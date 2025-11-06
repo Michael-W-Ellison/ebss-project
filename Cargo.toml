@@ -1,0 +1,72 @@
+[package]
+name = "ebss"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Emergent Behavior Society Simulator - A general-purpose AI platform for simulating autonomous agent societies"
+license = "MIT"
+repository = "https://github.com/yourusername/ebss-project"
+keywords = ["ai", "simulation", "emergent-behavior", "multi-agent", "game-ai"]
+categories = ["simulation", "game-engines", "science"]
+
+[dependencies]
+# Core dependencies
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Parallel processing
+rayon = "1.7"
+
+# Data structures
+petgraph = "0.6"  # For behavior trees
+dashmap = "5.5"   # Concurrent hash maps
+
+# Configuration
+toml = "0.8"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Serialization
+rmp-serde = "1.1"  # MessagePack
+
+[dev-dependencies]
+criterion = "0.5"
+proptest = "1.4"
+
+[[bench]]
+name = "behavior_tree"
+harness = false
+
+[[bench]]
+name = "agent_simulation"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 1
+
+[profile.test]
+opt-level = 2
+
+[lib]
+name = "ebss"
+path = "src/lib.rs"
+
+[[example]]
+name = "basic_survival"
+path = "examples/basic_survival.rs"
+
+[[example]]
+name = "minecraft_world"
+path = "examples/minecraft_world.rs"
+
+[workspace]
+members = ["plugins/*"]
