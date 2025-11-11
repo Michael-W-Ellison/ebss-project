@@ -56,13 +56,24 @@ pub enum Action {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionResult {
     Success { message: String },
+    SuccessWithItems { message: String, item_type: ItemType, quantity: u32 },
     Failure { reason: String },
     Partial { completed: f32, message: String },
 }
 
 impl ActionResult {
     pub fn is_success(&self) -> bool {
-        matches!(self, ActionResult::Success { .. })
+        matches!(self, ActionResult::Success { .. } | ActionResult::SuccessWithItems { .. })
+    }
+
+    /// Extract harvested items from the result, if any
+    pub fn take_items(&self) -> Option<(ItemType, u32)> {
+        match self {
+            ActionResult::SuccessWithItems { item_type, quantity, .. } => {
+                Some((*item_type, *quantity))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -128,8 +139,7 @@ impl World {
             let harvested = resource_node.harvest(amount);
 
             if harvested > 0 {
-                // Convert resource to item and add to storehouse for now
-                // (In full implementation, would add to agent inventory)
+                // Convert resource to item type
                 let item_type = match resource_type {
                     ResourceType::Wood => ItemType::Wood,
                     ResourceType::Stone => ItemType::Stone,
@@ -137,10 +147,23 @@ impl World {
                     ResourceType::Food => ItemType::Food,
                 };
 
-                self.storehouse_inventory.add_item(item_type, harvested);
+                // Food goes to agent inventory (returned in result)
+                // Other resources go to storehouse
+                if resource_type == ResourceType::Food {
+                    ActionResult::SuccessWithItems {
+                        message: format!("Harvested {} {:?}", harvested, resource_type),
+                        item_type,
+                        quantity: harvested,
+                    }
+                } else {
+                    // Non-food resources go directly to storehouse
+                    self.storehouse_inventory.add_item(item_type, harvested);
 
-                ActionResult::Success {
-                    message: format!("Harvested {} {:?}", harvested, resource_type),
+                    ActionResult::SuccessWithItems {
+                        message: format!("Harvested {} {:?} to storehouse", harvested, resource_type),
+                        item_type,
+                        quantity: 0, // Already deposited
+                    }
                 }
             } else {
                 ActionResult::Failure {

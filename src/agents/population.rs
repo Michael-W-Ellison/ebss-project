@@ -47,6 +47,7 @@ pub struct Population {
     pub reproduction_cooldown: HashMap<Uuid, u32>,
     pub config: PopulationConfig,
     pub unhappiness_tracker: HashMap<Uuid, u32>, // Track how long agents have been unhappy
+    pub current_tick: u32, // Current simulation tick for survival mechanics
 }
 
 impl Population {
@@ -58,6 +59,7 @@ impl Population {
             reproduction_cooldown: HashMap::new(),
             config: PopulationConfig::default(),
             unhappiness_tracker: HashMap::new(),
+            current_tick: 0,
         }
     }
 
@@ -70,6 +72,7 @@ impl Population {
             reproduction_cooldown: HashMap::new(),
             config,
             unhappiness_tracker: HashMap::new(),
+            current_tick: 0,
         }
     }
 
@@ -86,9 +89,12 @@ impl Population {
 
     /// Update all agents and handle lifecycle events
     pub fn tick(&mut self) {
+        self.current_tick += 1;
+
         // Update all agents
+        let current_tick = self.current_tick;
         for agent in &mut self.agents {
-            agent.tick();
+            agent.tick_with_time(current_tick);
         }
 
         // Process unhappiness tracking and abandonments

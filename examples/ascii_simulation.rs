@@ -152,7 +152,7 @@ fn main() {
     }
 }
 
-/// Process agent actions (simplified autonomous behavior)
+/// Process agent actions (simplified autonomous behavior with survival-first priority)
 fn process_agent_actions(world: &mut World, population: &mut Population, tick: u32) {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -161,79 +161,118 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
     let agent_ids: Vec<_> = population.agents.iter().map(|a| a.id).collect();
 
     for agent_id in agent_ids {
-        // Find agent
+        // Find agent and try to eat if hungry
         if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
+            // Always try to eat if we have food and are hungry
+            agent.try_eat(tick);
+
             let mut agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+
+            // SURVIVAL-FIRST AI: Check if agent is in survival-critical state
+            let is_critical = agent.state.is_survival_critical();
+            let needs_food = agent.needs_food();
 
             // Simple AI: Check most urgent drive
             let most_urgent = agent.drives.most_urgent();
 
-            let action = match most_urgent.map(|d| &d.drive_type) {
-                Some(DriveType::Hunger) => {
-                    // Try to find and gather food
-                    if let Some(food_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Food) {
-                        let food_pos = food_node.position;
+            let action = if is_critical || needs_food {
+                // CRITICAL: Survival needs override everything
+                // Try to find and gather food IMMEDIATELY
+                if let Some(food_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Food) {
+                    let food_pos = food_node.position;
 
-                        if agent_pos.distance_to(&food_pos) > 1 {
-                            // Move towards food
-                            Some(Action::MoveTo { destination: food_pos })
-                        } else {
-                            // Harvest food
-                            Some(Action::HarvestResource {
-                                resource_position: food_pos,
-                                resource_type: ResourceType::Food,
-                                amount: 5,
-                            })
-                        }
+                    if agent_pos.distance_to(&food_pos) > 1 {
+                        Some(Action::MoveTo { destination: food_pos })
                     } else {
-                        None
+                        Some(Action::HarvestResource {
+                            resource_position: food_pos,
+                            resource_type: ResourceType::Food,
+                            amount: 5,
+                        })
                     }
-                }
-
-                Some(DriveType::Construction) => {
-                    // Try to gather wood for construction
-                    if let Some(wood_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Wood) {
-                        let wood_pos = wood_node.position;
-
-                        if agent_pos.distance_to(&wood_pos) > 1 {
-                            Some(Action::MoveTo { destination: wood_pos })
-                        } else {
-                            Some(Action::HarvestResource {
-                                resource_position: wood_pos,
-                                resource_type: ResourceType::Wood,
-                                amount: 3,
-                            })
-                        }
-                    } else {
-                        None
-                    }
-                }
-
-                _ => {
-                    // Random wandering
-                    if rng.gen_bool(0.3) {
-                        let dx = rng.gen_range(-2..=2);
-                        let dy = rng.gen_range(-2..=2);
+                } else {
+                    // No food available - wander to find some
+                    if rng.gen_bool(0.5) {
+                        let dx = rng.gen_range(-3..=3);
+                        let dy = rng.gen_range(-3..=3);
                         let destination = Position::new(agent_pos.x + dx, agent_pos.y + dy);
-
                         if world.grid.is_valid_position(&destination) {
                             Some(Action::MoveTo { destination })
                         } else {
                             None
                         }
                     } else {
-                        Some(Action::Rest { duration: 1 })
+                        None
+                    }
+                }
+            } else {
+                // Normal behavior based on drives
+                match most_urgent.map(|d| &d.drive_type) {
+                    Some(DriveType::Hunger) => {
+                        if let Some(food_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Food) {
+                            let food_pos = food_node.position;
+                            if agent_pos.distance_to(&food_pos) > 1 {
+                                Some(Action::MoveTo { destination: food_pos })
+                            } else {
+                                Some(Action::HarvestResource {
+                                    resource_position: food_pos,
+                                    resource_type: ResourceType::Food,
+                                    amount: 5,
+                                })
+                            }
+                        } else {
+                            None
+                        }
+                    }
+
+                    Some(DriveType::Construction) => {
+                        if let Some(wood_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Wood) {
+                            let wood_pos = wood_node.position;
+                            if agent_pos.distance_to(&wood_pos) > 1 {
+                                Some(Action::MoveTo { destination: wood_pos })
+                            } else {
+                                Some(Action::HarvestResource {
+                                    resource_position: wood_pos,
+                                    resource_type: ResourceType::Wood,
+                                    amount: 3,
+                                })
+                            }
+                        } else {
+                            None
+                        }
+                    }
+
+                    _ => {
+                        if rng.gen_bool(0.3) {
+                            let dx = rng.gen_range(-2..=2);
+                            let dy = rng.gen_range(-2..=2);
+                            let destination = Position::new(agent_pos.x + dx, agent_pos.y + dy);
+                            if world.grid.is_valid_position(&destination) {
+                                Some(Action::MoveTo { destination })
+                            } else {
+                                None
+                            }
+                        } else {
+                            Some(Action::Rest { duration: 1 })
+                        }
                     }
                 }
             };
 
             // Execute action
             if let Some(action) = action {
-                let _result = world.execute_action(agent_id, &mut agent_pos, &action);
+                let result = world.execute_action(agent_id, &mut agent_pos, &action);
 
-                // Update agent position
+                // Update agent position and inventory
                 if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
                     agent.state.position = (agent_pos.x, agent_pos.y, 0);
+
+                    // If harvest was successful, add items to agent inventory
+                    if let Some((item_type, quantity)) = result.take_items() {
+                        if quantity > 0 {
+                            agent.inventory.add_item(item_type, quantity);
+                        }
+                    }
                 }
             }
         }
