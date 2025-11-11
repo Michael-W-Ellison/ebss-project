@@ -6,5 +6,5 @@ pub mod population;
 pub mod reproduction;
 
 pub use agent::{Agent, AgentConfig, AgentState, LifeStage};
-pub use population::Population;
+pub use population::{Population, PopulationConfig};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};

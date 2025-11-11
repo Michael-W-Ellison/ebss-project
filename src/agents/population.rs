@@ -117,7 +117,7 @@ impl Population {
 
     /// Process agent abandonments based on unhappiness
     /// Agents who are severely unhappy for extended periods may leave the town
-    fn process_abandonments(&mut self) {
+    pub fn process_abandonments(&mut self) {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
@@ -169,7 +169,7 @@ impl Population {
     }
 
     /// Process reproduction attempts
-    fn process_reproduction(&mut self) {
+    pub fn process_reproduction(&mut self) {
         let mut new_offspring = Vec::new();
 
         // Find potential mating pairs

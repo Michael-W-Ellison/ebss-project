@@ -271,6 +271,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_json",
+ "tempfile",
  "toml",
  "uuid",
 ]
