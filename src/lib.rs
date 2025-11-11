@@ -43,6 +43,10 @@ pub mod prelude {
         drives::{Drive, DriveType, DriveState},
         learning::{ObservableEvent, ObservableEventType, observe_and_learn, process_population_learning},
         memory::{Memory, SpatialMemoryType, SocialRelationship},
+        emotions::{Emotion, EmotionType, EmotionalState},
+        traits::{Trait, TraitSet},
+        goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager},
+        preferences::{Preferences, Obsession, ObsessionType},
     };
 
     pub use crate::agents::{

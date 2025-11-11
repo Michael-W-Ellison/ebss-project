@@ -1,7 +1,7 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use crate::core::{BehaviorTree, DriveState, Memory};
+use crate::core::{BehaviorTree, DriveState, Memory, EmotionalState, TraitSet, GoalManager, Preferences};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -137,6 +137,10 @@ pub struct Agent {
     pub behavior_trees: Vec<BehaviorTree>,
     pub memory: Memory,
     pub parent_ids: Vec<Uuid>,
+    pub emotions: EmotionalState,
+    pub traits: TraitSet,
+    pub goals: GoalManager,
+    pub preferences: Preferences,
 }
 
 impl Agent {
@@ -152,6 +156,10 @@ impl Agent {
             behavior_trees: Vec::new(),
             memory: Memory::new(),
             parent_ids: Vec::new(),
+            emotions: EmotionalState::new(),
+            traits: TraitSet::generate_random(3), // 3 random traits
+            goals: GoalManager::default(),
+            preferences: Preferences::generate_random(),
         }
     }
 
@@ -176,6 +184,12 @@ impl Agent {
 
         // Update memory
         self.memory.tick();
+
+        // Update emotions (natural decay)
+        self.emotions.tick();
+
+        // Cleanup completed goals
+        self.goals.cleanup_completed();
     }
 
     /// Check if agent can reproduce

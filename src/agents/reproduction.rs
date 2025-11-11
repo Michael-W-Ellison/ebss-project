@@ -79,6 +79,15 @@ pub fn reproduce(parent1: &Agent, parent2: &Agent) -> Agent {
     // Inherit behavior trees from parents with pruning and mutation
     offspring.behavior_trees = inherit_behavior_trees(&parent1.behavior_trees, &parent2.behavior_trees);
 
+    // Inherit traits from parents (mix of both with some variation)
+    offspring.traits = inherit_traits(&parent1.traits, &parent2.traits);
+
+    // Start with neutral emotions
+    offspring.emotions = crate::core::EmotionalState::new();
+
+    // Generate random preferences
+    offspring.preferences = crate::core::Preferences::generate_random();
+
     // Place offspring near parents
     offspring.state.position = offspring_position(parent1.state.position, parent2.state.position);
 
@@ -133,6 +142,41 @@ fn inherit_behavior_trees(trees1: &[BehaviorTree], trees2: &[BehaviorTree]) -> V
     }
 
     offspring_trees
+}
+
+/// Inherit traits from two parents
+fn inherit_traits(traits1: &crate::core::TraitSet, traits2: &crate::core::TraitSet) -> crate::core::TraitSet {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let mut offspring_traits = crate::core::TraitSet::new();
+
+    // Collect all parent traits
+    let all_parent_traits: Vec<crate::core::Trait> = traits1.traits.iter()
+        .chain(traits2.traits.iter())
+        .copied()
+        .collect();
+
+    // Offspring inherits some traits from parents (50% chance each)
+    for trait_item in all_parent_traits {
+        if rng.gen_bool(0.5) {
+            offspring_traits.add_trait(trait_item);
+        }
+    }
+
+    // Small chance (10%) to gain a completely new trait (mutation)
+    if rng.gen_bool(0.1) && offspring_traits.traits.len() < 5 {
+        let random_traits = crate::core::TraitSet::generate_random(1);
+        if let Some(new_trait) = random_traits.traits.first() {
+            offspring_traits.add_trait(*new_trait);
+        }
+    }
+
+    // If no traits inherited, give at least one random trait
+    if offspring_traits.traits.is_empty() {
+        offspring_traits = crate::core::TraitSet::generate_random(1);
+    }
+
+    offspring_traits
 }
 
 /// Calculate offspring position (near parents)
