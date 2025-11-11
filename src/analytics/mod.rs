@@ -5,12 +5,14 @@ use crate::world::World;
 use crate::agents::Population;
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
+use crate::visualization::AsciiRenderer;
 use log::{info, debug};
 
 pub struct Simulation {
     pub world: World,
     pub population: Population,
     pub current_tick: u32,
+    pub renderer: Option<AsciiRenderer>,
 }
 
 pub struct SimulationConfig;
@@ -23,7 +25,14 @@ impl Simulation {
             world,
             population,
             current_tick: 0,
+            renderer: None,
         }
+    }
+
+    /// Enable ASCII visualization
+    pub fn with_visualization(mut self) -> Self {
+        self.renderer = Some(AsciiRenderer::default());
+        self
     }
 
     /// Run the simulation for a specified number of ticks
@@ -32,6 +41,26 @@ impl Simulation {
             self.tick();
         }
         info!("Simulation completed {} ticks", ticks);
+    }
+
+    /// Run the simulation with visualization
+    pub fn run_visual(&mut self, ticks: u32, update_interval: u32) {
+        for _ in 0..ticks {
+            self.tick();
+
+            // Render visualization at intervals
+            if self.current_tick % update_interval == 0 {
+                if let Some(renderer) = &self.renderer {
+                    renderer.render(&self.population, self.current_tick);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+
+        // Final render
+        if let Some(renderer) = &self.renderer {
+            renderer.render(&self.population, self.current_tick);
+        }
     }
 
     /// Execute one simulation tick

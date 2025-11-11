@@ -59,3 +59,7 @@ path = "examples/basic_survival.rs"
 [[example]]
 name = "minecraft_world"
 path = "examples/minecraft_world.rs"
+
+[[example]]
+name = "visual_demo"
+path = "examples/visual_demo.rs"
