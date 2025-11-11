@@ -8,8 +8,10 @@ use std::collections::HashMap;
 pub struct PopulationStats {
     pub total_births: u64,
     pub total_deaths: u64,
+    pub total_abandonments: u64,
     pub current_population: usize,
     pub average_age: f32,
+    pub average_happiness: f32,
     pub infants: usize,
     pub children: usize,
     pub adolescents: usize,
@@ -17,11 +19,34 @@ pub struct PopulationStats {
     pub elderly: usize,
 }
 
+/// Configuration for population behavior
+#[derive(Debug, Clone)]
+pub struct PopulationConfig {
+    /// Happiness threshold below which agents consider leaving (-1.0 to 1.0)
+    pub abandonment_happiness_threshold: f32,
+    /// How long an agent must be unhappy before they can leave (ticks)
+    pub abandonment_unhappy_duration: u32,
+    /// Probability per tick that an unhappy agent will leave
+    pub abandonment_probability: f32,
+}
+
+impl Default for PopulationConfig {
+    fn default() -> Self {
+        Self {
+            abandonment_happiness_threshold: -0.3, // Leave if happiness below -0.3
+            abandonment_unhappy_duration: 1000,    // Must be unhappy for 1000 ticks
+            abandonment_probability: 0.01,         // 1% chance per tick when eligible
+        }
+    }
+}
+
 pub struct Population {
     pub agents: Vec<Agent>,
     pub stats: PopulationStats,
     pub mate_criteria: MateSelectionCriteria,
     pub reproduction_cooldown: HashMap<Uuid, u32>,
+    pub config: PopulationConfig,
+    pub unhappiness_tracker: HashMap<Uuid, u32>, // Track how long agents have been unhappy
 }
 
 impl Population {
@@ -31,6 +56,20 @@ impl Population {
             stats: PopulationStats::default(),
             mate_criteria: MateSelectionCriteria::default(),
             reproduction_cooldown: HashMap::new(),
+            config: PopulationConfig::default(),
+            unhappiness_tracker: HashMap::new(),
+        }
+    }
+
+    /// Create a new population with custom configuration
+    pub fn with_config(config: PopulationConfig) -> Self {
+        Self {
+            agents: Vec::new(),
+            stats: PopulationStats::default(),
+            mate_criteria: MateSelectionCriteria::default(),
+            reproduction_cooldown: HashMap::new(),
+            config,
+            unhappiness_tracker: HashMap::new(),
         }
     }
 
@@ -52,6 +91,9 @@ impl Population {
             agent.tick();
         }
 
+        // Process unhappiness tracking and abandonments
+        self.process_abandonments();
+
         // Process deaths
         self.process_deaths();
 
@@ -71,6 +113,59 @@ impl Population {
         self.agents.retain(|agent| agent.state.is_alive);
         let deaths = before - self.agents.len();
         self.stats.total_deaths += deaths as u64;
+    }
+
+    /// Process agent abandonments based on unhappiness
+    /// Agents who are severely unhappy for extended periods may leave the town
+    fn process_abandonments(&mut self) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        // Track unhappiness and identify agents who should abandon
+        let mut agents_to_remove = Vec::new();
+
+        for agent in &self.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Get agent's current happiness from emotions
+            let happiness = agent.emotions.get(crate::core::EmotionType::Happiness)
+                .map(|e| e.value)
+                .unwrap_or(0.0);
+
+            // Check if agent is unhappy
+            if happiness < self.config.abandonment_happiness_threshold {
+                // Track unhappiness duration
+                let unhappy_duration = self.unhappiness_tracker
+                    .entry(agent.id)
+                    .or_insert(0);
+                *unhappy_duration += 1;
+
+                // Check if agent has been unhappy long enough
+                if *unhappy_duration >= self.config.abandonment_unhappy_duration {
+                    // Probabilistic abandonment
+                    if rng.gen::<f32>() < self.config.abandonment_probability {
+                        agents_to_remove.push(agent.id);
+                    }
+                }
+            } else {
+                // Agent is happy, reset unhappiness tracker
+                self.unhappiness_tracker.remove(&agent.id);
+            }
+        }
+
+        // Remove agents who are abandoning
+        if !agents_to_remove.is_empty() {
+            self.agents.retain(|agent| !agents_to_remove.contains(&agent.id));
+            self.stats.total_abandonments += agents_to_remove.len() as u64;
+
+            // Clean up tracking for abandoned agents
+            for agent_id in agents_to_remove {
+                self.unhappiness_tracker.remove(&agent_id);
+                self.reproduction_cooldown.remove(&agent_id);
+            }
+        }
     }
 
     /// Process reproduction attempts
@@ -175,6 +270,7 @@ impl Population {
 
         if alive_agents.is_empty() {
             self.stats.average_age = 0.0;
+            self.stats.average_happiness = 0.0;
             self.stats.infants = 0;
             self.stats.children = 0;
             self.stats.adolescents = 0;
@@ -186,6 +282,14 @@ impl Population {
         // Calculate average age
         let total_age: u32 = alive_agents.iter().map(|a| a.state.age).sum();
         self.stats.average_age = total_age as f32 / alive_agents.len() as f32;
+
+        // Calculate average happiness
+        let total_happiness: f32 = alive_agents.iter()
+            .map(|a| a.emotions.get(crate::core::EmotionType::Happiness)
+                .map(|e| e.value)
+                .unwrap_or(0.0))
+            .sum();
+        self.stats.average_happiness = total_happiness / alive_agents.len() as f32;
 
         // Count life stages
         self.stats.infants = alive_agents.iter().filter(|a| a.state.life_stage == LifeStage::Infant).count();
