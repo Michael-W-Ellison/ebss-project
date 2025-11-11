@@ -1,7 +1,8 @@
 // src/analytics/mod.rs
 //! Analytics, data logging, and emergence detection.
 
-use crate::{World, Population};
+use crate::world::World;
+use crate::agents::Population;
 
 pub struct Simulation;
 pub struct SimulationConfig;

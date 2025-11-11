@@ -41,24 +41,26 @@ pub mod prelude {
     pub use crate::core::{
         behavior_tree::{BehaviorTree, BehaviorNode, NodeType},
         drives::{Drive, DriveType, DriveState},
-        learning::LearningSystem,
+        learning::{ObservableEvent, ObservableEventType, observe_and_learn, process_population_learning},
+        memory::{Memory, SpatialMemoryType, SocialRelationship},
     };
-    
+
     pub use crate::agents::{
-        Agent, AgentConfig, AgentState,
+        Agent, AgentConfig, AgentState, LifeStage,
         Population,
+        reproduction::{can_mate, reproduce, MateSelectionCriteria},
     };
-    
+
     pub use crate::environment::{
         Environment, EnvironmentPlugin,
         Material, Action, CraftingTemplate,
     };
-    
+
     pub use crate::world::{
         World, WorldConfig, GridConfig,
         Position, Chunk,
     };
-    
+
     pub use crate::analytics::{
         Simulation, SimulationConfig,
         Analytics, BehaviorAnalysis,

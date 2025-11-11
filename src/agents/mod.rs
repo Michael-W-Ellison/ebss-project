@@ -3,6 +3,8 @@
 
 pub mod agent;
 pub mod population;
+pub mod reproduction;
 
-pub use agent::{Agent, AgentConfig, AgentState};
+pub use agent::{Agent, AgentConfig, AgentState, LifeStage};
 pub use population::Population;
+pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
