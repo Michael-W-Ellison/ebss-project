@@ -50,8 +50,10 @@ pub mod prelude {
     };
     
     pub use crate::environment::{
-        Environment, EnvironmentPlugin,
+        EnvironmentPlugin, PluginRegistry,
         Material, Action, CraftingTemplate,
+        ActionResult, ActionContext, Position as EnvPosition,
+        ToolType, ToolTier, MaterialCategory,
     };
     
     pub use crate::world::{
