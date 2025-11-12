@@ -243,8 +243,11 @@ impl Agent {
         // Age the agent with survival mechanics
         self.state.age_tick(current_tick);
 
-        // Update drives based on survival state
-        self.update_drives_with_survival();
+        // Tick drives normally (accumulate over time)
+        self.drives.tick();
+
+        // Apply survival-based urgency adjustments
+        self.apply_survival_urgency();
 
         // Update memory
         self.memory.tick();
@@ -256,13 +259,11 @@ impl Agent {
         self.goals.cleanup_completed();
     }
 
-    /// Update drives with survival-based urgency adjustments
+    /// Apply survival-based urgency adjustments to drives
     /// When survival is threatened, basic needs must override all other drives
-    fn update_drives_with_survival(&mut self) {
-        // First, tick drives normally
-        self.drives.tick();
-
-        // Then apply survival urgency overrides
+    /// NOTE: This does NOT tick drives - that should be done separately
+    fn apply_survival_urgency(&mut self) {
+        // Apply survival urgency overrides when in critical state
         if self.state.is_survival_critical() {
             // CRITICAL: When survival is threatened, basic needs must come first
 
@@ -351,9 +352,16 @@ impl Agent {
     /// Try to eat food from inventory to restore energy
     /// Returns true if agent successfully ate
     pub fn try_eat(&mut self, current_tick: u32) -> bool {
-        // Check if agent needs to eat
-        if self.state.energy >= 80.0 {
-            return false; // Not hungry enough
+        // Check if agent should eat
+        // Eat when: energy < 90% OR hunger drive is active (>= threshold)
+        let hunger_active = self.drives.get(crate::core::DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        let should_eat = self.state.energy < 90.0 || hunger_active;
+
+        if !should_eat {
+            return false; // Not hungry
         }
 
         // Try to consume food from inventory
