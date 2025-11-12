@@ -7,6 +7,7 @@ pub mod senses;
 pub mod body;
 pub mod skills;
 pub mod emotions;
+pub mod traits;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem};
 pub use population::Population;
@@ -20,3 +21,4 @@ pub use emotions::{
     EmotionState, EmotionSource, EmotionType, Relationship, RelationshipType,
     RelationshipMap, ThreatAssessment,
 };
+pub use traits::{Trait, TraitSet};

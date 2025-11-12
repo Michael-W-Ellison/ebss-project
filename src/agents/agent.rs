@@ -8,6 +8,7 @@ use super::senses::Senses;
 use super::body::Body;
 use super::skills::Skills;
 use super::emotions::{EmotionState, RelationshipMap};
+use super::traits::TraitSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -299,6 +300,7 @@ pub struct Agent {
     pub skills: Skills,
     pub emotions: EmotionState,
     pub relationships: RelationshipMap,
+    pub traits: TraitSet,
 }
 
 impl Agent {
@@ -322,6 +324,7 @@ impl Agent {
             skills: Skills::default(),
             emotions: EmotionState::default(),
             relationships: RelationshipMap::default(),
+            traits: TraitSet::default(),
         }
     }
 
