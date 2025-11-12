@@ -157,6 +157,81 @@ impl Quality {
             Quality::Expert => 2.0,
         }
     }
+
+    /// Get tool durability modifier
+    pub fn tool_durability_modifier(&self) -> f32 {
+        match self {
+            Quality::Pathetic => 0.5,  // -50%
+            Quality::Crude => 0.75,     // -25%
+            Quality::Basic => 1.0,      // default
+            Quality::Moderate => 1.1,   // +10%
+            Quality::Advanced => 1.25,  // +25%
+            Quality::Expert => 1.5,     // +50%
+        }
+    }
+
+    /// Get tool speed modifier
+    pub fn tool_speed_modifier(&self) -> f32 {
+        match self {
+            Quality::Pathetic => 1.0,
+            Quality::Crude => 1.0,
+            Quality::Basic => 1.0,
+            Quality::Moderate => 1.1,   // +10%
+            Quality::Advanced => 1.25,  // +25%
+            Quality::Expert => 1.5,     // +50%
+        }
+    }
+
+    /// Get number of injury/failure rolls for tool quality
+    pub fn tool_risk_roll_count(&self) -> u8 {
+        match self {
+            Quality::Pathetic => 3,  // Roll 3 times (more danger)
+            Quality::Crude => 2,     // Roll 2 times
+            _ => 1,                   // Normal single roll
+        }
+    }
+
+    /// Get maximum output quality limit for materials
+    pub fn material_quality_limit(&self) -> Quality {
+        match self {
+            Quality::Pathetic => Quality::Crude,
+            Quality::Crude => Quality::Basic,
+            Quality::Basic => Quality::Moderate,
+            Quality::Moderate => Quality::Advanced,
+            Quality::Advanced => Quality::Expert,
+            Quality::Expert => Quality::Expert,
+        }
+    }
+
+    /// Get drive satisfaction modifier for material/product quality
+    pub fn drive_satisfaction_modifier(&self) -> f32 {
+        match self {
+            Quality::Pathetic => 0.5,   // -50%
+            Quality::Crude => 0.75,      // -25%
+            Quality::Basic => 1.0,       // normal
+            Quality::Moderate => 1.0,    // normal
+            Quality::Advanced => 1.1,    // +10%
+            Quality::Expert => 1.25,     // +25%
+        }
+    }
+
+    /// Get bonus chance for Expert quality when using Expert materials
+    pub fn expert_output_bonus(&self) -> f32 {
+        match self {
+            Quality::Expert => 0.1,  // +10% bonus to Expert rolls
+            _ => 0.0,
+        }
+    }
+
+    /// Limit quality to material's maximum
+    pub fn limit_to_material(&self, material_quality: Quality) -> Quality {
+        let max_quality = material_quality.material_quality_limit();
+        if *self > max_quality {
+            max_quality
+        } else {
+            *self
+        }
+    }
 }
 
 /// Result of a skill check
@@ -221,22 +296,35 @@ impl Skill {
         1.0 + (self.level as f32 * 0.05)
     }
 
-    /// Perform skill check
-    pub fn perform_check(&self) -> SkillCheckResult {
+    /// Perform skill check with optional tool quality
+    pub fn perform_check(&self, tool_quality: Option<Quality>) -> SkillCheckResult {
         let mut rng = rand::thread_rng();
         let category = self.category();
 
-        // Check for injury
-        let injury = if rng.gen::<f32>() < category.large_injury_chance() {
-            Some(InjuryType::Large)
-        } else if rng.gen::<f32>() < category.small_injury_chance() {
-            Some(InjuryType::Small)
-        } else {
-            None
-        };
+        // Determine number of rolls based on tool quality
+        let roll_count = tool_quality
+            .map(|q| q.tool_risk_roll_count())
+            .unwrap_or(1);
 
-        // Check for failure
-        let success = rng.gen::<f32>() >= category.failure_chance();
+        // Check for injury (multiple rolls for bad tools increase risk)
+        let mut injury = None;
+        for _ in 0..roll_count {
+            if rng.gen::<f32>() < category.large_injury_chance() {
+                injury = Some(InjuryType::Large);
+                break;
+            } else if rng.gen::<f32>() < category.small_injury_chance() && injury.is_none() {
+                injury = Some(InjuryType::Small);
+            }
+        }
+
+        // Check for failure (multiple rolls for bad tools increase risk)
+        let mut success = true;
+        for _ in 0..roll_count {
+            if rng.gen::<f32>() < category.failure_chance() {
+                success = false;
+                break;
+            }
+        }
 
         // Determine quality if successful
         let quality = if success {
@@ -245,12 +333,24 @@ impl Skill {
             None
         };
 
+        // Calculate speed multiplier (skill + tool quality)
+        let base_speed = self.speed_multiplier();
+        let tool_speed = tool_quality
+            .map(|q| q.tool_speed_modifier())
+            .unwrap_or(1.0);
+        let speed_multiplier = base_speed * tool_speed;
+
         SkillCheckResult {
             success,
             quality,
             injury,
-            speed_multiplier: self.speed_multiplier(),
+            speed_multiplier,
         }
+    }
+
+    /// Perform skill check without tool (backwards compatibility)
+    pub fn perform_check_no_tool(&self) -> SkillCheckResult {
+        self.perform_check(None)
     }
 
     /// Determine quality based on skill level distribution
@@ -357,10 +457,16 @@ impl Skills {
         self.skills.insert(skill_type, Skill::with_level(skill_type, level));
     }
 
-    /// Perform skill check
-    pub fn perform_check(&mut self, skill_type: SkillType) -> SkillCheckResult {
+    /// Perform skill check with optional tool quality
+    pub fn perform_check(&mut self, skill_type: SkillType, tool_quality: Option<Quality>) -> SkillCheckResult {
         let skill = self.get_skill_mut(skill_type);
-        skill.perform_check()
+        skill.perform_check(tool_quality)
+    }
+
+    /// Perform skill check without tool
+    pub fn perform_check_no_tool(&mut self, skill_type: SkillType) -> SkillCheckResult {
+        let skill = self.get_skill_mut(skill_type);
+        skill.perform_check_no_tool()
     }
 
     /// Gain experience in a skill
@@ -460,12 +566,57 @@ mod tests {
     #[test]
     fn test_skill_check() {
         let skill = Skill::with_level(SkillType::Mining, 10);
-        let result = skill.perform_check();
+        let result = skill.perform_check(None);
 
         // Master should always succeed
         assert!(result.success);
         assert!(result.quality.is_some());
         assert_eq!(result.speed_multiplier, 1.5);
+    }
+
+    #[test]
+    fn test_tool_quality_speed_bonus() {
+        let skill = Skill::with_level(SkillType::Mining, 0);
+
+        // Basic tool: no bonus
+        let result_basic = skill.perform_check(Some(Quality::Basic));
+        assert_eq!(result_basic.speed_multiplier, 1.0);
+
+        // Expert tool: +50% bonus
+        let result_expert = skill.perform_check(Some(Quality::Expert));
+        assert_eq!(result_expert.speed_multiplier, 1.5);
+    }
+
+    #[test]
+    fn test_quality_durability_modifiers() {
+        assert_eq!(Quality::Pathetic.tool_durability_modifier(), 0.5);
+        assert_eq!(Quality::Basic.tool_durability_modifier(), 1.0);
+        assert_eq!(Quality::Expert.tool_durability_modifier(), 1.5);
+    }
+
+    #[test]
+    fn test_quality_drive_satisfaction() {
+        assert_eq!(Quality::Pathetic.drive_satisfaction_modifier(), 0.5);
+        assert_eq!(Quality::Basic.drive_satisfaction_modifier(), 1.0);
+        assert_eq!(Quality::Expert.drive_satisfaction_modifier(), 1.25);
+    }
+
+    #[test]
+    fn test_material_quality_limits() {
+        assert_eq!(Quality::Pathetic.material_quality_limit(), Quality::Crude);
+        assert_eq!(Quality::Crude.material_quality_limit(), Quality::Basic);
+        assert_eq!(Quality::Expert.material_quality_limit(), Quality::Expert);
+    }
+
+    #[test]
+    fn test_quality_limiting() {
+        let output_quality = Quality::Advanced;
+
+        // Pathetic material limits to Crude
+        assert_eq!(output_quality.limit_to_material(Quality::Pathetic), Quality::Crude);
+
+        // Expert material doesn't limit
+        assert_eq!(output_quality.limit_to_material(Quality::Expert), Quality::Advanced);
     }
 
     #[test]

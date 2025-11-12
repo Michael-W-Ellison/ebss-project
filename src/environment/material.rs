@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use crate::agents::Quality;
 
 /// Tool tier required to harvest a material
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -122,6 +123,10 @@ pub struct Material {
     /// Light level emitted (0-15)
     pub light_level: u8,
 
+    // Quality
+    /// Quality of this material/tool (affects output quality and effectiveness)
+    pub quality: Quality,
+
     // Custom properties for plugin-specific data
     pub properties: HashMap<String, String>,
 }
@@ -148,7 +153,23 @@ impl Material {
             food_value: 0.0,
             is_flammable: false,
             light_level: 0,
+            quality: Quality::Basic,  // Default to Basic quality
             properties: HashMap::new(),
+        }
+    }
+
+    /// Set quality level
+    pub fn with_quality(mut self, quality: Quality) -> Self {
+        self.quality = quality;
+        self
+    }
+
+    /// Get effective durability based on quality
+    pub fn effective_durability(&self) -> u32 {
+        if self.durability == 0 {
+            0  // Infinite durability
+        } else {
+            ((self.durability as f32) * self.quality.tool_durability_modifier()) as u32
         }
     }
 
