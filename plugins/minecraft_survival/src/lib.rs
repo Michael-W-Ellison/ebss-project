@@ -255,8 +255,21 @@ impl MinecraftSurvivalPlugin {
                 .with_drive_effect(DriveType::Hunger, -0.5),
         );
 
+        // Drink water
+        let drink = Action::new(
+            "drink_water".to_string(),
+            "Drink Water".to_string(),
+            ActionType::Eat, // Reusing Eat action type for consumption
+        )
+        .with_description("Drink water to restore thirst".to_string())
+        .with_effects(
+            ActionEffects::none()
+                .with_time_cost(5)
+                .with_drive_effect(DriveType::Thirst, -0.6),
+        );
+
         // Register all actions
-        for action in vec![chop_tree, mine_stone, craft, eat] {
+        for action in vec![chop_tree, mine_stone, craft, eat, drink] {
             self.actions.insert(action.id.clone(), action);
         }
     }
@@ -564,9 +577,16 @@ impl EnvironmentPlugin for MinecraftSurvivalPlugin {
             ActionType::Eat => {
                 if let Some(material_id) = context.target_material {
                     if let Some(material) = self.materials.get(&material_id) {
+                        // Handle food
                         if material.is_edible {
                             result = result
                                 .with_drive_change(DriveType::Hunger, -material.food_value * 0.1)
+                                .with_item_consumed(ItemStack::new(material_id.clone(), 1));
+                        }
+                        // Handle water (drinkable liquid)
+                        if material_id == "water" && material.category == MaterialCategory::Liquid {
+                            result = result
+                                .with_drive_change(DriveType::Thirst, -0.6)
                                 .with_item_consumed(ItemStack::new(material_id, 1));
                         }
                     }

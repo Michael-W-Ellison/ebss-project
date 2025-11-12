@@ -235,7 +235,7 @@ mod tests {
         let data = AgentInspectorData::from_agent(&agent);
 
         assert_eq!(data.id, agent.id);
-        assert_eq!(data.drives.len(), 13); // 13 core drives
+        assert_eq!(data.drives.len(), 14); // 14 core drives (including Thirst)
         assert!(data.health > 0.0);
     }
 
@@ -245,7 +245,7 @@ mod tests {
         let data = AgentInspectorData::from_agent(&agent);
 
         let sorted = data.drives_by_urgency();
-        assert_eq!(sorted.len(), 13);
+        assert_eq!(sorted.len(), 14);
 
         // Verify sorted by urgency (descending)
         for i in 1..sorted.len() {
