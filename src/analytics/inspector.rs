@@ -1,7 +1,7 @@
 // src/analytics/inspector.rs
 //! Inspector system for examining agents, terrain, and simulation state.
 
-use crate::agents::Agent;
+use crate::agents::{Agent, BodyPartType, BodySummary};
 use crate::core::{DriveType, Drive};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
@@ -27,8 +27,31 @@ pub struct AgentInspectorData {
     // Inventory information
     pub inventory_summary: InventorySummary,
 
+    // Sensory information
+    pub sensory_summary: SensorySummary,
+
+    // Body information
+    pub body_summary: BodySummary,
+
     // Stats
     pub age: u64, // Ticks alive
+}
+
+/// Sensory system summary for display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SensorySummary {
+    pub vision_range: f32,
+    pub vision_acuity: f32,
+    pub vision_impaired: bool,
+    pub visible_agents_count: usize,
+    pub hearing_range: f32,
+    pub hearing_sensitivity: f32,
+    pub hearing_impaired: bool,
+    pub recent_sounds_count: usize,
+    pub can_speak: bool,
+    pub speech_impaired: bool,
+    pub known_languages: Vec<String>,
+    pub overall_sensory_health: f32,
 }
 
 /// Inventory summary for display
@@ -97,6 +120,25 @@ impl AgentInspectorData {
             .count();
         let slot_usage = format!("{}/{}", total_items, agent.inventory.max_slots);
 
+        // Calculate sensory summary
+        let sensory_summary = SensorySummary {
+            vision_range: agent.senses.vision.effective_range(),
+            vision_acuity: agent.senses.vision.acuity,
+            vision_impaired: agent.senses.vision.impaired,
+            visible_agents_count: agent.senses.vision.visible_agents.len(),
+            hearing_range: agent.senses.hearing.effective_range(),
+            hearing_sensitivity: agent.senses.hearing.sensitivity,
+            hearing_impaired: agent.senses.hearing.impaired,
+            recent_sounds_count: agent.senses.hearing.heard_sounds.len(),
+            can_speak: agent.senses.speech.can_speak,
+            speech_impaired: agent.senses.speech.impaired,
+            known_languages: agent.senses.speech.known_languages.iter().cloned().collect(),
+            overall_sensory_health: agent.senses.overall_health(),
+        };
+
+        // Get body summary
+        let body_summary = agent.body.summary();
+
         Self {
             id: agent.id,
             position: agent.state.position,
@@ -117,6 +159,8 @@ impl AgentInspectorData {
                 container_count,
                 slot_usage,
             },
+            sensory_summary,
+            body_summary,
             age: 0, // Will be tracked by simulation
         }
     }

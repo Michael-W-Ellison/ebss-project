@@ -47,6 +47,8 @@ pub mod prelude {
     pub use crate::agents::{
         Agent, AgentConfig, AgentState,
         Population, Inventory, InventoryItem,
+        Senses, Vision, Hearing, Speech,
+        Body, BodyPart, BodyPartType, BodyPartStatus,
     };
 
     pub use crate::environment::{

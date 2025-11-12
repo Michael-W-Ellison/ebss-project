@@ -10,7 +10,7 @@ pub mod inspector;
 pub use simulation_controller::{SimulationController, SimulationState};
 pub use inspector::{
     Inspector, Selection, AgentInspectorData, DriveInspectorData,
-    TerrainInspectorData, MemorySummary, InventorySummary,
+    TerrainInspectorData, MemorySummary, InventorySummary, SensorySummary,
 };
 
 pub struct Simulation;

@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, DriveState, Memory};
 use std::collections::HashMap;
 
+use super::senses::Senses;
+use super::body::Body;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     pub random_weights: bool,
@@ -218,6 +221,8 @@ pub struct Agent {
     pub behavior_trees: Vec<BehaviorTree>,
     pub memory: Memory,
     pub inventory: Inventory,
+    pub senses: Senses,
+    pub body: Body,
 }
 
 impl Agent {
@@ -236,6 +241,17 @@ impl Agent {
             behavior_trees: Vec::new(),
             memory: Memory::new(),
             inventory: Inventory::default(),
+            senses: Senses::default(),
+            body: Body::default(),
         }
+    }
+
+    /// Update agent state (tick senses and body)
+    pub fn tick(&mut self) {
+        self.senses.tick();
+        self.body.tick();
+
+        // Sync body health to agent state
+        self.state.health = self.body.overall_health() * 100.0;
     }
 }
