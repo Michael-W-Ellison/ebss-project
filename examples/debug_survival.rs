@@ -163,7 +163,9 @@ fn main() {
 
             // Execute action
             if let Some(action) = action {
-                let result = world.execute_action(agent_id, &mut agent_pos, &action);
+                // No other agents in single-agent test, so empty occupied positions
+                let occupied_positions: Vec<Position> = vec![];
+                let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied_positions);
 
                 // Update position and inventory
                 if let Some(agent) = population.agents.first_mut() {

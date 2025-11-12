@@ -79,7 +79,8 @@ impl ActionResult {
 
 impl World {
     /// Execute an action for an agent
-    pub fn execute_action(&mut self, agent_id: Uuid, agent_position: &mut Position, action: &Action) -> ActionResult {
+    /// occupied_positions: List of positions currently occupied by other agents (for collision detection)
+    pub fn execute_action(&mut self, agent_id: Uuid, agent_position: &mut Position, action: &Action, occupied_positions: &[Position]) -> ActionResult {
         match action {
             Action::HarvestResource {
                 resource_position,
@@ -96,7 +97,7 @@ impl World {
             }
 
             Action::MoveTo { destination } => {
-                self.execute_move(agent_position, destination)
+                self.execute_move(agent_position, destination, occupied_positions)
             }
 
             Action::WorkOnConstruction {
@@ -204,32 +205,42 @@ impl World {
         }
     }
 
-    fn execute_move(&self, agent_position: &mut Position, destination: &Position) -> ActionResult {
-        // Simple movement: move one step towards destination
+    fn execute_move(&self, agent_position: &mut Position, destination: &Position, occupied_positions: &[Position]) -> ActionResult {
+        // Check if already at destination
         if agent_position == destination {
             return ActionResult::Success {
                 message: "Already at destination".to_string(),
             };
         }
 
-        // Calculate direction
+        // Try direct movement first (one step towards destination)
         let dx = (destination.x - agent_position.x).signum();
         let dy = (destination.y - agent_position.y).signum();
+        let direct_pos = Position::new(agent_position.x + dx, agent_position.y + dy);
 
-        let new_pos = Position::new(agent_position.x + dx, agent_position.y + dy);
+        // Check if direct path is clear
+        let direct_blocked = occupied_positions.contains(&direct_pos) ||
+            self.grid.get_tile(&direct_pos).map(|t| !t.terrain.is_walkable()).unwrap_or(true);
 
-        // Check if new position is valid and walkable
-        if let Some(tile) = self.grid.get_tile(&new_pos) {
-            if tile.terrain.is_walkable() {
-                *agent_position = new_pos;
-                return ActionResult::Success {
-                    message: format!("Moved to ({}, {})", new_pos.x, new_pos.y),
-                };
-            }
+        if !direct_blocked {
+            // Direct path is clear, move there
+            *agent_position = direct_pos;
+            return ActionResult::Success {
+                message: format!("Moved to ({}, {})", direct_pos.x, direct_pos.y),
+            };
         }
 
+        // Direct path blocked, use pathfinding to route around obstacles
+        if let Some(next_pos) = self.grid.find_path_with_agents(agent_position, destination, occupied_positions) {
+            *agent_position = next_pos;
+            return ActionResult::Success {
+                message: format!("Pathfinding: moved to ({}, {})", next_pos.x, next_pos.y),
+            };
+        }
+
+        // No path found
         ActionResult::Failure {
-            reason: "Cannot move to that position".to_string(),
+            reason: "No path to destination (blocked)".to_string(),
         }
     }
 
@@ -275,7 +286,8 @@ mod tests {
                 amount: 10,
             };
 
-            let result = world.execute_action(agent_id, &mut agent_pos, &action);
+            let occupied = vec![]; // No other agents in test
+            let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
             assert!(result.is_success());
         }
     }
@@ -290,7 +302,8 @@ mod tests {
 
         let action = Action::MoveTo { destination };
 
-        let result = world.execute_action(agent_id, &mut agent_pos, &action);
+        let occupied = vec![]; // No other agents
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
         assert!(result.is_success());
 
         // Agent should have moved one step closer
@@ -303,12 +316,14 @@ mod tests {
         let agent_id = Uuid::new_v4();
         let mut agent_pos = Position::new(10, 10);
 
+        let occupied = vec![]; // No other agents
+
         // Deposit
         let deposit_action = Action::DepositItems {
             item_type: ItemType::Wood,
             amount: 50,
         };
-        let result = world.execute_action(agent_id, &mut agent_pos, &deposit_action);
+        let result = world.execute_action(agent_id, &mut agent_pos, &deposit_action, &occupied);
         assert!(result.is_success());
         assert_eq!(world.storehouse_inventory.count_item(&ItemType::Wood), 50);
 
@@ -317,7 +332,7 @@ mod tests {
             item_type: ItemType::Wood,
             amount: 20,
         };
-        let result = world.execute_action(agent_id, &mut agent_pos, &retrieve_action);
+        let result = world.execute_action(agent_id, &mut agent_pos, &retrieve_action, &occupied);
         assert!(result.is_success());
         assert_eq!(world.storehouse_inventory.count_item(&ItemType::Wood), 30);
     }

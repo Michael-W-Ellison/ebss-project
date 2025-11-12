@@ -180,6 +180,77 @@ impl Grid {
 
         None // No path found
     }
+
+    /// Find path avoiding both terrain obstacles and occupied positions
+    /// Returns the next position to move to (first step of path), not the full path
+    pub fn find_path_with_agents(&self, start: &Position, end: &Position, occupied_positions: &[Position]) -> Option<Position> {
+        use std::collections::{HashMap, VecDeque};
+
+        if !self.is_valid_position(start) || !self.is_valid_position(end) {
+            return None;
+        }
+
+        if start == end {
+            return None; // Already at destination
+        }
+
+        // Check if destination is walkable
+        if let Some(tile) = self.get_tile(end) {
+            if !tile.terrain.is_walkable() {
+                return None;
+            }
+        }
+
+        let mut queue = VecDeque::new();
+        let mut came_from: HashMap<Position, Position> = HashMap::new();
+        let mut visited = HashMap::new();
+
+        queue.push_back(*start);
+        visited.insert(*start, true);
+
+        while let Some(current) = queue.pop_front() {
+            if current == *end {
+                // Reconstruct path and return first step
+                let mut path_node = current;
+
+                while let Some(&prev) = came_from.get(&path_node) {
+                    if prev == *start {
+                        // path_node is the first step from start
+                        return Some(path_node);
+                    }
+                    path_node = prev;
+                }
+
+                return Some(current); // Shouldn't happen, but fallback
+            }
+
+            for neighbor in current.neighbors() {
+                if !self.is_valid_position(&neighbor) {
+                    continue;
+                }
+
+                // Skip if occupied by another agent
+                if occupied_positions.contains(&neighbor) {
+                    continue;
+                }
+
+                // Check if tile is walkable
+                if let Some(tile) = self.get_tile(&neighbor) {
+                    if !tile.terrain.is_walkable() {
+                        continue;
+                    }
+                }
+
+                if !visited.contains_key(&neighbor) {
+                    visited.insert(neighbor, true);
+                    came_from.insert(neighbor, current);
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+
+        None // No path found
+    }
 }
 
 #[cfg(test)]

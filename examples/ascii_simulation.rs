@@ -157,10 +157,12 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
     use rand::Rng;
     let mut rng = rand::thread_rng();
 
-    // Get agent IDs to avoid borrow conflicts
-    let agent_ids: Vec<_> = population.agents.iter().map(|a| a.id).collect();
+    // Get agent IDs and positions for collision detection
+    let agent_data: Vec<_> = population.agents.iter()
+        .map(|a| (a.id, Position::new(a.state.position.0, a.state.position.1)))
+        .collect();
 
-    for agent_id in agent_ids {
+    for (agent_id, _) in &agent_data {
         // Find agent and try to eat if hungry
         if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
             // Always try to eat if we have food and are hungry
@@ -269,7 +271,13 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
 
             // Execute action
             if let Some(action) = action {
-                let result = world.execute_action(agent_id, &mut agent_pos, &action);
+                // Get occupied positions (all agents except current one)
+                let occupied_positions: Vec<Position> = agent_data.iter()
+                    .filter(|(id, _)| id != agent_id)
+                    .map(|(_, pos)| *pos)
+                    .collect();
+
+                let result = world.execute_action(*agent_id, &mut agent_pos, &action, &occupied_positions);
 
                 // Debug: Log failed food harvesting
                 if matches!(action, Action::HarvestResource { resource_type: ResourceType::Food, .. }) {
