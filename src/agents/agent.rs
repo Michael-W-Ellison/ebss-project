@@ -3,7 +3,7 @@ use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, DriveState, Memory, EmotionalState, TraitSet, GoalManager, Preferences};
 use crate::world::{Inventory, ItemType, Position, ResourceType};
-use crate::agents::{PersonalKnowledge, SocialNetwork};
+use crate::agents::{PersonalKnowledge, SocialNetwork, Profession};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -202,6 +202,7 @@ pub struct Agent {
     pub inventory: Inventory, // Personal inventory for carrying food and resources
     pub knowledge: PersonalKnowledge, // Personal knowledge about world (resources, etc.)
     pub social_network: SocialNetwork, // Relationships and trust with other agents
+    pub profession: Profession, // Job/profession and skill level
 }
 
 impl Agent {
@@ -224,6 +225,7 @@ impl Agent {
             inventory: Inventory::new(20), // Can carry up to 20 items
             knowledge: PersonalKnowledge::new(),
             social_network: SocialNetwork::new(),
+            profession: Profession::default(), // Starts unemployed
         }
     }
 
@@ -536,6 +538,57 @@ impl Agent {
 
         // Believe the more trusted source
         trust_a >= trust_b
+    }
+
+    // === Profession Methods ===
+
+    /// Assign a new profession to this agent
+    pub fn assign_profession(&mut self, job: crate::agents::JobType) {
+        self.profession = Profession::new(job);
+    }
+
+    /// Assign profession with specific skill level
+    pub fn assign_profession_with_skill(&mut self, job: crate::agents::JobType, skill_level: u8) {
+        self.profession = Profession::with_skill(job, skill_level);
+    }
+
+    /// Assign agent to a workplace building
+    pub fn assign_to_workplace(&mut self, position: Position, building_id: Uuid) {
+        self.profession.assign_workplace(position, building_id);
+    }
+
+    /// Remove agent from their workplace
+    pub fn remove_from_workplace(&mut self) {
+        self.profession.remove_workplace();
+    }
+
+    /// Agent gains work experience
+    pub fn gain_work_experience(&mut self, amount: u16) {
+        self.profession.gain_experience(amount);
+    }
+
+    /// Agent produces items, gaining experience
+    pub fn produce_items(&mut self, quantity: u32) {
+        self.profession.record_production(quantity);
+    }
+
+    /// Check if agent is employed
+    pub fn is_employed(&self) -> bool {
+        !matches!(self.profession.job, crate::agents::JobType::Unemployed)
+    }
+
+    /// Check if agent has a workplace assigned
+    pub fn has_workplace(&self) -> bool {
+        self.profession.workplace.is_some()
+    }
+
+    /// Get agent's profession description
+    pub fn profession_description(&self) -> String {
+        format!(
+            "{} ({})",
+            self.profession.job.description(),
+            self.profession.skill_description()
+        )
     }
 }
 
