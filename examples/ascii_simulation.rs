@@ -152,6 +152,23 @@ fn main() {
     }
 }
 
+/// Discover nearby resources (vision range of 10 tiles)
+fn discover_nearby_resources(world: &World, population: &mut Population, agent_id: uuid::Uuid, agent_pos: &Position) {
+    const VISION_RANGE: u32 = 10;
+
+    for resource in &world.resources {
+        if agent_pos.distance_to(&resource.position) <= VISION_RANGE && resource.amount > 0 {
+            // Agent can see this resource, add to shared knowledge
+            population.shared_knowledge.discover_resource(
+                resource.position,
+                resource.resource_type,
+                resource.amount,
+                agent_id,
+            );
+        }
+    }
+}
+
 /// Process agent actions (simplified autonomous behavior with survival-first priority)
 fn process_agent_actions(world: &mut World, population: &mut Population, tick: u32) {
     use rand::Rng;
@@ -162,7 +179,10 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
         .map(|a| (a.id, Position::new(a.state.position.0, a.state.position.1)))
         .collect();
 
-    for (agent_id, _) in &agent_data {
+    for (agent_id, agent_starting_pos) in &agent_data {
+        // Discover nearby resources for this agent
+        discover_nearby_resources(world, population, *agent_id, agent_starting_pos);
+
         // Find agent and try to eat if hungry
         if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
             // Always try to eat if we have food and are hungry
@@ -185,12 +205,19 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             // Simple AI: Check most urgent drive
             let most_urgent = agent.drives.most_urgent();
 
+            // Use SHARED KNOWLEDGE to find resources (agents communicate!)
+            let known_food = population.shared_knowledge
+                .find_closest_known_to_agent(*agent_id, &agent_pos, ResourceType::Food)
+                .map(|r| r.position);
+
+            let known_wood = population.shared_knowledge
+                .find_closest_known_to_agent(*agent_id, &agent_pos, ResourceType::Wood)
+                .map(|r| r.position);
+
             let action = if is_critical || needs_food {
                 // CRITICAL: Survival needs override everything
-                // Try to find and gather food IMMEDIATELY
-                if let Some(food_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Food) {
-                    let food_pos = food_node.position;
-
+                // Try to find and gather food IMMEDIATELY using shared knowledge
+                if let Some(food_pos) = known_food {
                     if agent_pos.distance_to(&food_pos) > 1 {
                         Some(Action::MoveTo { destination: food_pos })
                     } else {
@@ -201,7 +228,7 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                         })
                     }
                 } else {
-                    // No food available - wander to find some
+                    // No known food - wander to discover more
                     if rng.gen_bool(0.5) {
                         let dx = rng.gen_range(-3..=3);
                         let dy = rng.gen_range(-3..=3);
@@ -219,8 +246,7 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                 // Normal behavior based on drives
                 match most_urgent.map(|d| &d.drive_type) {
                     Some(DriveType::Hunger) => {
-                        if let Some(food_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Food) {
-                            let food_pos = food_node.position;
+                        if let Some(food_pos) = known_food {
                             if agent_pos.distance_to(&food_pos) > 1 {
                                 Some(Action::MoveTo { destination: food_pos })
                             } else {
@@ -236,8 +262,7 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                     }
 
                     Some(DriveType::Construction) => {
-                        if let Some(wood_node) = world.resources.iter().find(|r| r.resource_type == ResourceType::Wood) {
-                            let wood_pos = wood_node.position;
+                        if let Some(wood_pos) = known_wood {
                             if agent_pos.distance_to(&wood_pos) > 1 {
                                 Some(Action::MoveTo { destination: wood_pos })
                             } else {
@@ -308,6 +333,30 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                 }
             }
         }
+    }
+
+    // Clean up depleted resources from shared knowledge
+    cleanup_depleted_resources(world, population);
+}
+
+/// Remove depleted resources from shared knowledge
+fn cleanup_depleted_resources(world: &World, population: &mut Population) {
+    // Get positions of all depleted resources
+    let depleted_positions: Vec<Position> = population.shared_knowledge
+        .all_resources()
+        .iter()
+        .filter(|known_resource| {
+            // Check if this resource still exists in the world with amount > 0
+            !world.resources.iter().any(|r| {
+                r.position == known_resource.position && r.amount > 0
+            })
+        })
+        .map(|r| r.position)
+        .collect();
+
+    // Remove depleted resources
+    for pos in depleted_positions {
+        population.shared_knowledge.remove_resource(&pos);
     }
 }
 

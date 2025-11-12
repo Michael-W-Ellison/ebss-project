@@ -1,5 +1,5 @@
 // src/agents/population.rs
-use crate::agents::{Agent, AgentConfig, can_mate, reproduce, MateSelectionCriteria};
+use crate::agents::{Agent, AgentConfig, can_mate, reproduce, MateSelectionCriteria, SharedKnowledge};
 use uuid::Uuid;
 use std::collections::HashMap;
 
@@ -48,6 +48,7 @@ pub struct Population {
     pub config: PopulationConfig,
     pub unhappiness_tracker: HashMap<Uuid, u32>, // Track how long agents have been unhappy
     pub current_tick: u32, // Current simulation tick for survival mechanics
+    pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
 }
 
 impl Population {
@@ -60,6 +61,7 @@ impl Population {
             config: PopulationConfig::default(),
             unhappiness_tracker: HashMap::new(),
             current_tick: 0,
+            shared_knowledge: SharedKnowledge::new(),
         }
     }
 
@@ -73,6 +75,7 @@ impl Population {
             config,
             unhappiness_tracker: HashMap::new(),
             current_tick: 0,
+            shared_knowledge: SharedKnowledge::new(),
         }
     }
 
@@ -90,6 +93,9 @@ impl Population {
     /// Update all agents and handle lifecycle events
     pub fn tick(&mut self) {
         self.current_tick += 1;
+
+        // Update shared knowledge tick counter
+        self.shared_knowledge.tick();
 
         // Update all agents
         let current_tick = self.current_tick;
