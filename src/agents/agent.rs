@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use super::senses::Senses;
 use super::body::Body;
+use super::skills::Skills;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -223,6 +224,7 @@ pub struct Agent {
     pub inventory: Inventory,
     pub senses: Senses,
     pub body: Body,
+    pub skills: Skills,
 }
 
 impl Agent {
@@ -243,6 +245,7 @@ impl Agent {
             inventory: Inventory::default(),
             senses: Senses::default(),
             body: Body::default(),
+            skills: Skills::default(),
         }
     }
 

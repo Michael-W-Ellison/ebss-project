@@ -1,7 +1,7 @@
 // src/analytics/inspector.rs
 //! Inspector system for examining agents, terrain, and simulation state.
 
-use crate::agents::{Agent, BodyPartType, BodySummary};
+use crate::agents::{Agent, BodyPartType, BodySummary, SkillType, SkillCategory};
 use crate::core::{DriveType, Drive};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
@@ -33,8 +33,23 @@ pub struct AgentInspectorData {
     // Body information
     pub body_summary: BodySummary,
 
+    // Skills information
+    pub skills_summary: SkillsSummary,
+
     // Stats
     pub age: u64, // Ticks alive
+}
+
+/// Skills summary for display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillsSummary {
+    pub total_skills: usize,
+    pub highest_skill_level: i32,
+    pub highest_skill_name: String,
+    pub average_skill_level: f32,
+    pub master_skills: usize,
+    pub journeyman_skills: usize,
+    pub apprentice_skills: usize,
 }
 
 /// Sensory system summary for display
@@ -139,6 +154,30 @@ impl AgentInspectorData {
         // Get body summary
         let body_summary = agent.body.summary();
 
+        // Calculate skills summary
+        let all_skills = agent.skills.get_all_skills();
+        let total_skills = all_skills.len();
+        let highest_skill = agent.skills.highest_skill();
+        let highest_skill_level = highest_skill.map(|s| s.level).unwrap_or(-10);
+        let highest_skill_name = highest_skill
+            .map(|s| s.skill_type.name().to_string())
+            .unwrap_or_else(|| "None".to_string());
+        let average_skill_level = agent.skills.average_skill_level();
+
+        let master_skills = agent.skills.get_skills_by_category(SkillCategory::High).len();
+        let journeyman_skills = agent.skills.get_skills_by_category(SkillCategory::Medium).len();
+        let apprentice_skills = agent.skills.get_skills_by_category(SkillCategory::Low).len();
+
+        let skills_summary = SkillsSummary {
+            total_skills,
+            highest_skill_level,
+            highest_skill_name,
+            average_skill_level,
+            master_skills,
+            journeyman_skills,
+            apprentice_skills,
+        };
+
         Self {
             id: agent.id,
             position: agent.state.position,
@@ -161,6 +200,7 @@ impl AgentInspectorData {
             },
             sensory_summary,
             body_summary,
+            skills_summary,
             age: 0, // Will be tracked by simulation
         }
     }

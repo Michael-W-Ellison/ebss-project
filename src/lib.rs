@@ -49,6 +49,7 @@ pub mod prelude {
         Population, Inventory, InventoryItem,
         Senses, Vision, Hearing, Speech,
         Body, BodyPart, BodyPartType, BodyPartStatus,
+        Skills, Skill, SkillType, SkillCategory, Quality,
     };
 
     pub use crate::environment::{
