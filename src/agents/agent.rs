@@ -28,6 +28,12 @@ pub struct InventoryItem {
     pub fill_level: Option<f32>,
     /// For containers: maximum capacity
     pub max_capacity: Option<f32>,
+    /// Current durability (0.0 to max_durability, None = no durability tracking)
+    pub current_durability: Option<f32>,
+    /// Maximum durability for this item
+    pub max_durability: Option<f32>,
+    /// Quality level of this item
+    pub quality: Option<super::Quality>,
 }
 
 impl InventoryItem {
@@ -37,6 +43,9 @@ impl InventoryItem {
             quantity,
             fill_level: None,
             max_capacity: None,
+            current_durability: None,
+            max_durability: None,
+            quality: None,
         }
     }
 
@@ -46,6 +55,27 @@ impl InventoryItem {
             quantity,
             fill_level: Some(0.0),
             max_capacity: Some(capacity),
+            current_durability: None,
+            max_durability: None,
+            quality: None,
+        }
+    }
+
+    /// Create a new tool/item with durability and quality
+    pub fn new_with_durability(
+        item_id: String,
+        quantity: u32,
+        durability: f32,
+        quality: super::Quality,
+    ) -> Self {
+        Self {
+            item_id,
+            quantity,
+            fill_level: None,
+            max_capacity: None,
+            current_durability: Some(durability),
+            max_durability: Some(durability),
+            quality: Some(quality),
         }
     }
 
@@ -84,6 +114,44 @@ impl InventoryItem {
                 amount_to_remove
             }
             _ => 0.0,
+        }
+    }
+
+    /// Get durability as percentage (0.0 to 1.0)
+    pub fn durability_percentage(&self) -> f32 {
+        match (self.current_durability, self.max_durability) {
+            (Some(current), Some(max)) if max > 0.0 => current / max,
+            _ => 1.0, // No durability tracking = always "full"
+        }
+    }
+
+    /// Check if item is broken (0 durability)
+    pub fn is_broken(&self) -> bool {
+        match self.current_durability {
+            Some(dur) => dur <= 0.0,
+            None => false, // No durability = never broken
+        }
+    }
+
+    /// Check if item can be repaired (not broken, has durability < max)
+    pub fn can_be_repaired(&self) -> bool {
+        match (self.current_durability, self.max_durability) {
+            (Some(current), Some(max)) => current > 0.0 && current < max,
+            _ => false,
+        }
+    }
+
+    /// Repair item to full durability
+    pub fn repair(&mut self) {
+        if let (Some(current), Some(max)) = (self.current_durability.as_mut(), self.max_durability) {
+            *current = max;
+        }
+    }
+
+    /// Damage item by amount
+    pub fn damage(&mut self, amount: f32) {
+        if let Some(current) = self.current_durability.as_mut() {
+            *current = (*current - amount).max(0.0);
         }
     }
 }
@@ -131,6 +199,9 @@ impl Inventory {
                     quantity,
                     fill_level: item.fill_level,
                     max_capacity: item.max_capacity,
+                    current_durability: item.current_durability,
+                    max_durability: item.max_durability,
+                    quality: item.quality,
                 };
 
                 if item.quantity == 0 {

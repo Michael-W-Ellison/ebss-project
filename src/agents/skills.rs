@@ -232,6 +232,32 @@ impl Quality {
             *self
         }
     }
+
+    /// Get minimum skill level required for 50% success rate at this quality
+    pub fn min_skill_level_for_repair(&self) -> i32 {
+        match self {
+            Quality::Pathetic => -9,   // 90% chance at -9
+            Quality::Crude => -7,      // 70% chance at -7
+            Quality::Basic => -5,      // 60% chance at -5
+            Quality::Moderate => -1,   // 50% chance at -1
+            Quality::Advanced => 3,    // 50% chance at 3
+            Quality::Expert => 7,      // 50% chance at 7
+        }
+    }
+
+    /// Downgrade quality by N levels (for recycling)
+    pub fn downgrade(&self, levels: u8) -> Quality {
+        let current_level = *self as i32;
+        let new_level = (current_level - levels as i32).max(0);
+        match new_level {
+            0 => Quality::Pathetic,
+            1 => Quality::Crude,
+            2 => Quality::Basic,
+            3 => Quality::Moderate,
+            4 => Quality::Advanced,
+            _ => Quality::Expert,
+        }
+    }
 }
 
 /// Result of a skill check
@@ -247,6 +273,30 @@ pub struct SkillCheckResult {
 pub enum InjuryType {
     Small,
     Large,
+}
+
+/// Result of a repair attempt
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepairResult {
+    pub success: bool,
+    pub experience_gained: f32,  // 0.5 for successful repair
+    pub speed_multiplier: f32,
+}
+
+/// Material returned from recycling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecycledMaterial {
+    pub material_id: String,
+    pub quantity: u32,
+    pub quality: Quality,
+}
+
+/// Result of recycling an item
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecycleResult {
+    pub materials: Vec<RecycledMaterial>,
+    pub return_percentage: f32,  // 0.2, 0.5, or 0.75
+    pub quality_downgrade: u8,    // 0, 1, or 2
 }
 
 /// Individual skill with level and progression
@@ -422,6 +472,32 @@ impl Skill {
             self.experience as f32 / 100.0
         }
     }
+
+    /// Check if agent can repair an item of given quality
+    pub fn can_repair(&self, item_quality: Quality) -> bool {
+        self.level >= item_quality.min_skill_level_for_repair()
+    }
+
+    /// Perform repair (100% success, no injury, 0.5 exp gain)
+    pub fn perform_repair(&mut self, item_quality: Quality) -> RepairResult {
+        if !self.can_repair(item_quality) {
+            return RepairResult {
+                success: false,
+                experience_gained: 0.0,
+                speed_multiplier: self.speed_multiplier(),
+            };
+        }
+
+        // Successful repair
+        let exp_gain = 0.5;
+        self.gain_experience((exp_gain * 100.0) as u32); // Convert to integer exp points
+
+        RepairResult {
+            success: true,
+            experience_gained: exp_gain,
+            speed_multiplier: self.speed_multiplier(),
+        }
+    }
 }
 
 /// Collection of all agent skills
@@ -500,6 +576,19 @@ impl Skills {
             let sum: i32 = self.skills.values().map(|s| s.level).sum();
             sum as f32 / self.skills.len() as f32
         }
+    }
+
+    /// Check if agent can repair an item of given quality with given skill
+    pub fn can_repair(&self, skill_type: SkillType, item_quality: Quality) -> bool {
+        self.get_skill_if_exists(skill_type)
+            .map(|s| s.can_repair(item_quality))
+            .unwrap_or(false)
+    }
+
+    /// Perform repair for an item
+    pub fn perform_repair(&mut self, skill_type: SkillType, item_quality: Quality) -> RepairResult {
+        let skill = self.get_skill_mut(skill_type);
+        skill.perform_repair(item_quality)
     }
 }
 
@@ -652,5 +741,71 @@ mod tests {
         skills.set_skill_level(SkillType::Crafting, -10);
 
         assert_eq!(skills.average_skill_level(), 0.0);
+    }
+
+    #[test]
+    fn test_quality_downgrade() {
+        assert_eq!(Quality::Expert.downgrade(0), Quality::Expert);
+        assert_eq!(Quality::Expert.downgrade(1), Quality::Advanced);
+        assert_eq!(Quality::Expert.downgrade(2), Quality::Moderate);
+        assert_eq!(Quality::Advanced.downgrade(1), Quality::Moderate);
+        assert_eq!(Quality::Crude.downgrade(1), Quality::Pathetic);
+        assert_eq!(Quality::Pathetic.downgrade(1), Quality::Pathetic); // Can't go lower
+    }
+
+    #[test]
+    fn test_min_skill_level_for_repair() {
+        assert_eq!(Quality::Pathetic.min_skill_level_for_repair(), -9);
+        assert_eq!(Quality::Crude.min_skill_level_for_repair(), -7);
+        assert_eq!(Quality::Basic.min_skill_level_for_repair(), -5);
+        assert_eq!(Quality::Moderate.min_skill_level_for_repair(), -1);
+        assert_eq!(Quality::Advanced.min_skill_level_for_repair(), 3);
+        assert_eq!(Quality::Expert.min_skill_level_for_repair(), 7);
+    }
+
+    #[test]
+    fn test_can_repair() {
+        let skill_low = Skill::with_level(SkillType::Crafting, -8);
+        let skill_high = Skill::with_level(SkillType::Crafting, 5);
+
+        // Low skill (-8) can repair Pathetic (-9) but not Crude (-7 required)
+        assert!(skill_low.can_repair(Quality::Pathetic));
+        assert!(!skill_low.can_repair(Quality::Crude)); // Requires -7, have -8
+        assert!(!skill_low.can_repair(Quality::Basic));
+        assert!(!skill_low.can_repair(Quality::Moderate));
+
+        // High skill (5) can repair everything up to Advanced but not Expert
+        assert!(skill_high.can_repair(Quality::Pathetic));
+        assert!(skill_high.can_repair(Quality::Crude));
+        assert!(skill_high.can_repair(Quality::Basic));
+        assert!(skill_high.can_repair(Quality::Moderate));
+        assert!(skill_high.can_repair(Quality::Advanced)); // Requires 3, have 5
+        assert!(!skill_high.can_repair(Quality::Expert)); // Requires 7, have 5
+    }
+
+    #[test]
+    fn test_perform_repair() {
+        let mut skill = Skill::with_level(SkillType::Crafting, 5);
+
+        // Can repair Moderate quality
+        let result = skill.perform_repair(Quality::Moderate);
+        assert!(result.success);
+        assert_eq!(result.experience_gained, 0.5);
+
+        // Cannot repair Expert quality (requires level 7)
+        let result_fail = skill.perform_repair(Quality::Expert);
+        assert!(!result_fail.success);
+        assert_eq!(result_fail.experience_gained, 0.0);
+    }
+
+    #[test]
+    fn test_repair_exp_gain() {
+        let mut skill = Skill::with_level(SkillType::Crafting, -5);
+        let initial_exp = skill.experience;
+
+        // Perform repair (0.5 exp = 50 exp points)
+        skill.perform_repair(Quality::Basic);
+
+        assert_eq!(skill.experience, initial_exp + 50);
     }
 }

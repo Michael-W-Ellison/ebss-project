@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use super::{ToolType, ToolTier, MaterialCategory};
+use crate::agents::{Quality, skills::RecycledMaterial};
 
 /// Represents a crafting station or workspace
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -295,6 +296,82 @@ impl Default for RecipeBook {
     }
 }
 
+/// Calculate repair cost for an item
+/// Formula: (material_cost - durability_percentage) * 0.2
+///
+/// # Arguments
+/// * `recipe` - The crafting recipe for the item
+/// * `current_durability_pct` - Current durability as percentage (0.0 to 1.0)
+///
+/// # Returns
+/// Vector of ingredients needed for repair
+pub fn calculate_repair_cost(recipe: &CraftingTemplate, current_durability_pct: f32) -> Vec<Ingredient> {
+    let durability_pct = current_durability_pct.clamp(0.0, 1.0);
+
+    recipe.inputs.iter()
+        .filter(|ing| ing.consumed) // Only consumed ingredients
+        .map(|ing| {
+            // (quantity * (1.0 - durability_pct)) * 0.2
+            let loss_amount = (ing.quantity as f32) * (1.0 - durability_pct);
+            let repair_cost = (loss_amount * 0.2).ceil() as u32; // Round up
+
+            Ingredient {
+                material_id: ing.material_id.clone(),
+                quantity: repair_cost.max(1), // Minimum 1 if any repair needed
+                consumed: true,
+            }
+        })
+        .filter(|ing| ing.quantity > 0)
+        .collect()
+}
+
+/// Calculate materials returned from recycling an item
+///
+/// Durability tiers:
+/// - 0% (broken): 20% materials, -2 quality levels
+/// - 1-49%: 50% materials, -1 quality level
+/// - 50-100%: 75% materials, same quality
+///
+/// # Arguments
+/// * `recipe` - The crafting recipe for the item
+/// * `current_durability_pct` - Current durability as percentage (0.0 to 1.0)
+/// * `item_quality` - Quality of the item being recycled
+///
+/// # Returns
+/// Vector of recycled materials with adjusted quantities and qualities
+pub fn calculate_recycle_returns(
+    recipe: &CraftingTemplate,
+    current_durability_pct: f32,
+    item_quality: Quality,
+) -> Vec<RecycledMaterial> {
+    let durability_pct = current_durability_pct.clamp(0.0, 1.0);
+
+    // Determine return percentage and quality downgrade
+    let (return_pct, quality_downgrade) = if durability_pct == 0.0 {
+        (0.2, 2) // 20%, -2 quality
+    } else if durability_pct < 0.5 {
+        (0.5, 1) // 50%, -1 quality
+    } else {
+        (0.75, 0) // 75%, same quality
+    };
+
+    let recycled_quality = item_quality.downgrade(quality_downgrade);
+
+    recipe.inputs.iter()
+        .filter(|ing| ing.consumed) // Only consumed ingredients
+        .map(|ing| {
+            let returned_quantity = ((ing.quantity as f32) * return_pct).floor() as u32;
+
+            RecycledMaterial {
+                material_id: ing.material_id.clone(),
+                quantity: returned_quantity,
+                quality: recycled_quality,
+            }
+        })
+        .filter(|mat| mat.quantity > 0)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,5 +454,103 @@ mod tests {
         let craftable = book.craftable_recipes(&inventory);
         assert_eq!(craftable.len(), 1); // Only planks is craftable
         assert_eq!(craftable[0].id, "planks");
+    }
+
+    #[test]
+    fn test_repair_cost_calculation() {
+        // Create iron axe recipe: 100 wood + 100 iron
+        let recipe = CraftingTemplate::new("iron_axe".to_string(), "Iron Axe".to_string())
+            .with_input(Ingredient::new("wood".to_string(), 100))
+            .with_input(Ingredient::new("iron".to_string(), 100));
+
+        // At 80% durability
+        let repair_cost = calculate_repair_cost(&recipe, 0.8);
+
+        // (100 - 80) * 0.2 = 4 for each material
+        assert_eq!(repair_cost.len(), 2);
+        assert_eq!(repair_cost[0].quantity, 4);
+        assert_eq!(repair_cost[1].quantity, 4);
+    }
+
+    #[test]
+    fn test_repair_cost_at_50_percent() {
+        let recipe = CraftingTemplate::new("tool".to_string(), "Tool".to_string())
+            .with_input(Ingredient::new("iron".to_string(), 50));
+
+        let repair_cost = calculate_repair_cost(&recipe, 0.5);
+
+        // (50 - 25) * 0.2 = 5
+        assert_eq!(repair_cost[0].quantity, 5);
+    }
+
+    #[test]
+    fn test_repair_cost_at_low_durability() {
+        let recipe = CraftingTemplate::new("tool".to_string(), "Tool".to_string())
+            .with_input(Ingredient::new("iron".to_string(), 100));
+
+        let repair_cost = calculate_repair_cost(&recipe, 0.1);
+
+        // (100 - 10) * 0.2 = 18
+        assert_eq!(repair_cost[0].quantity, 18);
+    }
+
+    #[test]
+    fn test_recycle_broken_item() {
+        // Broken item (0% durability): 20% return, -2 quality
+        let recipe = CraftingTemplate::new("tool".to_string(), "Tool".to_string())
+            .with_input(Ingredient::new("iron".to_string(), 100))
+            .with_input(Ingredient::new("wood".to_string(), 50));
+
+        let recycled = calculate_recycle_returns(&recipe, 0.0, Quality::Advanced);
+
+        // 20% of materials
+        assert_eq!(recycled[0].quantity, 20); // 100 * 0.2
+        assert_eq!(recycled[1].quantity, 10); // 50 * 0.2
+
+        // Quality downgraded by 2 (Advanced=4 -> Basic=2)
+        assert_eq!(recycled[0].quality, Quality::Basic);
+        assert_eq!(recycled[1].quality, Quality::Basic);
+    }
+
+    #[test]
+    fn test_recycle_damaged_item() {
+        // Damaged item (30% durability): 50% return, -1 quality
+        let recipe = CraftingTemplate::new("tool".to_string(), "Tool".to_string())
+            .with_input(Ingredient::new("iron".to_string(), 100));
+
+        let recycled = calculate_recycle_returns(&recipe, 0.3, Quality::Moderate);
+
+        // 50% of materials
+        assert_eq!(recycled[0].quantity, 50);
+
+        // Quality downgraded by 1 (Moderate -> Basic)
+        assert_eq!(recycled[0].quality, Quality::Basic);
+    }
+
+    #[test]
+    fn test_recycle_good_condition_item() {
+        // Good condition (70% durability): 75% return, same quality
+        let recipe = CraftingTemplate::new("tool".to_string(), "Tool".to_string())
+            .with_input(Ingredient::new("iron".to_string(), 100));
+
+        let recycled = calculate_recycle_returns(&recipe, 0.7, Quality::Expert);
+
+        // 75% of materials
+        assert_eq!(recycled[0].quantity, 75);
+
+        // Quality unchanged
+        assert_eq!(recycled[0].quality, Quality::Expert);
+    }
+
+    #[test]
+    fn test_recycle_filters_zero_quantity() {
+        // Small recipe that would produce < 1 item on some returns
+        let recipe = CraftingTemplate::new("small_tool".to_string(), "Small Tool".to_string())
+            .with_input(Ingredient::new("iron".to_string(), 3));
+
+        // Broken: 20% of 3 = 0.6, floors to 0, should be filtered out
+        let recycled = calculate_recycle_returns(&recipe, 0.0, Quality::Basic);
+
+        assert_eq!(recycled.len(), 0); // No materials returned
     }
 }
