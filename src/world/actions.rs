@@ -142,10 +142,57 @@ impl World {
             if harvested > 0 {
                 // Convert resource to item type
                 let item_type = match resource_type {
+                    // Basic
                     ResourceType::Wood => ItemType::Wood,
                     ResourceType::Stone => ItemType::Stone,
                     ResourceType::Iron => ItemType::Iron,
                     ResourceType::Food => ItemType::Food,
+
+                    // Agricultural
+                    ResourceType::Grain => ItemType::Grain,
+                    ResourceType::Flax => ItemType::Flax,
+                    ResourceType::Herbs => ItemType::Herbs,
+                    ResourceType::Cotton => ItemType::Cotton,
+
+                    // Animal
+                    ResourceType::Hides => ItemType::Hides,
+                    ResourceType::Wool => ItemType::Wool,
+                    ResourceType::Meat => ItemType::Meat,
+                    ResourceType::Milk => ItemType::Milk,
+                    ResourceType::Fish => ItemType::Fish,
+                    ResourceType::Honey => ItemType::Honey,
+
+                    // Mineral
+                    ResourceType::Clay => ItemType::Clay,
+                    ResourceType::Sand => ItemType::Sand,
+                    ResourceType::Coal => ItemType::Coal,
+
+                    // Processed
+                    ResourceType::Flour => ItemType::Flour,
+                    ResourceType::Leather => ItemType::Leather,
+                    ResourceType::Cloth => ItemType::Cloth,
+                    ResourceType::Linen => ItemType::Linen,
+                    ResourceType::Glass => ItemType::Glass,
+                    ResourceType::Bricks => ItemType::Bricks,
+                    ResourceType::Charcoal => ItemType::Charcoal,
+                    ResourceType::Rope => ItemType::Rope,
+                    ResourceType::Paper => ItemType::Paper,
+                    ResourceType::Dye => ItemType::Dye,
+
+                    // Finished Food
+                    ResourceType::Bread => ItemType::Bread,
+                    ResourceType::Ale => ItemType::Ale,
+                    ResourceType::Cheese => ItemType::Cheese,
+
+                    // Finished Goods
+                    ResourceType::Clothing => ItemType::Clothing,
+                    ResourceType::Shoes => ItemType::Shoes,
+                    ResourceType::Tools => ItemType::WoodenAxe, // Default tool
+                    ResourceType::Weapons => ItemType::WoodenSpear, // Default weapon
+                    ResourceType::Armor => ItemType::LeatherArmor, // Default armor
+                    ResourceType::Pottery => ItemType::Pottery,
+                    ResourceType::Furniture => ItemType::Furniture,
+                    ResourceType::Jewelry => ItemType::Jewelry,
                 };
 
                 // Food goes to agent inventory (returned in result)

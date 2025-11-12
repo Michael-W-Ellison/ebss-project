@@ -216,6 +216,8 @@ impl World {
                 ResourceType::Stone => stats.stone_available += resource.amount,
                 ResourceType::Iron => stats.iron_available += resource.amount,
                 ResourceType::Food => stats.food_available += resource.amount,
+                // New resource types - not yet tracked in stats
+                _ => {}
             }
         }
 

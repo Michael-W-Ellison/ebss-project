@@ -4,27 +4,78 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Types of items
+/// Types of items that can be held in inventory
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ItemType {
-    // Raw resources
+    // === Basic Resources ===
     Wood,
     Stone,
     Iron,
     Food,
 
-    // Tools
+    // === Raw Materials (Agricultural) ===
+    Grain,
+    Flax,
+    Herbs,
+    Cotton,
+
+    // === Raw Materials (Animal) ===
+    Hides,
+    Wool,
+    Meat,
+    Milk,
+    Fish,
+    Honey,
+
+    // === Raw Materials (Mineral) ===
+    Clay,
+    Sand,
+    Coal,
+
+    // === Processed Materials ===
+    Flour,
+    Leather,
+    Cloth,
+    Linen,
+    Glass,
+    Bricks,
+    Charcoal,
+    Rope,
+    Paper,
+    Dye,
+
+    // === Finished Food ===
+    Bread,
+    Ale,
+    Cheese,
+
+    // === Finished Goods (Simple) ===
+    Clothing,
+    Shoes,
+    Pottery,
+    Furniture,
+    Jewelry,
+
+    // === Tools ===
     WoodenAxe,
     StoneAxe,
     IronAxe,
     WoodenPickaxe,
     StonePickaxe,
     IronPickaxe,
+    WoodenHammer,
+    StoneHammer,
+    IronHammer,
 
-    // Weapons/Armor
+    // === Weapons ===
     WoodenSpear,
+    WoodenBow,
     StoneSpear,
     IronSword,
+    IronBow,
+    SteelSword,
+
+    // === Armor ===
     LeatherArmor,
     IronArmor,
     SteelArmor,
@@ -36,7 +87,8 @@ impl ItemType {
         matches!(
             self,
             ItemType::WoodenAxe | ItemType::StoneAxe | ItemType::IronAxe |
-            ItemType::WoodenPickaxe | ItemType::StonePickaxe | ItemType::IronPickaxe
+            ItemType::WoodenPickaxe | ItemType::StonePickaxe | ItemType::IronPickaxe |
+            ItemType::WoodenHammer | ItemType::StoneHammer | ItemType::IronHammer
         )
     }
 
@@ -44,7 +96,8 @@ impl ItemType {
     pub fn is_weapon(&self) -> bool {
         matches!(
             self,
-            ItemType::WoodenSpear | ItemType::StoneSpear | ItemType::IronSword
+            ItemType::WoodenSpear | ItemType::WoodenBow | ItemType::StoneSpear |
+            ItemType::IronSword | ItemType::IronBow | ItemType::SteelSword
         )
     }
 
@@ -56,12 +109,30 @@ impl ItemType {
         )
     }
 
+    /// Check if item is a resource/material
+    pub fn is_resource(&self) -> bool {
+        !self.is_tool() && !self.is_weapon() && !self.is_armor()
+    }
+
+    /// Check if item is consumable
+    pub fn is_consumable(&self) -> bool {
+        matches!(
+            self,
+            ItemType::Food | ItemType::Bread | ItemType::Ale | ItemType::Cheese |
+            ItemType::Meat | ItemType::Fish | ItemType::Honey
+        )
+    }
+
     /// Get tool efficiency multiplier (1.0 = base)
     pub fn efficiency(&self) -> f32 {
         match self {
-            ItemType::IronAxe | ItemType::IronPickaxe => 2.0,   // 2x faster
-            ItemType::StoneAxe | ItemType::StonePickaxe => 1.5, // 1.5x faster
-            ItemType::WoodenAxe | ItemType::WoodenPickaxe => 1.2, // 1.2x faster
+            // Iron tools - 2x efficiency
+            ItemType::IronAxe | ItemType::IronPickaxe | ItemType::IronHammer => 2.0,
+            // Stone tools - 1.5x efficiency
+            ItemType::StoneAxe | ItemType::StonePickaxe | ItemType::StoneHammer => 1.5,
+            // Wooden tools - 1.2x efficiency
+            ItemType::WoodenAxe | ItemType::WoodenPickaxe | ItemType::WoodenHammer => 1.2,
+            // Everything else
             _ => 1.0,
         }
     }
@@ -69,15 +140,23 @@ impl ItemType {
     /// Get base durability (uses before breaking, 0 = infinite)
     pub fn durability(&self) -> u32 {
         match self {
-            // Tools wear out
-            ItemType::WoodenAxe | ItemType::WoodenPickaxe => 50,
-            ItemType::StoneAxe | ItemType::StonePickaxe => 100,
-            ItemType::IronAxe | ItemType::IronPickaxe => 200,
+            // Wooden tools - low durability
+            ItemType::WoodenAxe | ItemType::WoodenPickaxe | ItemType::WoodenHammer => 50,
+            // Stone tools - moderate durability
+            ItemType::StoneAxe | ItemType::StonePickaxe | ItemType::StoneHammer => 100,
+            // Iron tools - high durability
+            ItemType::IronAxe | ItemType::IronPickaxe | ItemType::IronHammer => 200,
 
-            // Weapons/armor wear out
-            ItemType::WoodenSpear => 30,
+            // Wooden weapons
+            ItemType::WoodenSpear | ItemType::WoodenBow => 30,
+            // Stone weapons
             ItemType::StoneSpear => 60,
-            ItemType::IronSword => 150,
+            // Iron weapons
+            ItemType::IronSword | ItemType::IronBow => 150,
+            // Steel weapons
+            ItemType::SteelSword => 250,
+
+            // Armor durability
             ItemType::LeatherArmor => 80,
             ItemType::IronArmor => 200,
             ItemType::SteelArmor => 300,
