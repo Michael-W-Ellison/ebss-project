@@ -23,6 +23,7 @@ pub struct MinecraftSurvivalPlugin {
     actions: HashMap<String, Action>,
     recipe_book: RecipeBook,
     world_map: HashMap<Position, String>, // Position -> Material ID
+    structures: StructureRegistry,
     config: Option<PluginConfig>,
 }
 
@@ -48,6 +49,7 @@ impl MinecraftSurvivalPlugin {
             actions: HashMap::new(),
             recipe_book: RecipeBook::new(),
             world_map: HashMap::new(),
+            structures: StructureRegistry::new(),
             config: None,
         };
 
@@ -182,11 +184,54 @@ impl MinecraftSurvivalPlugin {
             .with_harvest_time(25)
             .with_drop_quantity(1, 1);
 
+        // Water containers - for carrying water
+        let leather = Material::new("leather".to_string(), "Leather".to_string())
+            .with_description("Leather for crafting".to_string())
+            .with_category(MaterialCategory::Processed)
+            .with_hardness(1.0)
+            .with_stack_size(16);
+
+        let mut waterskin = Material::new("waterskin".to_string(), "Leather Waterskin".to_string())
+            .with_description("Basic water container - holds 8 units of water".to_string())
+            .with_category(MaterialCategory::Container)
+            .with_hardness(0.5)
+            .with_stack_size(1);
+        waterskin.properties.insert("capacity".to_string(), "8.0".to_string());
+
+        let mut canteen = Material::new("canteen".to_string(), "Iron Canteen".to_string())
+            .with_description("Improved water container - holds 16 units of water".to_string())
+            .with_category(MaterialCategory::Container)
+            .with_hardness(1.0)
+            .with_stack_size(1);
+        canteen.properties.insert("capacity".to_string(), "16.0".to_string());
+
+        let mut advanced_canteen = Material::new("advanced_canteen".to_string(), "Advanced Canteen".to_string())
+            .with_description("High-capacity water container - holds 32 units of water".to_string())
+            .with_category(MaterialCategory::Container)
+            .with_hardness(1.5)
+            .with_stack_size(1);
+        advanced_canteen.properties.insert("capacity".to_string(), "32.0".to_string());
+
+        let bucket = Material::new("bucket".to_string(), "Iron Bucket".to_string())
+            .with_description("Bucket for carrying water".to_string())
+            .with_category(MaterialCategory::Tool)
+            .with_hardness(1.0)
+            .with_stack_size(16);
+
+        let clay = Material::new("clay".to_string(), "Clay".to_string())
+            .with_description("Clay for building and crafting".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(0.6)
+            .with_tool_requirement(ToolType::Shovel, ToolTier::None)
+            .with_harvest_time(40)
+            .with_drop_quantity(1, 1);
+
         // Register all materials
         for material in vec![
             wood, stone, iron_ore, coal, planks, sticks, iron_ingot,
             wooden_pickaxe, stone_pickaxe, iron_pickaxe, wooden_axe, apple,
-            water, dirt, grass, sand,
+            water, dirt, grass, sand, leather, waterskin, canteen, advanced_canteen,
+            bucket, clay,
         ] {
             self.materials.insert(material.id.clone(), material);
         }
@@ -268,8 +313,65 @@ impl MinecraftSurvivalPlugin {
                 .with_drive_effect(DriveType::Thirst, -0.6),
         );
 
+        // Fill water container from source
+        let fill_container = Action::new(
+            "fill_container".to_string(),
+            "Fill Water Container".to_string(),
+            ActionType::Store,
+        )
+        .with_description("Fill water containers from a water source or structure".to_string())
+        .with_effects(
+            ActionEffects::none()
+                .with_energy_cost(2.0)
+                .with_time_cost(30),
+        );
+
+        // Build structure
+        let build_structure = Action::new(
+            "build_structure".to_string(),
+            "Build Structure".to_string(),
+            ActionType::Build,
+        )
+        .with_description("Construct a building or structure".to_string())
+        .with_effects(
+            ActionEffects::none()
+                .with_energy_cost(15.0)
+                .with_time_cost(200)
+                .with_drive_effect(DriveType::Construction, -0.3)
+                .with_experience("construction".to_string(), 50.0),
+        );
+
+        // Draw water from structure
+        let draw_water = Action::new(
+            "draw_water".to_string(),
+            "Draw Water".to_string(),
+            ActionType::Retrieve,
+        )
+        .with_description("Draw water from a well, cistern, or water tower".to_string())
+        .with_effects(
+            ActionEffects::none()
+                .with_energy_cost(1.0)
+                .with_time_cost(15),
+        );
+
+        // Upgrade structure
+        let upgrade_structure = Action::new(
+            "upgrade_structure".to_string(),
+            "Upgrade Structure".to_string(),
+            ActionType::Build,
+        )
+        .with_description("Upgrade a structure to the next level".to_string())
+        .with_effects(
+            ActionEffects::none()
+                .with_energy_cost(20.0)
+                .with_time_cost(300)
+                .with_drive_effect(DriveType::Construction, -0.4)
+                .with_experience("construction".to_string(), 75.0),
+        );
+
         // Register all actions
-        for action in vec![chop_tree, mine_stone, craft, eat, drink] {
+        for action in vec![chop_tree, mine_stone, craft, eat, drink, fill_container,
+                           build_structure, draw_water, upgrade_structure] {
             self.actions.insert(action.id.clone(), action);
         }
     }
@@ -369,6 +471,60 @@ impl MinecraftSurvivalPlugin {
         .with_energy_cost(3.0)
         .with_experience(20.0);
 
+        // Water container recipes
+        // Leather Waterskin
+        let waterskin_recipe = CraftingTemplate::new(
+            "waterskin".to_string(),
+            "Leather Waterskin".to_string(),
+        )
+        .with_description("Craft a basic water container".to_string())
+        .with_input(Ingredient::new("leather".to_string(), 2))
+        .with_output(CraftingOutput::new("waterskin".to_string(), 1))
+        .at_station(CraftingStation::Workbench)
+        .with_craft_time(15)
+        .with_energy_cost(3.0)
+        .with_experience(5.0);
+
+        // Iron Canteen
+        let canteen_recipe = CraftingTemplate::new(
+            "canteen".to_string(),
+            "Iron Canteen".to_string(),
+        )
+        .with_description("Craft an improved water container".to_string())
+        .with_input(Ingredient::new("iron_ingot".to_string(), 2))
+        .with_output(CraftingOutput::new("canteen".to_string(), 1))
+        .at_station(CraftingStation::Workbench)
+        .with_craft_time(25)
+        .with_energy_cost(5.0)
+        .with_experience(15.0);
+
+        // Advanced Canteen
+        let advanced_canteen_recipe = CraftingTemplate::new(
+            "advanced_canteen".to_string(),
+            "Advanced Canteen".to_string(),
+        )
+        .with_description("Craft a high-capacity water container".to_string())
+        .with_input(Ingredient::new("iron_ingot".to_string(), 3))
+        .with_input(Ingredient::new("leather".to_string(), 1))
+        .with_output(CraftingOutput::new("advanced_canteen".to_string(), 1))
+        .at_station(CraftingStation::Workbench)
+        .with_craft_time(35)
+        .with_energy_cost(8.0)
+        .with_experience(25.0);
+
+        // Iron Bucket
+        let bucket_recipe = CraftingTemplate::new(
+            "bucket".to_string(),
+            "Iron Bucket".to_string(),
+        )
+        .with_description("Craft a bucket for carrying water".to_string())
+        .with_input(Ingredient::new("iron_ingot".to_string(), 3))
+        .with_output(CraftingOutput::new("bucket".to_string(), 1))
+        .at_station(CraftingStation::Workbench)
+        .with_craft_time(20)
+        .with_energy_cost(4.0)
+        .with_experience(10.0);
+
         // Register all recipes
         for recipe in vec![
             planks_recipe,
@@ -378,6 +534,10 @@ impl MinecraftSurvivalPlugin {
             iron_pickaxe_recipe,
             wooden_axe_recipe,
             iron_ingot_recipe,
+            waterskin_recipe,
+            canteen_recipe,
+            advanced_canteen_recipe,
+            bucket_recipe,
         ] {
             self.recipe_book.add_recipe(recipe);
         }
@@ -590,6 +750,29 @@ impl EnvironmentPlugin for MinecraftSurvivalPlugin {
                                 .with_item_consumed(ItemStack::new(material_id, 1));
                         }
                     }
+                }
+            }
+            ActionType::Store => {
+                // Fill water containers from source or structure
+                if action.id == "fill_container" {
+                    result = result.with_message("Water containers filled".to_string());
+                    // Note: Actual container filling would be handled by the agent's inventory system
+                }
+            }
+            ActionType::Build => {
+                // Build or upgrade structures
+                if action.id == "build_structure" {
+                    result = result.with_message("Structure construction in progress".to_string());
+                    // Note: Structure construction would create a Structure instance
+                } else if action.id == "upgrade_structure" {
+                    result = result.with_message("Structure upgrade in progress".to_string());
+                }
+            }
+            ActionType::Retrieve => {
+                // Draw water from structures
+                if action.id == "draw_water" {
+                    result = result.with_message("Water drawn from structure".to_string());
+                    // Note: Would check for nearby water storage structures
                 }
             }
             _ => {}

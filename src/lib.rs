@@ -46,14 +46,15 @@ pub mod prelude {
     
     pub use crate::agents::{
         Agent, AgentConfig, AgentState,
-        Population,
+        Population, Inventory, InventoryItem,
     };
-    
+
     pub use crate::environment::{
         EnvironmentPlugin, PluginRegistry,
         Material, Action, CraftingTemplate,
         ActionResult, ActionContext, Position as EnvPosition,
         ToolType, ToolTier, MaterialCategory,
+        Structure, StructureType, StructureLevel, StructureRegistry,
     };
     
     pub use crate::world::{

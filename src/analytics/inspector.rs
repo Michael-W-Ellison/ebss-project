@@ -24,8 +24,21 @@ pub struct AgentInspectorData {
     // Memory information
     pub memory_summary: MemorySummary,
 
+    // Inventory information
+    pub inventory_summary: InventorySummary,
+
     // Stats
     pub age: u64, // Ticks alive
+}
+
+/// Inventory summary for display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventorySummary {
+    pub total_items: usize,
+    pub total_weight: f32,
+    pub water_available: f32,
+    pub container_count: usize,
+    pub slot_usage: String, // e.g., "5/20"
 }
 
 /// Drive information for display
@@ -75,6 +88,15 @@ impl AgentInspectorData {
         let most_urgent_drive = agent.drives.most_urgent()
             .map(|d| d.drive_type);
 
+        // Calculate inventory summary
+        let total_items = agent.inventory.get_all_items().len();
+        let water_available = agent.inventory.get_total_water();
+        let container_count = agent.inventory.get_all_items()
+            .values()
+            .filter(|item| item.is_container())
+            .count();
+        let slot_usage = format!("{}/{}", total_items, agent.inventory.max_slots);
+
         Self {
             id: agent.id,
             position: agent.state.position,
@@ -87,6 +109,13 @@ impl AgentInspectorData {
                 known_storage: 0,
                 known_agents: 0,
                 known_recipes: 0,
+            },
+            inventory_summary: InventorySummary {
+                total_items,
+                total_weight: agent.inventory.current_weight,
+                water_available,
+                container_count,
+                slot_usage,
             },
             age: 0, // Will be tracked by simulation
         }

@@ -22,12 +22,14 @@ mod action;
 mod crafting;
 mod plugin;
 mod registry;
+mod structure;
 
 pub use material::*;
 pub use action::*;
 pub use crafting::*;
 pub use plugin::*;
 pub use registry::*;
+pub use structure::*;
 
 /// Result type for environment operations
 pub type EnvironmentResult<T> = Result<T, EnvironmentError>;

@@ -4,5 +4,5 @@
 pub mod agent;
 pub mod population;
 
-pub use agent::{Agent, AgentConfig, AgentState};
+pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem};
 pub use population::Population;
