@@ -29,9 +29,9 @@ impl RelationshipLevel {
         RelationshipLevel::Neutral(0)
     }
 
-    /// Create parent-child relationship (starts at Likes +3)
+    /// Create parent-child relationship (starts at Loves +1)
     pub fn parent_child() -> Self {
-        RelationshipLevel::Likes(3)
+        RelationshipLevel::Loves(1)
     }
 
     /// Get numeric value for calculations

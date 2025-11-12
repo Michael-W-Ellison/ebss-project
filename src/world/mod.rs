@@ -229,13 +229,17 @@ impl World {
         for building in &self.buildings {
             match building.building_type {
                 BuildingType::Longhouse => stats.longhouses += 1,
+                BuildingType::UpgradedLonghouse => stats.longhouses += 1, // Count as longhouse
                 BuildingType::SmallHouse => stats.small_houses += 1,
                 BuildingType::MediumHouse => stats.medium_houses += 1,
                 BuildingType::LargeHouse => stats.large_houses += 1,
-                BuildingType::Storehouse => stats.storehouses += 1,
+                BuildingType::Manor => stats.large_houses += 1, // Count as large house
+                BuildingType::Storehouse | BuildingType::TownStorage => stats.storehouses += 1,
                 BuildingType::Workshop => stats.workshops += 1,
-                BuildingType::Smithy => stats.smithies += 1,
+                BuildingType::Smithy | BuildingType::Forge => stats.smithies += 1,
                 BuildingType::Farm => stats.farms += 1,
+                // All other building types are tracked in total_buildings but not individually
+                _ => {}
             }
         }
 
