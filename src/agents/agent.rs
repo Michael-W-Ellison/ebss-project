@@ -203,6 +203,7 @@ pub struct Agent {
     pub knowledge: PersonalKnowledge, // Personal knowledge about world (resources, etc.)
     pub social_network: SocialNetwork, // Relationships and trust with other agents
     pub profession: Profession, // Job/profession and skill level
+    pub wealth: u32, // Abstract currency units for trading
 }
 
 impl Agent {
@@ -226,6 +227,7 @@ impl Agent {
             knowledge: PersonalKnowledge::new(),
             social_network: SocialNetwork::new(),
             profession: Profession::default(), // Starts unemployed
+            wealth: 100, // Starting currency
         }
     }
 
@@ -635,6 +637,134 @@ impl Agent {
     /// Get current recipe being worked on
     pub fn current_recipe(&self) -> Option<crate::world::Recipe> {
         self.profession.get_current_recipe()
+    }
+
+    // === Trading Methods ===
+
+    /// Create a trade offer
+    pub fn create_trade_offer(
+        &self,
+        offering: Vec<(ItemType, u32)>,
+        requesting: Vec<(ItemType, u32)>,
+        price: u32,
+        current_tick: u32,
+        duration: u32,
+    ) -> Option<crate::world::TradeOffer> {
+        // Check if agent has the items they're offering
+        for (item, quantity) in &offering {
+            if !self.inventory.has_item(item, *quantity) {
+                return None; // Cannot create offer without items
+            }
+        }
+
+        Some(crate::world::TradeOffer::new(
+            self.id,
+            offering,
+            requesting,
+            price,
+            current_tick,
+            duration,
+        ))
+    }
+
+    /// Check if agent can afford a trade
+    pub fn can_afford_trade(&self, offer: &crate::world::TradeOffer) -> bool {
+        offer.can_afford(self.wealth)
+    }
+
+    /// Check if agent has requested items for a trade
+    pub fn has_requested_items(&self, offer: &crate::world::TradeOffer) -> bool {
+        for (item, quantity) in &offer.requesting {
+            if !self.inventory.has_item(item, *quantity) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Pay for something (returns true if successful)
+    pub fn pay(&mut self, amount: u32) -> bool {
+        if self.wealth >= amount {
+            self.wealth -= amount;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Receive payment
+    pub fn receive_payment(&mut self, amount: u32) {
+        self.wealth += amount;
+    }
+
+    /// Get agent's wealth
+    pub fn get_wealth(&self) -> u32 {
+        self.wealth
+    }
+
+    /// Check if agent wants to buy an item (based on needs and profession)
+    pub fn wants_to_buy(&self, item: ItemType) -> bool {
+        // Always want food if low on energy
+        if item == ItemType::Food && self.state.energy < 50.0 {
+            return true;
+        }
+
+        // Want items related to profession
+        match self.profession.job {
+            crate::agents::JobType::Baker => {
+                matches!(item, ItemType::Flour | ItemType::Grain)
+            }
+            crate::agents::JobType::Carpenter => {
+                matches!(item, ItemType::Wood)
+            }
+            crate::agents::JobType::Blacksmith => {
+                matches!(item, ItemType::Iron | ItemType::Coal | ItemType::Charcoal)
+            }
+            crate::agents::JobType::Tailor => {
+                matches!(item, ItemType::Cloth | ItemType::Linen)
+            }
+            crate::agents::JobType::Cobbler => {
+                matches!(item, ItemType::Leather)
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if agent wants to sell an item
+    pub fn wants_to_sell(&self, item: ItemType) -> bool {
+        // Don't sell food if energy is low
+        if item == ItemType::Food && self.state.energy < 70.0 {
+            return false;
+        }
+
+        // Sell items not related to profession if inventory is getting full
+        if self.inventory.items.len() >= 15 {
+            return !self.wants_to_buy(item);
+        }
+
+        false
+    }
+
+    /// Determine fair price for buying an item (based on agent's valuation)
+    pub fn valuation_for_item(&self, item: ItemType, market_price: u32) -> u32 {
+        let mut value = market_price;
+
+        // Increase valuation if agent needs it
+        if self.wants_to_buy(item) {
+            value = (value as f32 * 1.3).round() as u32;
+        }
+
+        // Decrease valuation if agent doesn't need it
+        if self.wants_to_sell(item) {
+            value = (value as f32 * 0.8).round() as u32;
+        }
+
+        // Food is more valuable when starving
+        if item == ItemType::Food && self.state.is_starving() {
+            value = (value as f32 * 2.0).round() as u32;
+        }
+
+        value.max(1)
     }
 }
 

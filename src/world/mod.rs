@@ -9,6 +9,7 @@ pub mod actions;
 pub mod grid;
 pub mod render;
 pub mod production;
+pub mod economy;
 
 pub use terrain::{Terrain, TerrainType, Tile};
 pub use resources::{Resource, ResourceType, ResourceNode};
@@ -18,6 +19,7 @@ pub use actions::{Action, ActionResult};
 pub use grid::{Grid, Position};
 pub use render::AsciiRenderer;
 pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput, get_job_recipes, get_primary_recipe};
+pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketStatistics};
 
 use crate::agents::Population;
 use serde::{Deserialize, Serialize};
@@ -29,6 +31,7 @@ pub struct World {
     pub resources: Vec<ResourceNode>,
     pub buildings: Vec<Building>,
     pub storehouse_inventory: Inventory,
+    pub marketplace: Marketplace,
     pub tick: u32,
 }
 
@@ -71,6 +74,7 @@ impl World {
             resources: Vec::new(),
             buildings: Vec::new(),
             storehouse_inventory: Inventory::new(10000), // Large capacity
+            marketplace: Marketplace::new(),
             tick: 0,
         };
 
