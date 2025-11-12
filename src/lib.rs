@@ -64,6 +64,8 @@ pub mod prelude {
     pub use crate::analytics::{
         Simulation, SimulationConfig,
         Analytics, BehaviorAnalysis,
+        SimulationController, SimulationState,
+        Inspector, Selection, AgentInspectorData,
     };
 }
 

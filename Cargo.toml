@@ -69,5 +69,9 @@ path = "examples/basic_survival.rs"
 name = "minecraft_world"
 path = "examples/minecraft_world.rs"
 
+[[example]]
+name = "inspector_demo"
+path = "examples/inspector_demo.rs"
+
 [workspace]
 members = ["plugins/*"]
