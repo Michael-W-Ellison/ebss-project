@@ -11,6 +11,7 @@ pub use simulation_controller::{SimulationController, SimulationState};
 pub use inspector::{
     Inspector, Selection, AgentInspectorData, DriveInspectorData,
     TerrainInspectorData, MemorySummary, InventorySummary, SensorySummary, SkillsSummary,
+    EmotionSummary, RelationshipSummary,
 };
 
 pub struct Simulation;

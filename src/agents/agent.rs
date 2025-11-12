@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use super::senses::Senses;
 use super::body::Body;
 use super::skills::Skills;
+use super::emotions::{EmotionState, RelationshipMap};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -296,6 +297,8 @@ pub struct Agent {
     pub senses: Senses,
     pub body: Body,
     pub skills: Skills,
+    pub emotions: EmotionState,
+    pub relationships: RelationshipMap,
 }
 
 impl Agent {
@@ -317,15 +320,118 @@ impl Agent {
             senses: Senses::default(),
             body: Body::default(),
             skills: Skills::default(),
+            emotions: EmotionState::default(),
+            relationships: RelationshipMap::default(),
         }
     }
 
-    /// Update agent state (tick senses and body)
+    /// Update agent state (tick senses, body, and emotions)
     pub fn tick(&mut self) {
         self.senses.tick();
         self.body.tick();
+        self.emotions.tick();
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;
     }
+
+    /// Respond emotionally to a threat
+    ///
+    /// # Arguments
+    /// * `threat_strength` - Strength of the threat (e.g., enemy agent's combat power)
+    /// * `source` - Source of the threat
+    ///
+    /// Returns the emotional response triggered
+    pub fn respond_to_threat(&mut self, threat_strength: f32, source: super::EmotionSource) -> super::EmotionType {
+        use super::ThreatAssessment;
+
+        // Calculate agent strength (simplified: health + body functionality)
+        let agent_strength = self.state.health / 100.0 * self.body.movement_speed_multiplier();
+
+        let assessment = ThreatAssessment::assess(agent_strength, threat_strength, source.clone());
+
+        let emotion_type = assessment.emotion_type();
+        let emotion_amount = assessment.emotion_amount();
+
+        match emotion_type {
+            super::EmotionType::Anger => {
+                self.emotions.add_anger(source, emotion_amount);
+            }
+            super::EmotionType::Fear => {
+                self.emotions.add_fear(source, emotion_amount);
+            }
+            _ => {}
+        }
+
+        emotion_type
+    }
+
+    /// Respond emotionally to harm to a loved one
+    ///
+    /// # Arguments
+    /// * `loved_one_id` - UUID of the loved one
+    /// * `harm_severity` - How severe the harm was (0.0 to 1.0)
+    /// * `source` - Source of the harm
+    pub fn respond_to_loved_one_harm(&mut self, loved_one_id: &Uuid, harm_severity: f32, source: super::EmotionSource) {
+        // Check if this is actually a loved one
+        if let Some(relationship) = self.relationships.get_relationship(loved_one_id) {
+            if relationship.is_loved_one() {
+                // Sadness scales with bond strength and harm severity
+                let sadness_amount = relationship.bond_strength * harm_severity * 0.8;
+                self.emotions.add_sadness(source.clone(), sadness_amount);
+
+                // Also potentially add fear or anger based on agent's ability to protect
+                // Parents protecting children might feel anger if they can fight back
+                if relationship.relationship_type == super::RelationshipType::Child {
+                    // Calculate if agent is strong enough to retaliate
+                    let agent_strength = self.state.health / 100.0;
+
+                    // Assume medium threat strength for the source
+                    let assessment = super::ThreatAssessment::assess(agent_strength, 0.7, source.clone());
+
+                    if assessment.can_overcome {
+                        self.emotions.add_anger(source, 0.5);
+                    } else {
+                        self.emotions.add_fear(source, 0.3);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Respond emotionally to death of a loved one
+    ///
+    /// # Arguments
+    /// * `deceased_id` - UUID of the deceased
+    /// * `source` - Source of the death (what killed them)
+    pub fn respond_to_loved_one_death(&mut self, deceased_id: &Uuid, source: super::EmotionSource) {
+        // Maximum sadness for death of loved one
+        if let Some(relationship) = self.relationships.get_relationship(deceased_id) {
+            if relationship.is_loved_one() {
+                let sadness_amount = relationship.bond_strength * 0.9;
+                self.emotions.add_sadness(EmotionSource::Agent(*deceased_id), sadness_amount);
+
+                // Fear of the source that killed them
+                self.emotions.add_fear(source, 0.4);
+            }
+        }
+    }
+
+    /// Check if agent would flee from current emotional state
+    pub fn would_flee(&self) -> bool {
+        self.emotions.should_flee()
+    }
+
+    /// Check if agent would attack from current emotional state
+    pub fn would_attack(&self) -> bool {
+        self.emotions.should_attack()
+    }
+
+    /// Get agent's dominant emotion
+    pub fn dominant_emotion(&self) -> Option<super::EmotionType> {
+        self.emotions.dominant_emotion()
+    }
 }
+
+// Need to import EmotionSource at top
+use super::emotions::EmotionSource;

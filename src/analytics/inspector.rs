@@ -1,7 +1,7 @@
 // src/analytics/inspector.rs
 //! Inspector system for examining agents, terrain, and simulation state.
 
-use crate::agents::{Agent, BodyPartType, BodySummary, SkillType, SkillCategory};
+use crate::agents::{Agent, BodyPartType, BodySummary, SkillType, SkillCategory, EmotionType, RelationshipType};
 use crate::core::{DriveType, Drive};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,12 @@ pub struct AgentInspectorData {
 
     // Skills information
     pub skills_summary: SkillsSummary,
+
+    // Emotion information
+    pub emotion_summary: EmotionSummary,
+
+    // Relationship information
+    pub relationship_summary: RelationshipSummary,
 
     // Stats
     pub age: u64, // Ticks alive
@@ -77,6 +83,30 @@ pub struct InventorySummary {
     pub water_available: f32,
     pub container_count: usize,
     pub slot_usage: String, // e.g., "5/20"
+}
+
+/// Emotion summary for display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmotionSummary {
+    pub anger: f32,
+    pub fear: f32,
+    pub sadness: f32,
+    pub dominant_emotion: Option<EmotionType>,
+    pub is_distressed: bool,
+    pub should_flee: bool,
+    pub should_attack: bool,
+    pub active_sources: usize, // Total active emotion sources
+}
+
+/// Relationship summary for display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationshipSummary {
+    pub total_relationships: usize,
+    pub family_count: usize,
+    pub loved_ones_count: usize,
+    pub friends_count: usize,
+    pub enemies_count: usize,
+    pub strongest_bond: Option<(Uuid, RelationshipType, f32)>,
 }
 
 /// Drive information for display
@@ -178,6 +208,48 @@ impl AgentInspectorData {
             apprentice_skills,
         };
 
+        // Calculate emotion summary
+        let active_sources = agent.emotions.anger_sources.len()
+            + agent.emotions.fear_sources.len()
+            + agent.emotions.sadness_sources.len();
+
+        let emotion_summary = EmotionSummary {
+            anger: agent.emotions.anger,
+            fear: agent.emotions.fear,
+            sadness: agent.emotions.sadness,
+            dominant_emotion: agent.emotions.dominant_emotion(),
+            is_distressed: agent.emotions.is_distressed(),
+            should_flee: agent.emotions.should_flee(),
+            should_attack: agent.emotions.should_attack(),
+            active_sources,
+        };
+
+        // Calculate relationship summary
+        let all_relationships = agent.relationships.get_all();
+        let family_count = agent.relationships.get_family().len();
+        let loved_ones_count = agent.relationships.get_loved_ones().len();
+
+        let friends_count = all_relationships.values()
+            .filter(|r| r.relationship_type == RelationshipType::Friend)
+            .count();
+
+        let enemies_count = all_relationships.values()
+            .filter(|r| r.relationship_type == RelationshipType::Enemy || r.relationship_type == RelationshipType::Rival)
+            .count();
+
+        let strongest_bond = all_relationships.values()
+            .max_by(|a, b| a.bond_strength.partial_cmp(&b.bond_strength).unwrap())
+            .map(|r| (r.other_agent, r.relationship_type, r.bond_strength));
+
+        let relationship_summary = RelationshipSummary {
+            total_relationships: all_relationships.len(),
+            family_count,
+            loved_ones_count,
+            friends_count,
+            enemies_count,
+            strongest_bond,
+        };
+
         Self {
             id: agent.id,
             position: agent.state.position,
@@ -201,6 +273,8 @@ impl AgentInspectorData {
             sensory_summary,
             body_summary,
             skills_summary,
+            emotion_summary,
+            relationship_summary,
             age: 0, // Will be tracked by simulation
         }
     }
