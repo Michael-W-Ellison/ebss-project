@@ -213,7 +213,7 @@ impl Population {
 
                     if drive1 && drive2 {
                         // Successful reproduction
-                        let offspring = reproduce(agent1, agent2);
+                        let offspring = reproduce(agent1, agent2, self.current_tick);
                         new_offspring.push(offspring);
 
                         // Add cooldown (prevent immediate re-reproduction)

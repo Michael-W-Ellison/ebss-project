@@ -3,7 +3,7 @@ use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, DriveState, Memory, EmotionalState, TraitSet, GoalManager, Preferences};
 use crate::world::{Inventory, ItemType, Position, ResourceType};
-use crate::agents::PersonalKnowledge;
+use crate::agents::{PersonalKnowledge, SocialNetwork};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -201,6 +201,7 @@ pub struct Agent {
     pub preferences: Preferences,
     pub inventory: Inventory, // Personal inventory for carrying food and resources
     pub knowledge: PersonalKnowledge, // Personal knowledge about world (resources, etc.)
+    pub social_network: SocialNetwork, // Relationships and trust with other agents
 }
 
 impl Agent {
@@ -222,13 +223,20 @@ impl Agent {
             preferences: Preferences::generate_random(),
             inventory: Inventory::new(20), // Can carry up to 20 items
             knowledge: PersonalKnowledge::new(),
+            social_network: SocialNetwork::new(),
         }
     }
 
     /// Create a new agent with specified parent IDs (for reproduction)
-    pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>) -> Self {
+    pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, current_tick: u32) -> Self {
         let mut agent = Self::new(config);
-        agent.parent_ids = parent_ids;
+        agent.parent_ids = parent_ids.clone();
+
+        // Add parent relationships (starts at Likes +3)
+        for parent_id in parent_ids {
+            agent.social_network.add_parent_relationship(parent_id, current_tick);
+        }
+
         agent
     }
 
@@ -260,6 +268,11 @@ impl Agent {
 
         // Update knowledge (age tracking)
         self.knowledge.tick(current_tick);
+
+        // Decay relationships towards neutral over time (every 10 ticks)
+        if current_tick % 10 == 0 {
+            self.social_network.decay_all_relationships(current_tick, 0.1);
+        }
 
         // Cleanup completed goals
         self.goals.cleanup_completed();
@@ -413,11 +426,12 @@ impl Agent {
 
     /// Request information about a specific resource type from another agent
     /// Returns information if the other agent knows about it
+    /// Returns: (position, resource_type, amount, learned_tick)
     pub fn request_info_from(
         &mut self,
         other_agent: &Agent,
         resource_type: ResourceType,
-    ) -> Option<(Position, ResourceType, u32)> {
+    ) -> Option<(Position, ResourceType, u32, u32)> {
         // Other agent shares their best knowledge about this resource type
         other_agent.knowledge.get_shareable_info(resource_type)
     }
@@ -428,7 +442,7 @@ impl Agent {
         other_agent: &mut Agent,
         resource_type: ResourceType,
     ) -> bool {
-        if let Some((position, res_type, amount)) = self.knowledge.get_shareable_info(resource_type) {
+        if let Some((position, res_type, amount, _learned_tick)) = self.knowledge.get_shareable_info(resource_type) {
             // Other agent learns from us
             other_agent.knowledge.learn_from_agent(position, res_type, amount, self.id);
             true
@@ -470,4 +484,58 @@ impl Agent {
             _ => None,
         }
     }
+
+    // ===== RELATIONSHIP & TRUST METHODS =====
+
+    /// Verify that information received from another agent was correct
+    /// This increases trust with that agent
+    pub fn verify_information_from(
+        &mut self,
+        source_agent_id: Uuid,
+        info_age_ticks: u32,
+        current_tick: u32,
+    ) {
+        let relationship = self.social_network.get_or_create_relationship(source_agent_id, current_tick);
+        relationship.verify_information(info_age_ticks, current_tick);
+    }
+
+    /// Record that information from another agent was incorrect
+    /// This decreases trust with that agent
+    pub fn information_was_wrong_from(
+        &mut self,
+        source_agent_id: Uuid,
+        info_age_ticks: u32,
+        current_tick: u32,
+    ) {
+        let relationship = self.social_network.get_or_create_relationship(source_agent_id, current_tick);
+        relationship.incorrect_information(info_age_ticks, current_tick);
+    }
+
+    /// Record a positive social interaction
+    pub fn positive_interaction_with(&mut self, other_agent_id: Uuid, strength: i8, current_tick: u32) {
+        let relationship = self.social_network.get_or_create_relationship(other_agent_id, current_tick);
+        relationship.positive_interaction(strength, current_tick);
+    }
+
+    /// Record a negative social interaction
+    pub fn negative_interaction_with(&mut self, other_agent_id: Uuid, strength: i8, current_tick: u32) {
+        let relationship = self.social_network.get_or_create_relationship(other_agent_id, current_tick);
+        relationship.negative_interaction(strength, current_tick);
+    }
+
+    /// Get how much to believe information from a specific agent (0.0 to 1.0)
+    pub fn trust_factor_for(&self, agent_id: Uuid) -> f32 {
+        self.social_network.belief_weight_for(agent_id)
+    }
+
+    /// Decide which source to believe when receiving conflicting information
+    /// Returns true if should believe source A, false if should believe source B
+    pub fn choose_between_sources(&self, source_a: Uuid, source_b: Uuid) -> bool {
+        let trust_a = self.trust_factor_for(source_a);
+        let trust_b = self.trust_factor_for(source_b);
+
+        // Believe the more trusted source
+        trust_a >= trust_b
+    }
 }
+

@@ -165,6 +165,51 @@ fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
     }
 }
 
+/// Verify information when agent reaches a resource location they learned about from others
+fn verify_information(
+    world: &World,
+    agent: &mut ebss::agents::Agent,
+    resource_position: &Position,
+    resource_type: ResourceType,
+    current_tick: u32,
+) {
+    use ebss::agents::KnowledgeSource;
+
+    // Check if agent has knowledge about this resource
+    if let Some(knowledge) = agent.knowledge.get_resource_knowledge(resource_position) {
+        // Only verify if learned from another agent (not personal observation)
+        let (should_verify, source_id) = match &knowledge.source {
+            KnowledgeSource::DirectCommunication(id) | KnowledgeSource::Overheard(id) => {
+                (true, *id)
+            }
+            KnowledgeSource::PersonalObservation => (false, uuid::Uuid::nil()),
+        };
+
+        if should_verify {
+            // Calculate how long ago they were told this info
+            let info_age = current_tick.saturating_sub(knowledge.learned_tick);
+
+            // Check if the resource actually exists at this location
+            let resource_exists = world.resources.iter().any(|r| {
+                r.position == *resource_position
+                    && r.resource_type == resource_type
+                    && r.amount > 0
+            });
+
+            if resource_exists {
+                // Information was correct! Increase trust in source
+                agent.verify_information_from(source_id, info_age, current_tick);
+            } else {
+                // Information was wrong or resource depleted. Decrease trust
+                agent.information_was_wrong_from(source_id, info_age, current_tick);
+
+                // Forget this incorrect information
+                agent.knowledge.forget_resource(resource_position);
+            }
+        }
+    }
+}
+
 /// Social communication: agents ask nearby agents for information
 fn agents_communicate(population: &mut Population) {
     const COMMUNICATION_RANGE: u32 = 5; // Can talk to agents within 5 tiles
@@ -212,9 +257,20 @@ fn agents_communicate(population: &mut Population) {
             };
 
             // Requester asks responder for information
-            if let Some((pos, res_type, amount)) = req_agent.request_info_from(resp_agent, resource_type) {
+            if let Some((pos, res_type, amount, learned_tick)) = req_agent.request_info_from(resp_agent, resource_type) {
                 // Responder has information and shares it!
                 req_agent.knowledge.learn_from_agent(pos, res_type, amount, *responder_id);
+
+                // Record positive social interaction (successful information sharing)
+                let current_tick = population.current_tick;
+                req_agent.positive_interaction_with(*responder_id, 1, current_tick);
+
+                // Calculate age of information at time of sharing
+                let info_age = current_tick.saturating_sub(learned_tick);
+
+                // Store metadata for later verification (we'll use a simple approach:
+                // the ResourceKnowledge already tracks the source, so when we verify later,
+                // we can calculate the age from learned_tick)
 
                 // Other agents nearby can overhear this conversation
                 for k in 0..agent_data.len() {
@@ -294,6 +350,9 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                     if agent_pos.distance_to(&food_pos) > 1 {
                         Some(Action::MoveTo { destination: food_pos })
                     } else {
+                        // Before harvesting, verify information if learned from others
+                        verify_information(world, agent, &food_pos, ResourceType::Food, tick);
+
                         Some(Action::HarvestResource {
                             resource_position: food_pos,
                             resource_type: ResourceType::Food,
@@ -323,6 +382,9 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                             if agent_pos.distance_to(&food_pos) > 1 {
                                 Some(Action::MoveTo { destination: food_pos })
                             } else {
+                                // Before harvesting, verify information if learned from others
+                                verify_information(world, agent, &food_pos, ResourceType::Food, tick);
+
                                 Some(Action::HarvestResource {
                                     resource_position: food_pos,
                                     resource_type: ResourceType::Food,
@@ -339,6 +401,9 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                             if agent_pos.distance_to(&wood_pos) > 1 {
                                 Some(Action::MoveTo { destination: wood_pos })
                             } else {
+                                // Before harvesting, verify information if learned from others
+                                verify_information(world, agent, &wood_pos, ResourceType::Wood, tick);
+
                                 Some(Action::HarvestResource {
                                     resource_position: wood_pos,
                                     resource_type: ResourceType::Wood,

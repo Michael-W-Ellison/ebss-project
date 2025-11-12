@@ -67,11 +67,11 @@ fn calculate_distance(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> f32 {
 }
 
 /// Create offspring from two parent agents
-pub fn reproduce(parent1: &Agent, parent2: &Agent) -> Agent {
+pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
     let parent_ids = vec![parent1.id, parent2.id];
 
     // Create offspring with inherited traits
-    let mut offspring = Agent::with_parents(AgentConfig { random_weights: false }, parent_ids);
+    let mut offspring = Agent::with_parents(AgentConfig { random_weights: false }, parent_ids, current_tick);
 
     // Inherit drives from parents with mutation
     offspring.drives = inherit_drives(&parent1.drives, &parent2.drives);
@@ -251,7 +251,7 @@ mod tests {
         parent2.state.age = 3000;
         parent2.state.life_stage = crate::agents::LifeStage::Adult;
 
-        let offspring = reproduce(&parent1, &parent2);
+        let offspring = reproduce(&parent1, &parent2, 100);
 
         assert_eq!(offspring.parent_ids.len(), 2);
         assert!(offspring.parent_ids.contains(&parent1.id));
