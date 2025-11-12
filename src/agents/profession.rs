@@ -143,20 +143,20 @@ impl JobType {
     pub fn workplace(&self) -> Option<BuildingType> {
         match self {
             // Food processing
-            JobType::Miller => None, // TODO: Add Mill building
-            JobType::Butcher => None, // TODO: Add Butchery
+            JobType::Miller => Some(BuildingType::Mill),
+            JobType::Butcher => Some(BuildingType::Butchery),
             JobType::Baker => Some(BuildingType::Bakery),
-            JobType::Brewer => None, // TODO: Add Brewery
-            JobType::Cheesemaker => None, // TODO: Add Dairy
+            JobType::Brewer => Some(BuildingType::Brewery),
+            JobType::Cheesemaker => Some(BuildingType::Dairy),
 
             // Material processing
             JobType::Tanner => Some(BuildingType::Tannery),
             JobType::Potter => Some(BuildingType::PotteryKiln),
             JobType::Weaver | JobType::Spinner => Some(BuildingType::WeaverHut),
-            JobType::Glassblower => None, // TODO: Add Glassworks
-            JobType::Dyer => None, // TODO: Add Dyeworks
-            JobType::Ropemaker => None, // TODO: Add Ropewalk
-            JobType::Brickmaker => None, // TODO: Add Brickyard
+            JobType::Glassblower => Some(BuildingType::Glassworks),
+            JobType::Dyer => Some(BuildingType::Dyeworks),
+            JobType::Ropemaker => Some(BuildingType::Ropewalk),
+            JobType::Brickmaker => Some(BuildingType::Brickyard),
 
             // Crafting
             JobType::Carpenter | JobType::Sawyer | JobType::Turner |
@@ -168,19 +168,19 @@ impl JobType {
             JobType::Armorer | JobType::Goldsmith | JobType::Tinsmith => Some(BuildingType::Smithy),
 
             // Textile & leather goods
-            JobType::Tailor => None, // TODO: Add Tailor Shop
-            JobType::Cobbler => None, // TODO: Add Cobbler Shop
+            JobType::Tailor => Some(BuildingType::TailorShop),
+            JobType::Cobbler => Some(BuildingType::CobblerShop),
             JobType::Leatherworker => Some(BuildingType::Tannery),
 
             // Services
             JobType::Healer | JobType::Apothecary => Some(BuildingType::MedicalBuilding),
-            JobType::Barber => None, // TODO: Add Barber Shop
-            JobType::Scribe | JobType::Printer => None, // TODO: Add Scriptorium
-            JobType::Papermaker => None, // TODO: Add Paper Mill
+            JobType::Barber => Some(BuildingType::BarberShop),
+            JobType::Scribe | JobType::Printer => Some(BuildingType::Scriptorium),
+            JobType::Papermaker => Some(BuildingType::PaperMill),
 
             // Commerce
             JobType::Merchant => Some(BuildingType::TownStorage),
-            JobType::Watchman => None, // TODO: Add Guard Post
+            JobType::Watchman => Some(BuildingType::GuardPost),
 
             // Primary production & general - outdoor work
             JobType::Woodcutter | JobType::Miner | JobType::Farmer |

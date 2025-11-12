@@ -18,6 +18,7 @@ pub enum BuildingType {
     // Civic buildings
     TownCenter,        // Administrative center
     TownStorage,       // Large community storage
+    GuardPost,         // Security and defense
 
     // Production buildings
     Workshop,          // Basic crafting tools
@@ -27,6 +28,19 @@ pub enum BuildingType {
     WeaverHut,         // Textile production
     PotteryKiln,       // Pottery production
     Tannery,           // Leather working
+    Mill,              // Grain processing
+    Butchery,          // Meat processing
+    Brewery,           // Ale/beer production
+    Dairy,             // Milk/cheese production
+    Glassworks,        // Glass production
+    Dyeworks,          // Dye production
+    Ropewalk,          // Rope production
+    Brickyard,         // Brick production
+    PaperMill,         // Paper production
+    TailorShop,        // Clothing production
+    CobblerShop,       // Shoe production
+    BarberShop,        // Grooming services
+    Scriptorium,       // Writing/printing
 
     // Resource buildings
     Storehouse,        // Basic resource storage
@@ -118,6 +132,67 @@ impl BuildingType {
                 Resource::new(ResourceType::Wood, 80),
                 Resource::new(ResourceType::Stone, 60),
             ],
+            BuildingType::Mill => vec![
+                Resource::new(ResourceType::Wood, 90),
+                Resource::new(ResourceType::Stone, 120),
+            ],
+            BuildingType::Butchery => vec![
+                Resource::new(ResourceType::Wood, 70),
+                Resource::new(ResourceType::Stone, 50),
+            ],
+            BuildingType::Brewery => vec![
+                Resource::new(ResourceType::Wood, 100),
+                Resource::new(ResourceType::Stone, 80),
+                Resource::new(ResourceType::Iron, 20),
+            ],
+            BuildingType::Dairy => vec![
+                Resource::new(ResourceType::Wood, 80),
+                Resource::new(ResourceType::Stone, 60),
+            ],
+            BuildingType::Glassworks => vec![
+                Resource::new(ResourceType::Wood, 60),
+                Resource::new(ResourceType::Stone, 140),
+                Resource::new(ResourceType::Iron, 30),
+            ],
+            BuildingType::Dyeworks => vec![
+                Resource::new(ResourceType::Wood, 70),
+                Resource::new(ResourceType::Stone, 50),
+            ],
+            BuildingType::Ropewalk => vec![
+                Resource::new(ResourceType::Wood, 100),
+                Resource::new(ResourceType::Stone, 40),
+            ],
+            BuildingType::Brickyard => vec![
+                Resource::new(ResourceType::Wood, 80),
+                Resource::new(ResourceType::Stone, 100),
+            ],
+            BuildingType::PaperMill => vec![
+                Resource::new(ResourceType::Wood, 120),
+                Resource::new(ResourceType::Stone, 80),
+            ],
+            BuildingType::TailorShop => vec![
+                Resource::new(ResourceType::Wood, 70),
+                Resource::new(ResourceType::Stone, 50),
+            ],
+            BuildingType::CobblerShop => vec![
+                Resource::new(ResourceType::Wood, 60),
+                Resource::new(ResourceType::Stone, 50),
+            ],
+            BuildingType::BarberShop => vec![
+                Resource::new(ResourceType::Wood, 50),
+                Resource::new(ResourceType::Stone, 40),
+            ],
+            BuildingType::Scriptorium => vec![
+                Resource::new(ResourceType::Wood, 100),
+                Resource::new(ResourceType::Stone, 70),
+            ],
+
+            // Civic - GuardPost
+            BuildingType::GuardPost => vec![
+                Resource::new(ResourceType::Wood, 120),
+                Resource::new(ResourceType::Stone, 150),
+                Resource::new(ResourceType::Iron, 40),
+            ],
 
             // Resource
             BuildingType::Storehouse => vec![
@@ -166,6 +241,7 @@ impl BuildingType {
             // Civic
             BuildingType::TownCenter => 1000,
             BuildingType::TownStorage => 600,
+            BuildingType::GuardPost => 550,
 
             // Production
             BuildingType::Workshop => 350,
@@ -175,6 +251,19 @@ impl BuildingType {
             BuildingType::WeaverHut => 350,
             BuildingType::PotteryKiln => 400,
             BuildingType::Tannery => 450,
+            BuildingType::Mill => 500,
+            BuildingType::Butchery => 350,
+            BuildingType::Brewery => 450,
+            BuildingType::Dairy => 400,
+            BuildingType::Glassworks => 550,
+            BuildingType::Dyeworks => 380,
+            BuildingType::Ropewalk => 420,
+            BuildingType::Brickyard => 450,
+            BuildingType::PaperMill => 500,
+            BuildingType::TailorShop => 380,
+            BuildingType::CobblerShop => 360,
+            BuildingType::BarberShop => 320,
+            BuildingType::Scriptorium => 480,
 
             // Resource
             BuildingType::Storehouse => 400,
@@ -217,6 +306,7 @@ impl BuildingType {
             // Civic
             BuildingType::TownCenter => 'C',
             BuildingType::TownStorage => 'T',
+            BuildingType::GuardPost => 'G',
 
             // Production
             BuildingType::Workshop => 'W',
@@ -226,6 +316,19 @@ impl BuildingType {
             BuildingType::WeaverHut => 'w',
             BuildingType::PotteryKiln => 'K',
             BuildingType::Tannery => 't',
+            BuildingType::Mill => 'm',
+            BuildingType::Butchery => 'u',
+            BuildingType::Brewery => 'b',
+            BuildingType::Dairy => 'd',
+            BuildingType::Glassworks => 'g',
+            BuildingType::Dyeworks => 'y',
+            BuildingType::Ropewalk => 'r',
+            BuildingType::Brickyard => 'k',
+            BuildingType::PaperMill => 'p',
+            BuildingType::TailorShop => 'l',
+            BuildingType::CobblerShop => 'c',
+            BuildingType::BarberShop => 'a',
+            BuildingType::Scriptorium => 'q',
 
             // Resource
             BuildingType::Storehouse => 's',
@@ -250,12 +353,16 @@ impl BuildingType {
             BuildingType::LargeHouse | BuildingType::Manor => "\x1b[35m",
 
             // Civic - Bright Blue
-            BuildingType::TownCenter | BuildingType::TownStorage => "\x1b[94m",
+            BuildingType::TownCenter | BuildingType::TownStorage | BuildingType::GuardPost => "\x1b[94m",
 
             // Production - Cyan
             BuildingType::Workshop | BuildingType::Forge | BuildingType::Smithy |
             BuildingType::Bakery | BuildingType::WeaverHut | BuildingType::PotteryKiln |
-            BuildingType::Tannery => "\x1b[36m",
+            BuildingType::Tannery | BuildingType::Mill | BuildingType::Butchery |
+            BuildingType::Brewery | BuildingType::Dairy | BuildingType::Glassworks |
+            BuildingType::Dyeworks | BuildingType::Ropewalk | BuildingType::Brickyard |
+            BuildingType::PaperMill | BuildingType::TailorShop | BuildingType::CobblerShop |
+            BuildingType::BarberShop | BuildingType::Scriptorium => "\x1b[36m",
 
             // Resource - Yellow/Green
             BuildingType::Storehouse => "\x1b[33m",     // Yellow
@@ -275,7 +382,11 @@ impl BuildingType {
             self,
             BuildingType::Workshop | BuildingType::Forge | BuildingType::Smithy |
             BuildingType::Bakery | BuildingType::WeaverHut | BuildingType::PotteryKiln |
-            BuildingType::Tannery
+            BuildingType::Tannery | BuildingType::Mill | BuildingType::Butchery |
+            BuildingType::Brewery | BuildingType::Dairy | BuildingType::Glassworks |
+            BuildingType::Dyeworks | BuildingType::Ropewalk | BuildingType::Brickyard |
+            BuildingType::PaperMill | BuildingType::TailorShop | BuildingType::CobblerShop |
+            BuildingType::BarberShop | BuildingType::Scriptorium
         )
     }
 
@@ -295,7 +406,7 @@ impl BuildingType {
 
     /// Check if this is a civic building
     pub fn is_civic(&self) -> bool {
-        matches!(self, BuildingType::TownCenter | BuildingType::TownStorage)
+        matches!(self, BuildingType::TownCenter | BuildingType::TownStorage | BuildingType::GuardPost)
     }
 
     /// Get the description of what this building enables
@@ -312,6 +423,7 @@ impl BuildingType {
             // Civic
             BuildingType::TownCenter => "Administrative hub. Enables advanced planning, coordination, and governance.",
             BuildingType::TownStorage => "Large-scale resource storage. Significantly increases community resource capacity.",
+            BuildingType::GuardPost => "Security station. Provides defense, maintains order, and protects the settlement.",
 
             // Production
             BuildingType::Workshop => "Basic crafting facility. Enables tool creation and basic item production.",
@@ -321,6 +433,19 @@ impl BuildingType {
             BuildingType::WeaverHut => "Textile production. Enables cloth, clothing, and textile goods creation.",
             BuildingType::PotteryKiln => "Pottery production. Enables ceramic containers, storage vessels, and pottery goods.",
             BuildingType::Tannery => "Leather working facility. Processes hides into leather goods and armor.",
+            BuildingType::Mill => "Grain processing. Grinds grain into flour for bread and food production.",
+            BuildingType::Butchery => "Meat processing. Prepares meat and animal products for consumption and trade.",
+            BuildingType::Brewery => "Beverage production. Brews ale, beer, and other fermented drinks.",
+            BuildingType::Dairy => "Milk processing. Produces cheese, butter, and other dairy products.",
+            BuildingType::Glassworks => "Glass production. Creates glass, bottles, and decorative glass items.",
+            BuildingType::Dyeworks => "Dye production. Processes herbs and materials into dyes for coloring.",
+            BuildingType::Ropewalk => "Rope production. Creates rope, cordage, and fiber products.",
+            BuildingType::Brickyard => "Brick production. Manufactures bricks for construction.",
+            BuildingType::PaperMill => "Paper production. Creates paper, parchment, and writing materials.",
+            BuildingType::TailorShop => "Clothing production. Creates garments, clothes, and textile goods.",
+            BuildingType::CobblerShop => "Footwear production. Creates shoes, boots, and leather footwear.",
+            BuildingType::BarberShop => "Grooming services. Provides haircuts, grooming, and basic medical care.",
+            BuildingType::Scriptorium => "Writing and printing. Creates books, documents, and printed materials.",
 
             // Resource
             BuildingType::Storehouse => "Basic resource storage. Increases community resource capacity.",
@@ -352,6 +477,7 @@ impl BuildingType {
             // Civic buildings require established settlement
             BuildingType::TownCenter => vec![BuildingType::Longhouse, BuildingType::Storehouse],
             BuildingType::TownStorage => vec![BuildingType::Storehouse],
+            BuildingType::GuardPost => vec![BuildingType::TownCenter],
 
             // Advanced production requires basic workshop
             BuildingType::Forge => vec![BuildingType::Workshop],
@@ -360,6 +486,19 @@ impl BuildingType {
             BuildingType::PotteryKiln => vec![BuildingType::Workshop],
             BuildingType::Tannery => vec![BuildingType::Workshop],
             BuildingType::WeaverHut => vec![BuildingType::Workshop],
+            BuildingType::Mill => vec![BuildingType::Farm],
+            BuildingType::Butchery => vec![BuildingType::AnimalPen],
+            BuildingType::Brewery => vec![BuildingType::Farm],
+            BuildingType::Dairy => vec![BuildingType::AnimalPen],
+            BuildingType::Glassworks => vec![BuildingType::Forge],
+            BuildingType::Dyeworks => vec![BuildingType::Farm],
+            BuildingType::Ropewalk => vec![BuildingType::Farm],
+            BuildingType::Brickyard => vec![BuildingType::Workshop],
+            BuildingType::PaperMill => vec![BuildingType::Workshop],
+            BuildingType::TailorShop => vec![BuildingType::WeaverHut],
+            BuildingType::CobblerShop => vec![BuildingType::Tannery],
+            BuildingType::BarberShop => vec![BuildingType::Workshop],
+            BuildingType::Scriptorium => vec![BuildingType::PaperMill],
 
             // Resource buildings
             BuildingType::AnimalPen => vec![BuildingType::Farm],
