@@ -11,7 +11,7 @@
 //! Run with: cargo run --example ascii_simulation
 
 use ebss::agents::{Population, PopulationConfig, AgentConfig};
-use ebss::world::{World, WorldConfig, ResourceConfig, AsciiRenderer, Position, Action, ResourceType};
+use ebss::world::{World, WorldConfig, ResourceConfig, AsciiRenderer, Position, Action, ResourceType, ItemType};
 use ebss::world::render::ViewPort;
 use ebss::analytics::{SimulationMetrics, EmergenceDetector, PerformanceMonitor};
 use ebss::core::{DriveType, EmotionType};
@@ -172,6 +172,14 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             let is_critical = agent.state.is_survival_critical();
             let needs_food = agent.needs_food();
 
+            // Debug logging
+            if tick % 50 == 0 && tick < 150 {
+                let hunger_val = agent.drives.get(DriveType::Hunger).map(|d| d.value).unwrap_or(0.0);
+                eprintln!("[DEBUG Tick {}] Agent: critical={}, needs_food={}, hunger={:.2}, energy={:.1}, food_inv={}",
+                    tick, is_critical, needs_food, hunger_val, agent.state.energy,
+                    agent.inventory.count_item(&ItemType::Food));
+            }
+
             // Simple AI: Check most urgent drive
             let most_urgent = agent.drives.most_urgent();
 
@@ -263,6 +271,19 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             if let Some(action) = action {
                 let result = world.execute_action(agent_id, &mut agent_pos, &action);
 
+                // Debug: Log failed food harvesting
+                if matches!(action, Action::HarvestResource { resource_type: ResourceType::Food, .. }) {
+                    if !result.is_success() && tick % 100 < 5 {
+                        if let Action::HarvestResource { resource_position, .. } = action {
+                            eprintln!("[DEBUG Tick {}] Food harvest FAILED at ({}, {}) - Agent at ({}, {})",
+                                tick, resource_position.x, resource_position.y,
+                                agent_pos.x, agent_pos.y);
+                        }
+                    } else if result.is_success() && tick % 100 < 5 {
+                        eprintln!("[DEBUG Tick {}] Food harvest SUCCESS", tick);
+                    }
+                }
+
                 // Update agent position and inventory
                 if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
                     agent.state.position = (agent_pos.x, agent_pos.y, 0);
@@ -271,6 +292,9 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                     if let Some((item_type, quantity)) = result.take_items() {
                         if quantity > 0 {
                             agent.inventory.add_item(item_type, quantity);
+                            if matches!(item_type, ItemType::Food) && tick % 100 < 5 {
+                                eprintln!("[DEBUG Tick {}] Added {} food to inventory", tick, quantity);
+                            }
                         }
                     }
                 }
@@ -305,7 +329,7 @@ fn render_frame(
         emergence.detected_patterns.len()
     );
 
-    // Show drives
+    // Show drives and inventory
     if let Some(agent) = population.agents.first() {
         println!("║ Sample Agent Drives:                                                      ║");
         println!("║   Hunger: {:.2}  │  Shelter: {:.2}  │  Safety: {:.2}  │  Construction: {:.2}  ║",
@@ -314,9 +338,16 @@ fn render_frame(
             agent.drives.get(DriveType::Safety).map(|d| d.value).unwrap_or(0.0),
             agent.drives.get(DriveType::Construction).map(|d| d.value).unwrap_or(0.0),
         );
-        println!("║   Emotions: Happiness: {:.2}  │  Well-being: {:.2}                          ║",
+        println!("║   Emotions: Happiness: {:.2}  │  Well-being: {:.2}  │  Energy: {:.1}%          ║",
             agent.emotions.get(EmotionType::Happiness).map(|e| e.value).unwrap_or(0.0),
             agent.emotions.well_being(),
+            agent.state.energy,
+        );
+        println!("║   Inventory: Food: {}  │  Wood: {}  │  Stone: {}  │  Iron: {}            ║",
+            agent.inventory.count_item(&ItemType::Food),
+            agent.inventory.count_item(&ItemType::Wood),
+            agent.inventory.count_item(&ItemType::Stone),
+            agent.inventory.count_item(&ItemType::Iron),
         );
     }
 
