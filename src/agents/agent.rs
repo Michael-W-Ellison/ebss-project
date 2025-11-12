@@ -590,5 +590,51 @@ impl Agent {
             self.profession.skill_description()
         )
     }
+
+    // === Production Methods ===
+
+    /// Start crafting a recipe (by index from available recipes)
+    pub fn start_crafting(&mut self, recipe_index: usize) -> bool {
+        use crate::world::get_job_recipes;
+
+        let recipes = get_job_recipes(self.profession.job);
+        if recipe_index < recipes.len() {
+            self.profession.start_production(recipe_index);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Tick production, returns completed items if any
+    pub fn tick_production(&mut self) -> Option<Vec<(crate::world::ItemType, u32)>> {
+        self.profession.tick_production()
+    }
+
+    /// Check if currently crafting
+    pub fn is_crafting(&self) -> bool {
+        self.profession.is_producing()
+    }
+
+    /// Cancel current crafting
+    pub fn cancel_crafting(&mut self) {
+        self.profession.cancel_production();
+    }
+
+    /// Get crafting progress (0-100%)
+    pub fn crafting_progress(&self) -> u8 {
+        self.profession.production_progress_percent()
+    }
+
+    /// Get available recipes for agent's job
+    pub fn available_recipes(&self) -> Vec<crate::world::Recipe> {
+        use crate::world::get_job_recipes;
+        get_job_recipes(self.profession.job)
+    }
+
+    /// Get current recipe being worked on
+    pub fn current_recipe(&self) -> Option<crate::world::Recipe> {
+        self.profession.get_current_recipe()
+    }
 }
 

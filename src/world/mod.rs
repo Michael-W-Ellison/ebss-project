@@ -8,6 +8,7 @@ pub mod inventory;
 pub mod actions;
 pub mod grid;
 pub mod render;
+pub mod production;
 
 pub use terrain::{Terrain, TerrainType, Tile};
 pub use resources::{Resource, ResourceType, ResourceNode};
@@ -16,6 +17,7 @@ pub use inventory::{Inventory, Item, ItemType};
 pub use actions::{Action, ActionResult};
 pub use grid::{Grid, Position};
 pub use render::AsciiRenderer;
+pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput, get_job_recipes, get_primary_recipe};
 
 use crate::agents::Population;
 use serde::{Deserialize, Serialize};

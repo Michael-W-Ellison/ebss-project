@@ -341,6 +341,12 @@ pub struct Profession {
 
     /// Ticks spent working at this job
     pub time_in_profession: u32,
+
+    /// Current production task (recipe index being worked on)
+    pub current_recipe_index: Option<usize>,
+
+    /// Progress on current production (ticks)
+    pub production_progress: u32,
 }
 
 impl Profession {
@@ -355,6 +361,8 @@ impl Profession {
             items_produced: 0,
             efficiency: 0.6, // Novice efficiency
             time_in_profession: 0,
+            current_recipe_index: None,
+            production_progress: 0,
         }
     }
 
@@ -447,6 +455,87 @@ impl Profession {
     /// Get the required building type for this profession
     pub fn required_building_type(&self) -> Option<BuildingType> {
         self.job.workplace()
+    }
+
+    /// Check if currently producing something
+    pub fn is_producing(&self) -> bool {
+        self.current_recipe_index.is_some()
+    }
+
+    /// Start production on a recipe
+    pub fn start_production(&mut self, recipe_index: usize) {
+        self.current_recipe_index = Some(recipe_index);
+        self.production_progress = 0;
+    }
+
+    /// Tick production progress, returns Some((ItemType, quantity)) if production completes
+    pub fn tick_production(&mut self) -> Option<Vec<(crate::world::ItemType, u32)>> {
+        use crate::world::{get_job_recipes, Quality};
+
+        if let Some(recipe_idx) = self.current_recipe_index {
+            self.production_progress += 1;
+
+            let recipes = get_job_recipes(self.job);
+            if let Some(recipe) = recipes.get(recipe_idx) {
+                let quality = Quality::from_skill(self.skill_level);
+                let required_time = recipe.calculate_time(quality);
+
+                if self.production_progress >= required_time {
+                    // Production complete!
+                    let outputs = recipe.calculate_output(quality);
+                    let total_quantity: u32 = outputs.iter().map(|(_, qty)| qty).sum();
+
+                    // Record production and gain experience
+                    self.record_production(total_quantity);
+
+                    // Reset production state
+                    self.current_recipe_index = None;
+                    self.production_progress = 0;
+
+                    return Some(outputs);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Cancel current production
+    pub fn cancel_production(&mut self) {
+        self.current_recipe_index = None;
+        self.production_progress = 0;
+    }
+
+    /// Get progress percentage of current production (0-100)
+    pub fn production_progress_percent(&self) -> u8 {
+        use crate::world::{get_job_recipes, Quality};
+
+        if let Some(recipe_idx) = self.current_recipe_index {
+            let recipes = get_job_recipes(self.job);
+            if let Some(recipe) = recipes.get(recipe_idx) {
+                let quality = Quality::from_skill(self.skill_level);
+                let required_time = recipe.calculate_time(quality);
+
+                if required_time > 0 {
+                    return ((self.production_progress as f32 / required_time as f32) * 100.0)
+                        .min(100.0) as u8;
+                }
+            }
+        }
+
+        0
+    }
+
+    /// Get the current recipe being worked on
+    pub fn get_current_recipe(&self) -> Option<crate::world::Recipe> {
+        use crate::world::get_job_recipes;
+
+        if let Some(recipe_idx) = self.current_recipe_index {
+            let recipes = get_job_recipes(self.job);
+            recipes.get(recipe_idx).cloned()
+        } else {
+            None
+        }
     }
 }
 
