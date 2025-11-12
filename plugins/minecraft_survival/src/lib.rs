@@ -13,6 +13,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use rand::Rng;
+use noise::{NoiseFn, Perlin, Seedable};
 
 /// Minecraft-style survival environment plugin
 pub struct MinecraftSurvivalPlugin {
@@ -147,10 +148,45 @@ impl MinecraftSurvivalPlugin {
             .as_food(4.0)
             .with_stack_size(16);
 
+        // Water (critical for life)
+        let water = Material::new("water".to_string(), "Water".to_string())
+            .with_description("Fresh water source - essential for survival".to_string())
+            .with_category(MaterialCategory::Liquid)
+            .with_hardness(0.0)
+            .with_tool_requirement(ToolType::Hand, ToolTier::None)
+            .with_harvest_time(20)
+            .with_drop_quantity(1, 1)
+            .with_stack_size(16);
+
+        let dirt = Material::new("dirt".to_string(), "Dirt".to_string())
+            .with_description("Basic soil material".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(0.5)
+            .with_tool_requirement(ToolType::Shovel, ToolTier::None)
+            .with_harvest_time(30)
+            .with_drop_quantity(1, 1);
+
+        let grass = Material::new("grass".to_string(), "Grass".to_string())
+            .with_description("Grass-covered dirt".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(0.6)
+            .with_tool_requirement(ToolType::Shovel, ToolTier::None)
+            .with_harvest_time(30)
+            .with_drop_quantity(1, 1);
+
+        let sand = Material::new("sand".to_string(), "Sand".to_string())
+            .with_description("Sandy material found near water".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(0.5)
+            .with_tool_requirement(ToolType::Shovel, ToolTier::None)
+            .with_harvest_time(25)
+            .with_drop_quantity(1, 1);
+
         // Register all materials
         for material in vec![
             wood, stone, iron_ore, coal, planks, sticks, iron_ingot,
             wooden_pickaxe, stone_pickaxe, iron_pickaxe, wooden_axe, apple,
+            water, dirt, grass, sand,
         ] {
             self.materials.insert(material.id.clone(), material);
         }
@@ -336,46 +372,122 @@ impl MinecraftSurvivalPlugin {
 
     fn generate_world(&mut self) {
         let config = self.config.as_ref().unwrap();
-        let (width, depth, height) = config.world_size;
+        let (width, depth, max_height) = config.world_size;
         let mut rng = rand::thread_rng();
 
-        // Simple world generation: distribute resources
+        // Initialize Perlin noise generators with different seeds for varied terrain
+        let terrain_noise = Perlin::new(config.seed as u32);
+        let moisture_noise = Perlin::new((config.seed + 1000) as u32);
+        let cave_noise = Perlin::new((config.seed + 2000) as u32);
+
+        // Terrain generation constants
+        const SEA_LEVEL: i32 = 64;
+        const BEACH_LEVEL: i32 = 66;
+        const TERRAIN_SCALE: f64 = 0.02; // Smoother terrain
+        const MOISTURE_SCALE: f64 = 0.03;
+        const CAVE_SCALE: f64 = 0.1;
+        const CAVE_THRESHOLD: f64 = 0.6;
+
+        // Generate heightmap and terrain
         for x in -width/2..width/2 {
             for z in -depth/2..depth/2 {
-                // Surface layer - trees (wood)
-                if rng.gen_bool(0.05) {
+                // Generate height using Perlin noise (0.0 to 1.0)
+                let height_noise = terrain_noise.get([
+                    x as f64 * TERRAIN_SCALE,
+                    z as f64 * TERRAIN_SCALE,
+                ]);
+
+                // Convert to actual height (20 to 90)
+                let base_height = ((height_noise + 1.0) / 2.0 * 70.0 + 20.0) as i32;
+
+                // Generate moisture for biome determination
+                let moisture = moisture_noise.get([
+                    x as f64 * MOISTURE_SCALE,
+                    z as f64 * MOISTURE_SCALE,
+                ]);
+
+                let is_wet = moisture > 0.0;
+                let is_beach = base_height >= SEA_LEVEL && base_height <= BEACH_LEVEL;
+
+                // Fill terrain from bedrock to surface
+                for y in 0..=base_height {
+                    // Check for caves using 3D noise
+                    let cave_value = cave_noise.get([
+                        x as f64 * CAVE_SCALE,
+                        y as f64 * CAVE_SCALE,
+                        z as f64 * CAVE_SCALE,
+                    ]);
+
+                    // Skip this block if it's a cave (but not near surface or below sea level)
+                    if y > 10 && y < base_height - 3 && cave_value.abs() > CAVE_THRESHOLD {
+                        continue;
+                    }
+
+                    let material = if y == 0 {
+                        // Bedrock layer
+                        "stone"
+                    } else if y < base_height - 4 {
+                        // Deep underground - stone with occasional ores
+                        if y < 50 && rng.gen_bool(0.02) {
+                            "coal"
+                        } else if y < 40 && rng.gen_bool(0.008) {
+                            "iron_ore"
+                        } else {
+                            "stone"
+                        }
+                    } else if y < base_height - 1 {
+                        // Subsurface layer
+                        if is_beach {
+                            "sand"
+                        } else {
+                            "dirt"
+                        }
+                    } else if y == base_height {
+                        // Surface layer
+                        if is_beach {
+                            "sand"
+                        } else {
+                            "grass"
+                        }
+                    } else {
+                        continue;
+                    };
+
                     self.world_map.insert(
-                        Position::new(x, 64, z),
-                        "wood".to_string(),
+                        Position::new(x, y, z),
+                        material.to_string(),
                     );
                 }
 
-                // Stone layer
-                for y in 0..64 {
-                    if rng.gen_bool(0.3) {
+                // Add water to fill areas below sea level
+                if base_height < SEA_LEVEL {
+                    for y in (base_height + 1)..=SEA_LEVEL {
                         self.world_map.insert(
                             Position::new(x, y, z),
-                            "stone".to_string(),
+                            "water".to_string(),
                         );
                     }
                 }
 
-                // Coal deposits
-                if rng.gen_bool(0.02) {
-                    let y = rng.gen_range(10..50);
-                    self.world_map.insert(
-                        Position::new(x, y, z),
-                        "coal".to_string(),
-                    );
-                }
-
-                // Iron ore deposits
-                if rng.gen_bool(0.01) {
-                    let y = rng.gen_range(5..40);
-                    self.world_map.insert(
-                        Position::new(x, y, z),
-                        "iron_ore".to_string(),
-                    );
+                // Add surface features
+                if base_height >= SEA_LEVEL {
+                    // Trees on grass (not on beaches)
+                    if !is_beach && is_wet && rng.gen_bool(0.08) {
+                        // Tree trunk (3-5 blocks tall)
+                        let tree_height = rng.gen_range(3..=5);
+                        for dy in 1..=tree_height {
+                            self.world_map.insert(
+                                Position::new(x, base_height + dy, z),
+                                "wood".to_string(),
+                            );
+                        }
+                    } else if !is_beach && !is_wet && rng.gen_bool(0.03) {
+                        // Scattered trees in dry areas
+                        self.world_map.insert(
+                            Position::new(x, base_height + 1, z),
+                            "wood".to_string(),
+                        );
+                    }
                 }
             }
         }

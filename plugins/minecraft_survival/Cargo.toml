@@ -10,6 +10,7 @@ ebss = { path = "../.." }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.8"
+noise = "0.9"
 
 [lib]
 name = "minecraft_survival"

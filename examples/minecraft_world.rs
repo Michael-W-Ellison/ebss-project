@@ -42,6 +42,14 @@ fn main() {
     println!("     - Stone (Hardness: 3.0, Tool: Pickaxe, Tier: Wooden)");
     println!("     - Iron Ore (Hardness: 5.0, Tool: Pickaxe, Tier: Stone)");
     println!("     - Coal (Hardness: 3.0, Tool: Pickaxe, Tier: Wooden)");
+    println!("     - Dirt (Hardness: 0.5, Tool: Shovel)");
+    println!("     - Grass (Hardness: 0.6, Tool: Shovel)");
+    println!("     - Sand (Hardness: 0.5, Tool: Shovel)");
+
+    println!("\n   Water (Critical for Life):");
+    println!("     - Water (Liquid) - Forms lakes, rivers, and oceans");
+    println!("     - Essential for agent survival");
+    println!("     - Naturally generated below sea level (y=64)");
 
     println!("\n   Processed Materials:");
     println!("     - Wooden Planks");
@@ -152,15 +160,37 @@ fn main() {
     println!("   - Exploring → Curiosity drive");
 
     // Show world features
-    println!("\n8. World Features:");
-    println!("   - Procedural generation based on seed");
-    println!("   - Resource distribution:");
-    println!("     • Trees: 5% surface coverage");
-    println!("     • Stone: 30% underground");
-    println!("     • Coal: 2% (layers 10-50)");
-    println!("     • Iron: 1% (layers 5-40)");
-    println!("   - Day/night cycle: 0.001 per tick");
-    println!("   - Weather system: Dynamic");
+    println!("\n8. Natural World Generation:");
+    println!("   Terrain System:");
+    println!("     - Perlin noise-based heightmaps for realistic terrain");
+    println!("     - Height variation: y=20 to y=90");
+    println!("     - Sea level at y=64 with water below");
+    println!("     - Natural cave systems (3D noise)");
+    println!("     - Smooth, rolling hills and valleys");
+
+    println!("\n   Biome-like Features:");
+    println!("     - Wet biomes: Dense tree coverage (8%)");
+    println!("     - Dry biomes: Sparse trees (3%)");
+    println!("     - Beaches: Sandy areas near water (y=64-66)");
+    println!("     - Moisture-based vegetation distribution");
+
+    println!("\n   Terrain Layers:");
+    println!("     - Surface: Grass (on land) or Sand (beaches)");
+    println!("     - Subsurface: Dirt/Sand (3-4 blocks deep)");
+    println!("     - Underground: Stone with embedded ores");
+    println!("     - Deep underground: Coal (y<50), Iron (y<40)");
+    println!("     - Bedrock: Solid stone at y=0");
+
+    println!("\n   Water System:");
+    println!("     - Lakes, rivers, and oceans below sea level");
+    println!("     - Critical resource for agent survival");
+    println!("     - Natural barriers and navigation challenges");
+    println!("     - Connects low-lying terrain areas");
+
+    println!("\n   Dynamic Systems:");
+    println!("     - Day/night cycle: 0.001 per tick");
+    println!("     - Weather system: Dynamic");
+    println!("     - Seed-based reproducible worlds");
 
     println!("\n9. Plugin Extension Points:");
     println!("   Plugins can customize:");
