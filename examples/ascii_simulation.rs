@@ -152,19 +152,92 @@ fn main() {
     }
 }
 
-/// Discover nearby resources (vision range of 10 tiles)
-fn discover_nearby_resources(world: &World, population: &mut Population, agent_id: uuid::Uuid, agent_pos: &Position) {
+/// Personal observation: agent discovers nearby resources (vision range of 10 tiles)
+fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
     const VISION_RANGE: u32 = 10;
+    let agent_pos = agent.position();
 
     for resource in &world.resources {
         if agent_pos.distance_to(&resource.position) <= VISION_RANGE && resource.amount > 0 {
-            // Agent can see this resource, add to shared knowledge
-            population.shared_knowledge.discover_resource(
-                resource.position,
-                resource.resource_type,
-                resource.amount,
-                agent_id,
-            );
+            // Agent personally observes this resource
+            agent.observe_resource(resource.position, resource.resource_type, resource.amount);
+        }
+    }
+}
+
+/// Social communication: agents ask nearby agents for information
+fn agents_communicate(population: &mut Population) {
+    const COMMUNICATION_RANGE: u32 = 5; // Can talk to agents within 5 tiles
+    const LISTENING_RANGE: u32 = 3;     // Can overhear conversations within 3 tiles
+
+    // Collect agent data to avoid borrow issues
+    let agent_data: Vec<_> = population.agents.iter()
+        .map(|a| (a.id, a.position(), a.most_desired_resource()))
+        .collect();
+
+    // For each agent, try to communicate with nearby agents
+    for i in 0..agent_data.len() {
+        let (requester_id, requester_pos, desired_resource) = &agent_data[i];
+
+        // Skip if agent doesn't want anything
+        let resource_type = match desired_resource {
+            Some(rt) => *rt,
+            None => continue,
+        };
+
+        // Find nearby agents who might have information
+        for j in 0..agent_data.len() {
+            if i == j {
+                continue; // Can't talk to self
+            }
+
+            let (responder_id, responder_pos, _) = &agent_data[j];
+
+            // Check if agents are close enough to communicate
+            if requester_pos.distance_to(responder_pos) > COMMUNICATION_RANGE {
+                continue;
+            }
+
+            // Request information (need to do this carefully to avoid borrow conflicts)
+            let requester_idx = population.agents.iter().position(|a| a.id == *requester_id).unwrap();
+            let responder_idx = population.agents.iter().position(|a| a.id == *responder_id).unwrap();
+
+            // Split borrow: get both agents
+            let (req_agent, resp_agent) = if requester_idx < responder_idx {
+                let (left, right) = population.agents.split_at_mut(responder_idx);
+                (&mut left[requester_idx], &mut right[0])
+            } else {
+                let (left, right) = population.agents.split_at_mut(requester_idx);
+                (&mut right[0], &mut left[responder_idx])
+            };
+
+            // Requester asks responder for information
+            if let Some((pos, res_type, amount)) = req_agent.request_info_from(resp_agent, resource_type) {
+                // Responder has information and shares it!
+                req_agent.knowledge.learn_from_agent(pos, res_type, amount, *responder_id);
+
+                // Other agents nearby can overhear this conversation
+                for k in 0..agent_data.len() {
+                    if k == i || k == j {
+                        continue; // Not the speaker or listener
+                    }
+
+                    let (listener_id, listener_pos, _) = &agent_data[k];
+
+                    // Check if within listening range of the conversation
+                    let avg_pos = Position::new(
+                        (requester_pos.x + responder_pos.x) / 2,
+                        (requester_pos.y + responder_pos.y) / 2,
+                    );
+
+                    if listener_pos.distance_to(&avg_pos) <= LISTENING_RANGE {
+                        // Overhear the conversation
+                        if let Some(listener) = population.agents.iter_mut().find(|a| a.id == *listener_id) {
+                            listener.overhear_conversation(*responder_id, pos, res_type, amount);
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -180,11 +253,11 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
         .collect();
 
     for (agent_id, agent_starting_pos) in &agent_data {
-        // Discover nearby resources for this agent
-        discover_nearby_resources(world, population, *agent_id, agent_starting_pos);
-
-        // Find agent and try to eat if hungry
+        // Find agent and process actions
         if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
+            // Personal observation: agent discovers nearby resources
+            observe_nearby_resources(world, agent);
+
             // Always try to eat if we have food and are hungry
             agent.try_eat(tick);
 
@@ -205,18 +278,18 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             // Simple AI: Check most urgent drive
             let most_urgent = agent.drives.most_urgent();
 
-            // Use SHARED KNOWLEDGE to find resources (agents communicate!)
-            let known_food = population.shared_knowledge
-                .find_closest_known_to_agent(*agent_id, &agent_pos, ResourceType::Food)
+            // Use PERSONAL KNOWLEDGE to find resources
+            let known_food = agent.knowledge
+                .find_closest_resource(&agent_pos, ResourceType::Food)
                 .map(|r| r.position);
 
-            let known_wood = population.shared_knowledge
-                .find_closest_known_to_agent(*agent_id, &agent_pos, ResourceType::Wood)
+            let known_wood = agent.knowledge
+                .find_closest_resource(&agent_pos, ResourceType::Wood)
                 .map(|r| r.position);
 
             let action = if is_critical || needs_food {
                 // CRITICAL: Survival needs override everything
-                // Try to find and gather food IMMEDIATELY using shared knowledge
+                // Try to find and gather food IMMEDIATELY using personal knowledge
                 if let Some(food_pos) = known_food {
                     if agent_pos.distance_to(&food_pos) > 1 {
                         Some(Action::MoveTo { destination: food_pos })
@@ -335,29 +408,8 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
         }
     }
 
-    // Clean up depleted resources from shared knowledge
-    cleanup_depleted_resources(world, population);
-}
-
-/// Remove depleted resources from shared knowledge
-fn cleanup_depleted_resources(world: &World, population: &mut Population) {
-    // Get positions of all depleted resources
-    let depleted_positions: Vec<Position> = population.shared_knowledge
-        .all_resources()
-        .iter()
-        .filter(|known_resource| {
-            // Check if this resource still exists in the world with amount > 0
-            !world.resources.iter().any(|r| {
-                r.position == known_resource.position && r.amount > 0
-            })
-        })
-        .map(|r| r.position)
-        .collect();
-
-    // Remove depleted resources
-    for pos in depleted_positions {
-        population.shared_knowledge.remove_resource(&pos);
-    }
+    // Social communication: agents ask each other for information
+    agents_communicate(population);
 }
 
 /// Render a complete frame

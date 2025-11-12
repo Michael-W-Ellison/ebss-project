@@ -2,7 +2,8 @@
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, DriveState, Memory, EmotionalState, TraitSet, GoalManager, Preferences};
-use crate::world::{Inventory, ItemType};
+use crate::world::{Inventory, ItemType, Position, ResourceType};
+use crate::agents::PersonalKnowledge;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -199,6 +200,7 @@ pub struct Agent {
     pub goals: GoalManager,
     pub preferences: Preferences,
     pub inventory: Inventory, // Personal inventory for carrying food and resources
+    pub knowledge: PersonalKnowledge, // Personal knowledge about world (resources, etc.)
 }
 
 impl Agent {
@@ -219,6 +221,7 @@ impl Agent {
             goals: GoalManager::default(),
             preferences: Preferences::generate_random(),
             inventory: Inventory::new(20), // Can carry up to 20 items
+            knowledge: PersonalKnowledge::new(),
         }
     }
 
@@ -254,6 +257,9 @@ impl Agent {
 
         // Update emotions (natural decay)
         self.emotions.tick();
+
+        // Update knowledge (age tracking)
+        self.knowledge.tick(current_tick);
 
         // Cleanup completed goals
         self.goals.cleanup_completed();
@@ -396,5 +402,72 @@ impl Agent {
         self.state.energy < 50.0 ||
         (self.inventory.count_item(&ItemType::Food) == 0 &&
          self.drives.get(crate::core::DriveType::Hunger).map(|d| d.is_active()).unwrap_or(false))
+    }
+
+    // ===== COMMUNICATION METHODS =====
+
+    /// Observe a resource (personal discovery)
+    pub fn observe_resource(&mut self, position: Position, resource_type: ResourceType, amount: u32) {
+        self.knowledge.observe_resource(position, resource_type, amount);
+    }
+
+    /// Request information about a specific resource type from another agent
+    /// Returns information if the other agent knows about it
+    pub fn request_info_from(
+        &mut self,
+        other_agent: &Agent,
+        resource_type: ResourceType,
+    ) -> Option<(Position, ResourceType, u32)> {
+        // Other agent shares their best knowledge about this resource type
+        other_agent.knowledge.get_shareable_info(resource_type)
+    }
+
+    /// Share knowledge with another agent (direct communication)
+    pub fn share_knowledge_with(
+        &self,
+        other_agent: &mut Agent,
+        resource_type: ResourceType,
+    ) -> bool {
+        if let Some((position, res_type, amount)) = self.knowledge.get_shareable_info(resource_type) {
+            // Other agent learns from us
+            other_agent.knowledge.learn_from_agent(position, res_type, amount, self.id);
+            true
+        } else {
+            false // We don't have information to share
+        }
+    }
+
+    /// Overhear conversation between two agents about a resource
+    pub fn overhear_conversation(
+        &mut self,
+        speaker_id: Uuid,
+        position: Position,
+        resource_type: ResourceType,
+        amount: u32,
+    ) {
+        self.knowledge.overhear_information(position, resource_type, amount, speaker_id);
+    }
+
+    /// Get position of agent for proximity checks
+    pub fn position(&self) -> Position {
+        Position::new(self.state.position.0, self.state.position.1)
+    }
+
+    /// Check if another agent is within communication range
+    pub fn can_communicate_with(&self, other_agent: &Agent, communication_range: u32) -> bool {
+        self.position().distance_to(&other_agent.position()) <= communication_range
+    }
+
+    /// Find the resource type the agent is most interested in based on current drives
+    pub fn most_desired_resource(&self) -> Option<ResourceType> {
+        let most_urgent = self.drives.most_urgent()?;
+
+        match most_urgent.drive_type {
+            crate::core::DriveType::Hunger => Some(ResourceType::Food),
+            crate::core::DriveType::Construction | crate::core::DriveType::Shelter => Some(ResourceType::Wood),
+            crate::core::DriveType::Industry => Some(ResourceType::Iron),
+            crate::core::DriveType::Preparedness => Some(ResourceType::Stone),
+            _ => None,
+        }
     }
 }
