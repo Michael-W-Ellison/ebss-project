@@ -10,6 +10,7 @@ use super::skills::Skills;
 use super::emotions::{EmotionState, RelationshipMap};
 use super::traits::TraitSet;
 use super::gossip::KnowledgeBase;
+use super::observational_learning::ObservationalLearning;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -304,6 +305,7 @@ pub struct Agent {
     pub relationships: RelationshipMap,
     pub traits: TraitSet,
     pub knowledge: KnowledgeBase,
+    pub observational_learning: ObservationalLearning,
 }
 
 impl Agent {
@@ -330,6 +332,7 @@ impl Agent {
             relationships: RelationshipMap::default(),
             traits: TraitSet::default(),
             knowledge: KnowledgeBase::default(),
+            observational_learning: ObservationalLearning::default(),
         }
     }
 
@@ -522,6 +525,196 @@ impl Agent {
                 self.relationships.add_relationship(new_rel);
             }
         }
+    }
+
+    /// Observe another agent performing an action
+    ///
+    /// # Arguments
+    /// * `performer_id` - UUID of agent performing the action
+    /// * `performer_position` - Position of the performer
+    /// * `action_type` - Type of action being performed
+    /// * `success` - Whether the action succeeded
+    /// * `details` - Specific details about the action
+    /// * `timestamp` - Current simulation time
+    pub fn observe_action(
+        &mut self,
+        performer_id: &Uuid,
+        performer_position: (i32, i32, i32),
+        action_type: super::ActionType,
+        success: bool,
+        details: String,
+        timestamp: u64,
+    ) {
+        // Check if agent can see the performer
+        if !self.senses.vision.visible_agents.contains(performer_id) {
+            return; // Can't learn if you can't see them
+        }
+
+        // Calculate distance to performer
+        let dx = (performer_position.0 - self.state.position.0) as f32;
+        let dy = (performer_position.1 - self.state.position.1) as f32;
+        let dz = (performer_position.2 - self.state.position.2) as f32;
+        let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+
+        // Create observation record
+        let observation = super::ObservedAction::new(
+            *performer_id,
+            action_type,
+            success,
+            details,
+            timestamp,
+            distance,
+        );
+
+        // Record the observation
+        self.observational_learning.observe_action(observation);
+    }
+
+    /// Check if agent should adopt behaviors from observations
+    ///
+    /// Returns list of (performer, action_type, confidence) for behaviors ready to adopt
+    pub fn check_learning_opportunities(&self) -> Vec<(Uuid, super::ActionType, f32)> {
+        let mut opportunities = Vec::new();
+
+        for teacher_id in self.observational_learning.get_all_teachers() {
+            // Get relationship and trust
+            let relationship_strength = self.relationships
+                .get_relationship(&teacher_id)
+                .map(|r| r.bond_strength)
+                .unwrap_or(0.0);
+
+            let trust = self.knowledge.get_trust(&teacher_id);
+
+            // Check each action type
+            for action_type in [
+                super::ActionType::Mining,
+                super::ActionType::Crafting,
+                super::ActionType::Building,
+                super::ActionType::Combat,
+                super::ActionType::Cooking,
+                super::ActionType::ToolUse,
+                super::ActionType::Social,
+                super::ActionType::Navigation,
+                super::ActionType::ProblemSolving,
+            ] {
+                let (should_adopt, confidence) = self.observational_learning.should_adopt_behavior(
+                    &teacher_id,
+                    action_type,
+                    relationship_strength,
+                    trust,
+                );
+
+                if should_adopt {
+                    opportunities.push((teacher_id, action_type, confidence));
+                }
+            }
+        }
+
+        opportunities
+    }
+
+    /// Adopt a learned behavior
+    ///
+    /// # Arguments
+    /// * `teacher_id` - Who to learn from
+    /// * `action_type` - What action to adopt
+    ///
+    /// Returns true if successfully adopted
+    pub fn adopt_learned_behavior(
+        &mut self,
+        teacher_id: &Uuid,
+        action_type: super::ActionType,
+    ) -> bool {
+        // Get relationship and trust
+        let relationship_strength = self.relationships
+            .get_relationship(teacher_id)
+            .map(|r| r.bond_strength)
+            .unwrap_or(0.0);
+
+        let trust = self.knowledge.get_trust(teacher_id);
+
+        // Check if ready to adopt
+        let (should_adopt, _) = self.observational_learning.should_adopt_behavior(
+            teacher_id,
+            action_type,
+            relationship_strength,
+            trust,
+        );
+
+        if should_adopt {
+            self.observational_learning.adopt_behavior(teacher_id, action_type);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get learning progress from a specific teacher
+    pub fn get_learning_from(
+        &self,
+        teacher_id: &Uuid,
+        action_type: super::ActionType,
+    ) -> Option<&super::LearningProgress> {
+        self.observational_learning.get_progress(teacher_id, action_type)
+    }
+
+    /// Get all adopted behaviors
+    pub fn get_adopted_behaviors(&self) -> Vec<(Uuid, super::ActionType, f32)> {
+        self.observational_learning.get_adopted_behaviors()
+    }
+
+    /// Check if this agent is learning from parents
+    ///
+    /// Returns list of (parent_id, action_types_being_learned)
+    pub fn learning_from_parents(&self) -> Vec<(Uuid, Vec<super::ActionType>)> {
+        let mut parent_learning = Vec::new();
+
+        // Get all parents
+        let parents: Vec<Uuid> = self.relationships
+            .get_all()
+            .iter()
+            .filter(|(_, rel)| rel.relationship_type == super::RelationshipType::Parent)
+            .map(|(id, _)| *id)
+            .collect();
+
+        for parent_id in parents {
+            let mut learning_actions = Vec::new();
+
+            // Check all action types
+            for action_type in [
+                super::ActionType::Mining,
+                super::ActionType::Crafting,
+                super::ActionType::Building,
+                super::ActionType::Combat,
+                super::ActionType::Cooking,
+                super::ActionType::ToolUse,
+                super::ActionType::Social,
+                super::ActionType::Navigation,
+                super::ActionType::ProblemSolving,
+            ] {
+                if let Some(progress) = self.observational_learning.get_progress(&parent_id, action_type) {
+                    if progress.observation_count > 0 {
+                        learning_actions.push(action_type);
+                    }
+                }
+            }
+
+            if !learning_actions.is_empty() {
+                parent_learning.push((parent_id, learning_actions));
+            }
+        }
+
+        parent_learning
+    }
+
+    /// Set age-based learning rate (child = 1.5, adult = 1.0, elder = 0.7)
+    pub fn set_learning_rate(&mut self, rate: f32) {
+        self.observational_learning.set_learning_rate(rate);
+    }
+
+    /// Get current learning rate
+    pub fn learning_rate(&self) -> f32 {
+        self.observational_learning.learning_rate()
     }
 }
 
