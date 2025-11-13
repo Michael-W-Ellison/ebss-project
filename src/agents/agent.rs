@@ -298,6 +298,7 @@ pub struct Agent {
     pub inventory: Inventory,
     pub senses: Senses,
     pub body: Body,
+    pub body_temperature: super::BodyTemperature,
     pub skills: Skills,
     pub emotions: EmotionState,
     pub relationships: RelationshipMap,
@@ -323,6 +324,7 @@ impl Agent {
             inventory: Inventory::default(),
             senses: Senses::default(),
             body: Body::default(),
+            body_temperature: super::BodyTemperature::default(),
             skills: Skills::default(),
             emotions: EmotionState::default(),
             relationships: RelationshipMap::default(),
@@ -339,6 +341,18 @@ impl Agent {
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;
+    }
+
+    /// Update body temperature based on environmental conditions
+    ///
+    /// # Arguments
+    /// * `climate` - Environmental climate conditions
+    pub fn update_temperature(&mut self, climate: &super::Climate) {
+        let cold_insulation = self.body.total_cold_insulation();
+        let heat_resistance = self.body.total_heat_resistance();
+        let effective_temp = climate.effective_temperature();
+
+        self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
     }
 
     /// Respond emotionally to a threat

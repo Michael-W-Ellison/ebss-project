@@ -1,6 +1,7 @@
 // src/agents/body.rs
 //! Body part system for agents with anatomical structure and injury tracking.
 
+use crate::agents::equipment::{Equipment, EquipmentSlot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -424,6 +425,8 @@ impl BodyPart {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Body {
     pub parts: HashMap<BodyPartType, BodyPart>,
+    /// Equipped items by slot
+    pub equipment: HashMap<EquipmentSlot, Equipment>,
 }
 
 impl Body {
@@ -434,7 +437,10 @@ impl Body {
             parts.insert(part_type, BodyPart::new(part_type));
         }
 
-        Self { parts }
+        Self {
+            parts,
+            equipment: HashMap::new(),
+        }
     }
 
     /// Get a body part
@@ -603,11 +609,71 @@ impl Body {
             .collect()
     }
 
+    /// Equip an item of clothing/armor
+    pub fn equip(&mut self, item: Equipment) {
+        // Update armor protection on covered body parts
+        let armor = item.armor_protection();
+        for part_type in item.slot.covered_parts() {
+            if let Some(part) = self.parts.get_mut(&part_type) {
+                part.protection = armor;
+                part.equipped_item = Some(item.name.clone());
+            }
+        }
+
+        self.equipment.insert(item.slot, item);
+    }
+
+    /// Unequip an item from a slot
+    pub fn unequip(&mut self, slot: EquipmentSlot) -> Option<Equipment> {
+        if let Some(item) = self.equipment.remove(&slot) {
+            // Remove protection from covered body parts
+            for part_type in slot.covered_parts() {
+                if let Some(part) = self.parts.get_mut(&part_type) {
+                    part.protection = 0.0;
+                    part.equipped_item = None;
+                }
+            }
+            Some(item)
+        } else {
+            None
+        }
+    }
+
+    /// Get total cold insulation from all equipped items
+    pub fn total_cold_insulation(&self) -> f32 {
+        self.equipment.values().map(|e| e.cold_insulation()).sum()
+    }
+
+    /// Get total heat resistance from all equipped items
+    pub fn total_heat_resistance(&self) -> f32 {
+        self.equipment.values().map(|e| e.heat_resistance()).sum()
+    }
+
+    /// Tick wear on all equipped items
+    pub fn tick_equipment_wear(&mut self) {
+        for item in self.equipment.values_mut() {
+            item.tick_wear();
+        }
+
+        // Remove broken items
+        let broken_slots: Vec<EquipmentSlot> = self
+            .equipment
+            .iter()
+            .filter(|(_, item)| item.is_broken())
+            .map(|(slot, _)| *slot)
+            .collect();
+
+        for slot in broken_slots {
+            self.unequip(slot);
+        }
+    }
+
     /// Process all body parts (tick effects like bleeding)
     pub fn tick(&mut self) {
         for part in self.parts.values_mut() {
             part.tick();
         }
+        self.tick_equipment_wear();
     }
 
     /// Get body summary for display
@@ -990,6 +1056,114 @@ mod tests {
         let efficiency = body.tool_efficiency_multiplier();
         assert!(efficiency > 0.4);
         assert!(efficiency < 0.6);
+    }
+
+    #[test]
+    fn test_equip_clothing() {
+        use crate::agents::equipment::ClothingTemplate;
+        use crate::agents::skills::Quality;
+
+        let mut body = Body::new();
+        let tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+
+        // Equip the tunic
+        body.equip(tunic);
+
+        // Should have equipment in torso slot
+        assert!(body.equipment.contains_key(&EquipmentSlot::Torso));
+
+        // Torso should have protection
+        let torso = body.get_part(BodyPartType::Torso).unwrap();
+        assert!(torso.protection > 0.0);
+        assert_eq!(torso.equipped_item, Some("Leather Tunic".to_string()));
+    }
+
+    #[test]
+    fn test_unequip_clothing() {
+        use crate::agents::equipment::ClothingTemplate;
+        use crate::agents::skills::Quality;
+
+        let mut body = Body::new();
+        let tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+
+        body.equip(tunic);
+        let removed = body.unequip(EquipmentSlot::Torso);
+
+        assert!(removed.is_some());
+        assert!(!body.equipment.contains_key(&EquipmentSlot::Torso));
+
+        // Torso protection should be removed
+        let torso = body.get_part(BodyPartType::Torso).unwrap();
+        assert_eq!(torso.protection, 0.0);
+        assert_eq!(torso.equipped_item, None);
+    }
+
+    #[test]
+    fn test_cold_insulation() {
+        use crate::agents::equipment::ClothingTemplate;
+        use crate::agents::skills::Quality;
+
+        let mut body = Body::new();
+
+        // No clothing = no insulation
+        assert_eq!(body.total_cold_insulation(), 0.0);
+
+        // Add fur coat (excellent cold protection)
+        body.equip(ClothingTemplate::fur_coat(Quality::Basic));
+        let with_coat = body.total_cold_insulation();
+        assert!(with_coat > 0.0);
+
+        // Add fur hat
+        body.equip(ClothingTemplate::fur_hat(Quality::Basic));
+        let with_hat = body.total_cold_insulation();
+        assert!(with_hat > with_coat);
+    }
+
+    #[test]
+    fn test_heat_resistance() {
+        use crate::agents::equipment::ClothingTemplate;
+        use crate::agents::skills::Quality;
+
+        let mut body = Body::new();
+
+        // Linen provides excellent heat resistance
+        body.equip(ClothingTemplate::linen_shirt(Quality::Basic));
+        let linen_resistance = body.total_heat_resistance();
+
+        let mut body2 = Body::new();
+        // Fur provides poor heat resistance
+        body2.equip(ClothingTemplate::fur_coat(Quality::Basic));
+        let fur_resistance = body2.total_heat_resistance();
+
+        assert!(linen_resistance > fur_resistance);
+    }
+
+    #[test]
+    fn test_equipment_wear() {
+        use crate::agents::equipment::ClothingTemplate;
+        use crate::agents::skills::Quality;
+
+        let mut body = Body::new();
+        let mut tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+
+        // Set durability very low
+        tunic.durability = 0.5;
+        body.equip(tunic);
+
+        // Tick should apply wear
+        body.tick_equipment_wear();
+
+        // Still equipped but with less durability
+        assert!(body.equipment.contains_key(&EquipmentSlot::Torso));
+
+        // Set to broken
+        if let Some(item) = body.equipment.get_mut(&EquipmentSlot::Torso) {
+            item.durability = 0.0;
+        }
+
+        // Tick should remove broken items
+        body.tick_equipment_wear();
+        assert!(!body.equipment.contains_key(&EquipmentSlot::Torso));
     }
 }
 
