@@ -24,6 +24,8 @@ mod plugin;
 mod registry;
 mod structure;
 pub mod clothing_recipes;
+pub mod flora;
+pub mod fauna;
 
 pub use material::*;
 pub use action::*;
@@ -31,6 +33,8 @@ pub use crafting::*;
 pub use plugin::*;
 pub use registry::*;
 pub use structure::*;
+pub use flora::{PlantSpecies, FloraRegistry, BiomeType, GrowthStage, PlantSize};
+pub use fauna::{AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize};
 
 /// Result type for environment operations
 pub type EnvironmentResult<T> = Result<T, EnvironmentError>;
