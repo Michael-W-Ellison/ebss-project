@@ -333,11 +333,12 @@ impl Agent {
         }
     }
 
-    /// Update agent state (tick senses, body, and emotions)
+    /// Update agent state (tick senses, body, emotions, and memory)
     pub fn tick(&mut self) {
         self.senses.tick();
         self.body.tick();
         self.emotions.tick();
+        self.memory.tick();
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;
