@@ -9,6 +9,8 @@ pub mod skills;
 pub mod emotions;
 pub mod traits;
 pub mod gossip;
+pub mod equipment;
+pub mod temperature;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem};
 pub use population::Population;
@@ -29,4 +31,10 @@ pub use traits::{Trait, TraitSet};
 pub use gossip::{
     Information, InformationType, InformationDistortion, DistortionType,
     Belief, TrustRating, KnowledgeBase,
+};
+pub use equipment::{
+    Equipment, EquipmentSlot, ClothingMaterial, ClothingTemplate,
+};
+pub use temperature::{
+    BodyTemperature, Temperature, Climate,
 };
