@@ -61,7 +61,7 @@ pub mod prelude {
     };
     
     pub use crate::world::{
-        World, WorldConfig, GridConfig,
+        World, WorldConfig, GridConfig, WorldSize,
         Position, Chunk,
     };
     

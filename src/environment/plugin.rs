@@ -88,6 +88,7 @@ pub struct PluginConfig {
 }
 
 impl PluginConfig {
+    /// Create a new plugin configuration with default medium world size
     pub fn new(seed: u64) -> Self {
         Self {
             seed,
@@ -95,6 +96,73 @@ impl PluginConfig {
             difficulty: 0.5,
             custom_config: HashMap::new(),
         }
+    }
+
+    /// Create with tiny world (64x64x64) - for quick testing
+    pub fn tiny(seed: u64) -> Self {
+        Self {
+            seed,
+            world_size: (64, 64, 64),
+            difficulty: 0.5,
+            custom_config: HashMap::new(),
+        }
+    }
+
+    /// Create with small world (128x128x96) - for small simulations
+    pub fn small(seed: u64) -> Self {
+        Self {
+            seed,
+            world_size: (128, 128, 96),
+            difficulty: 0.5,
+            custom_config: HashMap::new(),
+        }
+    }
+
+    /// Create with medium world (256x256x128) - default balanced size
+    pub fn medium(seed: u64) -> Self {
+        Self::new(seed)
+    }
+
+    /// Create with large world (512x512x160) - for complex simulations
+    pub fn large(seed: u64) -> Self {
+        Self {
+            seed,
+            world_size: (512, 512, 160),
+            difficulty: 0.5,
+            custom_config: HashMap::new(),
+        }
+    }
+
+    /// Create with huge world (1024x1024x192) - for massive simulations
+    pub fn huge(seed: u64) -> Self {
+        Self {
+            seed,
+            world_size: (1024, 1024, 192),
+            difficulty: 0.5,
+            custom_config: HashMap::new(),
+        }
+    }
+
+    /// Create with custom dimensions
+    pub fn custom(seed: u64, width: i32, depth: i32, height: i32) -> Self {
+        Self {
+            seed,
+            world_size: (width, depth, height),
+            difficulty: 0.5,
+            custom_config: HashMap::new(),
+        }
+    }
+
+    /// Validate world size parameters
+    pub fn is_valid(&self) -> bool {
+        let (w, d, h) = self.world_size;
+        w > 0 && d > 0 && h > 0 && w <= 4096 && d <= 4096 && h <= 512
+    }
+
+    /// Get world volume
+    pub fn world_volume(&self) -> i64 {
+        let (w, d, h) = self.world_size;
+        w as i64 * d as i64 * h as i64
     }
 }
 
@@ -214,5 +282,51 @@ mod tests {
         assert_eq!(config.seed, 54321);
         assert_eq!(config.world_size, (256, 256, 128));
         assert_eq!(config.difficulty, 0.5);
+    }
+
+    #[test]
+    fn test_plugin_config_sizes() {
+        let tiny = PluginConfig::tiny(1);
+        assert_eq!(tiny.world_size, (64, 64, 64));
+
+        let small = PluginConfig::small(2);
+        assert_eq!(small.world_size, (128, 128, 96));
+
+        let medium = PluginConfig::medium(3);
+        assert_eq!(medium.world_size, (256, 256, 128));
+
+        let large = PluginConfig::large(4);
+        assert_eq!(large.world_size, (512, 512, 160));
+
+        let huge = PluginConfig::huge(5);
+        assert_eq!(huge.world_size, (1024, 1024, 192));
+    }
+
+    #[test]
+    fn test_plugin_config_custom() {
+        let custom = PluginConfig::custom(999, 100, 200, 75);
+        assert_eq!(custom.world_size, (100, 200, 75));
+        assert_eq!(custom.seed, 999);
+    }
+
+    #[test]
+    fn test_plugin_config_validation() {
+        let valid = PluginConfig::new(123);
+        assert!(valid.is_valid());
+
+        let invalid = PluginConfig::custom(123, -10, 256, 128);
+        assert!(!invalid.is_valid());
+
+        let too_large = PluginConfig::custom(123, 10000, 256, 128);
+        assert!(!too_large.is_valid());
+    }
+
+    #[test]
+    fn test_world_volume() {
+        let tiny = PluginConfig::tiny(1);
+        assert_eq!(tiny.world_volume(), 262144); // 64*64*64
+
+        let medium = PluginConfig::medium(2);
+        assert_eq!(medium.world_volume(), 8388608); // 256*256*128
     }
 }
