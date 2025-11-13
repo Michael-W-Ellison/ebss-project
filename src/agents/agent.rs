@@ -11,6 +11,7 @@ use super::emotions::{EmotionState, RelationshipMap};
 use super::traits::TraitSet;
 use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
+use super::transport::TransportSystem;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -28,6 +29,8 @@ impl Default for AgentConfig {
 pub struct InventoryItem {
     pub item_id: String,
     pub quantity: u32,
+    /// Weight per unit (in kg)
+    pub weight_per_unit: f32,
     /// For containers: current fill level (e.g., water in waterskin)
     pub fill_level: Option<f32>,
     /// For containers: maximum capacity
@@ -45,6 +48,20 @@ impl InventoryItem {
         Self {
             item_id,
             quantity,
+            weight_per_unit: 1.0, // Default weight
+            fill_level: None,
+            max_capacity: None,
+            current_durability: None,
+            max_durability: None,
+            quality: None,
+        }
+    }
+
+    pub fn new_with_weight(item_id: String, quantity: u32, weight_per_unit: f32) -> Self {
+        Self {
+            item_id,
+            quantity,
+            weight_per_unit,
             fill_level: None,
             max_capacity: None,
             current_durability: None,
@@ -57,6 +74,7 @@ impl InventoryItem {
         Self {
             item_id,
             quantity,
+            weight_per_unit: 0.5, // Containers are typically lighter
             fill_level: Some(0.0),
             max_capacity: Some(capacity),
             current_durability: None,
@@ -75,6 +93,7 @@ impl InventoryItem {
         Self {
             item_id,
             quantity,
+            weight_per_unit: 2.0, // Tools are typically heavier
             fill_level: None,
             max_capacity: None,
             current_durability: Some(durability),
@@ -158,6 +177,18 @@ impl InventoryItem {
             *current = (*current - amount).max(0.0);
         }
     }
+
+    /// Get total weight of this item stack
+    /// Includes container contents (water, etc.) if applicable
+    pub fn total_weight(&self) -> f32 {
+        let base_weight = self.weight_per_unit * self.quantity as f32;
+
+        // Add liquid weight if this is a filled container
+        // Water weighs ~1 kg per liter
+        let liquid_weight = self.fill_level.unwrap_or(0.0);
+
+        base_weight + liquid_weight
+    }
 }
 
 /// Agent inventory system
@@ -184,12 +215,29 @@ impl Inventory {
     }
 
     /// Add an item to inventory
+    /// Returns true if successful, false if no room or too heavy
     pub fn add_item(&mut self, item: InventoryItem) -> bool {
+        // Check slot limit
         if self.items.len() >= self.max_slots && !self.items.contains_key(&item.item_id) {
             return false; // No room for new item type
         }
 
-        self.items.insert(item.item_id.clone(), item);
+        // Check weight limit
+        let item_weight = item.total_weight();
+        if self.current_weight + item_weight > self.max_weight {
+            return false; // Too heavy
+        }
+
+        // Update weight
+        self.current_weight += item_weight;
+
+        // Add or stack item
+        if let Some(existing) = self.items.get_mut(&item.item_id) {
+            existing.quantity += item.quantity;
+        } else {
+            self.items.insert(item.item_id.clone(), item);
+        }
+
         true
     }
 
@@ -201,12 +249,16 @@ impl Inventory {
                 let removed = InventoryItem {
                     item_id: item_id.to_string(),
                     quantity,
+                    weight_per_unit: item.weight_per_unit,
                     fill_level: item.fill_level,
                     max_capacity: item.max_capacity,
                     current_durability: item.current_durability,
                     max_durability: item.max_durability,
                     quality: item.quality,
                 };
+
+                // Update weight
+                self.current_weight -= removed.total_weight();
 
                 if item.quantity == 0 {
                     self.items.remove(item_id);
@@ -247,7 +299,12 @@ impl Inventory {
             }
         }
 
-        amount - remaining // Return amount actually drunk
+        let drunk = amount - remaining;
+
+        // Update weight (water weighs 1kg per liter)
+        self.current_weight -= drunk;
+
+        drunk // Return amount actually drunk
     }
 
     /// Fill containers from a water source
@@ -261,7 +318,12 @@ impl Inventory {
             }
         }
 
-        available_water - remaining // Return amount actually used
+        let filled = available_water - remaining;
+
+        // Update weight (water weighs 1kg per liter)
+        self.current_weight += filled;
+
+        filled // Return amount actually filled
     }
 
     /// Check if inventory has item with minimum quantity
@@ -274,6 +336,37 @@ impl Inventory {
     /// Get all items
     pub fn get_all_items(&self) -> &HashMap<String, InventoryItem> {
         &self.items
+    }
+
+    /// Recalculate total weight from all items
+    pub fn recalculate_weight(&mut self) {
+        self.current_weight = self.items.values()
+            .map(|item| item.total_weight())
+            .sum();
+    }
+
+    /// Check if inventory is overweight
+    pub fn is_overweight(&self) -> bool {
+        self.current_weight > self.max_weight
+    }
+
+    /// Get weight capacity remaining
+    pub fn weight_capacity_remaining(&self) -> f32 {
+        (self.max_weight - self.current_weight).max(0.0)
+    }
+
+    /// Get weight as percentage of max (0.0 to 1.0+)
+    pub fn weight_percentage(&self) -> f32 {
+        if self.max_weight == 0.0 {
+            0.0
+        } else {
+            self.current_weight / self.max_weight
+        }
+    }
+
+    /// Increase max weight capacity (from backpack, etc.)
+    pub fn add_capacity(&mut self, additional_weight: f32) {
+        self.max_weight += additional_weight;
     }
 }
 
@@ -306,6 +399,7 @@ pub struct Agent {
     pub traits: TraitSet,
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
+    pub transport: TransportSystem,
 }
 
 impl Agent {
@@ -333,6 +427,7 @@ impl Agent {
             traits: TraitSet::default(),
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
+            transport: TransportSystem::default(),
         }
     }
 
@@ -715,6 +810,71 @@ impl Agent {
     /// Get current learning rate
     pub fn learning_rate(&self) -> f32 {
         self.observational_learning.learning_rate()
+    }
+
+    /// Equip a transport (activate it)
+    /// Updates inventory capacity automatically
+    pub fn equip_transport(&mut self, transport_id: &Uuid) -> bool {
+        if self.transport.activate(transport_id) {
+            // Update inventory capacity
+            self.update_inventory_capacity_from_transport();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Unequip a transport (deactivate it)
+    /// Updates inventory capacity automatically
+    pub fn unequip_transport(&mut self, transport_id: &Uuid) {
+        self.transport.deactivate(transport_id);
+        self.update_inventory_capacity_from_transport();
+    }
+
+    /// Add a new transport to agent's possession
+    pub fn add_transport(&mut self, transport: super::Transport) {
+        self.transport.add_transport(transport);
+    }
+
+    /// Update inventory max_weight based on active transports and body strength
+    fn update_inventory_capacity_from_transport(&mut self) {
+        // Base capacity (100kg default)
+        let base_capacity = 100.0;
+
+        // Strength modifier from body functionality
+        // Stronger/healthier body can carry more
+        let strength_modifier = self.body.movement_speed_multiplier(); // 0.0 to 1.0
+
+        // Transport capacity
+        let transport_capacity = self.transport.total_additional_capacity();
+
+        // Total capacity
+        let total_capacity = (base_capacity * strength_modifier) + transport_capacity;
+
+        self.inventory.max_weight = total_capacity;
+    }
+
+    /// Get movement speed including transport penalties
+    pub fn movement_speed(&self) -> f32 {
+        let body_speed = self.body.movement_speed_multiplier();
+        let transport_speed = self.transport.speed_modifier();
+        let weight_penalty = if self.inventory.is_overweight() {
+            0.5 // 50% speed when overweight
+        } else {
+            1.0 - (self.inventory.weight_percentage() * 0.3) // Up to 30% slower at max weight
+        };
+
+        body_speed * transport_speed * weight_penalty
+    }
+
+    /// Check if agent can carry additional weight
+    pub fn can_carry(&self, additional_weight: f32) -> bool {
+        self.inventory.current_weight + additional_weight <= self.inventory.max_weight
+    }
+
+    /// Get total carrying capacity (base + transport)
+    pub fn total_carrying_capacity(&self) -> f32 {
+        self.inventory.max_weight
     }
 }
 

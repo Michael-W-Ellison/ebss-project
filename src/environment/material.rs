@@ -110,6 +110,8 @@ pub struct Material {
     // Material properties
     /// Durability when used as a tool (0 = infinite)
     pub durability: u32,
+    /// Weight per unit (in kg)
+    pub weight: f32,
     /// Max stack size
     pub stack_size: u32,
     /// Whether it can be used as fuel
@@ -148,6 +150,7 @@ impl Material {
             harvest_time: 20,
             drop_quantity: (1, 1),
             durability: 0,
+            weight: 1.0, // Default 1kg per unit
             stack_size: 64,
             is_fuel: false,
             fuel_burn_time: 0,
@@ -209,6 +212,11 @@ impl Material {
 
     pub fn with_durability(mut self, durability: u32) -> Self {
         self.durability = durability;
+        self
+    }
+
+    pub fn with_weight(mut self, weight: f32) -> Self {
+        self.weight = weight;
         self
     }
 

@@ -12,6 +12,7 @@ pub mod gossip;
 pub mod equipment;
 pub mod temperature;
 pub mod observational_learning;
+pub mod transport;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem};
 pub use population::Population;
@@ -41,6 +42,9 @@ pub use temperature::{
 };
 pub use observational_learning::{
     ObservationalLearning, ObservedAction, ActionType, LearningProgress,
+};
+pub use transport::{
+    Transport, TransportType, TransportSystem,
 };
 
 #[cfg(test)]
