@@ -9,6 +9,7 @@ use super::body::Body;
 use super::skills::Skills;
 use super::emotions::{EmotionState, RelationshipMap};
 use super::traits::TraitSet;
+use super::gossip::KnowledgeBase;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -301,6 +302,7 @@ pub struct Agent {
     pub emotions: EmotionState,
     pub relationships: RelationshipMap,
     pub traits: TraitSet,
+    pub knowledge: KnowledgeBase,
 }
 
 impl Agent {
@@ -325,6 +327,7 @@ impl Agent {
             emotions: EmotionState::default(),
             relationships: RelationshipMap::default(),
             traits: TraitSet::default(),
+            knowledge: KnowledgeBase::default(),
         }
     }
 
@@ -433,6 +436,77 @@ impl Agent {
     /// Get agent's dominant emotion
     pub fn dominant_emotion(&self) -> Option<super::EmotionType> {
         self.emotions.dominant_emotion()
+    }
+
+    /// Share information with another agent
+    ///
+    /// # Arguments
+    /// * `info` - The information to share
+    /// * `recipient` - The agent receiving the information
+    /// * `timestamp` - Current simulation time
+    pub fn share_information(&self, mut info: super::Information, recipient: &mut Agent, timestamp: u64) {
+        // Check if this agent would distort the information
+        if let Some(distortion_trait) = self.traits.would_distort_info() {
+            // Apply distortion based on trait
+            info = info.distort(distortion_trait, self.id);
+
+            // Gain happiness from distortion
+            // This would integrate with a happiness/mood system
+        }
+
+        // Recipient receives information
+        recipient.knowledge.receive_information(info, self.id, recipient.id, &recipient.traits, timestamp);
+    }
+
+    /// Learn information directly (observed firsthand)
+    ///
+    /// # Arguments
+    /// * `info` - The information learned
+    /// * `timestamp` - Current simulation time
+    pub fn learn_information(&mut self, info: super::Information, timestamp: u64) {
+        // When learning firsthand, source is self
+        self.knowledge.receive_information(info, self.id, self.id, &self.traits, timestamp);
+    }
+
+    /// Check if agent believes specific information
+    pub fn believes(&self, info_id: &Uuid) -> bool {
+        self.knowledge.believes(info_id)
+    }
+
+    /// Get trust level for another agent
+    pub fn get_trust_in(&self, other_agent: &Uuid) -> f32 {
+        self.knowledge.get_trust(other_agent)
+    }
+
+    /// React to learning about another agent's trait
+    ///
+    /// # Arguments
+    /// * `other_agent` - The other agent's UUID
+    /// * `other_trait` - The trait learned about
+    ///
+    /// Example: Believer learns Atheist has Atheist trait → relationship weakens
+    pub fn react_to_trait_info(&mut self, other_agent: &Uuid, other_trait: super::Trait) {
+        // Check for trait conflicts
+        if self.traits.has_trait(&super::Trait::Believer) && other_trait == super::Trait::Atheist {
+            // Believer dislikes Atheist
+            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
+                relationship.weaken(0.2);
+            } else {
+                // Create negative relationship
+                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
+                new_rel.bond_strength = -0.2;
+                self.relationships.add_relationship(new_rel);
+            }
+        } else if self.traits.has_trait(&super::Trait::Atheist) && other_trait == super::Trait::Believer {
+            // Atheist may dislike Believer
+            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
+                relationship.weaken(0.1);
+            } else {
+                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
+                new_rel.bond_strength = -0.1;
+                self.relationships.add_relationship(new_rel);
+            }
+        }
     }
 }
 

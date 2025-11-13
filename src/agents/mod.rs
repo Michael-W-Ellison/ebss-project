@@ -8,6 +8,7 @@ pub mod body;
 pub mod skills;
 pub mod emotions;
 pub mod traits;
+pub mod gossip;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem};
 pub use population::Population;
@@ -22,3 +23,7 @@ pub use emotions::{
     RelationshipMap, ThreatAssessment,
 };
 pub use traits::{Trait, TraitSet};
+pub use gossip::{
+    Information, InformationType, InformationDistortion, DistortionType,
+    Belief, TrustRating, KnowledgeBase,
+};
