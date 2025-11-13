@@ -69,6 +69,7 @@ impl MinecraftSurvivalPlugin {
             .with_tool_requirement(ToolType::Axe, ToolTier::None)
             .with_harvest_time(100)
             .with_drop_quantity(1, 3)
+            .with_weight(0.5) // Wood logs are relatively light
             .as_fuel(300)
             .flammable();
 
@@ -78,7 +79,8 @@ impl MinecraftSurvivalPlugin {
             .with_hardness(3.0)
             .with_tool_requirement(ToolType::Pickaxe, ToolTier::Wooden)
             .with_harvest_time(150)
-            .with_drop_quantity(1, 1);
+            .with_drop_quantity(1, 1)
+            .with_weight(2.5); // Stone is heavy
 
         let iron_ore = Material::new("iron_ore".to_string(), "Iron Ore".to_string())
             .with_description("Raw iron ore that needs smelting".to_string())
@@ -86,7 +88,8 @@ impl MinecraftSurvivalPlugin {
             .with_hardness(5.0)
             .with_tool_requirement(ToolType::Pickaxe, ToolTier::Stone)
             .with_harvest_time(200)
-            .with_drop_quantity(1, 1);
+            .with_drop_quantity(1, 1)
+            .with_weight(7.0); // Iron ore is very heavy (metal ore)
 
         let coal = Material::new("coal".to_string(), "Coal".to_string())
             .with_description("Fuel source and crafting material".to_string())
@@ -95,6 +98,7 @@ impl MinecraftSurvivalPlugin {
             .with_tool_requirement(ToolType::Pickaxe, ToolTier::Wooden)
             .with_harvest_time(100)
             .with_drop_quantity(1, 1)
+            .with_weight(0.8) // Coal is lighter than stone
             .as_fuel(1600);
 
         // Processed materials
@@ -102,6 +106,7 @@ impl MinecraftSurvivalPlugin {
             .with_description("Processed wood for building".to_string())
             .with_category(MaterialCategory::Processed)
             .with_hardness(1.5)
+            .with_weight(0.2) // Planks are lighter than logs
             .as_fuel(200)
             .flammable();
 
@@ -109,12 +114,14 @@ impl MinecraftSurvivalPlugin {
             .with_description("Basic crafting component".to_string())
             .with_category(MaterialCategory::Processed)
             .with_hardness(0.5)
+            .with_weight(0.05) // Sticks are very light
             .as_fuel(100);
 
         let iron_ingot = Material::new("iron_ingot".to_string(), "Iron Ingot".to_string())
             .with_description("Smelted iron for tools and equipment".to_string())
             .with_category(MaterialCategory::Processed)
-            .with_hardness(4.0);
+            .with_hardness(4.0)
+            .with_weight(5.0); // Dense metal ingot
 
         // Tools
         let wooden_pickaxe = Material::new("wooden_pickaxe".to_string(), "Wooden Pickaxe".to_string())
@@ -122,25 +129,29 @@ impl MinecraftSurvivalPlugin {
             .with_category(MaterialCategory::Tool)
             .with_durability(60)
             .with_stack_size(1)
+            .with_weight(1.5) // Tool weight includes handle and head
             .as_fuel(200);
 
         let stone_pickaxe = Material::new("stone_pickaxe".to_string(), "Stone Pickaxe".to_string())
             .with_description("Improved mining tool".to_string())
             .with_category(MaterialCategory::Tool)
             .with_durability(132)
-            .with_stack_size(1);
+            .with_stack_size(1)
+            .with_weight(2.5); // Stone head is heavier
 
         let iron_pickaxe = Material::new("iron_pickaxe".to_string(), "Iron Pickaxe".to_string())
             .with_description("Advanced mining tool".to_string())
             .with_category(MaterialCategory::Tool)
             .with_durability(251)
-            .with_stack_size(1);
+            .with_stack_size(1)
+            .with_weight(3.0); // Iron head is heaviest
 
         let wooden_axe = Material::new("wooden_axe".to_string(), "Wooden Axe".to_string())
             .with_description("Basic woodcutting tool".to_string())
             .with_category(MaterialCategory::Tool)
             .with_durability(60)
             .with_stack_size(1)
+            .with_weight(1.2) // Axe is lighter than pickaxe
             .as_fuel(200);
 
         // Food
@@ -148,7 +159,8 @@ impl MinecraftSurvivalPlugin {
             .with_description("Restores hunger".to_string())
             .with_category(MaterialCategory::Food)
             .as_food(4.0)
-            .with_stack_size(16);
+            .with_stack_size(16)
+            .with_weight(0.2); // Apples are light
 
         // Water (critical for life)
         let water = Material::new("water".to_string(), "Water".to_string())
@@ -158,7 +170,8 @@ impl MinecraftSurvivalPlugin {
             .with_tool_requirement(ToolType::Hand, ToolTier::None)
             .with_harvest_time(20)
             .with_drop_quantity(1, 1)
-            .with_stack_size(16);
+            .with_stack_size(16)
+            .with_weight(1.0); // 1kg per liter of water
 
         let dirt = Material::new("dirt".to_string(), "Dirt".to_string())
             .with_description("Basic soil material".to_string())
@@ -166,7 +179,8 @@ impl MinecraftSurvivalPlugin {
             .with_hardness(0.5)
             .with_tool_requirement(ToolType::Shovel, ToolTier::None)
             .with_harvest_time(30)
-            .with_drop_quantity(1, 1);
+            .with_drop_quantity(1, 1)
+            .with_weight(1.2); // Soil is moderately heavy
 
         let grass = Material::new("grass".to_string(), "Grass".to_string())
             .with_description("Grass-covered dirt".to_string())
@@ -174,7 +188,8 @@ impl MinecraftSurvivalPlugin {
             .with_hardness(0.6)
             .with_tool_requirement(ToolType::Shovel, ToolTier::None)
             .with_harvest_time(30)
-            .with_drop_quantity(1, 1);
+            .with_drop_quantity(1, 1)
+            .with_weight(1.2); // Same as dirt
 
         let sand = Material::new("sand".to_string(), "Sand".to_string())
             .with_description("Sandy material found near water".to_string())
@@ -182,41 +197,47 @@ impl MinecraftSurvivalPlugin {
             .with_hardness(0.5)
             .with_tool_requirement(ToolType::Shovel, ToolTier::None)
             .with_harvest_time(25)
-            .with_drop_quantity(1, 1);
+            .with_drop_quantity(1, 1)
+            .with_weight(1.6); // Sand is denser than dirt
 
         // Water containers - for carrying water
         let leather = Material::new("leather".to_string(), "Leather".to_string())
             .with_description("Leather for crafting".to_string())
             .with_category(MaterialCategory::Processed)
             .with_hardness(1.0)
-            .with_stack_size(16);
+            .with_stack_size(16)
+            .with_weight(0.3); // Leather is lightweight
 
         let mut waterskin = Material::new("waterskin".to_string(), "Leather Waterskin".to_string())
             .with_description("Basic water container - holds 8 units of water".to_string())
             .with_category(MaterialCategory::Container)
             .with_hardness(0.5)
-            .with_stack_size(1);
+            .with_stack_size(1)
+            .with_weight(0.3); // Empty waterskin weight
         waterskin.properties.insert("capacity".to_string(), "8.0".to_string());
 
         let mut canteen = Material::new("canteen".to_string(), "Iron Canteen".to_string())
             .with_description("Improved water container - holds 16 units of water".to_string())
             .with_category(MaterialCategory::Container)
             .with_hardness(1.0)
-            .with_stack_size(1);
+            .with_stack_size(1)
+            .with_weight(0.8); // Iron container is heavier
         canteen.properties.insert("capacity".to_string(), "16.0".to_string());
 
         let mut advanced_canteen = Material::new("advanced_canteen".to_string(), "Advanced Canteen".to_string())
             .with_description("High-capacity water container - holds 32 units of water".to_string())
             .with_category(MaterialCategory::Container)
             .with_hardness(1.5)
-            .with_stack_size(1);
+            .with_stack_size(1)
+            .with_weight(1.2); // Larger iron container
         advanced_canteen.properties.insert("capacity".to_string(), "32.0".to_string());
 
         let bucket = Material::new("bucket".to_string(), "Iron Bucket".to_string())
             .with_description("Bucket for carrying water".to_string())
             .with_category(MaterialCategory::Tool)
             .with_hardness(1.0)
-            .with_stack_size(16);
+            .with_stack_size(16)
+            .with_weight(1.0); // Iron bucket
 
         let clay = Material::new("clay".to_string(), "Clay".to_string())
             .with_description("Clay for building and crafting".to_string())
@@ -224,7 +245,8 @@ impl MinecraftSurvivalPlugin {
             .with_hardness(0.6)
             .with_tool_requirement(ToolType::Shovel, ToolTier::None)
             .with_harvest_time(40)
-            .with_drop_quantity(1, 1);
+            .with_drop_quantity(1, 1)
+            .with_weight(1.8); // Clay is dense and heavy
 
         // Register all materials
         for material in vec![
