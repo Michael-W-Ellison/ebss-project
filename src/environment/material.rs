@@ -77,6 +77,8 @@ pub enum MaterialCategory {
     Plant,
     /// Containers (waterskins, bottles, buckets)
     Container,
+    /// Clothing and armor
+    Clothing,
 }
 
 /// Properties of a material in the environment

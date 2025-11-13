@@ -23,6 +23,7 @@ mod crafting;
 mod plugin;
 mod registry;
 mod structure;
+pub mod clothing_recipes;
 
 pub use material::*;
 pub use action::*;
