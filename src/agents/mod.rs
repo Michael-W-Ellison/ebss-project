@@ -13,9 +13,12 @@ pub mod gossip;
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem};
 pub use population::Population;
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};
-pub use body::{Body, BodyPart, BodyPartType, BodyPartStatus, BodySummary, Condition, ConditionType};
+pub use body::{
+    Body, BodyPart, BodyPartType, BodyPartStatus, BodySummary, Condition, ConditionType,
+    InjuryType, CripplingType, Injury,
+};
 pub use skills::{
-    Skills, Skill, SkillType, SkillCategory, Quality, SkillCheckResult, InjuryType,
+    Skills, Skill, SkillType, SkillCategory, Quality, SkillCheckResult,
     RepairResult, RecycledMaterial, RecycleResult,
 };
 pub use emotions::{

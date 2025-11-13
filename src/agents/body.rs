@@ -1,8 +1,106 @@
 // src/agents/body.rs
-//! Body part system for agents with anatomical structure.
+//! Body part system for agents with anatomical structure and injury tracking.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+/// Type of injury
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InjuryType {
+    /// Small injuries, little damage, heal quickly
+    Minor,
+    /// Larger injuries, decent damage, heal slowly but fully
+    Major,
+    /// Life-threatening, significant damage, may not heal fully
+    Crippling(CripplingType),
+}
+
+/// Severity of crippling injury
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CripplingType {
+    /// Partial loss of function (one eye, limp, decreased strength)
+    Partial,
+    /// Total loss of limb/sense (blindness, deafness, amputation)
+    Full,
+}
+
+impl InjuryType {
+    /// Get healing rate per tick
+    pub fn healing_rate(&self) -> f32 {
+        match self {
+            InjuryType::Minor => 0.5,                        // Heals 0.5 HP/tick
+            InjuryType::Major => 0.1,                        // Heals 0.1 HP/tick
+            InjuryType::Crippling(CripplingType::Partial) => 0.05, // Very slow
+            InjuryType::Crippling(CripplingType::Full) => 0.0,     // Does not heal
+        }
+    }
+
+    /// Get maximum recovery percentage
+    pub fn max_recovery(&self) -> f32 {
+        match self {
+            InjuryType::Minor => 1.0,                        // 100% recovery
+            InjuryType::Major => 1.0,                        // 100% recovery
+            InjuryType::Crippling(CripplingType::Partial) => 0.7, // Recovers to 70%
+            InjuryType::Crippling(CripplingType::Full) => 0.0,    // No recovery
+        }
+    }
+
+    /// Check if injury causes permanent impairment
+    pub fn is_permanent(&self) -> bool {
+        matches!(self, InjuryType::Crippling(_))
+    }
+}
+
+/// An active injury on a body part
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Injury {
+    pub injury_type: InjuryType,
+    pub damage_taken: f32,
+    pub healing_progress: f32, // 0.0 to damage_taken
+    pub timestamp: u64,        // When injury occurred
+}
+
+impl Injury {
+    pub fn new(injury_type: InjuryType, damage: f32, timestamp: u64) -> Self {
+        Self {
+            injury_type,
+            damage_taken: damage,
+            healing_progress: 0.0,
+            timestamp,
+        }
+    }
+
+    /// Heal this injury
+    pub fn heal(&mut self, amount: f32) -> f32 {
+        let max_healing = self.max_recoverable_damage();
+        let can_heal = max_healing - self.healing_progress;
+        let actual_heal = amount.min(can_heal);
+
+        self.healing_progress += actual_heal;
+        actual_heal
+    }
+
+    /// Get maximum amount that can be recovered from this injury
+    fn max_recoverable_damage(&self) -> f32 {
+        self.damage_taken * self.injury_type.max_recovery()
+    }
+
+    /// Check if injury is fully healed
+    pub fn is_healed(&self) -> bool {
+        let max_heal = self.max_recoverable_damage();
+        // If there's nothing that can be healed (full crippling), never consider it "healed"
+        if max_heal <= 0.0 {
+            return false;
+        }
+        // Use small epsilon for floating point comparison
+        (self.healing_progress - max_heal).abs() < 0.01 || self.healing_progress >= max_heal
+    }
+
+    /// Get permanent damage from this injury
+    pub fn permanent_damage(&self) -> f32 {
+        self.damage_taken - self.max_recoverable_damage()
+    }
+}
 
 /// Body part types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -99,6 +197,12 @@ pub struct BodyPart {
     /// Active conditions (bleeding, burned, frostbitten, etc.)
     pub conditions: Vec<Condition>,
 
+    /// Active injuries being healed
+    pub injuries: Vec<Injury>,
+
+    /// Permanent impairment factor (0.0 = no impairment, 1.0 = fully impaired)
+    pub permanent_impairment: f32,
+
     /// Protection value (from armor)
     pub protection: f32,
 }
@@ -131,6 +235,8 @@ impl BodyPart {
             status: BodyPartStatus::Healthy,
             equipped_item: None,
             conditions: Vec::new(),
+            injuries: Vec::new(),
+            permanent_impairment: 0.0,
             protection: 0.0,
         }
     }
@@ -145,9 +251,64 @@ impl BodyPart {
         actual_damage
     }
 
-    /// Heal this body part
+    /// Apply injury with specific type
+    pub fn apply_injury(&mut self, injury_type: InjuryType, damage: f32, timestamp: u64) {
+        // Apply the damage
+        self.health = (self.health - damage).max(0.0);
+
+        // Create injury record
+        let injury = Injury::new(injury_type, damage, timestamp);
+        self.injuries.push(injury);
+
+        // Update permanent impairment for crippling injuries
+        if injury_type.is_permanent() {
+            let permanent_dmg = damage * (1.0 - injury_type.max_recovery());
+            let impairment_increase = permanent_dmg / self.max_health;
+            self.permanent_impairment = (self.permanent_impairment + impairment_increase).min(1.0);
+        }
+
+        self.update_status();
+    }
+
+    /// Heal this body part (processes injuries)
     pub fn heal(&mut self, amount: f32) {
-        self.health = (self.health + amount).min(self.max_health);
+        let mut remaining_healing = amount;
+
+        // Heal injuries in order from oldest to newest
+        for injury in &mut self.injuries {
+            if remaining_healing <= 0.0 {
+                break;
+            }
+
+            let healed = injury.heal(remaining_healing);
+            remaining_healing -= healed;
+            self.health = (self.health + healed).min(self.max_health);
+        }
+
+        // Remove fully healed injuries
+        self.injuries.retain(|inj| !inj.is_healed());
+
+        // Apply any remaining healing directly to health (for non-injury damage)
+        if remaining_healing > 0.0 {
+            self.health = (self.health + remaining_healing).min(self.max_health);
+        }
+
+        self.update_status();
+    }
+
+    /// Natural healing tick (uses injury healing rates)
+    pub fn tick_natural_healing(&mut self) {
+        for injury in &mut self.injuries {
+            let heal_amount = injury.injury_type.healing_rate();
+            if heal_amount > 0.0 {
+                let healed = injury.heal(heal_amount);
+                self.health = (self.health + healed).min(self.max_health);
+            }
+        }
+
+        // Remove fully healed injuries
+        self.injuries.retain(|inj| !inj.is_healed());
+
         self.update_status();
     }
 
@@ -184,6 +345,23 @@ impl BodyPart {
             self.status,
             BodyPartStatus::Disabled | BodyPartStatus::Missing
         )
+    }
+
+    /// Get effective functionality (0.0 to 1.0) accounting for permanent impairment
+    pub fn effectiveness(&self) -> f32 {
+        if !self.is_functional() {
+            return 0.0;
+        }
+
+        let health_factor = self.health_percentage();
+        let impairment_factor = 1.0 - self.permanent_impairment;
+
+        health_factor * impairment_factor
+    }
+
+    /// Check if part has permanent impairment
+    pub fn has_permanent_impairment(&self) -> bool {
+        self.permanent_impairment > 0.0
     }
 
     /// Equip an item on this body part
@@ -236,6 +414,9 @@ impl BodyPart {
 
         // Remove expired conditions
         self.conditions.retain(|c| c.duration > 0);
+
+        // Natural healing for injuries
+        self.tick_natural_healing();
     }
 }
 
@@ -374,24 +555,28 @@ impl Body {
 
     /// Get movement speed multiplier based on leg health
     pub fn movement_speed_multiplier(&self) -> f32 {
-        let legs = self.functional_legs();
-        match legs {
-            2 => 1.0,
-            1 => 0.5,
-            0 => 0.0,
-            _ => 1.0,
-        }
+        let left_leg = self.parts.get(&BodyPartType::LeftLeg)
+            .map(|p| p.effectiveness())
+            .unwrap_or(0.0);
+        let right_leg = self.parts.get(&BodyPartType::RightLeg)
+            .map(|p| p.effectiveness())
+            .unwrap_or(0.0);
+
+        // Average effectiveness of both legs
+        (left_leg + right_leg) / 2.0
     }
 
     /// Get tool use efficiency based on arm health
     pub fn tool_efficiency_multiplier(&self) -> f32 {
-        let arms = self.functional_arms();
-        match arms {
-            2 => 1.0,
-            1 => 0.7,
-            0 => 0.0,
-            _ => 1.0,
-        }
+        let left_arm = self.parts.get(&BodyPartType::LeftArm)
+            .map(|p| p.effectiveness())
+            .unwrap_or(0.0);
+        let right_arm = self.parts.get(&BodyPartType::RightArm)
+            .map(|p| p.effectiveness())
+            .unwrap_or(0.0);
+
+        // Use better arm effectiveness
+        left_arm.max(right_arm)
     }
 
     /// Equip armor/clothing on a body part
@@ -548,9 +733,9 @@ mod tests {
         let mut body = Body::new();
         assert_eq!(body.tool_efficiency_multiplier(), 1.0);
 
-        // Disable one arm
+        // Disable one arm - can still use the other arm at full effectiveness
         body.damage_part(BodyPartType::RightArm, 1000.0);
-        assert_eq!(body.tool_efficiency_multiplier(), 0.7);
+        assert_eq!(body.tool_efficiency_multiplier(), 1.0); // Uses left arm
 
         // Disable both arms
         body.damage_part(BodyPartType::LeftArm, 1000.0);
@@ -630,4 +815,181 @@ mod tests {
         assert!(part.health < initial_health);
         assert_eq!(part.conditions[0].duration, 9);
     }
+
+    #[test]
+    fn test_minor_injury_healing() {
+        let mut part = BodyPart::new(BodyPartType::LeftArm);
+        let initial_health = part.health;
+
+        // Apply minor injury (10 damage)
+        part.apply_injury(InjuryType::Minor, 10.0, 0);
+
+        assert_eq!(part.health, initial_health - 10.0);
+        assert_eq!(part.injuries.len(), 1);
+
+        // Minor injuries heal quickly (0.5 HP/tick)
+        part.tick_natural_healing();
+        assert_eq!(part.health, initial_health - 9.5);
+
+        // After 20 ticks, should be fully healed
+        for _ in 0..19 {
+            part.tick_natural_healing();
+        }
+
+        assert_eq!(part.health, initial_health);
+        assert_eq!(part.injuries.len(), 0); // Injury removed when healed
+    }
+
+    #[test]
+    fn test_major_injury_healing() {
+        let mut part = BodyPart::new(BodyPartType::Torso);
+        let initial_health = part.health;
+
+        // Apply major injury (30 damage)
+        part.apply_injury(InjuryType::Major, 30.0, 0);
+
+        assert_eq!(part.health, initial_health - 30.0);
+
+        // Major injuries heal slowly (0.1 HP/tick)
+        part.tick_natural_healing();
+        assert_eq!(part.health, initial_health - 29.9);
+
+        // After 300 ticks, should be fully healed
+        for _ in 0..299 {
+            part.tick_natural_healing();
+        }
+
+        assert!((part.health - initial_health).abs() < 0.01); // Use tolerance for floating point
+        assert!(part.injuries.is_empty());
+        assert_eq!(part.permanent_impairment, 0.0); // Major injuries don't cause permanent damage
+    }
+
+    #[test]
+    fn test_partial_crippling_injury() {
+        let mut part = BodyPart::new(BodyPartType::LeftLeg);
+        let initial_health = part.health; // 70.0
+
+        // Apply partial crippling injury (40 damage)
+        part.apply_injury(InjuryType::Crippling(CripplingType::Partial), 40.0, 0);
+
+        assert_eq!(part.health, initial_health - 40.0);
+        assert_eq!(part.injuries.len(), 1);
+
+        // Partial crippling: max recovery 70%, so 40 * 0.7 = 28 HP can be recovered
+        // Permanent damage: 40 * 0.3 = 12 HP
+        let expected_permanent_impairment = 12.0 / 70.0; // ~0.171
+        assert!((part.permanent_impairment - expected_permanent_impairment).abs() < 0.01);
+
+        // Heal very slowly (0.05 HP/tick)
+        for _ in 0..560 {
+            part.tick_natural_healing();
+        }
+
+        // Should recover to 70% of damage
+        let expected_recovery = initial_health - 12.0; // 58.0
+        assert!((part.health - expected_recovery).abs() < 0.1);
+        assert!(part.injuries.is_empty()); // Injury fully healed (to its limit)
+
+        // Permanent impairment remains
+        assert!(part.permanent_impairment > 0.0);
+        assert!(part.has_permanent_impairment());
+    }
+
+    #[test]
+    fn test_full_crippling_injury() {
+        let mut part = BodyPart::new(BodyPartType::RightArm);
+        let initial_health = part.health; // 60.0
+
+        // Apply full crippling injury (50 damage)
+        part.apply_injury(InjuryType::Crippling(CripplingType::Full), 50.0, 0);
+
+        assert_eq!(part.health, initial_health - 50.0);
+
+        // Full crippling: no recovery (max_recovery = 0.0)
+        // All damage is permanent
+        let expected_permanent_impairment = 50.0 / 60.0; // ~0.833
+        assert!((part.permanent_impairment - expected_permanent_impairment).abs() < 0.01);
+
+        // Try to heal - should not heal at all
+        for _ in 0..100 {
+            part.tick_natural_healing();
+        }
+
+        assert_eq!(part.health, initial_health - 50.0); // No healing
+        assert_eq!(part.injuries.len(), 1); // Injury never heals
+    }
+
+    #[test]
+    fn test_effectiveness_with_permanent_impairment() {
+        let mut part = BodyPart::new(BodyPartType::LeftLeg);
+
+        // Start at 100% effectiveness
+        assert_eq!(part.effectiveness(), 1.0);
+
+        // Apply partial crippling injury (35 damage out of 70 max)
+        part.apply_injury(InjuryType::Crippling(CripplingType::Partial), 35.0, 0);
+
+        // Health is now 35/70 = 50%
+        // Permanent impairment: 35 * 0.3 / 70 = ~0.15
+        // Effectiveness = health_pct * (1 - impairment) = 0.5 * 0.85 = 0.425
+        let expected_effectiveness = 0.5 * (1.0 - (35.0 * 0.3 / 70.0));
+        assert!((part.effectiveness() - expected_effectiveness).abs() < 0.01);
+
+        // After healing to 70% recovery
+        for _ in 0..500 {
+            part.tick_natural_healing();
+        }
+
+        // Health should be at ~59.5 (70% recovery of 35 damage = 24.5 healed)
+        // Health: (35 + 24.5) / 70 = ~0.85
+        // Permanent impairment: ~0.15
+        // Effectiveness: 0.85 * 0.85 = ~0.72
+        assert!(part.effectiveness() > 0.7);
+        assert!(part.effectiveness() < 0.75);
+    }
+
+    #[test]
+    fn test_body_movement_with_partial_crippling() {
+        let mut body = Body::new();
+
+        // Apply partial crippling to left leg
+        if let Some(part) = body.get_part_mut(BodyPartType::LeftLeg) {
+            part.apply_injury(InjuryType::Crippling(CripplingType::Partial), 30.0, 0);
+        }
+
+        // Movement speed should be reduced due to partial crippling
+        // Left leg effectiveness: (70-30)/70 * (1 - 30*0.3/70) = 0.571 * 0.871 = ~0.497
+        // Right leg effectiveness: 1.0
+        // Average: (0.497 + 1.0) / 2 = ~0.75
+        let speed = body.movement_speed_multiplier();
+        assert!(speed > 0.7);
+        assert!(speed < 0.8);
+    }
+
+    #[test]
+    fn test_body_tool_use_with_crippling() {
+        let mut body = Body::new();
+
+        // Apply full crippling to left arm (amputation)
+        if let Some(part) = body.get_part_mut(BodyPartType::LeftArm) {
+            part.apply_injury(InjuryType::Crippling(CripplingType::Full), 60.0, 0);
+        }
+
+        // Tool efficiency should use right arm (better of the two)
+        // Left arm: 0.0 effectiveness (fully crippled)
+        // Right arm: 1.0 effectiveness
+        // max(0.0, 1.0) = 1.0
+        assert_eq!(body.tool_efficiency_multiplier(), 1.0);
+
+        // Now cripple right arm partially
+        if let Some(part) = body.get_part_mut(BodyPartType::RightArm) {
+            part.apply_injury(InjuryType::Crippling(CripplingType::Partial), 30.0, 0);
+        }
+
+        // Right arm effectiveness reduced
+        let efficiency = body.tool_efficiency_multiplier();
+        assert!(efficiency > 0.4);
+        assert!(efficiency < 0.6);
+    }
 }
+
