@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
+use super::traits::{Trait, TraitSet};
 
 /// Emotional state tracking anger, fear, and sadness
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,6 +200,107 @@ impl Relationship {
     pub fn weaken(&mut self, amount: f32) {
         self.bond_strength = (self.bond_strength - amount).max(-1.0);
     }
+
+    /// Update relationship based on trait compatibility
+    /// Returns true if relationship changed significantly
+    pub fn update_from_trait_interaction(
+        &mut self,
+        self_traits: &TraitSet,
+        other_traits: &TraitSet,
+    ) -> bool {
+        let mut total_change = 0.0;
+        let mut incompatibility_count = 0;
+        let mut compatibility_count = 0;
+
+        // Check for incompatibilities
+        for self_trait in self_traits.get_traits() {
+            for other_trait in other_traits.get_traits() {
+                if self_trait.incompatible_with(other_trait) {
+                    incompatibility_count += 1;
+
+                    // Different trait pairs have different conflict severity
+                    let conflict_severity = match (self_trait, other_trait) {
+                        // Major conflicts (religion, honesty)
+                        (Trait::Believer, Trait::Atheist) |
+                        (Trait::Atheist, Trait::Believer) => 0.03,
+                        (Trait::Honest, Trait::Dishonest) |
+                        (Trait::Dishonest, Trait::Honest) => 0.025,
+
+                        // Moderate conflicts (personality clashes)
+                        (Trait::Aggressive, Trait::Peaceful) |
+                        (Trait::Peaceful, Trait::Aggressive) => 0.02,
+                        (Trait::Hottempered, Trait::Calm) |
+                        (Trait::Calm, Trait::Hottempered) => 0.02,
+
+                        // Minor conflicts (preferences)
+                        (Trait::Sociable, Trait::Introverted) |
+                        (Trait::Introverted, Trait::Sociable) => 0.01,
+                        (Trait::Diligent, Trait::Lazy) |
+                        (Trait::Lazy, Trait::Diligent) => 0.015,
+
+                        _ => 0.01,
+                    };
+
+                    total_change -= conflict_severity;
+                }
+            }
+        }
+
+        // Check for complementary traits (strengthen relationships)
+        if self_traits.has_trait(&Trait::Empathetic) &&
+           other_traits.has_trait(&Trait::Empathetic) {
+            compatibility_count += 1;
+            total_change += 0.02; // Both empathetic
+        }
+
+        if self_traits.has_trait(&Trait::Forgiving) {
+            // Forgiving trait reduces negative impact of incompatibilities
+            total_change *= 0.7;
+        }
+
+        if self_traits.has_trait(&Trait::Sociable) &&
+           other_traits.has_trait(&Trait::Sociable) {
+            compatibility_count += 1;
+            total_change += 0.015; // Both sociable
+        }
+
+        // Family bonds are more resilient to trait conflicts
+        if self.is_family() {
+            total_change *= 0.5;
+        }
+
+        // Apply the change
+        let old_strength = self.bond_strength;
+        self.bond_strength = (self.bond_strength + total_change).clamp(-1.0, 1.0);
+        self.time_together += 1;
+
+        // Significant change if bond strength changed by more than 0.05
+        (self.bond_strength - old_strength).abs() > 0.05
+    }
+
+    /// Check if relationship is degrading (negative bond)
+    pub fn is_degrading(&self) -> bool {
+        self.bond_strength < 0.0
+    }
+
+    /// Check if relationship has become hostile
+    pub fn is_hostile(&self) -> bool {
+        self.bond_strength < -0.4
+    }
+
+    /// Get relationship quality descriptor
+    pub fn quality_descriptor(&self) -> &'static str {
+        match self.bond_strength {
+            x if x >= 0.8 => "Excellent",
+            x if x >= 0.6 => "Good",
+            x if x >= 0.4 => "Friendly",
+            x if x >= 0.2 => "Neutral",
+            x if x >= 0.0 => "Strained",
+            x if x >= -0.3 => "Poor",
+            x if x >= -0.6 => "Hostile",
+            _ => "Enemy",
+        }
+    }
 }
 
 /// Type of relationship between agents
@@ -266,6 +368,89 @@ impl RelationshipMap {
     /// Get all relationships
     pub fn get_all(&self) -> &HashMap<Uuid, Relationship> {
         &self.relationships
+    }
+
+    /// Update a specific relationship based on trait interaction
+    /// Returns true if the relationship changed significantly
+    pub fn update_relationship_from_traits(
+        &mut self,
+        other_agent_id: &Uuid,
+        self_traits: &TraitSet,
+        other_traits: &TraitSet,
+    ) -> bool {
+        if let Some(relationship) = self.relationships.get_mut(other_agent_id) {
+            relationship.update_from_trait_interaction(self_traits, other_traits)
+        } else {
+            false
+        }
+    }
+
+    /// Get all degrading relationships (bond strength < 0)
+    pub fn get_degrading_relationships(&self) -> Vec<&Relationship> {
+        self.relationships
+            .values()
+            .filter(|r| r.is_degrading())
+            .collect()
+    }
+
+    /// Get all hostile relationships (bond strength < -0.4)
+    pub fn get_hostile_relationships(&self) -> Vec<&Relationship> {
+        self.relationships
+            .values()
+            .filter(|r| r.is_hostile())
+            .collect()
+    }
+
+    /// Get relationships by quality
+    pub fn get_by_quality(&self, min_bond: f32) -> Vec<&Relationship> {
+        self.relationships
+            .values()
+            .filter(|r| r.bond_strength >= min_bond)
+            .collect()
+    }
+
+    /// Count incompatible trait conflicts with another agent
+    pub fn count_trait_conflicts(
+        self_traits: &TraitSet,
+        other_traits: &TraitSet,
+    ) -> usize {
+        let mut count = 0;
+        for self_trait in self_traits.get_traits() {
+            for other_trait in other_traits.get_traits() {
+                if self_trait.incompatible_with(other_trait) {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Check if two agents have compatible traits (more compatible than incompatible)
+    pub fn are_traits_compatible(
+        self_traits: &TraitSet,
+        other_traits: &TraitSet,
+    ) -> bool {
+        let conflicts = Self::count_trait_conflicts(self_traits, other_traits);
+
+        // Check for synergies
+        let mut synergies = 0;
+
+        if self_traits.has_trait(&Trait::Empathetic) &&
+           other_traits.has_trait(&Trait::Empathetic) {
+            synergies += 1;
+        }
+
+        if self_traits.has_trait(&Trait::Sociable) &&
+           other_traits.has_trait(&Trait::Sociable) {
+            synergies += 1;
+        }
+
+        if self_traits.has_trait(&Trait::Forgiving) ||
+           other_traits.has_trait(&Trait::Forgiving) {
+            synergies += 1; // Forgiving helps compatibility
+        }
+
+        synergies > conflicts
     }
 }
 
@@ -450,5 +635,257 @@ mod tests {
 
         emotions.tick();
         assert!(emotions.anger_sources.is_empty()); // Should be removed at 0
+    }
+
+    #[test]
+    fn test_trait_incompatibility_weakens_relationship() {
+        let agent1_id = Uuid::new_v4();
+        let agent2_id = Uuid::new_v4();
+
+        let mut agent1_traits = TraitSet::new();
+        agent1_traits.add_trait(Trait::Believer);
+
+        let mut agent2_traits = TraitSet::new();
+        agent2_traits.add_trait(Trait::Atheist);
+
+        let mut rel = Relationship::new(agent2_id, RelationshipType::Friend);
+        let initial_strength = rel.bond_strength;
+
+        // Simulate multiple interactions
+        for _ in 0..10 {
+            rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
+        }
+
+        // Relationship should have degraded
+        assert!(rel.bond_strength < initial_strength);
+        assert!(rel.bond_strength < 0.2); // Should be significantly weakened
+    }
+
+    #[test]
+    fn test_compatible_traits_strengthen_relationship() {
+        let agent1_id = Uuid::new_v4();
+        let agent2_id = Uuid::new_v4();
+
+        let mut agent1_traits = TraitSet::new();
+        agent1_traits.add_trait(Trait::Empathetic);
+        agent1_traits.add_trait(Trait::Sociable);
+
+        let mut agent2_traits = TraitSet::new();
+        agent2_traits.add_trait(Trait::Empathetic);
+        agent2_traits.add_trait(Trait::Sociable);
+
+        let mut rel = Relationship::new(agent2_id, RelationshipType::Acquaintance);
+        let initial_strength = rel.bond_strength;
+
+        // Simulate multiple interactions
+        for _ in 0..10 {
+            rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
+        }
+
+        // Relationship should have strengthened
+        assert!(rel.bond_strength > initial_strength);
+        assert!(rel.bond_strength > 0.4); // Should be significantly strengthened
+    }
+
+    #[test]
+    fn test_forgiving_trait_reduces_conflict_impact() {
+        let agent1_id = Uuid::new_v4();
+        let agent2_id = Uuid::new_v4();
+
+        // Agent 1 is forgiving
+        let mut agent1_traits = TraitSet::new();
+        agent1_traits.add_trait(Trait::Believer);
+        agent1_traits.add_trait(Trait::Forgiving);
+
+        // Agent 2 has conflicting trait
+        let mut agent2_traits = TraitSet::new();
+        agent2_traits.add_trait(Trait::Atheist);
+
+        let mut rel_forgiving = Relationship::new(agent2_id, RelationshipType::Friend);
+        let mut rel_normal = Relationship::new(agent2_id, RelationshipType::Friend);
+
+        // Without forgiving trait
+        let mut traits_no_forgive = TraitSet::new();
+        traits_no_forgive.add_trait(Trait::Believer);
+
+        // Simulate interactions
+        for _ in 0..5 {
+            rel_forgiving.update_from_trait_interaction(&agent1_traits, &agent2_traits);
+            rel_normal.update_from_trait_interaction(&traits_no_forgive, &agent2_traits);
+        }
+
+        // Forgiving agent's relationship should degrade less
+        assert!(rel_forgiving.bond_strength > rel_normal.bond_strength);
+    }
+
+    #[test]
+    fn test_family_bonds_more_resilient() {
+        let parent_id = Uuid::new_v4();
+        let child_id = Uuid::new_v4();
+
+        let mut parent_traits = TraitSet::new();
+        parent_traits.add_trait(Trait::Diligent);
+
+        let mut child_traits = TraitSet::new();
+        child_traits.add_trait(Trait::Lazy);
+
+        // Family relationship
+        let mut family_rel = Relationship::new(child_id, RelationshipType::Parent);
+        let family_initial = family_rel.bond_strength;
+
+        // Friend relationship (non-family)
+        let mut friend_rel = Relationship::new(child_id, RelationshipType::Friend);
+        let friend_initial = friend_rel.bond_strength;
+
+        // Simulate same conflicts
+        for _ in 0..10 {
+            family_rel.update_from_trait_interaction(&parent_traits, &child_traits);
+            friend_rel.update_from_trait_interaction(&parent_traits, &child_traits);
+        }
+
+        // Family bond should degrade less than friend bond
+        let family_loss = family_initial - family_rel.bond_strength;
+        let friend_loss = friend_initial - friend_rel.bond_strength;
+
+        assert!(family_loss < friend_loss);
+    }
+
+    #[test]
+    fn test_relationship_quality_descriptor() {
+        let other_id = Uuid::new_v4();
+
+        let excellent = Relationship::new(other_id, RelationshipType::Parent);
+        assert_eq!(excellent.quality_descriptor(), "Excellent");
+
+        let good = Relationship::new(other_id, RelationshipType::Sibling);
+        assert_eq!(good.quality_descriptor(), "Good");
+
+        let enemy = Relationship::new(other_id, RelationshipType::Enemy);
+        assert_eq!(enemy.quality_descriptor(), "Enemy"); // -0.7 is below -0.6 threshold
+    }
+
+    #[test]
+    fn test_relationship_map_trait_update() {
+        let mut map = RelationshipMap::new();
+        let agent1_id = Uuid::new_v4();
+        let agent2_id = Uuid::new_v4();
+
+        map.add_relationship(Relationship::new(agent2_id, RelationshipType::Friend));
+
+        let mut agent1_traits = TraitSet::new();
+        agent1_traits.add_trait(Trait::Aggressive);
+
+        let mut agent2_traits = TraitSet::new();
+        agent2_traits.add_trait(Trait::Peaceful);
+
+        let initial = map.get_relationship(&agent2_id).unwrap().bond_strength;
+
+        // Update relationship
+        map.update_relationship_from_traits(&agent2_id, &agent1_traits, &agent2_traits);
+
+        let updated = map.get_relationship(&agent2_id).unwrap().bond_strength;
+
+        // Should have degraded
+        assert!(updated < initial);
+    }
+
+    #[test]
+    fn test_count_trait_conflicts() {
+        let mut traits1 = TraitSet::new();
+        traits1.add_trait(Trait::Believer);
+        traits1.add_trait(Trait::Aggressive);
+
+        let mut traits2 = TraitSet::new();
+        traits2.add_trait(Trait::Atheist);
+        traits2.add_trait(Trait::Peaceful);
+
+        let conflicts = RelationshipMap::count_trait_conflicts(&traits1, &traits2);
+        assert_eq!(conflicts, 2); // Believer-Atheist and Aggressive-Peaceful
+    }
+
+    #[test]
+    fn test_are_traits_compatible() {
+        // Compatible agents
+        let mut compatible1 = TraitSet::new();
+        compatible1.add_trait(Trait::Empathetic);
+        compatible1.add_trait(Trait::Sociable);
+
+        let mut compatible2 = TraitSet::new();
+        compatible2.add_trait(Trait::Empathetic);
+        compatible2.add_trait(Trait::Forgiving);
+
+        assert!(RelationshipMap::are_traits_compatible(&compatible1, &compatible2));
+
+        // Incompatible agents
+        let mut incompatible1 = TraitSet::new();
+        incompatible1.add_trait(Trait::Believer);
+        incompatible1.add_trait(Trait::Aggressive);
+
+        let mut incompatible2 = TraitSet::new();
+        incompatible2.add_trait(Trait::Atheist);
+        incompatible2.add_trait(Trait::Peaceful);
+
+        assert!(!RelationshipMap::are_traits_compatible(&incompatible1, &incompatible2));
+    }
+
+    #[test]
+    fn test_get_degrading_relationships() {
+        let mut map = RelationshipMap::new();
+
+        let friend_id = Uuid::new_v4();
+        let enemy_id = Uuid::new_v4();
+
+        let mut friend_rel = Relationship::new(friend_id, RelationshipType::Friend);
+        friend_rel.bond_strength = -0.2; // Degraded
+        map.add_relationship(friend_rel);
+
+        let enemy_rel = Relationship::new(enemy_id, RelationshipType::Enemy);
+        map.add_relationship(enemy_rel);
+
+        let degrading = map.get_degrading_relationships();
+        assert_eq!(degrading.len(), 2); // Both have negative bond
+    }
+
+    #[test]
+    fn test_get_hostile_relationships() {
+        let mut map = RelationshipMap::new();
+
+        let rival_id = Uuid::new_v4();
+        let enemy_id = Uuid::new_v4();
+
+        let rival_rel = Relationship::new(rival_id, RelationshipType::Rival);
+        map.add_relationship(rival_rel); // -0.3, not hostile yet
+
+        let enemy_rel = Relationship::new(enemy_id, RelationshipType::Enemy);
+        map.add_relationship(enemy_rel); // -0.7, hostile
+
+        let hostile = map.get_hostile_relationships();
+        assert_eq!(hostile.len(), 1); // Only enemy is hostile (< -0.4)
+    }
+
+    #[test]
+    fn test_relationship_becomes_hostile_from_traits() {
+        let other_id = Uuid::new_v4();
+
+        let mut agent1_traits = TraitSet::new();
+        agent1_traits.add_trait(Trait::Believer);
+        agent1_traits.add_trait(Trait::Honest);
+        agent1_traits.add_trait(Trait::Aggressive);
+
+        let mut agent2_traits = TraitSet::new();
+        agent2_traits.add_trait(Trait::Atheist);
+        agent2_traits.add_trait(Trait::Dishonest);
+        agent2_traits.add_trait(Trait::Peaceful);
+
+        let mut rel = Relationship::new(other_id, RelationshipType::Acquaintance);
+
+        // Simulate many conflicted interactions
+        for _ in 0..30 {
+            rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
+        }
+
+        // Should become hostile due to multiple major conflicts
+        assert!(rel.is_hostile());
+        assert!(rel.bond_strength < -0.4);
     }
 }
