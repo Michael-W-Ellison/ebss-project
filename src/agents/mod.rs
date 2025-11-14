@@ -9,7 +9,7 @@ pub mod knowledge;
 pub mod relationships;
 pub mod profession;
 
-pub use agent::{Agent, AgentConfig, AgentState, LifeStage};
+pub use agent::{Agent, AgentConfig, AgentState, LifeStage, DiscoveryResult};
 pub use population::{Population, PopulationConfig};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
 pub use shared_knowledge::{SharedKnowledge, DiscoveredResource};

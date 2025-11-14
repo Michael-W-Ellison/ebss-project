@@ -204,6 +204,7 @@ pub struct Agent {
     pub social_network: SocialNetwork, // Relationships and trust with other agents
     pub profession: Profession, // Job/profession and skill level
     pub wealth: u32, // Abstract currency units for trading
+    pub known_technologies: crate::world::KnownTechnologies, // Discovered technologies
 }
 
 impl Agent {
@@ -228,6 +229,7 @@ impl Agent {
             social_network: SocialNetwork::new(),
             profession: Profession::default(), // Starts unemployed
             wealth: 100, // Starting currency
+            known_technologies: crate::world::KnownTechnologies::new(), // Starts with fire and basic shelter
         }
     }
 
@@ -766,5 +768,156 @@ impl Agent {
 
         value.max(1)
     }
+
+    // === Technology Discovery Methods ===
+
+    /// Attempt to experiment and discover a new technology
+    pub fn attempt_discovery(
+        &mut self,
+        tech_id: &str,
+        tech_tree: &crate::world::TechnologyTree,
+    ) -> DiscoveryResult {
+        use crate::core::Trait;
+
+        // Get the technology
+        let tech = match tech_tree.get(tech_id) {
+            Some(t) => t,
+            None => return DiscoveryResult::InvalidTechnology,
+        };
+
+        // Check prerequisites
+        for prereq in &tech.prerequisites {
+            if !self.known_technologies.knows(prereq) {
+                return DiscoveryResult::PrerequisitesNotMet;
+            }
+        }
+
+        // Already known?
+        if self.known_technologies.knows(tech_id) {
+            return DiscoveryResult::AlreadyKnown;
+        }
+
+        // Check if agent has required items
+        for item in &tech.required_items {
+            if !self.inventory.has_item(item, 1) {
+                return DiscoveryResult::MissingItems;
+            }
+        }
+
+        // Get curiosity modifier based on trait
+        let curiosity = if self.traits.has(Trait::Curious) {
+            5 // Curious agents get +5 bonus
+        } else {
+            0 // Normal agents have no bonus
+        };
+
+        // Calculate discovery chance
+        let chance = tech.discovery_chance(curiosity);
+
+        // Roll for discovery
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let roll: f32 = rng.gen();
+
+        if roll < chance {
+            // Success! Full discovery
+            self.known_technologies.learn(tech_id, true);
+
+            // Consume resources (experimentation uses materials)
+            for item in &tech.required_items {
+                self.inventory.remove_item(item, 1);
+            }
+
+            DiscoveryResult::Discovered
+        } else {
+            // Partial progress
+            let progress = rng.gen_range(5..20);
+
+            // Consume some resources on failed attempts
+            if rng.gen_bool(0.3) {
+                for item in &tech.required_items {
+                    self.inventory.remove_item(item, 1);
+                }
+            }
+
+            if self.known_technologies.add_experimentation(tech_id, progress) {
+                DiscoveryResult::Discovered
+            } else {
+                DiscoveryResult::ProgressMade(self.known_technologies.get_progress(tech_id))
+            }
+        }
+    }
+
+    /// Learn a technology from another agent (teaching)
+    pub fn learn_from(&mut self, tech_id: &str, teacher_id: Uuid) -> bool {
+        if self.known_technologies.knows(tech_id) {
+            return false; // Already known
+        }
+
+        // Learn it (not discovered by self)
+        self.known_technologies.learn(tech_id, false);
+
+        // Create positive social interaction (teaching creates bond)
+        self.positive_interaction_with(teacher_id, 2, 0);
+
+        true
+    }
+
+    /// Check if agent can craft an item based on known technologies
+    pub fn can_craft_tech(&self, item: ItemType, tech_tree: &crate::world::TechnologyTree) -> bool {
+        self.known_technologies.can_craft(item, tech_tree)
+    }
+
+    /// Get all recipes agent can craft based on tech and profession
+    pub fn get_available_recipes_tech(&self, tech_tree: &crate::world::TechnologyTree) -> Vec<crate::world::Recipe> {
+        use crate::world::get_job_recipes;
+
+        let job_recipes = get_job_recipes(self.profession.job);
+        let craftable = self.known_technologies.get_craftable_items(tech_tree);
+
+        // Filter recipes to only those with outputs the agent can craft
+        job_recipes
+            .into_iter()
+            .filter(|recipe| {
+                recipe.outputs.iter().all(|output| craftable.contains(&output.item_type))
+            })
+            .collect()
+    }
+
+    /// Get current technological era
+    pub fn get_tech_era(&self, tech_tree: &crate::world::TechnologyTree) -> crate::world::TechEra {
+        self.known_technologies.current_era(tech_tree)
+    }
+
+    /// Get list of discoverable technologies (prerequisites met but not known)
+    pub fn get_discoverable_techs<'a>(&self, tech_tree: &'a crate::world::TechnologyTree) -> Vec<&'a crate::world::Technology> {
+        tech_tree.all().into_iter()
+            .filter(|tech| {
+                // Not already known
+                if self.known_technologies.knows(tech.id) {
+                    return false;
+                }
+
+                // Prerequisites met
+                tech.prerequisites.iter().all(|prereq| self.known_technologies.knows(prereq))
+            })
+            .collect()
+    }
+
+    /// Check if agent knows a specific technology
+    pub fn knows_technology(&self, tech_id: &str) -> bool {
+        self.known_technologies.knows(tech_id)
+    }
+}
+
+/// Result of a technology discovery attempt
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiscoveryResult {
+    Discovered,                    // Successfully discovered!
+    ProgressMade(u8),              // Made progress (0-100)
+    AlreadyKnown,                  // Agent already knows this
+    PrerequisitesNotMet,           // Missing prerequisite technologies
+    MissingItems,                  // Don't have required items
+    InvalidTechnology,             // Tech ID doesn't exist
 }
 

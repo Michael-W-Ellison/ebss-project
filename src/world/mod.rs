@@ -10,6 +10,7 @@ pub mod grid;
 pub mod render;
 pub mod production;
 pub mod economy;
+pub mod technology;
 
 pub use terrain::{Terrain, TerrainType, Tile};
 pub use resources::{Resource, ResourceType, ResourceNode};
@@ -20,6 +21,7 @@ pub use grid::{Grid, Position};
 pub use render::AsciiRenderer;
 pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput, get_job_recipes, get_primary_recipe};
 pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketStatistics};
+pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
 
 use crate::agents::Population;
 use serde::{Deserialize, Serialize};
@@ -32,6 +34,8 @@ pub struct World {
     pub buildings: Vec<Building>,
     pub storehouse_inventory: Inventory,
     pub marketplace: Marketplace,
+    #[serde(skip)]
+    pub tech_tree: TechnologyTree, // Global technology tree (not serialized, recreated)
     pub tick: u32,
 }
 
@@ -75,6 +79,7 @@ impl World {
             buildings: Vec::new(),
             storehouse_inventory: Inventory::new(10000), // Large capacity
             marketplace: Marketplace::new(),
+            tech_tree: TechnologyTree::new(),
             tick: 0,
         };
 
