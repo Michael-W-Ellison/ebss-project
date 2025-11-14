@@ -48,8 +48,7 @@ impl WorldSize {
     }
 }
 
-/// Configuration for the world grid system
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Module declarations
 pub mod terrain;
 pub mod resources;
 pub mod buildings;
@@ -61,6 +60,7 @@ pub mod production;
 pub mod economy;
 pub mod technology;
 
+// Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
 pub use resources::{Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
@@ -73,7 +73,6 @@ pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketSta
 pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
 
 use crate::agents::Population;
-use serde::{Deserialize, Serialize};
 
 /// Complete world state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -382,102 +381,6 @@ impl Default for GridConfig {
     }
 }
 
-/// World configuration including grid and generation parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorldConfig {
-    /// Grid configuration
-    pub grid: GridConfig,
-    /// World generation seed
-    pub seed: u64,
-    /// Difficulty level (0.0 to 1.0)
-    pub difficulty: f32,
-}
-
-impl WorldConfig {
-    /// Create a new world configuration
-    pub fn new(seed: u64, world_size: WorldSize) -> Self {
-        Self {
-            grid: GridConfig::from_world_size(world_size),
-            seed,
-            difficulty: 0.5,
-        }
-    }
-
-    /// Create with custom dimensions
-    pub fn with_custom_size(seed: u64, width: i32, depth: i32, height: i32) -> Self {
-        Self {
-            grid: GridConfig::new((width, depth, height)),
-            seed,
-            difficulty: 0.5,
-        }
-    }
-}
-
-impl Default for WorldConfig {
-    fn default() -> Self {
-        Self::new(0, WorldSize::Medium)
-    }
-}
-
-/// 3D position in world space
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Position {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
-}
-
-impl Position {
-    pub fn new(x: i32, y: i32, z: i32) -> Self {
-        Self { x, y, z }
-    }
-
-    pub fn distance_to(&self, other: &Position) -> f32 {
-        let dx = (self.x - other.x) as f32;
-        let dy = (self.y - other.y) as f32;
-        let dz = (self.z - other.z) as f32;
-        (dx * dx + dy * dy + dz * dz).sqrt()
-    }
-}
-
-/// Chunk for spatial partitioning
-pub struct Chunk {
-    pub position: (i32, i32, i32),
-}
-
-/// World simulation state
-pub struct World {
-    config: GridConfig,
-}
-
-impl World {
-    /// Create a new world with the given configuration
-    pub fn new(config: GridConfig) -> Self {
-        assert!(config.is_valid(), "Invalid grid configuration");
-        Self { config }
-    }
-
-    /// Create a world from a preset size
-    pub fn with_size(world_size: WorldSize) -> Self {
-        Self::new(GridConfig::from_world_size(world_size))
-    }
-
-    /// Get the world configuration
-    pub fn config(&self) -> &GridConfig {
-        &self.config
-    }
-
-    /// Check if a position is valid in this world
-    pub fn is_valid_position(&self, x: i32, y: i32, z: i32) -> bool {
-        self.config.is_in_bounds(x, y, z)
-    }
-
-    /// Get world dimensions
-    pub fn dimensions(&self) -> (i32, i32, i32) {
-        self.config.size
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -587,4 +490,3 @@ mod tests {
         assert!(tiny.estimated_memory_mb() < 50.0); // Tiny should be small
     }
 }
-pub struct Chunk;

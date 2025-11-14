@@ -23,9 +23,6 @@ pub use emergence::{EmergenceDetector, EmergentPattern, PatternType};
 pub use export::{DataExporter, ExportFormat};
 pub use performance::{PerformanceMonitor, PerformanceSnapshot};
 
-use crate::world::World;
-use crate::agents::Population;
-
 /// Placeholder for backwards compatibility
 pub struct Simulation;
 pub struct SimulationConfig;

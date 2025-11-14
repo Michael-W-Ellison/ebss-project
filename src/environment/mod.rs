@@ -197,6 +197,9 @@ impl ItemStack {
 mod tests {
     use super::*;
 
+    #[path = "tests/technology_progression_tests.rs"]
+    mod technology_progression_tests;
+
     #[test]
     fn test_position_distance() {
         let p1 = Position::new(0, 0, 0);

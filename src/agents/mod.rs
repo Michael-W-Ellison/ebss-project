@@ -14,8 +14,7 @@ pub mod temperature;
 pub mod observational_learning;
 pub mod transport;
 
-pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem};
-pub use population::Population;
+pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};
 pub use body::{
     Body, BodyPart, BodyPartType, BodyPartStatus, BodySummary, Condition, ConditionType,
@@ -49,16 +48,16 @@ pub use transport::{
 
 #[cfg(test)]
 mod tests;
-pub mod reproduction;
+// Temporarily commented out due to API changes
+// pub mod reproduction;
 pub mod shared_knowledge;
 pub mod knowledge;
 pub mod relationships;
 pub mod profession;
 
-pub use agent::{Agent, AgentConfig, AgentState, LifeStage, DiscoveryResult};
 pub use population::{Population, PopulationConfig};
-pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
+// pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
 pub use shared_knowledge::{SharedKnowledge, DiscoveredResource};
 pub use knowledge::{PersonalKnowledge, ResourceKnowledge, KnowledgeSource};
-pub use relationships::{SocialNetwork, Relationship, RelationshipLevel, TrustLevel};
+pub use relationships::{SocialNetwork, RelationshipLevel, TrustLevel};
 pub use profession::{Profession, JobType, JobCategory};
