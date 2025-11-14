@@ -10,11 +10,13 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The 13 core drives that motivate agent behavior
+/// The 14 core drives that motivate agent behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DriveType {
     /// Need for food
     Hunger,
+    /// Need for water
+    Thirst,
     /// Need for sleep
     Rest,
     /// Need for protective structure
@@ -43,9 +45,10 @@ pub enum DriveType {
 
 impl DriveType {
     /// Get all drive types
-    pub fn all() -> [DriveType; 13] {
+    pub fn all() -> [DriveType; 14] {
         [
             DriveType::Hunger,
+            DriveType::Thirst,
             DriveType::Rest,
             DriveType::Shelter,
             DriveType::Safety,
@@ -65,6 +68,7 @@ impl DriveType {
     pub fn default_threshold(&self) -> f32 {
         match self {
             DriveType::Hunger => 0.7,
+            DriveType::Thirst => 0.75,
             DriveType::Rest => 0.6,
             DriveType::Shelter => 0.5,
             DriveType::Safety => 0.8,
@@ -84,6 +88,7 @@ impl DriveType {
     pub fn base_accumulation_rate(&self) -> f32 {
         match self {
             DriveType::Hunger => 0.01,
+            DriveType::Thirst => 0.012,  // Slightly faster than hunger
             DriveType::Rest => 0.008,
             DriveType::Shelter => 0.005,
             DriveType::Safety => 0.02,  // Spikes with threats
@@ -103,6 +108,7 @@ impl DriveType {
     pub fn satisfaction_description(&self) -> &'static str {
         match self {
             DriveType::Hunger => "Consuming food",
+            DriveType::Thirst => "Drinking water",
             DriveType::Rest => "Sleeping in bed",
             DriveType::Shelter => "Being inside shelter structure",
             DriveType::Safety => "Being in shelter, possessing weapons",
@@ -326,7 +332,7 @@ mod tests {
     #[test]
     fn test_drive_state_creation() {
         let state = DriveState::new();
-        assert_eq!(state.drives.len(), 13);
+        assert_eq!(state.drives.len(), 14);
     }
 
     #[test]

@@ -1,9 +1,17 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use crate::core::{BehaviorTree, DriveState, Memory, EmotionalState, TraitSet, GoalManager, Preferences};
-use crate::world::{Inventory, ItemType, Position, ResourceType};
-use crate::agents::{PersonalKnowledge, SocialNetwork, Profession};
+use crate::core::{BehaviorTree, DriveState, Memory};
+use std::collections::HashMap;
+
+use super::senses::Senses;
+use super::body::Body;
+use super::skills::Skills;
+use super::emotions::{EmotionState, RelationshipMap};
+use super::traits::TraitSet;
+use super::gossip::KnowledgeBase;
+use super::observational_learning::ObservationalLearning;
+use super::transport::TransportSystem;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -16,6 +24,355 @@ impl Default for AgentConfig {
     }
 }
 
+/// Item stored in inventory with quantity and optional fill level
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventoryItem {
+    pub item_id: String,
+    pub quantity: u32,
+    /// Weight per unit (in kg)
+    pub weight_per_unit: f32,
+    /// For containers: current fill level (e.g., water in waterskin)
+    pub fill_level: Option<f32>,
+    /// For containers: maximum capacity
+    pub max_capacity: Option<f32>,
+    /// Current durability (0.0 to max_durability, None = no durability tracking)
+    pub current_durability: Option<f32>,
+    /// Maximum durability for this item
+    pub max_durability: Option<f32>,
+    /// Quality level of this item
+    pub quality: Option<super::Quality>,
+}
+
+impl InventoryItem {
+    pub fn new(item_id: String, quantity: u32) -> Self {
+        Self {
+            item_id,
+            quantity,
+            weight_per_unit: 1.0, // Default weight
+            fill_level: None,
+            max_capacity: None,
+            current_durability: None,
+            max_durability: None,
+            quality: None,
+        }
+    }
+
+    pub fn new_with_weight(item_id: String, quantity: u32, weight_per_unit: f32) -> Self {
+        Self {
+            item_id,
+            quantity,
+            weight_per_unit,
+            fill_level: None,
+            max_capacity: None,
+            current_durability: None,
+            max_durability: None,
+            quality: None,
+        }
+    }
+
+    pub fn new_container(item_id: String, quantity: u32, capacity: f32) -> Self {
+        Self {
+            item_id,
+            quantity,
+            weight_per_unit: 0.5, // Containers are typically lighter
+            fill_level: Some(0.0),
+            max_capacity: Some(capacity),
+            current_durability: None,
+            max_durability: None,
+            quality: None,
+        }
+    }
+
+    /// Create a new tool/item with durability and quality
+    pub fn new_with_durability(
+        item_id: String,
+        quantity: u32,
+        durability: f32,
+        quality: super::Quality,
+    ) -> Self {
+        Self {
+            item_id,
+            quantity,
+            weight_per_unit: 2.0, // Tools are typically heavier
+            fill_level: None,
+            max_capacity: None,
+            current_durability: Some(durability),
+            max_durability: Some(durability),
+            quality: Some(quality),
+        }
+    }
+
+    /// Check if this is a container
+    pub fn is_container(&self) -> bool {
+        self.max_capacity.is_some()
+    }
+
+    /// Get fill percentage (0.0 to 1.0)
+    pub fn fill_percentage(&self) -> f32 {
+        match (self.fill_level, self.max_capacity) {
+            (Some(fill), Some(max)) if max > 0.0 => fill / max,
+            _ => 0.0,
+        }
+    }
+
+    /// Add liquid to container, returns amount actually added
+    pub fn fill(&mut self, amount: f32) -> f32 {
+        match (self.fill_level.as_mut(), self.max_capacity) {
+            (Some(fill), Some(max)) => {
+                let space_available = max - *fill;
+                let amount_to_add = amount.min(space_available);
+                *fill += amount_to_add;
+                amount_to_add
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// Remove liquid from container, returns amount actually removed
+    pub fn drain(&mut self, amount: f32) -> f32 {
+        match self.fill_level.as_mut() {
+            Some(fill) => {
+                let amount_to_remove = amount.min(*fill);
+                *fill -= amount_to_remove;
+                amount_to_remove
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// Get durability as percentage (0.0 to 1.0)
+    pub fn durability_percentage(&self) -> f32 {
+        match (self.current_durability, self.max_durability) {
+            (Some(current), Some(max)) if max > 0.0 => current / max,
+            _ => 1.0, // No durability tracking = always "full"
+        }
+    }
+
+    /// Check if item is broken (0 durability)
+    pub fn is_broken(&self) -> bool {
+        match self.current_durability {
+            Some(dur) => dur <= 0.0,
+            None => false, // No durability = never broken
+        }
+    }
+
+    /// Check if item can be repaired (not broken, has durability < max)
+    pub fn can_be_repaired(&self) -> bool {
+        match (self.current_durability, self.max_durability) {
+            (Some(current), Some(max)) => current > 0.0 && current < max,
+            _ => false,
+        }
+    }
+
+    /// Repair item to full durability
+    pub fn repair(&mut self) {
+        if let (Some(current), Some(max)) = (self.current_durability.as_mut(), self.max_durability) {
+            *current = max;
+        }
+    }
+
+    /// Damage item by amount
+    pub fn damage(&mut self, amount: f32) {
+        if let Some(current) = self.current_durability.as_mut() {
+            *current = (*current - amount).max(0.0);
+        }
+    }
+
+    /// Get total weight of this item stack
+    /// Includes container contents (water, etc.) if applicable
+    pub fn total_weight(&self) -> f32 {
+        let base_weight = self.weight_per_unit * self.quantity as f32;
+
+        // Add liquid weight if this is a filled container
+        // Water weighs ~1 kg per liter
+        let liquid_weight = self.fill_level.unwrap_or(0.0);
+
+        base_weight + liquid_weight
+    }
+}
+
+/// Agent inventory system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Inventory {
+    /// Items stored by item_id
+    items: HashMap<String, InventoryItem>,
+    /// Maximum number of item stacks
+    pub max_slots: usize,
+    /// Maximum weight that can be carried
+    pub max_weight: f32,
+    /// Current total weight
+    pub current_weight: f32,
+}
+
+impl Inventory {
+    pub fn new(max_slots: usize, max_weight: f32) -> Self {
+        Self {
+            items: HashMap::new(),
+            max_slots,
+            max_weight,
+            current_weight: 0.0,
+        }
+    }
+
+    /// Add an item to inventory
+    /// Returns true if successful, false if no room or too heavy
+    pub fn add_item(&mut self, item: InventoryItem) -> bool {
+        // Check slot limit
+        if self.items.len() >= self.max_slots && !self.items.contains_key(&item.item_id) {
+            return false; // No room for new item type
+        }
+
+        // Check weight limit
+        let item_weight = item.total_weight();
+        if self.current_weight + item_weight > self.max_weight {
+            return false; // Too heavy
+        }
+
+        // Update weight
+        self.current_weight += item_weight;
+
+        // Add or stack item
+        if let Some(existing) = self.items.get_mut(&item.item_id) {
+            existing.quantity += item.quantity;
+        } else {
+            self.items.insert(item.item_id.clone(), item);
+        }
+
+        true
+    }
+
+    /// Remove an item from inventory
+    pub fn remove_item(&mut self, item_id: &str, quantity: u32) -> Option<InventoryItem> {
+        if let Some(item) = self.items.get_mut(item_id) {
+            if item.quantity >= quantity {
+                item.quantity -= quantity;
+                let removed = InventoryItem {
+                    item_id: item_id.to_string(),
+                    quantity,
+                    weight_per_unit: item.weight_per_unit,
+                    fill_level: item.fill_level,
+                    max_capacity: item.max_capacity,
+                    current_durability: item.current_durability,
+                    max_durability: item.max_durability,
+                    quality: item.quality,
+                };
+
+                // Update weight
+                self.current_weight -= removed.total_weight();
+
+                if item.quantity == 0 {
+                    self.items.remove(item_id);
+                }
+
+                return Some(removed);
+            }
+        }
+        None
+    }
+
+    /// Get an item from inventory
+    pub fn get_item(&self, item_id: &str) -> Option<&InventoryItem> {
+        self.items.get(item_id)
+    }
+
+    /// Get a mutable item from inventory
+    pub fn get_item_mut(&mut self, item_id: &str) -> Option<&mut InventoryItem> {
+        self.items.get_mut(item_id)
+    }
+
+    /// Get total water available from all containers
+    pub fn get_total_water(&self) -> f32 {
+        self.items.values()
+            .filter(|item| item.is_container())
+            .filter_map(|item| item.fill_level)
+            .sum()
+    }
+
+    /// Drink water from any available container
+    pub fn drink_water(&mut self, amount: f32) -> f32 {
+        let mut remaining = amount;
+
+        for item in self.items.values_mut() {
+            if item.is_container() && remaining > 0.0 {
+                let drained = item.drain(remaining);
+                remaining -= drained;
+            }
+        }
+
+        let drunk = amount - remaining;
+
+        // Update weight (water weighs 1kg per liter)
+        self.current_weight -= drunk;
+
+        drunk // Return amount actually drunk
+    }
+
+    /// Fill containers from a water source
+    pub fn fill_containers(&mut self, available_water: f32) -> f32 {
+        let mut remaining = available_water;
+
+        for item in self.items.values_mut() {
+            if item.is_container() && remaining > 0.0 {
+                let filled = item.fill(remaining);
+                remaining -= filled;
+            }
+        }
+
+        let filled = available_water - remaining;
+
+        // Update weight (water weighs 1kg per liter)
+        self.current_weight += filled;
+
+        filled // Return amount actually filled
+    }
+
+    /// Check if inventory has item with minimum quantity
+    pub fn has_item(&self, item_id: &str, min_quantity: u32) -> bool {
+        self.items.get(item_id)
+            .map(|item| item.quantity >= min_quantity)
+            .unwrap_or(false)
+    }
+
+    /// Get all items
+    pub fn get_all_items(&self) -> &HashMap<String, InventoryItem> {
+        &self.items
+    }
+
+    /// Recalculate total weight from all items
+    pub fn recalculate_weight(&mut self) {
+        self.current_weight = self.items.values()
+            .map(|item| item.total_weight())
+            .sum();
+    }
+
+    /// Check if inventory is overweight
+    pub fn is_overweight(&self) -> bool {
+        self.current_weight > self.max_weight
+    }
+
+    /// Get weight capacity remaining
+    pub fn weight_capacity_remaining(&self) -> f32 {
+        (self.max_weight - self.current_weight).max(0.0)
+    }
+
+    /// Get weight as percentage of max (0.0 to 1.0+)
+    pub fn weight_percentage(&self) -> f32 {
+        if self.max_weight == 0.0 {
+            0.0
+        } else {
+            self.current_weight / self.max_weight
+        }
+    }
+
+    /// Increase max weight capacity (from backpack, etc.)
+    pub fn add_capacity(&mut self, additional_weight: f32) {
+        self.max_weight += additional_weight;
+    }
+}
+
+impl Default for Inventory {
+    fn default() -> Self {
+        Self::new(20, 100.0) // Default: 20 slots, 100 weight units
 /// Life stages of an agent
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifeStage {
@@ -194,17 +551,17 @@ pub struct Agent {
     pub drives: DriveState,
     pub behavior_trees: Vec<BehaviorTree>,
     pub memory: Memory,
-    pub parent_ids: Vec<Uuid>,
-    pub emotions: EmotionalState,
+    pub inventory: Inventory,
+    pub senses: Senses,
+    pub body: Body,
+    pub body_temperature: super::BodyTemperature,
+    pub skills: Skills,
+    pub emotions: EmotionState,
+    pub relationships: RelationshipMap,
     pub traits: TraitSet,
-    pub goals: GoalManager,
-    pub preferences: Preferences,
-    pub inventory: Inventory, // Personal inventory for carrying food and resources
-    pub knowledge: PersonalKnowledge, // Personal knowledge about world (resources, etc.)
-    pub social_network: SocialNetwork, // Relationships and trust with other agents
-    pub profession: Profession, // Job/profession and skill level
-    pub wealth: u32, // Abstract currency units for trading
-    pub known_technologies: crate::world::KnownTechnologies, // Discovered technologies
+    pub knowledge: KnowledgeBase,
+    pub observational_learning: ObservationalLearning,
+    pub transport: TransportSystem,
 }
 
 impl Agent {
@@ -219,6 +576,327 @@ impl Agent {
             },
             behavior_trees: Vec::new(),
             memory: Memory::new(),
+            inventory: Inventory::default(),
+            senses: Senses::default(),
+            body: Body::default(),
+            body_temperature: super::BodyTemperature::default(),
+            skills: Skills::default(),
+            emotions: EmotionState::default(),
+            relationships: RelationshipMap::default(),
+            traits: TraitSet::default(),
+            knowledge: KnowledgeBase::default(),
+            observational_learning: ObservationalLearning::default(),
+            transport: TransportSystem::default(),
+        }
+    }
+
+    /// Update agent state (tick senses, body, emotions, and memory)
+    pub fn tick(&mut self) {
+        self.senses.tick();
+        self.body.tick();
+        self.emotions.tick();
+        self.memory.tick();
+
+        // Sync body health to agent state
+        self.state.health = self.body.overall_health() * 100.0;
+    }
+
+    /// Update body temperature based on environmental conditions
+    ///
+    /// # Arguments
+    /// * `climate` - Environmental climate conditions
+    pub fn update_temperature(&mut self, climate: &super::Climate) {
+        let cold_insulation = self.body.total_cold_insulation();
+        let heat_resistance = self.body.total_heat_resistance();
+        let effective_temp = climate.effective_temperature();
+
+        self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
+    }
+
+    /// Respond emotionally to a threat
+    ///
+    /// # Arguments
+    /// * `threat_strength` - Strength of the threat (e.g., enemy agent's combat power)
+    /// * `source` - Source of the threat
+    ///
+    /// Returns the emotional response triggered
+    pub fn respond_to_threat(&mut self, threat_strength: f32, source: super::EmotionSource) -> super::EmotionType {
+        use super::ThreatAssessment;
+
+        // Calculate agent strength (simplified: health + body functionality)
+        let agent_strength = self.state.health / 100.0 * self.body.movement_speed_multiplier();
+
+        let assessment = ThreatAssessment::assess(agent_strength, threat_strength, source.clone());
+
+        let emotion_type = assessment.emotion_type();
+        let emotion_amount = assessment.emotion_amount();
+
+        match emotion_type {
+            super::EmotionType::Anger => {
+                self.emotions.add_anger(source, emotion_amount);
+            }
+            super::EmotionType::Fear => {
+                self.emotions.add_fear(source, emotion_amount);
+            }
+            _ => {}
+        }
+
+        emotion_type
+    }
+
+    /// Respond emotionally to harm to a loved one
+    ///
+    /// # Arguments
+    /// * `loved_one_id` - UUID of the loved one
+    /// * `harm_severity` - How severe the harm was (0.0 to 1.0)
+    /// * `source` - Source of the harm
+    pub fn respond_to_loved_one_harm(&mut self, loved_one_id: &Uuid, harm_severity: f32, source: super::EmotionSource) {
+        // Check if this is actually a loved one
+        if let Some(relationship) = self.relationships.get_relationship(loved_one_id) {
+            if relationship.is_loved_one() {
+                // Sadness scales with bond strength and harm severity
+                let sadness_amount = relationship.bond_strength * harm_severity * 0.8;
+                self.emotions.add_sadness(source.clone(), sadness_amount);
+
+                // Also potentially add fear or anger based on agent's ability to protect
+                // Parents protecting children might feel anger if they can fight back
+                if relationship.relationship_type == super::RelationshipType::Child {
+                    // Calculate if agent is strong enough to retaliate
+                    let agent_strength = self.state.health / 100.0;
+
+                    // Assume medium threat strength for the source
+                    let assessment = super::ThreatAssessment::assess(agent_strength, 0.7, source.clone());
+
+                    if assessment.can_overcome {
+                        self.emotions.add_anger(source, 0.5);
+                    } else {
+                        self.emotions.add_fear(source, 0.3);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Respond emotionally to death of a loved one
+    ///
+    /// # Arguments
+    /// * `deceased_id` - UUID of the deceased
+    /// * `source` - Source of the death (what killed them)
+    pub fn respond_to_loved_one_death(&mut self, deceased_id: &Uuid, source: super::EmotionSource) {
+        // Maximum sadness for death of loved one
+        if let Some(relationship) = self.relationships.get_relationship(deceased_id) {
+            if relationship.is_loved_one() {
+                let sadness_amount = relationship.bond_strength * 0.9;
+                self.emotions.add_sadness(EmotionSource::Agent(*deceased_id), sadness_amount);
+
+                // Fear of the source that killed them
+                self.emotions.add_fear(source, 0.4);
+            }
+        }
+    }
+
+    /// Check if agent would flee from current emotional state
+    pub fn would_flee(&self) -> bool {
+        self.emotions.should_flee()
+    }
+
+    /// Check if agent would attack from current emotional state
+    pub fn would_attack(&self) -> bool {
+        self.emotions.should_attack()
+    }
+
+    /// Get agent's dominant emotion
+    pub fn dominant_emotion(&self) -> Option<super::EmotionType> {
+        self.emotions.dominant_emotion()
+    }
+
+    /// Share information with another agent
+    ///
+    /// # Arguments
+    /// * `info` - The information to share
+    /// * `recipient` - The agent receiving the information
+    /// * `timestamp` - Current simulation time
+    pub fn share_information(&self, mut info: super::Information, recipient: &mut Agent, timestamp: u64) {
+        // Check if this agent would distort the information
+        if let Some(distortion_trait) = self.traits.would_distort_info() {
+            // Apply distortion based on trait
+            info = info.distort(distortion_trait, self.id);
+
+            // Gain happiness from distortion
+            // This would integrate with a happiness/mood system
+        }
+
+        // Recipient receives information
+        recipient.knowledge.receive_information(info, self.id, recipient.id, &recipient.traits, timestamp);
+    }
+
+    /// Learn information directly (observed firsthand)
+    ///
+    /// # Arguments
+    /// * `info` - The information learned
+    /// * `timestamp` - Current simulation time
+    pub fn learn_information(&mut self, info: super::Information, timestamp: u64) {
+        // When learning firsthand, source is self
+        self.knowledge.receive_information(info, self.id, self.id, &self.traits, timestamp);
+    }
+
+    /// Check if agent believes specific information
+    pub fn believes(&self, info_id: &Uuid) -> bool {
+        self.knowledge.believes(info_id)
+    }
+
+    /// Get trust level for another agent
+    pub fn get_trust_in(&self, other_agent: &Uuid) -> f32 {
+        self.knowledge.get_trust(other_agent)
+    }
+
+    /// React to learning about another agent's trait
+    ///
+    /// # Arguments
+    /// * `other_agent` - The other agent's UUID
+    /// * `other_trait` - The trait learned about
+    ///
+    /// Example: Believer learns Atheist has Atheist trait → relationship weakens
+    pub fn react_to_trait_info(&mut self, other_agent: &Uuid, other_trait: super::Trait) {
+        // Check for trait conflicts
+        if self.traits.has_trait(&super::Trait::Believer) && other_trait == super::Trait::Atheist {
+            // Believer dislikes Atheist
+            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
+                relationship.weaken(0.2);
+            } else {
+                // Create negative relationship
+                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
+                new_rel.bond_strength = -0.2;
+                self.relationships.add_relationship(new_rel);
+            }
+        } else if self.traits.has_trait(&super::Trait::Atheist) && other_trait == super::Trait::Believer {
+            // Atheist may dislike Believer
+            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
+                relationship.weaken(0.1);
+            } else {
+                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
+                new_rel.bond_strength = -0.1;
+                self.relationships.add_relationship(new_rel);
+            }
+        }
+    }
+
+    /// Observe another agent performing an action
+    ///
+    /// # Arguments
+    /// * `performer_id` - UUID of agent performing the action
+    /// * `performer_position` - Position of the performer
+    /// * `action_type` - Type of action being performed
+    /// * `success` - Whether the action succeeded
+    /// * `details` - Specific details about the action
+    /// * `timestamp` - Current simulation time
+    pub fn observe_action(
+        &mut self,
+        performer_id: &Uuid,
+        performer_position: (i32, i32, i32),
+        action_type: super::ActionType,
+        success: bool,
+        details: String,
+        timestamp: u64,
+    ) {
+        // Check if agent can see the performer
+        if !self.senses.vision.visible_agents.contains(performer_id) {
+            return; // Can't learn if you can't see them
+        }
+
+        // Calculate distance to performer
+        let dx = (performer_position.0 - self.state.position.0) as f32;
+        let dy = (performer_position.1 - self.state.position.1) as f32;
+        let dz = (performer_position.2 - self.state.position.2) as f32;
+        let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+
+        // Create observation record
+        let observation = super::ObservedAction::new(
+            *performer_id,
+            action_type,
+            success,
+            details,
+            timestamp,
+            distance,
+        );
+
+        // Record the observation
+        self.observational_learning.observe_action(observation);
+    }
+
+    /// Check if agent should adopt behaviors from observations
+    ///
+    /// Returns list of (performer, action_type, confidence) for behaviors ready to adopt
+    pub fn check_learning_opportunities(&self) -> Vec<(Uuid, super::ActionType, f32)> {
+        let mut opportunities = Vec::new();
+
+        for teacher_id in self.observational_learning.get_all_teachers() {
+            // Get relationship and trust
+            let relationship_strength = self.relationships
+                .get_relationship(&teacher_id)
+                .map(|r| r.bond_strength)
+                .unwrap_or(0.0);
+
+            let trust = self.knowledge.get_trust(&teacher_id);
+
+            // Check each action type
+            for action_type in [
+                super::ActionType::Mining,
+                super::ActionType::Crafting,
+                super::ActionType::Building,
+                super::ActionType::Combat,
+                super::ActionType::Cooking,
+                super::ActionType::ToolUse,
+                super::ActionType::Social,
+                super::ActionType::Navigation,
+                super::ActionType::ProblemSolving,
+            ] {
+                let (should_adopt, confidence) = self.observational_learning.should_adopt_behavior(
+                    &teacher_id,
+                    action_type,
+                    relationship_strength,
+                    trust,
+                );
+
+                if should_adopt {
+                    opportunities.push((teacher_id, action_type, confidence));
+                }
+            }
+        }
+
+        opportunities
+    }
+
+    /// Adopt a learned behavior
+    ///
+    /// # Arguments
+    /// * `teacher_id` - Who to learn from
+    /// * `action_type` - What action to adopt
+    ///
+    /// Returns true if successfully adopted
+    pub fn adopt_learned_behavior(
+        &mut self,
+        teacher_id: &Uuid,
+        action_type: super::ActionType,
+    ) -> bool {
+        // Get relationship and trust
+        let relationship_strength = self.relationships
+            .get_relationship(teacher_id)
+            .map(|r| r.bond_strength)
+            .unwrap_or(0.0);
+
+        let trust = self.knowledge.get_trust(teacher_id);
+
+        // Check if ready to adopt
+        let (should_adopt, _) = self.observational_learning.should_adopt_behavior(
+            teacher_id,
+            action_type,
+            relationship_strength,
+            trust,
+        );
+
+        if should_adopt {
+            self.observational_learning.adopt_behavior(teacher_id, action_type);
             parent_ids: Vec::new(),
             emotions: EmotionalState::new(),
             traits: TraitSet::generate_random(3), // 3 random traits
@@ -610,6 +1288,80 @@ impl Agent {
         }
     }
 
+    /// Get learning progress from a specific teacher
+    pub fn get_learning_from(
+        &self,
+        teacher_id: &Uuid,
+        action_type: super::ActionType,
+    ) -> Option<&super::LearningProgress> {
+        self.observational_learning.get_progress(teacher_id, action_type)
+    }
+
+    /// Get all adopted behaviors
+    pub fn get_adopted_behaviors(&self) -> Vec<(Uuid, super::ActionType, f32)> {
+        self.observational_learning.get_adopted_behaviors()
+    }
+
+    /// Check if this agent is learning from parents
+    ///
+    /// Returns list of (parent_id, action_types_being_learned)
+    pub fn learning_from_parents(&self) -> Vec<(Uuid, Vec<super::ActionType>)> {
+        let mut parent_learning = Vec::new();
+
+        // Get all parents
+        let parents: Vec<Uuid> = self.relationships
+            .get_all()
+            .iter()
+            .filter(|(_, rel)| rel.relationship_type == super::RelationshipType::Parent)
+            .map(|(id, _)| *id)
+            .collect();
+
+        for parent_id in parents {
+            let mut learning_actions = Vec::new();
+
+            // Check all action types
+            for action_type in [
+                super::ActionType::Mining,
+                super::ActionType::Crafting,
+                super::ActionType::Building,
+                super::ActionType::Combat,
+                super::ActionType::Cooking,
+                super::ActionType::ToolUse,
+                super::ActionType::Social,
+                super::ActionType::Navigation,
+                super::ActionType::ProblemSolving,
+            ] {
+                if let Some(progress) = self.observational_learning.get_progress(&parent_id, action_type) {
+                    if progress.observation_count > 0 {
+                        learning_actions.push(action_type);
+                    }
+                }
+            }
+
+            if !learning_actions.is_empty() {
+                parent_learning.push((parent_id, learning_actions));
+            }
+        }
+
+        parent_learning
+    }
+
+    /// Set age-based learning rate (child = 1.5, adult = 1.0, elder = 0.7)
+    pub fn set_learning_rate(&mut self, rate: f32) {
+        self.observational_learning.set_learning_rate(rate);
+    }
+
+    /// Get current learning rate
+    pub fn learning_rate(&self) -> f32 {
+        self.observational_learning.learning_rate()
+    }
+
+    /// Equip a transport (activate it)
+    /// Updates inventory capacity automatically
+    pub fn equip_transport(&mut self, transport_id: &Uuid) -> bool {
+        if self.transport.activate(transport_id) {
+            // Update inventory capacity
+            self.update_inventory_capacity_from_transport();
     /// Tick production, returns completed items if any
     pub fn tick_production(&mut self) -> Option<Vec<(crate::world::ItemType, u32)>> {
         self.profession.tick_production()
@@ -694,6 +1446,62 @@ impl Agent {
         }
     }
 
+    /// Unequip a transport (deactivate it)
+    /// Updates inventory capacity automatically
+    pub fn unequip_transport(&mut self, transport_id: &Uuid) {
+        self.transport.deactivate(transport_id);
+        self.update_inventory_capacity_from_transport();
+    }
+
+    /// Add a new transport to agent's possession
+    pub fn add_transport(&mut self, transport: super::Transport) {
+        self.transport.add_transport(transport);
+    }
+
+    /// Update inventory max_weight based on active transports and body strength
+    fn update_inventory_capacity_from_transport(&mut self) {
+        // Base capacity (100kg default)
+        let base_capacity = 100.0;
+
+        // Strength modifier from body functionality
+        // Stronger/healthier body can carry more
+        let strength_modifier = self.body.movement_speed_multiplier(); // 0.0 to 1.0
+
+        // Transport capacity
+        let transport_capacity = self.transport.total_additional_capacity();
+
+        // Total capacity
+        let total_capacity = (base_capacity * strength_modifier) + transport_capacity;
+
+        self.inventory.max_weight = total_capacity;
+    }
+
+    /// Get movement speed including transport penalties
+    pub fn movement_speed(&self) -> f32 {
+        let body_speed = self.body.movement_speed_multiplier();
+        let transport_speed = self.transport.speed_modifier();
+        let weight_penalty = if self.inventory.is_overweight() {
+            0.5 // 50% speed when overweight
+        } else {
+            1.0 - (self.inventory.weight_percentage() * 0.3) // Up to 30% slower at max weight
+        };
+
+        body_speed * transport_speed * weight_penalty
+    }
+
+    /// Check if agent can carry additional weight
+    pub fn can_carry(&self, additional_weight: f32) -> bool {
+        self.inventory.current_weight + additional_weight <= self.inventory.max_weight
+    }
+
+    /// Get total carrying capacity (base + transport)
+    pub fn total_carrying_capacity(&self) -> f32 {
+        self.inventory.max_weight
+    }
+}
+
+// Need to import EmotionSource at top
+use super::emotions::EmotionSource;
     /// Receive payment
     pub fn receive_payment(&mut self, amount: u32) {
         self.wealth += amount;

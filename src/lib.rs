@@ -52,24 +52,31 @@ pub mod prelude {
     };
 
     pub use crate::agents::{
-        Agent, AgentConfig, AgentState, LifeStage,
-        Population,
-        reproduction::{can_mate, reproduce, MateSelectionCriteria},
+        Agent, AgentConfig, AgentState,
+        Population, Inventory, InventoryItem,
+        Senses, Vision, Hearing, Speech,
+        Body, BodyPart, BodyPartType, BodyPartStatus,
+        Skills, Skill, SkillType, SkillCategory, Quality,
     };
 
     pub use crate::environment::{
-        Environment, EnvironmentPlugin,
+        EnvironmentPlugin, PluginRegistry,
         Material, Action, CraftingTemplate,
+        ActionResult, ActionContext, Position as EnvPosition,
+        ToolType, ToolTier, MaterialCategory,
+        Structure, StructureType, StructureLevel, StructureRegistry,
     };
 
     pub use crate::world::{
-        World, WorldConfig, GridConfig,
+        World, WorldConfig, GridConfig, WorldSize,
         Position, Chunk,
     };
 
     pub use crate::analytics::{
         Simulation, SimulationConfig,
         Analytics, BehaviorAnalysis,
+        SimulationController, SimulationState,
+        Inspector, Selection, AgentInspectorData,
     };
 }
 
