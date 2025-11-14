@@ -49,3 +49,16 @@ pub use transport::{
 
 #[cfg(test)]
 mod tests;
+pub mod reproduction;
+pub mod shared_knowledge;
+pub mod knowledge;
+pub mod relationships;
+pub mod profession;
+
+pub use agent::{Agent, AgentConfig, AgentState, LifeStage, DiscoveryResult};
+pub use population::{Population, PopulationConfig};
+pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
+pub use shared_knowledge::{SharedKnowledge, DiscoveredResource};
+pub use knowledge::{PersonalKnowledge, ResourceKnowledge, KnowledgeSource};
+pub use relationships::{SocialNetwork, Relationship, RelationshipLevel, TrustLevel};
+pub use profession::{Profession, JobType, JobCategory};

@@ -23,3 +23,4 @@ cobertura.xml
 
 # Benchmark results
 /benches/results/
+target/

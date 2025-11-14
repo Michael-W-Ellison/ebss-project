@@ -13,7 +13,20 @@ pub use inspector::{
     TerrainInspectorData, MemorySummary, InventorySummary, SensorySummary, SkillsSummary,
     EmotionSummary, RelationshipSummary,
 };
+pub mod metrics;
+pub mod emergence;
+pub mod export;
+pub mod performance;
 
+pub use metrics::{SimulationMetrics, TickSnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
+pub use emergence::{EmergenceDetector, EmergentPattern, PatternType};
+pub use export::{DataExporter, ExportFormat};
+pub use performance::{PerformanceMonitor, PerformanceSnapshot};
+
+use crate::world::World;
+use crate::agents::Population;
+
+/// Placeholder for backwards compatibility
 pub struct Simulation;
 pub struct SimulationConfig;
 pub struct Analytics;

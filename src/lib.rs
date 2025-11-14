@@ -41,9 +41,16 @@ pub mod prelude {
     pub use crate::core::{
         behavior_tree::{BehaviorTree, BehaviorNode, NodeType},
         drives::{Drive, DriveType, DriveState},
-        learning::LearningSystem,
+        learning::{ObservableEvent, ObservableEventType, observe_and_learn, process_population_learning},
+        memory::{Memory, SpatialMemoryType, SocialRelationship},
+        emotions::{Emotion, EmotionType, EmotionalState},
+        traits::{Trait, TraitSet},
+        goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager},
+        preferences::{Preferences, Obsession, ObsessionType},
+        drive_progression::{DriveProgression, DriveTier, DriveTierRequirement, Requirement},
+        planning::{Planner, ActionPlan, PlanStep, ActionType, ActionOutcome},
     };
-    
+
     pub use crate::agents::{
         Agent, AgentConfig, AgentState,
         Population, Inventory, InventoryItem,
@@ -59,12 +66,12 @@ pub mod prelude {
         ToolType, ToolTier, MaterialCategory,
         Structure, StructureType, StructureLevel, StructureRegistry,
     };
-    
+
     pub use crate::world::{
         World, WorldConfig, GridConfig, WorldSize,
         Position, Chunk,
     };
-    
+
     pub use crate::analytics::{
         Simulation, SimulationConfig,
         Analytics, BehaviorAnalysis,

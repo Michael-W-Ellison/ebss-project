@@ -213,15 +213,30 @@ impl DriveState {
     }
 
     /// Create a new drive state with randomized weights
+    /// Ensures survival drives (Hunger, Rest, Safety, Shelter) have higher minimum weights
     pub fn with_random_weights() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        
+
         Self {
             drives: DriveType::all()
                 .iter()
                 .map(|&dt| {
-                    let weight = rng.gen_range(0.5..2.0);
+                    // Survival-critical drives get higher base weights
+                    let weight = match dt {
+                        DriveType::Hunger | DriveType::Rest => {
+                            // Tier 1 survival: 1.5-2.5 weight range
+                            rng.gen_range(1.5..2.5)
+                        }
+                        DriveType::Safety | DriveType::Shelter => {
+                            // Tier 2 survival: 1.0-2.0 weight range
+                            rng.gen_range(1.0..2.0)
+                        }
+                        _ => {
+                            // Other drives: 0.5-1.5 weight range (lower than survival)
+                            rng.gen_range(0.5..1.5)
+                        }
+                    };
                     Drive::with_weight(dt, weight)
                 })
                 .collect(),

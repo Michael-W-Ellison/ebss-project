@@ -14,10 +14,7 @@ fn main() {
     
     // Create a world
     println!("Creating world...");
-    let world = World::new(GridConfig {
-        size: (50, 50, 5),
-        chunk_size: 16,
-    });
+    let world = World::new(WorldConfig::default());
     
     // Create population
     println!("Spawning agents...");
