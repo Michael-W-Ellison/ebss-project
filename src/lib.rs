@@ -35,6 +35,7 @@ pub mod agents;
 pub mod environment;
 pub mod world;
 pub mod analytics;
+pub mod visualization;
 
 /// Prelude module for convenient imports
 pub mod prelude {
@@ -62,6 +63,10 @@ pub mod prelude {
     pub use crate::analytics::{
         Simulation, SimulationConfig,
         Analytics, BehaviorAnalysis,
+    };
+
+    pub use crate::visualization::{
+        AsciiRenderer,
     };
 }
 

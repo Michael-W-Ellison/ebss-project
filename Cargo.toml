@@ -37,14 +37,6 @@ rmp-serde = "1.1"  # MessagePack
 criterion = "0.5"
 proptest = "1.4"
 
-[[bench]]
-name = "behavior_tree"
-harness = false
-
-[[bench]]
-name = "agent_simulation"
-harness = false
-
 [profile.release]
 opt-level = 3
 lto = true
@@ -68,5 +60,6 @@ path = "examples/basic_survival.rs"
 name = "minecraft_world"
 path = "examples/minecraft_world.rs"
 
-[workspace]
-members = ["plugins/*"]
+[[example]]
+name = "visual_demo"
+path = "examples/visual_demo.rs"

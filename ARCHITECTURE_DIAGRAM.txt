@@ -1,0 +1,399 @@
+================================================================================
+EBSS ARCHITECTURE OVERVIEW
+================================================================================
+
+LAYER 1: AGENT STATE
+================================================================================
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Agent                                                                   │
+│  ├─ id: UUID                                  [Unique identifier]      │
+│  ├─ state: AgentState                         [Position, health]       │
+│  │   ├─ position: (i32, i32, i32)             [3D coordinates]         │
+│  │   └─ health: f32                           [0.0 to 100.0]           │
+│  ├─ drives: DriveState                        [Motivation system]      │
+│  │   └─ drives: Vec<Drive> (13 total)         [13 core drives]         │
+│  ├─ behavior_trees: Vec<BehaviorTree>         [Learned strategies]     │
+│  └─ memory: Memory                            [Knowledge store]        │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+LAYER 2: DRIVE SYSTEM (Motivation)
+================================================================================
+                              Drive Loop (Every Tick)
+                              │
+                    ┌─────────┴──────────┐
+                    ▼                    ▼
+              ┌──────────────┐    ┌─────────────────┐
+              │  drive.tick()│    │ drive.is_active()
+              │              │    │                 │
+              │ value +=     │    │ Returns: true   │
+              │ accumulation │    │ if value >=     │
+              │   _rate      │    │ threshold       │
+              └──────────────┘    └─────────────────┘
+                    │                    │
+                    └─────────┬──────────┘
+                              ▼
+                    ┌──────────────────────┐
+                    │ most_urgent()        │
+                    │                      │
+                    │ Returns drive with:  │
+                    │ max(value * weight)  │
+                    │ where is_active()    │
+                    └──────────────────────┘
+                              │
+                              ▼
+                    DECISION POINT ◄─── THIS IS WHERE LEARNING LOOP STARTS
+
+Drives (13 total):
+  1. Hunger (0.7 thresh)  - consume food
+  2. Rest (0.6 thresh)    - sleep
+  3. Shelter (0.5 thresh) - protective structure
+  4. Safety (0.8 thresh)  - avoid threats
+  5. Preparedness (0.4)   - stockpile resources
+  6. Industry (0.3)       - process materials
+  7. Sustenance (0.3)     - produce food
+  8. Curiosity (0.2)      - explore/learn
+  9. Social (0.5)         - be near others
+  10. Reproduction (0.6)  - create offspring
+  11. Luxury (0.1)        - decorative items
+  12. Utility (0.4)       - tools/equipment
+  13. Construction (0.3)  - build structures
+
+
+LAYER 3: BEHAVIOR TREE SELECTION (MISSING - TO IMPLEMENT)
+================================================================================
+                    most_urgent_drive
+                              │
+                    ┌─────────┴──────────┐
+                    ▼                    ▼
+          ┌──────────────────┐  ┌──────────────────┐
+          │ Drive Type       │  │ Drive Type       │
+          │ Hunger           │  │ Curiosity        │
+          └────────┬─────────┘  └─────────┬────────┘
+                   │                      │
+                   ▼                      ▼
+          ┌──────────────────┐  ┌──────────────────┐
+          │ BehaviorTree     │  │ BehaviorTree     │
+          │ "find_food"      │  │ "explore"        │
+          │                  │  │                  │
+          │ ┌──────────────┐ │  │ ┌──────────────┐ │
+          │ │ Selector     │ │  │ │ Sequence     │ │
+          │ │              │ │  │ │              │ │
+          │ │ ┌──────────┐ │ │  │ │ ┌──────────┐ │ │
+          │ │ │ Cond:    │ │ │  │ │ │ Action:  │ │ │
+          │ │ │ see_food?│ │ │  │ │ │ move()   │ │ │
+          │ │ └──────────┘ │ │  │ │ └──────────┘ │ │
+          │ │ ┌──────────┐ │ │  │ │ ┌──────────┐ │ │
+          │ │ │ Action:  │ │ │  │ │ │ Action:  │ │ │
+          │ │ │ eat()    │ │ │  │ │ │ observe()│ │ │
+          │ │ └──────────┘ │ │  │ │ └──────────┘ │ │
+          │ └──────────────┘ │  │ └──────────────┘ │
+          └──────────────────┘  └──────────────────┘
+                   │                      │
+                   └─────────┬────────────┘
+                             ▼
+                    BehaviorTree Selected
+
+
+LAYER 4: BEHAVIOR TREE EXECUTION (IMPLEMENTED)
+================================================================================
+                        tree.execute()
+                              │
+                    ┌─────────┴──────────┐
+                    ▼                    ▼
+          ┌──────────────────┐  ┌──────────────────┐
+          │ Execute Root     │  │ Increment        │
+          │ Node             │  │ total_executions │
+          │                  │  │                  │
+          │ traverse tree    │  │ total_executions += 1
+          │ depth-first      │  │                  │
+          └────────┬─────────┘  └──────────────────┘
+                   │
+        ┌──────────┴──────────────┐
+        ▼                         ▼
+   ┌─────────────┐         ┌─────────────┐
+   │ Sequence    │         │ Selector    │
+   │             │         │             │
+   │ ALL must    │         │ FIRST that  │
+   │ succeed     │         │ succeeds    │
+   │             │         │             │
+   │ AND logic   │         │ OR logic    │
+   └──────┬──────┘         └──────┬──────┘
+          │                       │
+          └───────────┬───────────┘
+                      ▼
+        ┌──────────────────────────────┐
+        │ Execute each child node      │
+        │ recursively                  │
+        └──────────────────────────────┘
+                      │
+        ┌─────────────┴─────────────┐
+        ▼                           ▼
+    ┌─────────────┐        ┌─────────────┐
+    │ Action Node │        │ Condition   │
+    │             │        │ Node        │
+    │ Success:    │        │             │
+    │ probability │        │ Success:    │
+    │ based on    │        │ 50% random  │
+    │ success_    │        │             │
+    │ rate        │        │ (placeholder)
+    └──────┬──────┘        └──────┬──────┘
+           │                      │
+           └──────────┬───────────┘
+                      ▼
+        ┌──────────────────────────────┐
+        │ Update Node Weight            │
+        │ node.update_weight(result)    │
+        │                               │
+        │ Success: weight *= 1.1        │
+        │ Failure: weight *= 0.9        │
+        │ weight.clamp(0.1, 10.0)       │
+        │                               │
+        │ ✅ LEARNING ALREADY ACTIVE    │
+        └──────────────────────────────┘
+                      │
+        ┌─────────────┴──────────────┐
+        ▼                            ▼
+   ┌─────────────┐          ┌─────────────┐
+   │ Success     │          │ Failure     │
+   │             │          │             │
+   │ Increment   │          │ Return      │
+   │ total_      │          │ Failure     │
+   │ successes   │          │             │
+   │             │          │             │
+   │ Return      │          │             │
+   │ Success     │          │             │
+   └─────────────┘          └─────────────┘
+        │                            │
+        └─────────────┬──────────────┘
+                      ▼
+        ┌──────────────────────────────┐
+        │ Return ExecutionResult       │
+        │                              │
+        │ Success / Failure / Running  │
+        └──────────────────────────────┘
+
+
+LAYER 5: ACTION EXECUTION (MISSING - TO IMPLEMENT)
+================================================================================
+              ExecutionResult
+                      │
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+   ┌─────────┐  ┌─────────┐   ┌─────────┐
+   │ Success │  │ Failure │   │ Running │
+   │         │  │         │   │         │
+   │ Convert │  │ Return  │   │ Wait/   │
+   │ to      │  │ partial │   │ continue│
+   │ action  │  │ action  │   │         │
+   └────┬────┘  └────┬────┘   └─────────┘
+        │            │
+        └─────┬──────┘
+              ▼
+    ┌──────────────────────┐
+    │ Agent Action         │
+    │                      │
+    │ Move(dx, dy, dz)     │
+    │ Gather(item)         │
+    │ Craft(recipe)        │
+    │ Sleep()              │
+    │ Eat(food)            │
+    │ Interact(target)     │
+    │ Build(structure)     │
+    └────┬─────────────────┘
+         │
+         ▼
+    ┌──────────────────────┐
+    │ Update World State   │
+    │ - Check if valid     │
+    │ - Check resources    │
+    │ - Determine success  │
+    │ - Update positions   │
+    │ - Consume resources  │
+    └────┬─────────────────┘
+         │
+         ▼
+    ┌──────────────────────┐
+    │ Return Outcome       │
+    │ Success / Failure    │
+    │ + reward amount      │
+    └────┬─────────────────┘
+         │
+         ▼
+         FEEDBACK LOOP (SEE LAYER 6)
+
+
+LAYER 6: LEARNING FEEDBACK (PARTIALLY IMPLEMENTED)
+================================================================================
+                    Action Outcome
+                    (Success/Failure)
+                              │
+                    ┌─────────┴──────────┐
+                    ▼                    ▼
+              ┌──────────────┐    ┌──────────────┐
+              │ SUCCESS      │    │ FAILURE      │
+              │              │    │              │
+              │ Reward>0     │    │ Reward≤0     │
+              └────┬─────────┘    └──────┬───────┘
+                   │                     │
+                   ▼                     ▼
+         ┌───────────────────┐ ┌───────────────────┐
+         │ Apply Reward      │ │ No satisfaction   │
+         │                   │ │                   │
+         │ satisfy/partial_  │ │ Tree already      │
+         │ satisfy drive     │ │ penalized via     │
+         │                   │ │ weight *= 0.9     │
+         │ drive.partial_    │ │                   │
+         │ satisfy(reward)   │ │                   │
+         └───────────────────┘ └───────────────────┘
+                   │                     │
+                   └─────────┬───────────┘
+                             ▼
+                ┌──────────────────────────┐
+                │ ✅ LEARNING LOOP COMPLETE│
+                │                          │
+                │ Next tick:               │
+                │ - Drives accumulate      │
+                │ - Most urgent selected   │
+                │ - Tree executed again    │
+                │ - Weights already        │
+                │   changed by result      │
+                │                          │
+                │ Over time:               │
+                │ - Successful branches    │
+                │   become more likely     │
+                │ - Failed branches fade   │
+                │ - Agent specializes      │
+                └──────────────────────────┘
+
+
+LAYER 7: GENETIC EVOLUTION (IMPLEMENTED)
+================================================================================
+              Reproduction Condition Met
+              (Reproduction drive satisfied
+               + mate found + resources)
+                              │
+                    ┌─────────┴──────────┐
+                    ▼                    ▼
+              ┌──────────────┐    ┌──────────────┐
+              │ Parent 1     │    │ Parent 2     │
+              │              │    │              │
+              │ Behavior     │    │ Behavior     │
+              │ Trees with   │    │ Trees with   │
+              │ learned      │    │ learned      │
+              │ weights      │    │ weights      │
+              └────┬─────────┘    └──────┬───────┘
+                   │                     │
+                   ▼                     ▼
+         ┌───────────────────┐ ┌───────────────────┐
+         │ clone_with_       │ │ clone_with_       │
+         │ pruning(0.5)      │ │ pruning(0.5)      │
+         │                   │ │                   │
+         │ - Copy tree       │ │ - Copy tree       │
+         │ - Prune low       │ │ - Prune low       │
+         │   weight branches │ │   weight branches │
+         │ - New UUID        │ │ - New UUID        │
+         └───────────────────┘ └───────────────────┘
+                   │                     │
+                   └─────────┬───────────┘
+                             ▼
+              ┌──────────────────────────┐
+              │ Offspring                │
+              │                          │
+              │ - Inherits both trees    │
+              │ - Simpler than parents   │
+              │ - Only strong strategies │
+              │ - Ready to learn from    │
+              │   own experience         │
+              │                          │
+              │ Optional: mutation       │
+              │ - Tweak weights          │
+              │ - Add random branches    │
+              └──────────────────────────┘
+
+
+COMPLETE TICK LOOP (What Happens Every Simulation Step)
+================================================================================
+
+START_TICK:
+  │
+  ├─► FOR EACH AGENT:
+  │   │
+  │   ├─► 1. Update Drives
+  │   │   └─ agent.drives.tick()
+  │   │      Each drive: value += base_rate
+  │   │
+  │   ├─► 2. Select Most Urgent
+  │   │   └─ urgent = agent.drives.most_urgent()
+  │   │      Returns highest urgency active drive
+  │   │
+  │   ├─► 3. Find Behavior Tree (TODO)
+  │   │   └─ tree_idx = find_tree_for(urgent.drive_type)
+  │   │
+  │   ├─► 4. Execute Tree
+  │   │   └─ result = tree.execute()
+  │   │      Returns Success/Failure/Running
+  │   │      ✅ Weights auto-updated
+  │   │      ✅ Counters incremented
+  │   │
+  │   ├─► 5. Execute Action (TODO)
+  │   │   └─ action = result_to_action(result)
+  │   │      Update world, check success
+  │   │
+  │   ├─► 6. Apply Feedback (TODO)
+  │   │   └─ if success:
+  │   │        urgent_drive.partial_satisfy(reward)
+  │   │
+  │   └─► 7. Check Reproduction (TODO)
+  │       └─ if reproduction ready:
+  │            offspring = spawn_offspring(parent)
+  │
+  └─► END_TICK
+
+
+FILES STATUS MATRIX
+================================================================================
+
+File                              Status    Learning Role
+────────────────────────────────  ────────  ─────────────────────────────────
+src/core/behavior_tree.rs         ✅ Done   Weight reinforcement (ACTIVE)
+src/core/drives.rs                ✅ Done   Motivation & selection
+src/agents/agent.rs               ⚠️ Stub   Decision logic (CRITICAL GAP)
+src/core/learning.rs              ⚠️ Stub   Learning algorithms placeholder
+src/analytics/mod.rs              ⚠️ Stub   Simulation loop (CRITICAL GAP)
+src/world/mod.rs                  ⚠️ Stub   Environment for actions
+src/environment/mod.rs            ⚠️ Stub   Action execution & feedback
+src/core/memory.rs                ⚠️ Stub   Knowledge persistence
+────────────────────────────────  ────────  ─────────────────────────────────
+
+Legend: ✅ Done | ⚠️ Stub | ❌ Missing
+
+
+KEY INTEGRATION POINTS
+================================================================================
+
+1. drives.most_urgent()
+   → Returns which drive to pursue
+   → MUST use to select behavior tree
+
+2. behavior_tree.execute()
+   → Returns Success/Failure/Running
+   → ALREADY updates weights internally
+   → MUST provide real outcome from environment
+
+3. drive.partial_satisfy(amount)
+   → Reduce drive value after success
+   → MUST call after successful action
+
+4. behavior_tree.clone_with_pruning()
+   → Create offspring with inheritance
+   → Removes low-weight (weak) branches
+   → Enables natural evolution
+
+5. Simulation tick loop
+   → Orchestrates all steps above
+   → CURRENTLY MISSING - needs implementation
+
+================================================================================
+END OF ARCHITECTURE DIAGRAM
+================================================================================
