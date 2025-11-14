@@ -131,6 +131,20 @@ pub struct Material {
     /// Quality of this material/tool (affects output quality and effectiveness)
     pub quality: Quality,
 
+    // Metallurgy properties
+    /// Melting point in °C (None if doesn't melt)
+    pub melting_point: Option<f32>,
+    /// Can this material be worked cold (hammered without heat)?
+    pub can_cold_work: bool,
+    /// Temperature needed to work this material (forging temp in °C)
+    pub workable_temp: Option<f32>,
+    /// Is this an ore containing metal?
+    pub is_ore: bool,
+    /// What metal does this ore produce when smelted?
+    pub ore_metal_id: Option<String>,
+    /// Metal purity/yield from ore (0.0 to 1.0)
+    pub ore_yield: f32,
+
     // Custom properties for plugin-specific data
     pub properties: HashMap<String, String>,
 }
@@ -159,6 +173,12 @@ impl Material {
             is_flammable: false,
             light_level: 0,
             quality: Quality::Basic,  // Default to Basic quality
+            melting_point: None,
+            can_cold_work: false,
+            workable_temp: None,
+            is_ore: false,
+            ore_metal_id: None,
+            ore_yield: 0.0,
             properties: HashMap::new(),
         }
     }
@@ -244,6 +264,29 @@ impl Material {
 
     pub fn with_light_level(mut self, level: u8) -> Self {
         self.light_level = level.min(15);
+        self
+    }
+
+    // Metallurgy builder methods
+    pub fn with_melting_point(mut self, temp: f32) -> Self {
+        self.melting_point = Some(temp);
+        self
+    }
+
+    pub fn with_cold_working(mut self) -> Self {
+        self.can_cold_work = true;
+        self
+    }
+
+    pub fn with_workable_temp(mut self, temp: f32) -> Self {
+        self.workable_temp = Some(temp);
+        self
+    }
+
+    pub fn as_ore(mut self, metal_id: String, yield_percent: f32) -> Self {
+        self.is_ore = true;
+        self.ore_metal_id = Some(metal_id);
+        self.ore_yield = yield_percent;
         self
     }
 

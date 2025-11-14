@@ -61,6 +61,118 @@ impl MinecraftSurvivalPlugin {
     }
 
     fn register_materials(&mut self) {
+        // Stone Age materials
+        let flint = Material::new("flint".to_string(), "Flint".to_string())
+            .with_description("Sharp stone for making basic tools".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(4.0)
+            .with_tool_requirement(ToolType::Pickaxe, ToolTier::None)
+            .with_harvest_time(80)
+            .with_drop_quantity(1, 2)
+            .with_weight(0.3); // Flint chips are light
+
+        let native_copper = Material::new("native_copper".to_string(), "Native Copper".to_string())
+            .with_description("Pure copper nuggets - can be hammered cold".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(3.5)
+            .with_tool_requirement(ToolType::Pickaxe, ToolTier::None)
+            .with_harvest_time(120)
+            .with_drop_quantity(1, 1)
+            .with_weight(8.9) // Pure copper is very dense
+            .with_melting_point(1085.0) // Copper melts at 1085°C
+            .with_cold_working(); // Can be hammered cold!
+
+        let copper_ore = Material::new("copper_ore".to_string(), "Copper Ore".to_string())
+            .with_description("Green malachite ore containing copper".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(4.5)
+            .with_tool_requirement(ToolType::Pickaxe, ToolTier::None)
+            .with_harvest_time(150)
+            .with_drop_quantity(1, 1)
+            .with_weight(3.5) // Ore is lighter than pure metal
+            .as_ore("copper_ingot".to_string(), 0.6); // 60% yield
+
+        let tin_ore = Material::new("tin_ore".to_string(), "Tin Ore".to_string())
+            .with_description("Cassiterite ore containing tin".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(4.0)
+            .with_tool_requirement(ToolType::Pickaxe, ToolTier::None)
+            .with_harvest_time(140)
+            .with_drop_quantity(1, 1)
+            .with_weight(6.0)
+            .as_ore("tin_ingot".to_string(), 0.5); // 50% yield
+
+        let lead_ore = Material::new("lead_ore".to_string(), "Lead Ore".to_string())
+            .with_description("Galena ore containing lead".to_string())
+            .with_category(MaterialCategory::Natural)
+            .with_hardness(3.5)
+            .with_tool_requirement(ToolType::Pickaxe, ToolTier::None)
+            .with_harvest_time(130)
+            .with_drop_quantity(1, 1)
+            .with_weight(7.5)
+            .with_melting_point(327.0) // Lead melts very easily!
+            .as_ore("lead_ingot".to_string(), 0.7); // 70% yield
+
+        // Processed metals
+        let copper_ingot = Material::new("copper_ingot".to_string(), "Copper Ingot".to_string())
+            .with_description("Smelted copper ingot".to_string())
+            .with_category(MaterialCategory::Processed)
+            .with_hardness(3.0)
+            .with_stack_size(64)
+            .with_weight(8.9)
+            .with_melting_point(1085.0)
+            .with_workable_temp(800.0); // Can be forged at red heat
+
+        let tin_ingot = Material::new("tin_ingot".to_string(), "Tin Ingot".to_string())
+            .with_description("Smelted tin ingot".to_string())
+            .with_category(MaterialCategory::Processed)
+            .with_hardness(2.0)
+            .with_stack_size(64)
+            .with_weight(7.3)
+            .with_melting_point(232.0); // Tin melts easily
+
+        let bronze_ingot = Material::new("bronze_ingot".to_string(), "Bronze Ingot".to_string())
+            .with_description("Copper-tin alloy ingot".to_string())
+            .with_category(MaterialCategory::Processed)
+            .with_hardness(4.0)
+            .with_stack_size(64)
+            .with_weight(8.8)
+            .with_melting_point(950.0) // Bronze melts lower than copper
+            .with_workable_temp(750.0);
+
+        let lead_ingot = Material::new("lead_ingot".to_string(), "Lead Ingot".to_string())
+            .with_description("Smelted lead ingot - soft and heavy".to_string())
+            .with_category(MaterialCategory::Processed)
+            .with_hardness(1.5)
+            .with_stack_size(64)
+            .with_weight(11.3) // Lead is very dense
+            .with_melting_point(327.0);
+
+        // Stone Age tools
+        let flint_knife = Material::new("flint_knife".to_string(), "Flint Knife".to_string())
+            .with_description("Sharp flint blade".to_string())
+            .with_category(MaterialCategory::Tool)
+            .with_hardness(4.0)
+            .with_tool_requirement(ToolType::Hand, ToolTier::None)
+            .with_durability(30)
+            .with_weight(0.2);
+
+        let flint_axe = Material::new("flint_axe".to_string(), "Flint Axe".to_string())
+            .with_description("Flint axe head on wooden handle".to_string())
+            .with_category(MaterialCategory::Tool)
+            .with_hardness(4.0)
+            .with_tool_requirement(ToolType::Hand, ToolTier::None)
+            .with_durability(40)
+            .with_weight(1.0);
+
+        let flint_spear = Material::new("flint_spear".to_string(), "Flint Spear".to_string())
+            .with_description("Flint-tipped spear for hunting".to_string())
+            .with_category(MaterialCategory::Tool)
+            .with_hardness(3.5)
+            .with_tool_requirement(ToolType::Hand, ToolTier::None)
+            .with_durability(25)
+            .with_weight(1.5);
+
         // Natural resources
         let wood = Material::new("wood".to_string(), "Wood".to_string())
             .with_description("Raw wood from trees".to_string())
@@ -250,6 +362,11 @@ impl MinecraftSurvivalPlugin {
 
         // Register all materials
         for material in vec![
+            // Stone Age materials
+            flint, native_copper, copper_ore, tin_ore, lead_ore,
+            copper_ingot, tin_ingot, bronze_ingot, lead_ingot,
+            flint_knife, flint_axe, flint_spear,
+            // Original materials
             wood, stone, iron_ore, coal, planks, sticks, iron_ingot,
             wooden_pickaxe, stone_pickaxe, iron_pickaxe, wooden_axe, apple,
             water, dirt, grass, sand, leather, waterskin, canteen, advanced_canteen,

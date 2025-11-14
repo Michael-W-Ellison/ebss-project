@@ -12,6 +12,7 @@ use super::traits::TraitSet;
 use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
+use crate::environment::TechnologyKnowledge;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -562,6 +563,7 @@ pub struct Agent {
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
     pub transport: TransportSystem,
+    pub technology_knowledge: TechnologyKnowledge,
 }
 
 impl Agent {
@@ -587,6 +589,7 @@ impl Agent {
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
+            technology_knowledge: TechnologyKnowledge::default(),
         }
     }
 

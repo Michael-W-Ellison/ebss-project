@@ -23,6 +23,8 @@ mod crafting;
 mod plugin;
 mod registry;
 mod structure;
+mod technology;
+mod heat_source;
 pub mod clothing_recipes;
 pub mod flora;
 pub mod fauna;
@@ -33,6 +35,8 @@ pub use crafting::*;
 pub use plugin::*;
 pub use registry::*;
 pub use structure::*;
+pub use technology::*;
+pub use heat_source::*;
 pub use flora::{PlantSpecies, FloraRegistry, BiomeType, GrowthStage, PlantSize};
 pub use fauna::{AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize};
 
