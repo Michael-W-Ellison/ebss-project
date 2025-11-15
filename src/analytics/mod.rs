@@ -3,6 +3,28 @@
 
 use crate::world::World;
 use crate::agents::Population;
+
+pub mod simulation_controller;
+pub mod inspector;
+
+pub use simulation_controller::{SimulationController, SimulationState};
+pub use inspector::{
+    Inspector, Selection, AgentInspectorData, DriveInspectorData,
+    TerrainInspectorData, MemorySummary, InventorySummary, SensorySummary, SkillsSummary,
+    EmotionSummary, RelationshipSummary,
+};
+pub mod metrics;
+pub mod emergence;
+pub mod export;
+pub mod performance;
+
+pub use metrics::{SimulationMetrics, TickSnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
+pub use emergence::{EmergenceDetector, EmergentPattern, PatternType};
+pub use export::{DataExporter, ExportFormat};
+pub use performance::{PerformanceMonitor, PerformanceSnapshot};
+
+/// Placeholder for backwards compatibility
+pub struct Simulation;
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
@@ -189,6 +211,8 @@ impl Simulation {
         }
     }
 
+    pub fn run_for_ticks(&mut self, _ticks: u32) {
+        // Placeholder for simulation loop
     /// Log simulation statistics
     fn log_statistics(&self) {
         info!("--- Tick {} Statistics ---", self.current_tick);

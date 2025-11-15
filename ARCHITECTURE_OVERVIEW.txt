@@ -1,0 +1,305 @@
+================================================================================
+EBSS ARCHITECTURE OVERVIEW - CURRENT STATE & PHASE 3 ADDITIONS
+================================================================================
+
+CURRENT ARCHITECTURE (Implemented)
+===================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CORE AI SYSTEMS                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────────┐         ┌──────────────────┐                      │
+│  │ BEHAVIOR TREES   │ ◄─────► │  DRIVE SYSTEM    │                      │
+│  │ (200+ lines)     │         │  (280+ lines)    │                      │
+│  │                  │         │  ALL 13 DRIVES   │                      │
+│  │ • Sequence       │         │                  │                      │
+│  │ • Selector       │         │ • Hunger         │                      │
+│  │ • Action         │         │ • Rest           │                      │
+│  │ • Condition      │         │ • Shelter        │                      │
+│  │                  │         │ • Safety         │                      │
+│  │ • Weight-based   │         │ • Preparedness   │                      │
+│  │   learning       │         │ • Industry       │                      │
+│  │ • Auto-pruning   │         │ • Sustenance     │                      │
+│  │ • Inheritance    │         │ • Curiosity      │                      │
+│  │   ready          │         │ • Social         │                      │
+│  │                  │         │ • Reproduction   │                      │
+│  │                  │         │ • Luxury         │                      │
+│  │                  │         │ • Utility        │                      │
+│  │                  │         │ • Construction   │                      │
+│  └──────────────────┘         └──────────────────┘                      │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────┐       │
+│  │  MEMORY (Stub - Needs Implementation)                        │       │
+│  │  • MemoryType enum defined                                   │       │
+│  │  • Empty placeholder struct                                  │       │
+│  └──────────────────────────────────────────────────────────────┘       │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────┐       │
+│  │  LEARNING (Stub - Needs Implementation)                      │       │
+│  │  • Placeholder struct                                        │       │
+│  │  • No learning logic yet                                     │       │
+│  └──────────────────────────────────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────────────────────┘
+
+AGENT SYSTEM (Partial Implementation)
+======================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          AGENT                                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ Agent                                                       │        │
+│  │ ├─ id: UUID                                                 │        │
+│  │ ├─ state: AgentState                                        │        │
+│  │ │   ├─ health: f32                                          │        │
+│  │ │   └─ position: (i32, i32, i32)                            │        │
+│  │ ├─ drives: DriveState (13 drives)          [COMPLETE]      │        │
+│  │ ├─ behavior_trees: Vec<BehaviorTree>       [EMPTY]         │        │
+│  │ └─ memory: Memory                          [STUB]          │        │
+│  │                                                              │        │
+│  │ MISSING FOR PHASE 3:                                        │        │
+│  │ ├─ age: u32                                [ADD]            │        │
+│  │ ├─ maturity_age: u32                       [ADD]            │        │
+│  │ ├─ max_lifespan: u32                       [ADD]            │        │
+│  │ ├─ parents: Option<(UUID, UUID)>           [ADD]            │        │
+│  │ ├─ generation: u32                         [ADD]            │        │
+│  │ ├─ social_memory: HashMap<UUID, Relation>  [ADD]            │        │
+│  │ └─ is_alive: bool                          [ADD]            │        │
+│  └─────────────────────────────────────────────────────────────┘        │
+│                                                                           │
+│  ┌─────────────────────────────────────────────────────────────┐        │
+│  │ Population                                                  │        │
+│  │ ├─ agents: Vec<Agent>          [BASIC]                     │        │
+│  │ ├─ birth_count: u32            [ADD]                       │        │
+│  │ ├─ death_count: u32            [ADD]                       │        │
+│  │ ├─ generation: u32             [ADD]                       │        │
+│  │ └─ max_population: u32         [ADD]                       │        │
+│  └─────────────────────────────────────────────────────────────┘        │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+WORLD SYSTEMS (Stub - Major Implementation Needed)
+===================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     WORLD SIMULATION                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────┐       │
+│  │ World                                      [STUB - EMPTY]    │       │
+│  │ • Grid representation                      [NEEDS]           │       │
+│  │ • Resource distribution                    [NEEDS]           │       │
+│  │ • Chunk-based spatial partitioning         [NEEDS]           │       │
+│  └──────────────────────────────────────────────────────────────┘       │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────┐       │
+│  │ Environment Abstraction        [STUB - ONLY STRUCT DEF]     │       │
+│  │ • Plugin interface                         [NEEDS]           │       │
+│  │ • Material system                          [NEEDS]           │       │
+│  │ • Action system                            [NEEDS]           │       │
+│  │ • Crafting templates                       [NEEDS]           │       │
+│  └──────────────────────────────────────────────────────────────┘       │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+ANALYTICS & SIMULATION (Stub - Major Implementation Needed)
+===========================================================
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                  ANALYTICS & VISUALIZATION                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────┐       │
+│  │ Simulation                     [STUB - run_for_ticks EMPTY]  │       │
+│  │ • Main simulation loop                     [NEEDS]           │       │
+│  │ • Tick-based update mechanics              [NEEDS]           │       │
+│  │ • Event handling                           [NEEDS]           │       │
+│  └──────────────────────────────────────────────────────────────┘       │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────┐       │
+│  │ Analytics                      [STUB - EMPTY]                │       │
+│  │ • Data collection                          [NEEDS]           │       │
+│  │ • Behavior analysis                        [NEEDS]           │       │
+│  │ • Emergence detection                      [NEEDS]           │       │
+│  │ • Statistics tracking                      [NEEDS]           │       │
+│  └──────────────────────────────────────────────────────────────┘       │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+PHASE 3 REQUIREMENTS - SOCIAL SYSTEMS
+=======================================
+
+NEW SYSTEMS TO IMPLEMENT:
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                 REPRODUCTION & GENETIC INHERITANCE                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌────────────────────────┐      ┌────────────────────────┐             │
+│  │ REPRODUCTION SYSTEM    │      │ GENETIC INHERITANCE    │             │
+│  │                        │      │                        │             │
+│  │ • Maturity tracking    │      │ • Tree cloning         │             │
+│  │ • Mating mechanics     │      │ • Drive weight mixing  │             │
+│  │ • Offspring creation   │      │ • Mutation (5-20%)     │             │
+│  │ • Pregnancy period     │      │ • Phenotype variation  │             │
+│  │ • Kinship tracking     │      │ • Behavioral diversity │             │
+│  └────────────────────────┘      └────────────────────────┘             │
+│         │                                   │                            │
+│         └──────────────────┬─────────────────┘                           │
+│                            │                                             │
+│                    OFFSPRING AGENTS                                      │
+│              (Inherit traits + small mutations)                          │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│             OBSERVATIONAL LEARNING & SOCIAL MEMORY                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌────────────────────────┐      ┌────────────────────────┐             │
+│  │ YOUNG AGENT LEARNING   │      │ SOCIAL MEMORY          │             │
+│  │                        │      │                        │             │
+│  │ • Youth designation    │      │ • Agent recognition    │             │
+│  │ • Parent tracking      │      │ • Kinship matrix       │             │
+│  │ • Behavior imitation   │      │ • Interaction history  │             │
+│  │ • Fast-track learning  │      │ • Reputation system    │             │
+│  │ • Gradual independence │      │ • Location memory      │             │
+│  └────────────────────────┘      └────────────────────────┘             │
+│         │                                   │                            │
+│         └──────────────────┬─────────────────┘                           │
+│                            │                                             │
+│                    SOCIAL DYNAMICS                                       │
+│              (Cooperation, alliance, hierarchy)                          │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│              POPULATION DYNAMICS & LIFECYCLE MANAGEMENT                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  • Age tracking (ticks since birth)                                      │
+│  • Maturity threshold (~500-1000 ticks)                                  │
+│  • Death mechanics:                                                      │
+│    ├─ Age-based (max: 5000-10000 ticks)                                  │
+│    ├─ Starvation (hunger too high too long)                              │
+│    └─ Health depletion                                                   │
+│  • Population balancing                                                  │
+│  • Generation tracking                                                   │
+│  • Birth/death rate control                                              │
+│                                                                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+SIMULATION TICK LOOP (To be implemented in analytics/mod.rs)
+================================================================================
+
+Current: Empty run_for_ticks() method
+
+Needed per-tick implementation:
+
+  TICK START
+     │
+     ├─► UPDATE DRIVES
+     │   └─ Call tick() on all agent drives
+     │
+     ├─► AGING & LIFECYCLE
+     │   ├─ Increment age for all agents
+     │   ├─ Check for deaths (age, starvation, health)
+     │   └─ Check for maturity (enable reproduction)
+     │
+     ├─► REPRODUCTION
+     │   ├─ Find mature agents
+     │   ├─ Create pairs
+     │   ├─ Spawn offspring
+     │   └─ Inherit traits with mutation
+     │
+     ├─► DECISION MAKING (per agent)
+     │   ├─ Get most urgent drive
+     │   ├─ Select behavior tree for that drive
+     │   └─ Execute tree
+     │
+     ├─► ACTION EXECUTION
+     │   ├─ Modify world state
+     │   ├─ Update agent position/health/inventory
+     │   └─ Collect resources
+     │
+     ├─► LEARNING
+     │   ├─ Update tree weights
+     │   ├─ Update drive satisfaction
+     │   └─ Update memory
+     │
+     ├─► SOCIAL UPDATES
+     │   ├─ Update relationship matrices
+     │   ├─ Handle cooperation events
+     │   └─ Update social memory
+     │
+     ├─► ANALYTICS
+     │   ├─ Collect statistics
+     │   ├─ Track population metrics
+     │   ├─ Detect emergent behaviors
+     │   └─ Log events
+     │
+  TICK END
+     │
+  (Repeat next tick)
+
+================================================================================
+DATA FLOW: Drive → Behavior Selection → Action → Drive Satisfaction
+================================================================================
+
+     AGENT STATE                        DECISION CYCLE                      WORLD
+    ┌──────────────┐
+    │   Drives     │
+    │  (13 types)  │
+    └────┬─────────┘
+         │
+         ├─► Most Urgent?
+         │
+         ├─► YES ──────────────────────► Select Behavior Tree
+         │                               (based on drive type)
+         │                                    │
+         │                                    ├─► Execute Tree
+         │                                    │   (traverse nodes)
+         │                                    │
+         │                                    ├─► Result: Action(s)
+         │
+         └─► Update Satisfaction ◄──────────── Action Effects
+             └─ Reduce drive value
+             └─ Modify world
+             └─ Update learning weights
+             └─ Update memory
+
+================================================================================
+CURRENT vs PHASE 3 READY
+================================================================================
+
+PHASE 1 COMPLETION ✅
+├─ Behavior trees
+├─ Drive system  
+├─ Basic agents
+├─ Basic population
+├─ Project structure
+└─ Build system
+
+PHASE 1 → 2 (Planning)
+├─ World grid
+├─ Resource system
+├─ Basic actions
+├─ ASCII visualization
+└─ Learning loop
+
+PHASE 3 IMPLEMENTATION CHECKLIST ❌
+├─ [ ] Lifecycle system (age, death, reproduction)
+├─ [ ] Genetic inheritance (behavior trees & drives)
+├─ [ ] Observational learning (young agents)
+├─ [ ] Social memory & relationships
+├─ [ ] Population dynamics
+├─ [ ] Action execution in world
+├─ [ ] Memory system (spatial, social, recipes)
+├─ [ ] Learning algorithms
+├─ [ ] Simulation main loop
+└─ [ ] Analytics & visualization
+
+================================================================================

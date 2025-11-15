@@ -42,27 +42,42 @@ pub mod prelude {
     pub use crate::core::{
         behavior_tree::{BehaviorTree, BehaviorNode, NodeType},
         drives::{Drive, DriveType, DriveState},
-        learning::LearningSystem,
+        learning::{ObservableEvent, ObservableEventType, observe_and_learn, process_population_learning},
+        memory::{Memory, SpatialMemoryType, SocialRelationship},
+        emotions::{Emotion, EmotionType, EmotionalState},
+        traits::{Trait, TraitSet},
+        goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager},
+        preferences::{Preferences, Obsession, ObsessionType},
+        drive_progression::{DriveProgression, DriveTier, DriveTierRequirement, Requirement},
+        planning::{Planner, ActionPlan, PlanStep, ActionType, ActionOutcome},
     };
-    
+
     pub use crate::agents::{
         Agent, AgentConfig, AgentState,
-        Population,
+        Population, Inventory, InventoryItem,
+        Senses, Vision, Hearing, Speech,
+        Body, BodyPart, BodyPartType, BodyPartStatus,
+        Skills, Skill, SkillType, SkillCategory, Quality,
     };
-    
+
     pub use crate::environment::{
-        Environment, EnvironmentPlugin,
+        EnvironmentPlugin, PluginRegistry,
         Material, Action, CraftingTemplate,
+        ActionResult, ActionContext, Position as EnvPosition,
+        ToolType, ToolTier, MaterialCategory,
+        Structure, StructureType, StructureLevel, StructureRegistry,
     };
-    
+
     pub use crate::world::{
-        World, WorldConfig, GridConfig,
-        Position, Chunk,
+        World, WorldConfig, GridConfig, WorldSize,
+        Position,
     };
-    
+
     pub use crate::analytics::{
         Simulation, SimulationConfig,
         Analytics, BehaviorAnalysis,
+        SimulationController, SimulationState,
+        Inspector, Selection, AgentInspectorData,
     };
 
     pub use crate::visualization::{
