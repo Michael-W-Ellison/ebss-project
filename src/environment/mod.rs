@@ -120,8 +120,11 @@ pub struct ActionResult {
     pub experience: f32,
     /// Energy cost
     pub energy_cost: f32,
+    /// Overall drive satisfaction from this action
+    pub drive_satisfaction: f32,
     /// Message describing what happened
-use crate::core::DriveType;
+    pub message: String,
+}
 
 pub struct Environment;
 pub struct EnvironmentPlugin;
@@ -171,14 +174,6 @@ impl Action {
     }
 }
 
-/// Result of executing an action
-#[derive(Debug, Clone, PartialEq)]
-pub struct ActionResult {
-    pub success: bool,
-    pub drive_satisfaction: f32,
-    pub message: String,
-}
-
 impl ActionResult {
     pub fn success() -> Self {
         Self {
@@ -188,6 +183,7 @@ impl ActionResult {
             items_consumed: Vec::new(),
             experience: 0.0,
             energy_cost: 0.0,
+            drive_satisfaction: 0.0,
             message: String::new(),
         }
     }
@@ -200,6 +196,7 @@ impl ActionResult {
             items_consumed: Vec::new(),
             experience: 0.0,
             energy_cost: 0.0,
+            drive_satisfaction: 0.0,
             message,
         }
     }

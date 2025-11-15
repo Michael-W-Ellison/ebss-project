@@ -23,8 +23,6 @@ pub use emergence::{EmergenceDetector, EmergentPattern, PatternType};
 pub use export::{DataExporter, ExportFormat};
 pub use performance::{PerformanceMonitor, PerformanceSnapshot};
 
-/// Placeholder for backwards compatibility
-pub struct Simulation;
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
@@ -213,6 +211,8 @@ impl Simulation {
 
     pub fn run_for_ticks(&mut self, _ticks: u32) {
         // Placeholder for simulation loop
+    }
+
     /// Log simulation statistics
     fn log_statistics(&self) {
         info!("--- Tick {} Statistics ---", self.current_tick);

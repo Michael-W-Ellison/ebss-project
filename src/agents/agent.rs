@@ -571,14 +571,9 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(config: AgentConfig) -> Self {
-        let mut agent = Self {
+        Self {
             id: Uuid::new_v4(),
             state: AgentState::new(),
-            state: AgentState {
-                health: 100.0,
-                position: (0, 0, 0),
-                energy: 100.0,
-            },
             drives: if config.random_weights {
                 DriveState::with_random_weights()
             } else {
@@ -601,15 +596,29 @@ impl Agent {
         }
     }
 
-    /// Update agent state (tick senses, body, emotions, and memory)
+    /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
+        // Update subsystems
         self.senses.tick();
         self.body.tick();
         self.emotions.tick();
         self.memory.tick();
+        self.drives.tick();
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;
+
+        // Update energy (basic metabolism)
+        self.state.energy = (self.state.energy - 0.1).max(0.0);
+    }
+
+    /// Update agent with time progression (includes aging and survival mechanics)
+    pub fn tick_with_time(&mut self, current_tick: u32) {
+        // First do the regular tick
+        self.tick();
+
+        // Then handle aging and survival mechanics
+        self.state.age_tick(current_tick);
     }
 
     /// Update body temperature based on environmental conditions
@@ -1211,15 +1220,6 @@ impl Agent {
                 drive.partial_satisfy(action_result.drive_satisfaction);
             }
         }
-    }
-
-    /// Tick function for agent updates
-    pub fn tick(&mut self) {
-        // Update all drives
-        self.drives.tick();
-
-        // Update energy
-        self.state.energy = (self.state.energy - 0.1).max(0.0);
     }
 
     // Helper methods
