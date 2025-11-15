@@ -224,7 +224,7 @@ impl ActionResult {
 }
 
 /// Stack of items
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ItemStack {
     pub material_id: String,
     pub quantity: u32,

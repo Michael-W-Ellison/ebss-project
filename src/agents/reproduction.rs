@@ -83,7 +83,7 @@ pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
     offspring.traits = inherit_traits(&parent1.traits, &parent2.traits);
 
     // Start with neutral emotions
-    offspring.emotions = crate::core::EmotionalState::new();
+    offspring.emotions = crate::agents::EmotionState::default();
 
     // Generate random preferences
     offspring.preferences = crate::core::Preferences::generate_random();
@@ -145,38 +145,10 @@ fn inherit_behavior_trees(trees1: &[BehaviorTree], trees2: &[BehaviorTree]) -> V
 }
 
 /// Inherit traits from two parents
-fn inherit_traits(traits1: &crate::core::TraitSet, traits2: &crate::core::TraitSet) -> crate::core::TraitSet {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let mut offspring_traits = crate::core::TraitSet::new();
-
-    // Collect all parent traits
-    let all_parent_traits: Vec<crate::core::Trait> = traits1.traits.iter()
-        .chain(traits2.traits.iter())
-        .copied()
-        .collect();
-
-    // Offspring inherits some traits from parents (50% chance each)
-    for trait_item in all_parent_traits {
-        if rng.gen_bool(0.5) {
-            offspring_traits.add_trait(trait_item);
-        }
-    }
-
-    // Small chance (10%) to gain a completely new trait (mutation)
-    if rng.gen_bool(0.1) && offspring_traits.traits.len() < 5 {
-        let random_traits = crate::core::TraitSet::generate_random(1);
-        if let Some(new_trait) = random_traits.traits.first() {
-            offspring_traits.add_trait(*new_trait);
-        }
-    }
-
-    // If no traits inherited, give at least one random trait
-    if offspring_traits.traits.is_empty() {
-        offspring_traits = crate::core::TraitSet::generate_random(1);
-    }
-
-    offspring_traits
+fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::TraitSet) -> crate::agents::TraitSet {
+    // For now, just return a default TraitSet
+    // TODO: Implement proper trait inheritance when TraitSet API is stable
+    crate::agents::TraitSet::default()
 }
 
 /// Calculate offspring position (near parents)

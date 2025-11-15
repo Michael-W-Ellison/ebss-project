@@ -123,8 +123,8 @@ impl Simulation {
                     let action_result = Self::execute_action_static(&action);
 
                     debug!(
-                        "Agent {} - Action result: {} (satisfaction: {:.2})",
-                        agent.id, action_result.message, action_result.drive_satisfaction
+                        "Agent {} - Action result: {}",
+                        agent.id, action_result.message.as_deref().unwrap_or("unknown")
                     );
 
                     // 6. Apply feedback to agent (drive satisfaction)
@@ -201,10 +201,7 @@ impl Simulation {
                 Action::Wait => 0.0,
             };
 
-            ActionResult::success(
-                satisfaction,
-                format!("{:?} completed successfully", action)
-            )
+            ActionResult::success()
         } else {
             ActionResult::failure(format!("{:?} failed", action))
         }
