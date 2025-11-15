@@ -1,7 +1,7 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use crate::core::{BehaviorTree, DriveState, Memory};
+use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory};
 use std::collections::HashMap;
 
 use super::senses::Senses;
@@ -603,15 +603,19 @@ impl Agent {
         agent
     }
 
-    /// Update agent state (tick senses, body, emotions, and memory)
+    /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
         self.senses.tick();
         self.body.tick();
         self.emotions.tick();
         self.memory.tick();
+        self.drives.tick();
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;
+
+        // Update energy
+        self.state.energy = (self.state.energy - 0.1).max(0.0);
     }
 
     /// Update body temperature based on environmental conditions
@@ -1215,14 +1219,6 @@ impl Agent {
         }
     }
 
-    /// Tick function for agent updates
-    pub fn tick(&mut self) {
-        // Update all drives
-        self.drives.tick();
-
-        // Update energy
-        self.state.energy = (self.state.energy - 0.1).max(0.0);
-    }
 
     // Helper methods
     fn find_nearest_shelter(&self) -> (i32, i32, i32) {

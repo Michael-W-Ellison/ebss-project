@@ -124,13 +124,6 @@ pub struct ActionResult {
     pub message: Option<String>,
 }
 
-use crate::core::DriveType;
-
-pub struct Environment;
-pub struct EnvironmentPlugin;
-pub struct Material;
-pub struct CraftingTemplate;
-
 /// Actions that agents can perform in the environment
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Action {

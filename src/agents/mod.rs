@@ -48,15 +48,14 @@ pub use transport::{
 
 #[cfg(test)]
 mod tests;
-// Temporarily commented out due to API changes
-// pub mod reproduction;
+pub mod reproduction;
 pub mod shared_knowledge;
 pub mod knowledge;
 pub mod relationships;
 pub mod profession;
 
 pub use population::{Population, PopulationConfig};
-// pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
+pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
 pub use shared_knowledge::{SharedKnowledge, DiscoveredResource};
 pub use knowledge::{PersonalKnowledge, ResourceKnowledge, KnowledgeSource};
 pub use relationships::{SocialNetwork, RelationshipLevel, TrustLevel};
