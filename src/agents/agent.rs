@@ -573,11 +573,11 @@ impl Agent {
     pub fn new(config: AgentConfig) -> Self {
         let mut agent = Self {
             id: Uuid::new_v4(),
-            state: AgentState::new(),
             state: AgentState {
                 health: 100.0,
                 position: (0, 0, 0),
                 energy: 100.0,
+                is_alive: true,
             },
             drives: if config.random_weights {
                 DriveState::with_random_weights()
@@ -598,7 +598,9 @@ impl Agent {
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
-        }
+        };
+
+        agent
     }
 
     /// Update agent state (tick senses, body, emotions, and memory)
