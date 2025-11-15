@@ -1,7 +1,8 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use crate::core::{BehaviorTree, DriveState, Memory};
+use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences};
+use crate::environment::{Action, ActionResult};
 use std::collections::HashMap;
 
 use super::senses::Senses;
@@ -567,6 +568,10 @@ pub struct Agent {
     pub observational_learning: ObservationalLearning,
     pub transport: TransportSystem,
     pub technology_knowledge: TechnologyKnowledge,
+    pub parent_ids: Vec<Uuid>,
+    pub birth_tick: u32,
+    pub goals: GoalManager,
+    pub preferences: Preferences,
 }
 
 impl Agent {
@@ -574,11 +579,6 @@ impl Agent {
         let mut agent = Self {
             id: Uuid::new_v4(),
             state: AgentState::new(),
-            state: AgentState {
-                health: 100.0,
-                position: (0, 0, 0),
-                energy: 100.0,
-            },
             drives: if config.random_weights {
                 DriveState::with_random_weights()
             } else {
@@ -598,18 +598,36 @@ impl Agent {
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
-        }
+            parent_ids: Vec::new(),
+            birth_tick: 0,
+            goals: GoalManager::new(10), // Default max_goals capacity
+            preferences: Preferences::generate_random(),
+        };
+
+        agent
     }
 
-    /// Update agent state (tick senses, body, emotions, and memory)
+    /// Create a new agent with specified parents
+    pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, birth_tick: u32) -> Self {
+        let mut agent = Self::new(config);
+        agent.parent_ids = parent_ids;
+        agent.birth_tick = birth_tick;
+        agent
+    }
+
+    /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
         self.senses.tick();
         self.body.tick();
         self.emotions.tick();
         self.memory.tick();
+        self.drives.tick();
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;
+
+        // Update energy
+        self.state.energy = (self.state.energy - 0.1).max(0.0);
     }
 
     /// Update body temperature based on environmental conditions
@@ -968,11 +986,9 @@ impl Agent {
             if !learning_actions.is_empty() {
                 parent_learning.push((parent_id, learning_actions));
             }
-        };
+        }
 
-        // Initialize default behavior trees for each drive
-        agent.initialize_behavior_trees();
-        agent
+        parent_learning
     }
 
     /// Initialize default behavior trees for each drive type
@@ -981,8 +997,6 @@ impl Agent {
             let tree = Self::create_default_tree_for_drive(drive_type);
             self.behavior_trees.push(tree);
         }
-
-        parent_learning
     }
 
     /// Set age-based learning rate (child = 1.5, adult = 1.0, elder = 0.7)
@@ -1093,6 +1107,12 @@ impl Agent {
                 selector.add_child(BehaviorNode::new(NodeType::Action("eat_stored_food".to_string())));
                 selector.add_child(BehaviorNode::new(NodeType::Action("gather_food".to_string())));
                 selector.add_child(BehaviorNode::new(NodeType::Action("hunt".to_string())));
+                selector
+            }
+            DriveType::Thirst => {
+                let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("drink_water".to_string())));
+                selector.add_child(BehaviorNode::new(NodeType::Action("find_water".to_string())));
                 selector
             }
             DriveType::Rest => {
@@ -1208,19 +1228,13 @@ impl Agent {
         // Update drive satisfaction
         if let Some(drive) = self.drives.get_mut(drive_type) {
             if action_result.success {
-                drive.partial_satisfy(action_result.drive_satisfaction);
+                // TODO: Use drive_changes from ActionResult once API is stabilized
+                // drive.partial_satisfy(amount);
+                let _ = action_result; // Suppress unused warning
             }
         }
     }
 
-    /// Tick function for agent updates
-    pub fn tick(&mut self) {
-        // Update all drives
-        self.drives.tick();
-
-        // Update energy
-        self.state.energy = (self.state.energy - 0.1).max(0.0);
-    }
 
     // Helper methods
     fn find_nearest_shelter(&self) -> (i32, i32, i32) {

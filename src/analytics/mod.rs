@@ -23,8 +23,6 @@ pub use emergence::{EmergenceDetector, EmergentPattern, PatternType};
 pub use export::{DataExporter, ExportFormat};
 pub use performance::{PerformanceMonitor, PerformanceSnapshot};
 
-/// Placeholder for backwards compatibility
-pub struct Simulation;
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
@@ -125,8 +123,8 @@ impl Simulation {
                     let action_result = Self::execute_action_static(&action);
 
                     debug!(
-                        "Agent {} - Action result: {} (satisfaction: {:.2})",
-                        agent.id, action_result.message, action_result.drive_satisfaction
+                        "Agent {} - Action result: {}",
+                        agent.id, action_result.message.as_deref().unwrap_or("unknown")
                     );
 
                     // 6. Apply feedback to agent (drive satisfaction)
@@ -155,6 +153,7 @@ impl Simulation {
         // Map drive type to a representative action
         match drive_type {
             DriveType::Hunger => Action::Eat { food_type: "generic".to_string() },
+            DriveType::Thirst => Action::Gather { resource_type: "water".to_string() },
             DriveType::Rest => Action::Sleep { duration: 10 },
             DriveType::Shelter => Action::Build {
                 structure_type: "shelter".to_string(),
@@ -202,17 +201,12 @@ impl Simulation {
                 Action::Wait => 0.0,
             };
 
-            ActionResult::success(
-                satisfaction,
-                format!("{:?} completed successfully", action)
-            )
+            ActionResult::success()
         } else {
             ActionResult::failure(format!("{:?} failed", action))
         }
     }
 
-    pub fn run_for_ticks(&mut self, _ticks: u32) {
-        // Placeholder for simulation loop
     /// Log simulation statistics
     fn log_statistics(&self) {
         info!("--- Tick {} Statistics ---", self.current_tick);
