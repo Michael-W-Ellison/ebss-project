@@ -269,6 +269,9 @@ fn learn_behavior(
         learned: false,
         knowledge_gained: None,
         proficiency_increase: 0.0,
+    }
+}
+
 //! Learning system for behavior tree evolution.
 //!
 //! # Learning Loop Architecture
