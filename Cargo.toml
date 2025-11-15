@@ -66,3 +66,5 @@ path = "examples/inspector_demo.rs"
 
 [workspace]
 members = ["plugins/*"]
+name = "visual_demo"
+path = "examples/visual_demo.rs"

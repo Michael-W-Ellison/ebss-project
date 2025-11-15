@@ -35,6 +35,7 @@ pub mod agents;
 pub mod environment;
 pub mod world;
 pub mod analytics;
+pub mod visualization;
 
 /// Prelude module for convenient imports
 pub mod prelude {
@@ -77,6 +78,10 @@ pub mod prelude {
         Analytics, BehaviorAnalysis,
         SimulationController, SimulationState,
         Inspector, Selection, AgentInspectorData,
+    };
+
+    pub use crate::visualization::{
+        AsciiRenderer,
     };
 }
 
