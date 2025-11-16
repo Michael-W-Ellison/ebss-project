@@ -247,6 +247,65 @@ fn print_population_status(population: &Population, tick: u32) {
             }
             println!("     • Total Weight: {:.1}/{:.1} kg", total_weight, total_max_weight);
         }
+
+        // Calculate injury and combat statistics
+        let mut total_injuries = 0;
+        let mut agents_with_injuries = 0;
+        let mut disabled_parts = 0;
+        let mut crippled_parts = 0;
+        let mut total_body_health = 0.0;
+        let mut agents_with_armor = 0;
+
+        for agent in &population.agents {
+            let mut agent_injury_count = 0;
+
+            // Count injuries across all body parts
+            for part in agent.body.parts.values() {
+                agent_injury_count += part.injuries.len();
+                total_injuries += part.injuries.len();
+
+                // Check body part status
+                match part.status {
+                    ebss::agents::body::BodyPartStatus::Disabled |
+                    ebss::agents::body::BodyPartStatus::Missing => {
+                        disabled_parts += 1;
+                    }
+                    ebss::agents::body::BodyPartStatus::Crippled => {
+                        crippled_parts += 1;
+                    }
+                    _ => {}
+                }
+            }
+
+            if agent_injury_count > 0 {
+                agents_with_injuries += 1;
+            }
+
+            // Track armor
+            if !agent.body.equipment.is_empty() {
+                agents_with_armor += 1;
+            }
+
+            // Sum overall body health
+            total_body_health += agent.body.overall_health();
+        }
+
+        // Display injury statistics if any exist
+        if total_injuries > 0 || disabled_parts > 0 || crippled_parts > 0 {
+            println!("   Combat & Injuries:");
+            println!("     • Total Injuries:     {}", total_injuries);
+            println!("     • Agents Injured:     {}", agents_with_injuries);
+            if crippled_parts > 0 {
+                println!("     • Crippled Parts:     {}", crippled_parts);
+            }
+            if disabled_parts > 0 {
+                println!("     • Disabled/Missing:   {}", disabled_parts);
+            }
+            println!("     • Avg Body Health:    {:.1}%", (total_body_health / count) * 100.0);
+            if agents_with_armor > 0 {
+                println!("     • Agents w/ Armor:    {}", agents_with_armor);
+            }
+        }
     }
 
     println!();

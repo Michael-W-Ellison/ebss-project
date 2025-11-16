@@ -171,6 +171,12 @@ impl Simulation {
             }
         }
 
+        // Process environmental damage (exposure, falling, disease)
+        self.process_environmental_damage();
+
+        // Tick world (building construction progress, etc.)
+        self.world.tick();
+
         // Log statistics every 10 ticks
         if self.current_tick % 10 == 0 {
             self.log_statistics();
@@ -466,6 +472,129 @@ impl Simulation {
                     .with_message(format!("Started building {:?}", building_type))
             },
 
+            Action::Attack { target_agent_id, weapon } => {
+                use crate::agents::body::{BodyPartType, InjuryType};
+
+                // Find target agent
+                let target_index = self.population.agents.iter()
+                    .position(|a| &a.id == target_agent_id);
+
+                if target_index.is_none() {
+                    return ActionResult::failure("Target agent not found".to_string());
+                }
+                let target_index = target_index.unwrap();
+
+                // Can't attack yourself
+                if target_index == agent_index {
+                    return ActionResult::failure("Cannot attack yourself".to_string());
+                }
+
+                // Get attacker and target positions
+                let attacker_pos = self.population.agents[agent_index].state.position;
+                let target_pos = self.population.agents[target_index].state.position;
+
+                // Check if target is in range (melee range = 1 tile, unarmed or melee weapon)
+                let distance = ((target_pos.0 - attacker_pos.0).abs() + (target_pos.1 - attacker_pos.1).abs()) as u32;
+                let max_range = 1; // Melee range for now
+
+                if distance > max_range {
+                    return ActionResult::failure(format!("Target too far away (distance: {})", distance));
+                }
+
+                // Calculate base damage
+                let base_damage = if weapon.is_some() {
+                    // Weapon damage (will be expanded later with actual weapon stats)
+                    rng.gen_range(10.0..25.0)
+                } else {
+                    // Unarmed combat
+                    rng.gen_range(5.0..15.0)
+                };
+
+                // Get attacker's tool efficiency (arm health affects combat)
+                let attacker_efficiency = self.population.agents[agent_index].body.tool_efficiency_multiplier();
+                let actual_damage = base_damage * attacker_efficiency;
+
+                // Select random body part to hit (weighted toward torso/limbs)
+                let body_parts = [
+                    (BodyPartType::Head, 10),       // 10% chance (critical)
+                    (BodyPartType::Torso, 30),      // 30% chance (common target)
+                    (BodyPartType::LeftArm, 15),    // 15% chance
+                    (BodyPartType::RightArm, 15),   // 15% chance
+                    (BodyPartType::LeftLeg, 12),    // 12% chance
+                    (BodyPartType::RightLeg, 12),   // 12% chance
+                    (BodyPartType::Back, 6),        // 6% chance (hard to hit)
+                ];
+
+                let total_weight: u32 = body_parts.iter().map(|(_, w)| w).sum();
+                let roll = rng.gen_range(0..total_weight);
+
+                let mut cumulative = 0;
+                let mut target_part = BodyPartType::Torso; // Default
+                for (part, weight) in &body_parts {
+                    cumulative += weight;
+                    if roll < cumulative {
+                        target_part = *part;
+                        break;
+                    }
+                }
+
+                // Determine injury type based on damage and weapon
+                let injury_type = if actual_damage >= 30.0 {
+                    // High damage can cause crippling injuries
+                    if rng.gen_bool(0.3) {
+                        InjuryType::Crippling(crate::agents::body::CripplingType::Partial)
+                    } else {
+                        InjuryType::Major
+                    }
+                } else if actual_damage >= 15.0 {
+                    InjuryType::Major
+                } else {
+                    InjuryType::Minor
+                };
+
+                // Apply damage to target
+                let target = &mut self.population.agents[target_index];
+                if let Some(part) = target.body.get_part_mut(target_part) {
+                    part.apply_injury(injury_type, actual_damage, self.current_tick as u64);
+                }
+
+                // Also reduce target's overall health
+                let target = &mut self.population.agents[target_index];
+                target.state.health = (target.state.health - actual_damage * 0.2).max(0.0);
+
+                // Check if target died from the attack
+                let target_alive = self.population.agents[target_index].body.is_alive()
+                    && self.population.agents[target_index].state.health > 0.0;
+
+                debug!(
+                    "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({})",
+                    self.population.agents[agent_index].id,
+                    self.population.agents[target_index].id,
+                    weapon.as_ref().unwrap_or(&"unarmed".to_string()),
+                    actual_damage,
+                    target_part,
+                    if target_alive { "survived" } else { "FATAL" }
+                );
+
+                if !target_alive {
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Safety, -0.3)
+                        .with_energy_cost(25.0)
+                        .with_message(format!(
+                            "Attacked and killed target ({:.1} damage to {:?})",
+                            actual_damage, target_part
+                        ))
+                } else {
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Safety, -0.2)
+                        .with_energy_cost(15.0)
+                        .with_message(format!(
+                            "Attacked target ({:.1} damage to {:?}, {:?} injury)",
+                            actual_damage, target_part, injury_type
+                        ))
+                }
+            },
+
             // For other actions, use simplified success/failure
             _ => {
                 let success_probability = 0.7;
@@ -486,6 +615,136 @@ impl Simulation {
                     ActionResult::failure(format!("{:?} failed", action))
                 }
             }
+        }
+    }
+
+    /// Process environmental damage for all agents
+    pub fn process_environmental_damage(&mut self) {
+        use crate::agents::body::{BodyPartType, InjuryType, CripplingType};
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        for agent in &mut self.population.agents {
+            // 1. EXPOSURE DAMAGE - Cold/Heat based on environment
+            // Check if agent has adequate protection from equipment
+            let cold_insulation = agent.body.total_cold_insulation();
+            let heat_resistance = agent.body.total_heat_resistance();
+
+            // Simplified environmental model - can be enhanced with actual world temperature
+            // Assume baseline comfortable temperature, extreme cold/heat causes damage
+            // In a full implementation, this would check world.get_temperature_at(position)
+
+            // Cold exposure (lack of insulation)
+            if cold_insulation < 1.0 {
+                // Missing adequate cold protection
+                let exposure_severity = 1.0 - cold_insulation;
+                if rng.gen_bool(exposure_severity as f64 * 0.01) { // 1% chance per severity point
+                    let cold_damage = rng.gen_range(1.0..5.0);
+                    // Cold affects extremities most
+                    let affected_parts = [
+                        BodyPartType::LeftArm,
+                        BodyPartType::RightArm,
+                        BodyPartType::LeftLeg,
+                        BodyPartType::RightLeg,
+                    ];
+                    let part = affected_parts[rng.gen_range(0..affected_parts.len())];
+
+                    if let Some(body_part) = agent.body.get_part_mut(part) {
+                        body_part.apply_injury(InjuryType::Minor, cold_damage, self.current_tick as u64);
+                        debug!("Agent {} suffered cold exposure: {:.1} damage to {:?}",
+                            agent.id, cold_damage, part);
+                    }
+                }
+            }
+
+            // Heat exposure (lack of heat resistance) - less common, more severe
+            if heat_resistance < 0.5 {
+                let exposure_severity = 0.5 - heat_resistance;
+                if rng.gen_bool(exposure_severity as f64 * 0.005) { // 0.5% chance per severity
+                    let heat_damage = rng.gen_range(2.0..8.0);
+                    // Heat affects torso and head
+                    let affected_parts = [BodyPartType::Head, BodyPartType::Torso];
+                    let part = affected_parts[rng.gen_range(0..affected_parts.len())];
+
+                    if let Some(body_part) = agent.body.get_part_mut(part) {
+                        body_part.apply_injury(InjuryType::Minor, heat_damage, self.current_tick as u64);
+                        debug!("Agent {} suffered heat exposure: {:.1} damage to {:?}",
+                            agent.id, heat_damage, part);
+                    }
+                }
+            }
+
+            // 2. FALLING DAMAGE - Based on height/terrain
+            // In a full implementation, this would check for actual falls
+            // For now, simulate random accidents
+            if rng.gen_bool(0.0001) { // 0.01% chance per tick (~14 falls per million ticks)
+                let fall_height = rng.gen_range(1..=5); // Units of height
+                let fall_damage = (fall_height as f32) * rng.gen_range(3.0..8.0);
+
+                // Falls primarily affect legs, with chance of head/torso on severe falls
+                let injured_part = if fall_height >= 4 && rng.gen_bool(0.3) {
+                    // High fall with head/torso injury
+                    if rng.gen_bool(0.5) {
+                        BodyPartType::Head
+                    } else {
+                        BodyPartType::Torso
+                    }
+                } else {
+                    // Normal fall - legs
+                    if rng.gen_bool(0.5) {
+                        BodyPartType::LeftLeg
+                    } else {
+                        BodyPartType::RightLeg
+                    }
+                };
+
+                let injury_severity = if fall_damage >= 25.0 {
+                    InjuryType::Crippling(CripplingType::Partial)
+                } else if fall_damage >= 12.0 {
+                    InjuryType::Major
+                } else {
+                    InjuryType::Minor
+                };
+
+                if let Some(body_part) = agent.body.get_part_mut(injured_part) {
+                    body_part.apply_injury(injury_severity, fall_damage, self.current_tick as u64);
+                    debug!("Agent {} suffered fall damage: {:.1} damage to {:?} ({:?})",
+                        agent.id, fall_damage, injured_part, injury_severity);
+                }
+
+                // Also reduce overall health
+                agent.state.health = (agent.state.health - fall_damage * 0.15).max(0.0);
+            }
+
+            // 3. DISEASE/INFECTION - Random chance
+            // Agents with existing injuries have higher infection risk
+            let injury_count: usize = agent.body.parts.values()
+                .map(|part| part.injuries.len())
+                .sum();
+
+            if injury_count > 0 {
+                let infection_chance = (injury_count as f64) * 0.0001; // 0.01% per injury per tick
+                if rng.gen_bool(infection_chance) {
+                    // Random body part gets infected
+                    let parts: Vec<BodyPartType> = agent.body.parts.keys().cloned().collect();
+                    if !parts.is_empty() {
+                        let part = parts[rng.gen_range(0..parts.len())];
+                        let infection_damage = rng.gen_range(0.5..2.0);
+
+                        if let Some(body_part) = agent.body.get_part_mut(part) {
+                            body_part.add_condition(crate::agents::body::Condition {
+                                condition_type: crate::agents::body::ConditionType::Infected,
+                                severity: rng.gen_range(0.3..0.8),
+                                duration: rng.gen_range(100..500), // Lasts 100-500 ticks
+                            });
+                            debug!("Agent {} developed infection on {:?}", agent.id, part);
+                        }
+                    }
+                }
+            }
+
+            // 4. NATURAL HEALING - Process body tick (handles conditions, bleeding, etc.)
+            agent.body.tick();
         }
     }
 

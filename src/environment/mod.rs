@@ -147,6 +147,11 @@ pub enum Action {
     Explore { direction: (i32, i32, i32) },
     /// Interact with another agent
     Socialize { target_agent_id: uuid::Uuid },
+    /// Attack another agent
+    Attack {
+        target_agent_id: uuid::Uuid,
+        weapon: Option<String>,  // Optional weapon (None = unarmed)
+    },
     /// Wait/idle
     Wait,
 }
@@ -163,6 +168,7 @@ impl Action {
             Action::Store { .. } => Some(DriveType::Preparedness),
             Action::Explore { .. } => Some(DriveType::Curiosity),
             Action::Socialize { .. } => Some(DriveType::Social),
+            Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Move { .. } => None,
             Action::Wait => None,
         }
