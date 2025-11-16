@@ -61,6 +61,7 @@ pub mod economy;
 pub mod technology;
 pub mod climate;
 pub mod combat;
+pub mod crafting;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -94,6 +95,8 @@ pub struct World {
     pub plants: PlantManager,
     #[serde(skip)]
     pub combat_manager: combat::CombatManager, // Combat system (not serialized)
+    #[serde(skip)]
+    pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
     pub tick: u32,
 }
 
@@ -143,6 +146,7 @@ impl World {
             animals: AnimalManager::new(1000), // Max 1000 animals
             plants: PlantManager::new(5000), // Max 5000 plants
             combat_manager: combat::CombatManager::new(),
+            crafting_manager: crafting::CraftingManager::new(),
             tick: 0,
         };
 
@@ -787,6 +791,101 @@ impl World {
         self.combat_manager.get_recent_combat(count)
     }
 
+    // ===== Crafting System =====
+
+    /// Get a crafting recipe
+    pub fn get_recipe(&self, recipe_id: &str) -> Option<&crafting::CraftingRecipe> {
+        self.crafting_manager.get_recipe(recipe_id)
+    }
+
+    /// Get all recipes in a category
+    pub fn get_recipes_by_category(&self, category: crafting::CraftingCategory) -> Vec<&crafting::CraftingRecipe> {
+        self.crafting_manager.get_recipes_by_category(category)
+    }
+
+    /// Get all available recipes
+    pub fn get_all_recipes(&self) -> Vec<&crafting::CraftingRecipe> {
+        self.crafting_manager.all_recipes()
+    }
+
+    /// Attempt to craft an item (checks materials, skills, tools)
+    pub fn attempt_craft(
+        &mut self,
+        recipe_id: &str,
+        crafter_id: uuid::Uuid,
+        inventory: &mut super::agents::agent::Inventory,
+        skills: &HashMap<String, u32>,
+        available_tools: &[crafting::ToolRequirement],
+    ) -> crafting::CraftingResult {
+        // Get inventory materials as HashMap
+        let mut inventory_materials = HashMap::new();
+        for (item_id, item) in inventory.get_all_items() {
+            inventory_materials.insert(item_id.clone(), item.quantity);
+        }
+
+        // Check if can craft
+        let check_result = self.crafting_manager.can_craft(
+            recipe_id,
+            &inventory_materials,
+            skills,
+            available_tools,
+        );
+
+        match check_result {
+            crafting::CraftingResult::Success { item_id, quantity } => {
+                // Get the recipe to consume materials
+                if let Some(recipe) = self.crafting_manager.get_recipe(recipe_id) {
+                    // Consume materials from inventory
+                    for material in &recipe.materials {
+                        inventory.remove_item(&material.material_id, material.quantity);
+                    }
+
+                    // Start crafting job
+                    if let Some(_job_id) = self.crafting_manager.start_crafting(recipe_id.to_string(), crafter_id) {
+                        crafting::CraftingResult::Success { item_id, quantity }
+                    } else {
+                        crafting::CraftingResult::RecipeNotFound
+                    }
+                } else {
+                    crafting::CraftingResult::RecipeNotFound
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// Check if an agent can craft a recipe (without consuming materials)
+    pub fn can_craft_recipe(
+        &self,
+        recipe_id: &str,
+        inventory: &super::agents::agent::Inventory,
+        skills: &HashMap<String, u32>,
+        available_tools: &[crafting::ToolRequirement],
+    ) -> crafting::CraftingResult {
+        // Get inventory materials as HashMap
+        let mut inventory_materials = HashMap::new();
+        for (item_id, item) in inventory.get_all_items() {
+            inventory_materials.insert(item_id.clone(), item.quantity);
+        }
+
+        self.crafting_manager.can_craft(
+            recipe_id,
+            &inventory_materials,
+            skills,
+            available_tools,
+        )
+    }
+
+    /// Get active crafting jobs for a crafter
+    pub fn get_crafter_jobs(&self, crafter_id: &uuid::Uuid) -> Vec<&crafting::CraftingJob> {
+        self.crafting_manager.get_crafter_jobs(crafter_id)
+    }
+
+    /// Cancel a crafting job
+    pub fn cancel_crafting_job(&mut self, job_id: &uuid::Uuid) -> bool {
+        self.crafting_manager.cancel_job(job_id)
+    }
+
     pub fn tick(&mut self) {
         self.tick += 1;
 
@@ -806,6 +905,10 @@ impl World {
 
         // Update plants (growth, regrowth)
         self.plants.tick();
+
+        // Update crafting jobs (progress crafting)
+        let _completed_crafts = self.crafting_manager.tick();
+        // Note: Completed items should be added to crafter inventories by caller
 
         // Remove depleted resources
         self.remove_depleted_resources();
