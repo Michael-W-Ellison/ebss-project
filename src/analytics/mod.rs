@@ -622,7 +622,6 @@ impl Simulation {
                     // BEGINNER (skill -10 to 0): Basic wooden tools - requires wooden_tools technology
                     (Recipe {
                         name: "Craft Wooden Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenAxe, 1)],
                         base_time: 80,
@@ -630,7 +629,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Wooden Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenPickaxe, 1)],
                         base_time: 80,
@@ -638,7 +636,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Wooden Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenHammer, 1)],
                         base_time: 80,
@@ -646,7 +643,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Wooden Spear",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Wood, 2),
                             ResourceRequirement::new(ResourceType::Stone, 1),
@@ -658,7 +654,6 @@ impl Simulation {
                     // NOVICE (skill 0-3): Stone tools - requires stone_tools technology
                     (Recipe {
                         name: "Craft Stone Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Stone, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -669,7 +664,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Stone Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Stone, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -680,7 +674,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Stone Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Stone, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -692,7 +685,6 @@ impl Simulation {
                     // APPRENTICE (skill 3-5): Iron tools - requires iron_working technology
                     (Recipe {
                         name: "Craft Iron Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -703,7 +695,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Iron Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -714,7 +705,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Iron Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -726,7 +716,6 @@ impl Simulation {
                     // JOURNEYMAN (skill 5-8): Advanced weapons - requires iron_working technology
                     (Recipe {
                         name: "Craft Iron Sword",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 3),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -1161,9 +1150,6 @@ impl Simulation {
 
             // 4. NATURAL HEALING - Process body tick (handles conditions, bleeding, etc.)
             agent.body.tick();
-            ActionResult::success()
-        } else {
-            ActionResult::failure(format!("{:?} failed", action))
         }
     }
 

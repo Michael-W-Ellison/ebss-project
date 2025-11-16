@@ -172,13 +172,7 @@ impl Population {
             agent.state.age_tick(current_tick);
         }
 
-        // Calculate population needs for job selection
-        let population_needs = self.calculate_population_needs();
-
-        // Update job selection for all agents (dynamic, based on needs and traits)
-        for agent in &mut self.agents {
-            agent.update_job_selection(&population_needs);
-        }
+        // Note: Job selection has been removed in favor of skill-based, drive-driven behavior
 
         // Update relationships between nearby agents
         self.update_relationships();
@@ -229,6 +223,8 @@ impl Population {
     ///
     /// This analyzes resource stockpiles, agent inventories, and population size
     /// to determine what the population urgently needs for survival.
+    /// NOTE: This method is no longer used after profession system removal
+    #[allow(dead_code)]
     fn calculate_population_needs(&self) -> super::agent::PopulationNeeds {
         use super::agent::PopulationNeeds;
 

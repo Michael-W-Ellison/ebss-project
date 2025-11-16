@@ -469,73 +469,33 @@ impl Profession {
     }
 
     /// Tick production progress, returns Some((ItemType, quantity)) if production completes
+    /// NOTE: This method is deprecated as the profession system is no longer in active use.
+    /// Crafting is now handled through the skill-based system in src/world/crafting.rs
+    #[allow(dead_code)]
     pub fn tick_production(&mut self) -> Option<Vec<(crate::world::ItemType, u32)>> {
-        use crate::world::{get_job_recipes, Quality};
-
-        if let Some(recipe_idx) = self.current_recipe_index {
-            self.production_progress += 1;
-
-            let recipes = get_job_recipes(self.job);
-            if let Some(recipe) = recipes.get(recipe_idx) {
-                let quality = Quality::from_skill(self.skill_level);
-                let required_time = recipe.calculate_time(quality);
-
-                if self.production_progress >= required_time {
-                    // Production complete!
-                    let outputs = recipe.calculate_output(quality);
-                    let total_quantity: u32 = outputs.iter().map(|(_, qty)| qty).sum();
-
-                    // Record production and gain experience
-                    self.record_production(total_quantity);
-
-                    // Reset production state
-                    self.current_recipe_index = None;
-                    self.production_progress = 0;
-
-                    return Some(outputs);
-                }
-            }
-        }
-
+        // This method is no longer functional after profession system removal
         None
     }
 
     /// Cancel current production
+    #[allow(dead_code)]
     pub fn cancel_production(&mut self) {
         self.current_recipe_index = None;
         self.production_progress = 0;
     }
 
     /// Get progress percentage of current production (0-100)
+    /// NOTE: This method is deprecated as the profession system is no longer in active use.
+    #[allow(dead_code)]
     pub fn production_progress_percent(&self) -> u8 {
-        use crate::world::{get_job_recipes, Quality};
-
-        if let Some(recipe_idx) = self.current_recipe_index {
-            let recipes = get_job_recipes(self.job);
-            if let Some(recipe) = recipes.get(recipe_idx) {
-                let quality = Quality::from_skill(self.skill_level);
-                let required_time = recipe.calculate_time(quality);
-
-                if required_time > 0 {
-                    return ((self.production_progress as f32 / required_time as f32) * 100.0)
-                        .min(100.0) as u8;
-                }
-            }
-        }
-
         0
     }
 
     /// Get the current recipe being worked on
+    /// NOTE: This method is deprecated as the profession system is no longer in active use.
+    #[allow(dead_code)]
     pub fn get_current_recipe(&self) -> Option<crate::world::Recipe> {
-        use crate::world::get_job_recipes;
-
-        if let Some(recipe_idx) = self.current_recipe_index {
-            let recipes = get_job_recipes(self.job);
-            recipes.get(recipe_idx).cloned()
-        } else {
-            None
-        }
+        None
     }
 }
 
