@@ -41,7 +41,7 @@ pub use registry::*;
 pub use structure::*;
 pub use technology::*;
 pub use heat_source::*;
-pub use flora::{PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize};
+pub use flora::{PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize, Plant, PlantManager, PlantDrop};
 pub use fauna::{
     AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize,
     Animal, AnimalState, AnimalManager, AnimalDrop, AnimalProduct,
