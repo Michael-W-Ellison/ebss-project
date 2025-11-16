@@ -347,6 +347,57 @@ fn print_population_status(population: &Population, tick: u32) {
                 println!("     • Total Items:        {}", total_crafted_items);
             }
         }
+
+        // Calculate movement and position statistics
+        let mut min_x = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut min_y = i32::MAX;
+        let mut max_y = i32::MIN;
+        let mut total_distance_from_center = 0.0;
+        let mut agents_with_leg_injuries = 0;
+        let mut total_movement_speed = 0.0;
+
+        // Get world center for reference
+        let center_x = 25; // Default world size is 50x50
+        let center_y = 25;
+
+        for agent in &population.agents {
+            let pos = agent.state.position;
+            min_x = min_x.min(pos.0);
+            max_x = max_x.max(pos.0);
+            min_y = min_y.min(pos.1);
+            max_y = max_y.max(pos.1);
+
+            // Calculate distance from center
+            let dx = (pos.0 - center_x) as f32;
+            let dy = (pos.1 - center_y) as f32;
+            total_distance_from_center += (dx * dx + dy * dy).sqrt();
+
+            // Check leg health for movement capability
+            let movement_speed = agent.body.movement_speed_multiplier();
+            total_movement_speed += movement_speed;
+
+            if movement_speed < 1.0 {
+                agents_with_leg_injuries += 1;
+            }
+        }
+
+        // Display movement statistics if agents have spread out
+        let spread_x = (max_x - min_x) as u32;
+        let spread_y = (max_y - min_y) as u32;
+        if spread_x > 5 || spread_y > 5 {
+            println!("   Movement & Exploration:");
+            println!("     • Position Range:");
+            println!("       X: {} to {} (spread: {})", min_x, max_x, spread_x);
+            println!("       Y: {} to {} (spread: {})", min_y, max_y, spread_y);
+            println!("     • Avg Distance from Center: {:.1} tiles",
+                total_distance_from_center / count);
+            println!("     • Avg Movement Speed:      {:.2}x",
+                total_movement_speed / count);
+            if agents_with_leg_injuries > 0 {
+                println!("     • Agents w/ Leg Injuries:  {}", agents_with_leg_injuries);
+            }
+        }
     }
 
     println!();

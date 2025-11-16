@@ -185,6 +185,9 @@ impl Simulation {
 
     /// Generate an action based on drive type and position
     fn generate_action_for_drive(drive_type: DriveType, position: (i32, i32, i32)) -> Action {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
         // Map drive type to a representative action
         match drive_type {
             DriveType::Hunger => Action::Eat { food_type: "generic".to_string() },
@@ -198,12 +201,22 @@ impl Simulation {
                 position
             },
             DriveType::Industry => Action::Gather { resource_type: "generic".to_string() },
-            DriveType::Curiosity => Action::Explore { direction: (1, 0, 0) },
+            DriveType::Curiosity => {
+                // Explore by moving to a random distant location
+                let target_x = position.0 + rng.gen_range(-20..=20);
+                let target_y = position.1 + rng.gen_range(-20..=20);
+                Action::Move { target: (target_x, target_y, position.2) }
+            },
             DriveType::Social => Action::Socialize { target_agent_id: uuid::Uuid::nil() },
             DriveType::Utility => Action::Craft { item_type: "woodenaxe".to_string() },
             DriveType::Preparedness => Action::Store { item_type: "resource".to_string(), amount: 1 },
             DriveType::Sustenance => Action::Gather { resource_type: "food".to_string() },
-            DriveType::Safety => Action::Move { target: position },
+            DriveType::Safety => {
+                // Move to a random nearby safe location
+                let target_x = position.0 + rng.gen_range(-5..=5);
+                let target_y = position.1 + rng.gen_range(-5..=5);
+                Action::Move { target: (target_x, target_y, position.2) }
+            },
             DriveType::Reproduction => Action::Wait,
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
             DriveType::Thirst => Action::Eat { food_type: "water".to_string() },
@@ -779,6 +792,105 @@ impl Simulation {
                     .with_drive_change(DriveType::Utility, -0.2)
                     .with_energy_cost(15.0)
                     .with_message(format!("Crafted {} ({:?} quality)", recipe.name, quality))
+            },
+
+            Action::Move { target } => {
+                use crate::world::grid::Position;
+
+                // Get agent current position
+                let agent = &self.population.agents[agent_index];
+                let current_pos = agent.state.position;
+                let current_2d = Position::new(current_pos.0, current_pos.1);
+
+                // Target position (2D, ignore z for now)
+                let target_2d = Position::new(target.0, target.1);
+
+                // Check if already at target
+                if current_2d == target_2d {
+                    return ActionResult::success()
+                        .with_message("Already at destination".to_string());
+                }
+
+                // Calculate movement distance (Manhattan distance)
+                let distance = current_2d.distance_to(&target_2d);
+
+                // Determine next step towards target (simple pathfinding - move one step)
+                let dx = target.0 - current_pos.0;
+                let dy = target.1 - current_pos.1;
+
+                // Normalize to -1, 0, or 1 for each axis
+                let step_x = if dx > 0 { 1 } else if dx < 0 { -1 } else { 0 };
+                let step_y = if dy > 0 { 1 } else if dy < 0 { -1 } else { 0 };
+
+                // Prioritize longer axis for movement
+                let (next_x, next_y) = if dx.abs() >= dy.abs() {
+                    (current_pos.0 + step_x, current_pos.1)
+                } else {
+                    (current_pos.0, current_pos.1 + step_y)
+                };
+
+                let next_pos = Position::new(next_x, next_y);
+
+                // Check if next position is within world bounds
+                let world_width = self.world.grid.width as i32;
+                let world_height = self.world.grid.height as i32;
+
+                if next_x < 0 || next_x >= world_width || next_y < 0 || next_y >= world_height {
+                    return ActionResult::failure("Cannot move outside world bounds".to_string());
+                }
+
+                // Check if position is passable (not water, not occupied by building)
+                if let Some(tile) = self.world.grid.get_tile(&next_pos) {
+                    use crate::world::TerrainType;
+                    if tile.terrain.terrain_type == TerrainType::Water {
+                        return ActionResult::failure("Cannot move into water".to_string());
+                    }
+                }
+
+                // Check if position is occupied by a building
+                if self.world.is_position_occupied(&next_pos) {
+                    return ActionResult::failure("Position blocked by building".to_string());
+                }
+
+                // Get movement speed multiplier from leg health
+                let agent = &self.population.agents[agent_index];
+                let movement_speed = agent.body.movement_speed_multiplier();
+
+                // Base energy cost (modified by speed and distance)
+                let base_energy_cost = 2.0;
+                let actual_energy_cost = if movement_speed > 0.1 {
+                    base_energy_cost / movement_speed
+                } else {
+                    // Legs too damaged, can't move
+                    return ActionResult::failure("Too injured to move (legs crippled)".to_string());
+                };
+
+                // Update agent position
+                let agent = &mut self.population.agents[agent_index];
+                agent.state.position = (next_x, next_y, target.2);
+
+                debug!(
+                    "Agent {} moved from ({}, {}) to ({}, {}) (distance to target: {}, speed: {:.2}x)",
+                    agent.id, current_pos.0, current_pos.1, next_x, next_y,
+                    distance - 1, movement_speed
+                );
+
+                // Determine drive satisfaction based on purpose (Safety or Curiosity)
+                let drive_type = if distance <= 5 {
+                    Some(DriveType::Safety) // Moving to nearby location (fleeing or seeking safety)
+                } else {
+                    Some(DriveType::Curiosity) // Exploring distant location
+                };
+
+                let mut result = ActionResult::success()
+                    .with_energy_cost(actual_energy_cost)
+                    .with_message(format!("Moved to ({}, {}), {} steps to goal", next_x, next_y, distance - 1));
+
+                if let Some(drive) = drive_type {
+                    result = result.with_drive_change(drive, -0.05);
+                }
+
+                result
             },
 
             // For other actions, use simplified success/failure
