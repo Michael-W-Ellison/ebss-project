@@ -42,7 +42,10 @@ pub use structure::*;
 pub use technology::*;
 pub use heat_source::*;
 pub use flora::{PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize};
-pub use fauna::{AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize};
+pub use fauna::{
+    AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize,
+    Animal, AnimalState, AnimalManager, AnimalDrop, AnimalProduct,
+};
 pub use biome::{BiomeType, Biome};
 pub use weather::{Weather, WeatherType, WeatherGenerator, PrecipitationType};
 pub use exposure::{ExposureType, ExposureStatus, ExposureProtection};
