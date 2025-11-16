@@ -58,6 +58,7 @@ pub mod exploration;
 pub mod exploration_behavior;
 pub mod storage_management;
 pub mod storage_integration;
+pub mod sensory_processing;
 
 pub use population::{Population, PopulationConfig};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
@@ -88,4 +89,9 @@ pub use storage_integration::{
     take_from_agent_inventory, add_to_agent_inventory,
     count_in_agent_inventory, count_food_in_inventory,
     count_resources_in_inventory, count_tools_in_inventory,
+};
+pub use sensory_processing::{
+    Percept, DetectionMethod, ThreatType, EnvironmentType,
+    process_sensory_input, calculate_salience, filter_by_salience,
+    most_salient_percept,
 };
