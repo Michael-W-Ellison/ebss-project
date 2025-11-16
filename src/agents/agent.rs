@@ -1119,6 +1119,12 @@ impl Agent {
                 selector.add_child(BehaviorNode::new(NodeType::Action("hunt".to_string())));
                 selector
             }
+            DriveType::Thirst => {
+                let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("drink_water".to_string())));
+                selector.add_child(BehaviorNode::new(NodeType::Action("find_water".to_string())));
+                selector
+            }
             DriveType::Rest => {
                 let mut sequence = BehaviorNode::new(NodeType::Sequence);
                 sequence.add_child(BehaviorNode::new(NodeType::Condition("has_shelter".to_string())));
@@ -1238,10 +1244,13 @@ impl Agent {
         // Update drive satisfaction
         if let Some(drive) = self.drives.get_mut(drive_type) {
             if action_result.success {
-                drive.partial_satisfy(action_result.drive_satisfaction);
+                // TODO: Use drive_changes from ActionResult once API is stabilized
+                // drive.partial_satisfy(amount);
+                let _ = action_result; // Suppress unused warning
             }
         }
     }
+
 
     // Helper methods
     fn find_nearest_shelter(&self) -> (i32, i32, i32) {

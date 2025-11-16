@@ -34,7 +34,7 @@ fn test_child_observes_parent_mining() {
             ActionType::Mining,
             true,
             format!("mined stone {}", i),
-            i,
+            i as u64,
         );
     }
 
@@ -85,7 +85,7 @@ fn test_child_learns_faster_than_adult() {
             ActionType::Crafting,
             true,
             format!("crafted item {}", i),
-            i,
+            i as u64,
         );
 
         adult.observe_action(
@@ -94,7 +94,7 @@ fn test_child_learns_faster_than_adult() {
             ActionType::Crafting,
             true,
             format!("crafted item {}", i),
-            i,
+            i as u64,
         );
     }
 
@@ -131,7 +131,7 @@ fn test_cannot_observe_if_not_visible() {
         ActionType::Mining,
         true,
         "mined stone".to_string(),
-        0,
+        0_u64,
     );
 
     // Should not have recorded observation
@@ -154,7 +154,7 @@ fn test_distance_affects_observation_quality() {
         ActionType::Building,
         true,
         "built wall".to_string(),
-        0,
+        0_u64,
     );
 
     // Distant observation (50 units away)
@@ -164,7 +164,7 @@ fn test_distance_affects_observation_quality() {
         ActionType::Building,
         true,
         "built wall".to_string(),
-        1,
+        1_u64,
     );
 
     let progress = learner.get_learning_from(&teacher_id, ActionType::Building).unwrap();
@@ -195,7 +195,7 @@ fn test_adopt_learned_behavior() {
             ActionType::Cooking,
             true,
             format!("cooked food {}", i),
-            i,
+            i as u64,
         );
     }
 
@@ -240,7 +240,7 @@ fn test_learning_from_parents_tracking() {
         ActionType::Mining,
         true,
         "mined ore".to_string(),
-        0,
+        0_u64,
     );
 
     // Observe parent2 crafting
@@ -250,7 +250,7 @@ fn test_learning_from_parents_tracking() {
         ActionType::Crafting,
         true,
         "crafted tool".to_string(),
-        1,
+        1_u64,
     );
 
     // Check learning from parents
@@ -287,7 +287,7 @@ fn test_failed_actions_reduce_learning_quality() {
             ActionType::Combat,
             false, // Failed!
             format!("lost fight {}", i),
-            i,
+            i as u64,
         );
     }
 
@@ -298,7 +298,7 @@ fn test_failed_actions_reduce_learning_quality() {
         ActionType::Combat,
         true,
         "won fight".to_string(),
-        5,
+        5_u64,
     );
 
     let progress = learner.get_learning_from(&teacher_id, ActionType::Combat).unwrap();
@@ -335,7 +335,7 @@ fn test_multiple_action_types_from_same_teacher() {
             ActionType::Mining,
             true,
             format!("mined {}", i),
-            i,
+            i as u64,
         );
     }
 
@@ -346,7 +346,7 @@ fn test_multiple_action_types_from_same_teacher() {
             ActionType::Crafting,
             true,
             format!("crafted {}", i),
-            i + 3,
+            (i + 3) as u64,
         );
     }
 
@@ -357,7 +357,7 @@ fn test_multiple_action_types_from_same_teacher() {
             ActionType::Building,
             true,
             format!("built {}", i),
-            i + 6,
+            (i + 6) as u64,
         );
     }
 

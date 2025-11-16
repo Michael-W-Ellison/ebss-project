@@ -191,6 +191,7 @@ impl Simulation {
         // Map drive type to a representative action
         match drive_type {
             DriveType::Hunger => Action::Eat { food_type: "generic".to_string() },
+            DriveType::Thirst => Action::Gather { resource_type: "water".to_string() },
             DriveType::Rest => Action::Sleep { duration: 10 },
             DriveType::Shelter => Action::Build {
                 structure_type: "shelter".to_string(),
@@ -1160,6 +1161,9 @@ impl Simulation {
 
             // 4. NATURAL HEALING - Process body tick (handles conditions, bleeding, etc.)
             agent.body.tick();
+            ActionResult::success()
+        } else {
+            ActionResult::failure(format!("{:?} failed", action))
         }
     }
 

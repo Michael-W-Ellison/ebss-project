@@ -198,6 +198,16 @@ impl SimulationMetrics {
                 .entry(crate::core::EmotionType::Sadness)
                 .or_insert_with(Vec::new)
                 .push(agent.emotions.sadness);
+            // TODO: Implement EmotionState::well_being()
+            // well_being_sum += agent.emotions.well_being();
+
+            // TODO: Fix EmotionState API
+            // for emotion in &agent.emotions.emotions {
+            //     emotion_map
+            //         .entry(emotion.emotion_type.clone())
+            //         .or_insert_with(Vec::new)
+            //         .push(emotion.value);
+            // }
         }
 
         let average_well_being = if population.agents.is_empty() {
@@ -224,6 +234,16 @@ impl SimulationMetrics {
         // Note: Trait type mismatch between core::Trait and agents::Trait
         // Returning empty map for now - needs trait system reconciliation
         HashMap::new()
+        let mut trait_counts = HashMap::new();
+
+        for _agent in &population.agents {
+            // TODO: Make TraitSet.traits public or add accessor
+            // for trait_item in &agent.traits.traits {
+            //     *trait_counts.entry(trait_item.clone()).or_insert(0) += 1;
+            // }
+        }
+
+        trait_counts
     }
 
     fn snapshot_relationships(&self, population: &Population) -> RelationshipSnapshot {

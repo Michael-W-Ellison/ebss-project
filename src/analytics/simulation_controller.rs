@@ -120,12 +120,12 @@ impl SimulationController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::world::GridConfig;
+    use crate::world::WorldConfig;
     use crate::agents::AgentConfig;
 
     #[test]
     fn test_controller_creation() {
-        let world = World::new(GridConfig::default());
+        let world = World::new(WorldConfig::default());
         let population = Population::new();
         let controller = SimulationController::new(world, population);
 
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_pause_play() {
-        let world = World::new(GridConfig::default());
+        let world = World::new(WorldConfig::default());
         let population = Population::new();
         let mut controller = SimulationController::new(world, population);
 
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn test_toggle_pause() {
-        let world = World::new(GridConfig::default());
+        let world = World::new(WorldConfig::default());
         let population = Population::new();
         let mut controller = SimulationController::new(world, population);
 
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_step() {
-        let world = World::new(GridConfig::default());
+        let world = World::new(WorldConfig::default());
         let mut population = Population::new();
         population.spawn_agent(AgentConfig::default());
 
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_tick_rate() {
-        let world = World::new(GridConfig::default());
+        let world = World::new(WorldConfig::default());
         let population = Population::new();
         let mut controller = SimulationController::new(world, population);
 

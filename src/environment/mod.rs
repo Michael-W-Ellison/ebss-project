@@ -106,7 +106,7 @@ impl From<(i32, i32, i32)> for Position {
 }
 
 /// Represents the result of an action in the environment
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionResult {
     /// Whether the action succeeded
     pub success: bool,
@@ -123,7 +123,7 @@ pub struct ActionResult {
     /// Overall drive satisfaction from this action
     pub drive_satisfaction: f32,
     /// Message describing what happened
-    pub message: String,
+    pub message: Option<String>,
 }
 
 /// Actions that agents can perform in the environment
@@ -186,6 +186,7 @@ impl ActionResult {
             energy_cost: 0.0,
             drive_satisfaction: 0.0,
             message: String::new(),
+            message: None,
         }
     }
 
@@ -199,6 +200,7 @@ impl ActionResult {
             energy_cost: 0.0,
             drive_satisfaction: 0.0,
             message,
+            message: Some(message),
         }
     }
 
@@ -228,13 +230,13 @@ impl ActionResult {
     }
 
     pub fn with_message(mut self, message: String) -> Self {
-        self.message = message;
+        self.message = Some(message);
         self
     }
 }
 
 /// Stack of items
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ItemStack {
     pub material_id: String,
     pub quantity: u32,
@@ -247,11 +249,12 @@ impl ItemStack {
 }
 
 #[cfg(test)]
+#[path = "tests/technology_progression_tests.rs"]
+mod technology_progression_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-
-    #[path = "tests/technology_progression_tests.rs"]
-    mod technology_progression_tests;
 
     #[test]
     fn test_position_distance() {
