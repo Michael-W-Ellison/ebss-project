@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::collections::HashMap;
+use super::smelting::{SmeltingRegistry, check_smelting, SmeltingCheck};
 
 /// Type of heat source
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -216,7 +217,7 @@ impl HeatSource {
     }
 
     /// Update heat source for one tick
-    pub fn tick(&mut self) -> Vec<SmeltingResult> {
+    pub fn tick(&mut self, smelting_registry: &SmeltingRegistry) -> Vec<SmeltingResult> {
         let mut results = Vec::new();
 
         if !self.is_lit {
@@ -258,13 +259,60 @@ impl HeatSource {
             self.current_temperature = (self.current_temperature + heat_rate).min(max_temp);
         }
 
-        // Heat contents and check for transformations
+        // Heat contents and check for smelting transformations
+        let mut completed_smelts = Vec::new();
         for content in &mut self.contents {
             content.heating_time += 1;
             content.current_temp = self.current_temperature;
 
-            // Check if material has melted/transformed (handled externally)
-            // This just tracks that heating occurred
+            // Check if material can be smelted
+            match check_smelting(
+                smelting_registry,
+                &content.material_id,
+                content.heating_time,
+                content.current_temp,
+            ) {
+                SmeltingCheck::CanSmelt {
+                    recipe_id: _,
+                    output_material,
+                    output_quantity,
+                } => {
+                    // Ready to smelt!
+                    if let Some(recipe) = smelting_registry.get_by_input(&content.material_id).first() {
+                        // Calculate how many we can smelt
+                        let batches = content.quantity / recipe.input_quantity;
+                        if batches > 0 {
+                            let input_consumed = batches * recipe.input_quantity;
+                            let output_produced = batches * output_quantity;
+
+                            completed_smelts.push((
+                                content.material_id.clone(),
+                                input_consumed,
+                                output_material.clone(),
+                                output_produced,
+                            ));
+
+                            self.items_processed += output_produced;
+                        }
+                    }
+                }
+                _ => {
+                    // Not ready yet, continue heating
+                }
+            }
+        }
+
+        // Process completed smelts
+        for (input_mat, input_qty, output_mat, output_qty) in completed_smelts {
+            self.remove_contents(&input_mat, input_qty);
+
+            results.push(SmeltingResult {
+                input_material: input_mat,
+                output_material: output_mat,
+                input_quantity: input_qty,
+                output_quantity: output_qty,
+                heat_source_id: self.id,
+            });
         }
 
         results
@@ -311,6 +359,8 @@ pub struct SmeltingResult {
 pub struct HeatSourceRegistry {
     heat_sources: HashMap<Uuid, HeatSource>,
     position_index: HashMap<(i32, i32, i32), Uuid>,
+    #[serde(skip)]
+    smelting_registry: SmeltingRegistry,
 }
 
 impl HeatSourceRegistry {
@@ -318,6 +368,7 @@ impl HeatSourceRegistry {
         Self {
             heat_sources: HashMap::new(),
             position_index: HashMap::new(),
+            smelting_registry: SmeltingRegistry::new(),
         }
     }
 
@@ -398,11 +449,21 @@ impl HeatSourceRegistry {
         let mut all_results = Vec::new();
 
         for heat_source in self.heat_sources.values_mut() {
-            let results = heat_source.tick();
+            let results = heat_source.tick(&self.smelting_registry);
             all_results.extend(results);
         }
 
         all_results
+    }
+
+    /// Get smelting recipes for a material
+    pub fn get_smelting_recipes(&self, material_id: &str) -> Vec<&super::smelting::SmeltingRecipe> {
+        self.smelting_registry.get_by_input(material_id)
+    }
+
+    /// Check if a material can be smelted
+    pub fn can_smelt_material(&self, material_id: &str) -> bool {
+        self.smelting_registry.can_smelt(material_id)
     }
 }
 

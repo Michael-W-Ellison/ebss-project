@@ -2,6 +2,7 @@
 //! Complete world simulation system with terrain, resources, buildings, and spatial management.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// World size presets for common use cases
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +79,15 @@ pub use climate::{ClimateManager, terrain_to_biome};
 
 use crate::agents::Population;
 use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager};
+
+/// Status of a heat source for smelting
+#[derive(Debug, Clone)]
+pub struct HeatSourceStatus {
+    pub is_lit: bool,
+    pub current_temperature: f32,
+    pub fuel_remaining: f32,
+    pub contents: Vec<(String, u32, u32, f32)>, // (material_id, quantity, heating_time, current_temp)
+}
 
 /// Complete world state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -884,6 +894,37 @@ impl World {
     /// Cancel a crafting job
     pub fn cancel_crafting_job(&mut self, job_id: &uuid::Uuid) -> bool {
         self.crafting_manager.cancel_job(job_id)
+    }
+
+    // ===== Smelting System =====
+
+    /// Get smelting recipes for a material
+    pub fn get_smelting_recipes(&self, material_id: &str) -> Vec<&crate::environment::smelting::SmeltingRecipe> {
+        self.heat_sources.get_smelting_recipes(material_id)
+    }
+
+    /// Check if a material can be smelted
+    pub fn can_smelt_material(&self, material_id: &str) -> bool {
+        self.heat_sources.can_smelt_material(material_id)
+    }
+
+    /// Get detailed status of smelting in a heat source
+    pub fn get_smelting_status(&self, heat_source_id: &uuid::Uuid) -> Option<HeatSourceStatus> {
+        if let Some(heat_source) = self.heat_sources.get(heat_source_id) {
+            Some(HeatSourceStatus {
+                is_lit: heat_source.is_lit,
+                current_temperature: heat_source.current_temperature,
+                fuel_remaining: heat_source.fuel.iter().map(|f| f.amount).sum(),
+                contents: heat_source.contents.iter().map(|c| (
+                    c.material_id.clone(),
+                    c.quantity,
+                    c.heating_time,
+                    c.current_temp,
+                )).collect(),
+            })
+        } else {
+            None
+        }
     }
 
     pub fn tick(&mut self) {
