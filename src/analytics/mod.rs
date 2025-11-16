@@ -200,7 +200,7 @@ impl Simulation {
             DriveType::Industry => Action::Gather { resource_type: "generic".to_string() },
             DriveType::Curiosity => Action::Explore { direction: (1, 0, 0) },
             DriveType::Social => Action::Socialize { target_agent_id: uuid::Uuid::nil() },
-            DriveType::Utility => Action::Craft { item_type: "tool".to_string() },
+            DriveType::Utility => Action::Craft { item_type: "woodenaxe".to_string() },
             DriveType::Preparedness => Action::Store { item_type: "resource".to_string(), amount: 1 },
             DriveType::Sustenance => Action::Gather { resource_type: "food".to_string() },
             DriveType::Safety => Action::Move { target: position },
@@ -593,6 +593,192 @@ impl Simulation {
                             actual_damage, target_part, injury_type
                         ))
                 }
+            },
+
+            Action::Craft { item_type } => {
+                use crate::world::production::{Quality as ProductionQuality, Recipe, ResourceRequirement, ProductionOutput};
+                use crate::world::{ItemType, ResourceType};
+                use crate::agents::skills::SkillType;
+
+                // Define simple crafting recipes (anyone can craft these)
+                let simple_recipes: Vec<Recipe> = vec![
+                    // Wooden tools
+                    Recipe {
+                        name: "Craft Wooden Axe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
+                        outputs: vec![ProductionOutput::new(ItemType::WoodenAxe, 1)],
+                        base_time: 80,
+                    },
+                    Recipe {
+                        name: "Craft Wooden Pickaxe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
+                        outputs: vec![ProductionOutput::new(ItemType::WoodenPickaxe, 1)],
+                        base_time: 80,
+                    },
+                    Recipe {
+                        name: "Craft Wooden Hammer",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
+                        outputs: vec![ProductionOutput::new(ItemType::WoodenHammer, 1)],
+                        base_time: 80,
+                    },
+                    // Stone tools (require wood + stone)
+                    Recipe {
+                        name: "Craft Stone Axe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Stone, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::StoneAxe, 1)],
+                        base_time: 90,
+                    },
+                    Recipe {
+                        name: "Craft Stone Pickaxe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Stone, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::StonePickaxe, 1)],
+                        base_time: 90,
+                    },
+                    // Iron tools (require iron + wood)
+                    Recipe {
+                        name: "Craft Iron Axe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Iron, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::IronAxe, 1)],
+                        base_time: 100,
+                    },
+                    Recipe {
+                        name: "Craft Iron Sword",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Iron, 3),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::IronSword, 1)],
+                        base_time: 120,
+                    },
+                ];
+
+                // Try to find a recipe that matches the item type
+                let recipe = simple_recipes.iter().find(|r| {
+                    r.outputs.iter().any(|output| {
+                        format!("{:?}", output.item_type).to_lowercase() == item_type.to_lowercase()
+                    })
+                });
+
+                if recipe.is_none() {
+                    return ActionResult::failure(format!("No recipe found for {}", item_type));
+                }
+                let recipe = recipe.unwrap();
+
+                // Check if agent has all required materials in inventory
+                let agent = &self.population.agents[agent_index];
+                let mut has_all_materials = true;
+                let mut missing_materials = Vec::new();
+
+                for req in &recipe.inputs {
+                    let item_id = match req.resource_type {
+                        ResourceType::Wood => "wood",
+                        ResourceType::Stone => "stone",
+                        ResourceType::Iron => "iron",
+                        ResourceType::Food => "food",
+                        _ => continue,
+                    };
+
+                    if let Some(item) = agent.inventory.get_item(item_id) {
+                        if item.quantity < req.amount {
+                            has_all_materials = false;
+                            missing_materials.push(format!("{} {} (have {})",
+                                req.amount - item.quantity, item_id, item.quantity));
+                        }
+                    } else {
+                        has_all_materials = false;
+                        missing_materials.push(format!("{} {}", req.amount, item_id));
+                    }
+                }
+
+                if !has_all_materials {
+                    return ActionResult::failure(format!(
+                        "Missing materials for {}: {}",
+                        recipe.name,
+                        missing_materials.join(", ")
+                    ));
+                }
+
+                // Get agent's crafting skill level (-10 to 10)
+                let agent = &mut self.population.agents[agent_index];
+                let skill_level = agent.skills.get_skill_mut(SkillType::Crafting).level;
+
+                // Convert skill level (-10 to 10) to skill value (0 to 100) for quality calculation
+                // -10 -> 0, 0 -> 50, 10 -> 100
+                let skill_value = ((skill_level + 10) * 5) as u8;
+
+                // Determine quality based on skill
+                let quality = ProductionQuality::from_skill(skill_value);
+
+                // Calculate actual outputs with quality multiplier
+                let outputs = recipe.calculate_output(quality);
+
+                // Consume materials from inventory
+                for req in &recipe.inputs {
+                    let item_id = match req.resource_type {
+                        ResourceType::Wood => "wood",
+                        ResourceType::Stone => "stone",
+                        ResourceType::Iron => "iron",
+                        ResourceType::Food => "food",
+                        _ => continue,
+                    };
+                    agent.inventory.remove_item(item_id, req.amount);
+                }
+
+                // Add crafted items to inventory
+                for (output_item, quantity) in outputs {
+                    let item_id = format!("{:?}", output_item).to_lowercase();
+
+                    // Create inventory item with appropriate weight
+                    let item = crate::agents::InventoryItem::new_with_weight(
+                        item_id.clone(),
+                        quantity,
+                        5.0, // Default weight for crafted tools
+                    );
+
+                    if !agent.inventory.add_item(item) {
+                        debug!(
+                            "Agent {} crafted {} but inventory full, item dropped",
+                            agent.id, item_id
+                        );
+                    }
+                }
+
+                // Grant crafting experience
+                let experience_gained = match quality {
+                    ProductionQuality::Poor => 1,
+                    ProductionQuality::Common => 2,
+                    ProductionQuality::Good => 3,
+                    ProductionQuality::Excellent => 4,
+                    ProductionQuality::Masterwork => 5,
+                };
+
+                agent.skills.get_skill_mut(SkillType::Crafting).gain_experience(experience_gained);
+
+                debug!(
+                    "Agent {} crafted {} (quality: {:?}, skill: {}, exp: +{})",
+                    agent.id, recipe.name, quality, skill_level, experience_gained
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.2)
+                    .with_energy_cost(15.0)
+                    .with_message(format!("Crafted {} ({:?} quality)", recipe.name, quality))
             },
 
             // For other actions, use simplified success/failure

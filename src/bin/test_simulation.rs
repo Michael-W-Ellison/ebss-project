@@ -306,6 +306,47 @@ fn print_population_status(population: &Population, tick: u32) {
                 println!("     • Agents w/ Armor:    {}", agents_with_armor);
             }
         }
+
+        // Calculate crafting statistics
+        let mut total_tools = 0;
+        let mut total_weapons = 0;
+        let mut total_crafted_items = 0;
+
+        for agent in &population.agents {
+            // Count tools and weapons in inventory
+            let tool_types = vec!["woodenaxe", "woodenpickaxe", "woodenhammer",
+                                  "stoneaxe", "stonepickaxe", "stonehammer",
+                                  "ironaxe", "ironpickaxe", "ironhammer"];
+            let weapon_types = vec!["woodenspear", "ironsword"];
+
+            for tool in &tool_types {
+                if let Some(item) = agent.inventory.get_item(tool) {
+                    total_tools += item.quantity;
+                    total_crafted_items += item.quantity;
+                }
+            }
+
+            for weapon in &weapon_types {
+                if let Some(item) = agent.inventory.get_item(weapon) {
+                    total_weapons += item.quantity;
+                    total_crafted_items += item.quantity;
+                }
+            }
+        }
+
+        // Display crafting statistics if any items crafted
+        if total_crafted_items > 0 {
+            println!("   Crafting & Production:");
+            if total_tools > 0 {
+                println!("     • Tools Crafted:      {}", total_tools);
+            }
+            if total_weapons > 0 {
+                println!("     • Weapons Crafted:    {}", total_weapons);
+            }
+            if total_crafted_items > 0 {
+                println!("     • Total Items:        {}", total_crafted_items);
+            }
+        }
     }
 
     println!();
