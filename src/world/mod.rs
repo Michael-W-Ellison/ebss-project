@@ -306,6 +306,96 @@ impl World {
 
         stats
     }
+
+    /// Process exploration for an agent at a position
+    /// Returns number of new tiles discovered
+    pub fn process_exploration(
+        &mut self,
+        agent_exploration: &mut crate::agents::ExplorationKnowledge,
+        agent_position: &Position,
+        vision_range: u32,
+        current_tick: u32,
+    ) -> usize {
+        let mut new_discoveries = 0;
+        let range = vision_range as i32;
+
+        // Explore all tiles in vision range
+        for dx in -range..=range {
+            for dy in -range..=range {
+                // Check if within circular vision range (not square)
+                if (dx * dx + dy * dy) as f32 > (range * range) as f32 {
+                    continue;
+                }
+
+                let explore_pos = Position::new(
+                    agent_position.x + dx,
+                    agent_position.y + dy,
+                );
+
+                // Check if position is valid
+                if !self.grid.is_valid_position(&explore_pos) {
+                    continue;
+                }
+
+                // Mark tile as explored if new
+                if agent_exploration.explore_tile(explore_pos, current_tick) {
+                    new_discoveries += 1;
+
+                    // Mark tile as globally explored
+                    if let Some(tile) = self.grid.get_tile_mut(&explore_pos) {
+                        tile.mark_explored();
+
+                        // Discover terrain type
+                        agent_exploration.encounter_terrain(
+                            tile.terrain.terrain_type,
+                            explore_pos,
+                            current_tick,
+                        );
+                    }
+
+                    // Check for resources at this position
+                    for resource in &self.resources {
+                        if resource.position == explore_pos && resource.amount > 0 {
+                            agent_exploration.discover_resource(
+                                explore_pos,
+                                resource.resource_type,
+                                current_tick,
+                            );
+                        }
+                    }
+
+                    // Check for buildings at this position
+                    for building in &self.buildings {
+                        if building.position == explore_pos {
+                            agent_exploration.discover_building(
+                                explore_pos,
+                                building.building_type,
+                                current_tick,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Record milestone discoveries
+        if new_discoveries >= 10 {
+            agent_exploration.discoveries.push(crate::agents::Discovery {
+                discovery_type: crate::agents::DiscoveryType::AreaExplored {
+                    tiles_count: new_discoveries,
+                },
+                tick: current_tick,
+                position: *agent_position,
+            });
+        }
+
+        new_discoveries
+    }
+
+    /// Get total number of tiles in the world
+    pub fn total_tiles(&self) -> usize {
+        self.grid.width * self.grid.height
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

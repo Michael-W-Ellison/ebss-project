@@ -54,6 +54,8 @@ pub mod knowledge;
 pub mod relationships;
 pub mod profession;
 pub mod social_interactions;
+pub mod exploration;
+pub mod exploration_behavior;
 
 pub use population::{Population, PopulationConfig};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
@@ -65,4 +67,13 @@ pub use social_interactions::{
     SocialInteractionType, ConversationTopic, HelpType, SocialInteractionResult,
     calculate_relationship_change, calculate_social_satisfaction, should_greet,
     select_conversation_topic, would_accept_gift, calculate_gift_value,
+};
+pub use exploration::{
+    ExplorationKnowledge, Discovery, DiscoveryType,
+    calculate_exploration_reward, should_explore,
+};
+pub use exploration_behavior::{
+    ExplorationDecision,
+    random_exploration_direction,
+    calculate_exploration_direction,
 };

@@ -569,6 +569,7 @@ pub struct Agent {
     pub observational_learning: ObservationalLearning,
     pub transport: TransportSystem,
     pub technology_knowledge: TechnologyKnowledge,
+    pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
     pub parent_ids: Vec<Uuid>,
     pub goals: GoalManager,
     pub preferences: Preferences,
@@ -601,6 +602,7 @@ impl Agent {
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
+            exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             parent_ids: Vec::new(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),

@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Types of terrain
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TerrainType {
     Plains,   // Walkable, good for farming and building
     Forest,   // Walkable, source of wood
@@ -79,8 +79,13 @@ impl Tile {
     pub fn new(terrain_type: TerrainType) -> Self {
         Self {
             terrain: Terrain::new(terrain_type),
-            explored: true, // All tiles visible for now
+            explored: false, // Tiles start unexplored (fog of war)
         }
+    }
+
+    /// Mark this tile as explored (globally)
+    pub fn mark_explored(&mut self) {
+        self.explored = true;
     }
 }
 

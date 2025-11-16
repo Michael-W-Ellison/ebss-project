@@ -193,6 +193,9 @@ impl Population {
             self.process_social_interactions();
         }
 
+        // Process exploration for all agents (vision-based discovery)
+        self.process_exploration();
+
         // Share technologies between nearby agents
         self.share_technologies();
 
@@ -942,6 +945,57 @@ impl Population {
                 drive.partial_satisfy(satisfaction_2);
             }
         }
+    }
+
+    /// Process exploration for all living agents
+    /// Agents discover tiles within their vision range
+    pub fn process_exploration_with_world(&mut self, world: &mut crate::world::World) {
+        use crate::core::DriveType;
+
+        let current_tick = self.current_tick;
+
+        for agent in &mut self.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Get agent position
+            let agent_pos = crate::world::Position::new(
+                agent.state.position.0,
+                agent.state.position.1,
+            );
+
+            // Vision range based on terrain and conditions (default 10 tiles)
+            let vision_range = 10;
+
+            // Process exploration - discovers tiles, resources, buildings
+            let new_discoveries = world.process_exploration(
+                &mut agent.exploration_knowledge,
+                &agent_pos,
+                vision_range,
+                current_tick,
+            );
+
+            // Satisfy curiosity drive based on discoveries
+            if new_discoveries > 0 {
+                if let Some(drive) = agent.drives.get_mut(DriveType::Curiosity) {
+                    // Each new tile discovery provides small curiosity satisfaction
+                    let satisfaction = (new_discoveries as f32 * 0.02).min(0.5);
+                    drive.partial_satisfy(satisfaction);
+                }
+
+                // Also track in observational learning if discovering new actions
+                // (future enhancement: learn from discovered resources/buildings)
+            }
+        }
+    }
+
+    /// Process exploration without world (for standalone population updates)
+    /// This is called from tick() and just tracks that agents are exploring
+    fn process_exploration(&mut self) {
+        // This method is a placeholder for when we don't have world access
+        // In a full simulation, this would call process_exploration_with_world
+        // For now, it does nothing - exploration happens when world is available
     }
 }
 
