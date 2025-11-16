@@ -279,14 +279,104 @@ impl Simulation {
             },
 
             Action::Gather { resource_type } => {
-                // Simplified gathering - just succeed with some probability
-                if rng.gen_bool(0.7) {
-                    ActionResult::success()
-                        .with_drive_change(DriveType::Industry, -0.15)
-                        .with_energy_cost(10.0)
-                        .with_message(format!("Gathered {}", resource_type))
+                use crate::world::{ResourceType, Position};
+                use crate::agents::InventoryItem;
+
+                // Map resource string to ResourceType
+                let resource_type_enum = match resource_type.as_str() {
+                    "wood" => Some(ResourceType::Wood),
+                    "stone" => Some(ResourceType::Stone),
+                    "iron" => Some(ResourceType::Iron),
+                    "food" => Some(ResourceType::Food),
+                    "generic" => Some(ResourceType::Wood), // Default to wood for generic
+                    _ => None,
+                };
+
+                if resource_type_enum.is_none() {
+                    return ActionResult::failure(format!("Unknown resource type: {}", resource_type));
+                }
+                let resource_type_enum = resource_type_enum.unwrap();
+
+                // Get agent position
+                let agent = &self.population.agents[agent_index];
+                let agent_pos = Position::new(
+                    agent.state.position.0,
+                    agent.state.position.1
+                );
+
+                // Look for resources within a 25-tile radius
+                let mut nearest_resource: Option<(usize, u32)> = None;
+                for (i, resource) in self.world.resources.iter().enumerate() {
+                    if resource.resource_type == resource_type_enum && resource.amount > 0 {
+                        let distance = agent_pos.distance_to(&resource.position);
+                        if distance <= 25 {
+                            if let Some((_, nearest_dist)) = nearest_resource {
+                                if distance < nearest_dist {
+                                    nearest_resource = Some((i, distance));
+                                }
+                            } else {
+                                nearest_resource = Some((i, distance));
+                            }
+                        }
+                    }
+                }
+
+                if let Some((resource_index, _)) = nearest_resource {
+                    // Determine harvest amount based on resource type and skill
+                    let harvest_amount = match resource_type_enum {
+                        ResourceType::Wood => rng.gen_range(1..=3),
+                        ResourceType::Stone => rng.gen_range(1..=2),
+                        ResourceType::Iron => 1,
+                        ResourceType::Food => 1,
+                        _ => 1,
+                    };
+
+                    // Harvest resource
+                    let harvested = self.world.resources[resource_index].harvest(harvest_amount);
+
+                    if harvested > 0 {
+                        // Add to agent inventory
+                        let item_id = match resource_type_enum {
+                            ResourceType::Wood => "wood",
+                            ResourceType::Stone => "stone",
+                            ResourceType::Iron => "iron",
+                            ResourceType::Food => "food",
+                            _ => "generic",
+                        };
+
+                        let item = InventoryItem::new_with_weight(
+                            item_id.to_string(),
+                            harvested,
+                            match resource_type_enum {
+                                ResourceType::Wood => 2.0,     // Wood is light but bulky
+                                ResourceType::Stone => 5.0,    // Stone is heavy
+                                ResourceType::Iron => 8.0,     // Iron is very heavy
+                                ResourceType::Food => 0.5,     // Food is light
+                                _ => 1.0,
+                            }
+                        );
+
+                        let agent = &mut self.population.agents[agent_index];
+                        if agent.inventory.add_item(item) {
+                            debug!(
+                                "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
+                                agent.id, harvested, item_id,
+                                agent.inventory.current_weight, agent.inventory.max_weight
+                            );
+
+                            ActionResult::success()
+                                .with_drive_change(DriveType::Industry, -0.15)
+                                .with_energy_cost(10.0)
+                                .with_message(format!("Gathered {} {}", harvested, resource_type))
+                        } else {
+                            ActionResult::failure("Inventory full - cannot carry more".to_string())
+                        }
+                    } else {
+                        ActionResult::failure("Resource source was empty".to_string())
+                    }
                 } else {
-                    ActionResult::failure(format!("Failed to gather {}", resource_type))
+                    // No resource nearby
+                    ActionResult::failure(format!("No {} sources nearby", resource_type))
                 }
             },
 

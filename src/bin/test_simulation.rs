@@ -103,19 +103,43 @@ fn parse_arg(args: &[String], flag: &str) -> Option<usize> {
 fn print_world_status(world: &World, tick: u32) {
     use ebss::world::ResourceType;
 
-    // Count food resources
+    // Count all resources
+    let mut wood_nodes = 0;
+    let mut wood_amount = 0;
+    let mut stone_nodes = 0;
+    let mut stone_amount = 0;
+    let mut iron_nodes = 0;
+    let mut iron_amount = 0;
     let mut food_nodes = 0;
     let mut food_amount = 0;
 
     for resource in &world.resources {
-        if resource.resource_type == ResourceType::Food {
-            food_nodes += 1;
-            food_amount += resource.amount;
+        match resource.resource_type {
+            ResourceType::Wood => {
+                wood_nodes += 1;
+                wood_amount += resource.amount;
+            }
+            ResourceType::Stone => {
+                stone_nodes += 1;
+                stone_amount += resource.amount;
+            }
+            ResourceType::Iron => {
+                iron_nodes += 1;
+                iron_amount += resource.amount;
+            }
+            ResourceType::Food => {
+                food_nodes += 1;
+                food_amount += resource.amount;
+            }
+            _ => {}
         }
     }
 
     println!("🌍 World Resources at Tick {}:", tick);
-    println!("   Food Sources: {} nodes with {} total food", food_nodes, food_amount);
+    println!("   Wood:  {} nodes with {} total", wood_nodes, wood_amount);
+    println!("   Stone: {} nodes with {} total", stone_nodes, stone_amount);
+    println!("   Iron:  {} nodes with {} total", iron_nodes, iron_amount);
+    println!("   Food:  {} nodes with {} total", food_nodes, food_amount);
     println!();
 }
 
@@ -157,6 +181,48 @@ fn print_population_status(population: &Population, tick: u32) {
         println!("     • Avg Energy:  {:.1}/100.0", total_energy / count);
         println!("     • Avg Hunger:  {:.2}", total_hunger / count);
         println!("     • Starving:    {}", starving_count);
+
+        // Calculate inventory statistics
+        let mut total_wood = 0;
+        let mut total_stone = 0;
+        let mut total_iron = 0;
+        let mut total_food_inv = 0;
+        let mut total_weight = 0.0;
+        let mut total_max_weight = 0.0;
+
+        for agent in &population.agents {
+            if let Some(wood) = agent.inventory.get_item("wood") {
+                total_wood += wood.quantity;
+            }
+            if let Some(stone) = agent.inventory.get_item("stone") {
+                total_stone += stone.quantity;
+            }
+            if let Some(iron) = agent.inventory.get_item("iron") {
+                total_iron += iron.quantity;
+            }
+            if let Some(food) = agent.inventory.get_item("food") {
+                total_food_inv += food.quantity;
+            }
+            total_weight += agent.inventory.current_weight;
+            total_max_weight += agent.inventory.max_weight;
+        }
+
+        if total_wood > 0 || total_stone > 0 || total_iron > 0 || total_food_inv > 0 {
+            println!("   Gathered Resources:");
+            if total_wood > 0 {
+                println!("     • Wood:  {}", total_wood);
+            }
+            if total_stone > 0 {
+                println!("     • Stone: {}", total_stone);
+            }
+            if total_iron > 0 {
+                println!("     • Iron:  {}", total_iron);
+            }
+            if total_food_inv > 0 {
+                println!("     • Food:  {}", total_food_inv);
+            }
+            println!("     • Total Weight: {:.1}/{:.1} kg", total_weight, total_max_weight);
+        }
     }
 
     println!();
