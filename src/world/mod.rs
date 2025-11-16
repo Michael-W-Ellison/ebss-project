@@ -75,7 +75,7 @@ pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, Dis
 pub use climate::{ClimateManager, terrain_to_biome};
 
 use crate::agents::Population;
-use crate::environment::HeatSourceRegistry;
+use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager};
 
 /// Complete world state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +89,8 @@ pub struct World {
     pub tech_tree: TechnologyTree, // Global technology tree (not serialized, recreated)
     pub climate: ClimateManager,
     pub heat_sources: HeatSourceRegistry,
+    pub animals: AnimalManager,
+    pub plants: PlantManager,
     pub tick: u32,
 }
 
@@ -135,6 +137,8 @@ impl World {
             tech_tree: TechnologyTree::new(),
             climate: ClimateManager::default(),
             heat_sources: HeatSourceRegistry::new(),
+            animals: AnimalManager::new(1000), // Max 1000 animals
+            plants: PlantManager::new(5000), // Max 5000 plants
             tick: 0,
         };
 
@@ -392,6 +396,197 @@ impl World {
         20.0 + total_heat_contribution
     }
 
+    // ===== Animal Management =====
+
+    /// Spawn a wild animal at a position
+    pub fn spawn_animal(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        if position.0 < 0 || position.1 < 0 ||
+           position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.animals.spawn_animal(species_id, position)
+            .ok_or_else(|| "Failed to spawn animal (max population reached or invalid species)".to_string())
+    }
+
+    /// Spawn a group/herd of animals
+    pub fn spawn_animal_group(
+        &mut self,
+        species_id: String,
+        center: (i32, i32),
+        count: u32,
+    ) -> Result<uuid::Uuid, String> {
+        // Check if center position is valid
+        if center.0 < 0 || center.1 < 0 ||
+           center.0 >= self.grid.width as i32 || center.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.animals.spawn_group(species_id, center, count)
+            .ok_or_else(|| "Failed to spawn animal group".to_string())
+    }
+
+    /// Get animals within radius of a position
+    pub fn get_animals_in_radius(
+        &self,
+        center: (i32, i32),
+        radius: f32,
+    ) -> Vec<&crate::environment::Animal> {
+        self.animals.get_in_radius(center, radius)
+    }
+
+    /// Get animals at a specific position
+    pub fn get_animals_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Animal> {
+        self.animals.get_at_position(position)
+    }
+
+    /// Tame an animal (increase tame level)
+    pub fn tame_animal(&mut self, animal_id: &uuid::Uuid, amount: f32) -> Result<(), String> {
+        if let Some(animal) = self.animals.get_mut(animal_id) {
+            animal.tame(amount);
+            Ok(())
+        } else {
+            Err("Animal not found".to_string())
+        }
+    }
+
+    /// Feed an animal
+    pub fn feed_animal(&mut self, animal_id: &uuid::Uuid, amount: f32) -> Result<(), String> {
+        if let Some(animal) = self.animals.get_mut(animal_id) {
+            animal.feed(amount);
+            Ok(())
+        } else {
+            Err("Animal not found".to_string())
+        }
+    }
+
+    /// Damage an animal
+    pub fn damage_animal(&mut self, animal_id: &uuid::Uuid, damage: f32) -> Result<bool, String> {
+        if let Some(animal) = self.animals.get_mut(animal_id) {
+            let is_dead = animal.damage(damage);
+            Ok(is_dead)
+        } else {
+            Err("Animal not found".to_string())
+        }
+    }
+
+    /// Get all animals of a specific species
+    pub fn get_animals_by_species(&self, species_id: &str) -> Vec<&crate::environment::Animal> {
+        self.animals.all_animals()
+            .iter()
+            .filter(|a| a.species_id == species_id)
+            .copied()
+            .collect()
+    }
+
+    /// Get all domesticated animals
+    pub fn get_domesticated_animals(&self) -> Vec<&crate::environment::Animal> {
+        self.animals.all_animals()
+            .iter()
+            .filter(|a| a.is_domesticated)
+            .copied()
+            .collect()
+    }
+
+    // ===== Plant Management =====
+
+    /// Plant a crop at a position (cultivated)
+    pub fn plant_crop(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+        planter_id: uuid::Uuid,
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        if position.0 < 0 || position.1 < 0 ||
+           position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.plants.plant_crop(species_id, position, planter_id)
+            .ok_or_else(|| "Failed to plant crop (max population reached or invalid species)".to_string())
+    }
+
+    /// Spawn a wild plant at a position
+    pub fn spawn_plant(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        if position.0 < 0 || position.1 < 0 ||
+           position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.plants.spawn_plant(species_id, position)
+            .ok_or_else(|| "Failed to spawn plant (max population reached or invalid species)".to_string())
+    }
+
+    /// Spawn a patch of plants (forest, field, etc.)
+    pub fn spawn_plant_patch(
+        &mut self,
+        species_id: String,
+        center: (i32, i32),
+        radius: u32,
+        density: f32,
+    ) -> Vec<uuid::Uuid> {
+        self.plants.spawn_patch(species_id, center, radius, density)
+    }
+
+    /// Harvest a plant
+    pub fn harvest_plant(
+        &mut self,
+        plant_id: &uuid::Uuid,
+    ) -> Result<Vec<crate::environment::PlantDrop>, String> {
+        self.plants.harvest_plant(plant_id)
+            .ok_or_else(|| "Failed to harvest plant (not found or not harvestable)".to_string())
+    }
+
+    /// Get harvestable plants in radius
+    pub fn get_harvestable_plants(
+        &self,
+        center: (i32, i32),
+        radius: f32,
+    ) -> Vec<&crate::environment::Plant> {
+        self.plants.get_harvestable_in_radius(center, radius)
+    }
+
+    /// Get all plants in radius
+    pub fn get_plants_in_radius(
+        &self,
+        center: (i32, i32),
+        radius: f32,
+    ) -> Vec<&crate::environment::Plant> {
+        self.plants.get_in_radius(center, radius)
+    }
+
+    /// Get plants at a specific position
+    pub fn get_plants_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Plant> {
+        self.plants.get_at_position(position)
+    }
+
+    /// Get all plants of a specific species
+    pub fn get_plants_by_species(&self, species_id: &str) -> Vec<&crate::environment::Plant> {
+        self.plants.all_plants()
+            .iter()
+            .filter(|p| p.species_id == species_id)
+            .collect()
+    }
+
+    /// Get all cultivated plants
+    pub fn get_cultivated_plants(&self) -> Vec<&crate::environment::Plant> {
+        self.plants.all_plants()
+            .iter()
+            .filter(|p| p.is_cultivated)
+            .collect()
+    }
+
     pub fn tick(&mut self) {
         self.tick += 1;
 
@@ -405,6 +600,12 @@ impl World {
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.tick_all();
+
+        // Update animals (AI, movement, aging)
+        self.animals.tick();
+
+        // Update plants (growth, regrowth)
+        self.plants.tick();
 
         // Remove depleted resources
         self.remove_depleted_resources();
