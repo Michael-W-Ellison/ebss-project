@@ -571,7 +571,8 @@ pub struct Agent {
     pub parent_ids: Vec<Uuid>,
     pub goals: GoalManager,
     pub preferences: Preferences,
-    pub profession: super::profession::JobType,
+    pub current_job: Option<super::profession::JobType>,
+    pub job_change_cooldown: u32, // Ticks until can change job again
 }
 
 impl Agent {
@@ -601,7 +602,8 @@ impl Agent {
             parent_ids: Vec::new(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
-            profession: super::profession::JobType::Unemployed, // Start unemployed
+            current_job: None, // No job initially
+            job_change_cooldown: 0,
         }
     }
 
@@ -1257,63 +1259,207 @@ impl Agent {
         )
     }
 
-    /// Assign a profession to the agent
+    /// Evaluate and select a job based on traits, skills, and population needs
     ///
-    /// Professions are assigned randomly from a weighted list based on societal needs.
-    /// In the future, this can be based on skills, traits, or available workplaces.
-    pub fn assign_profession(&mut self) {
-        use rand::Rng;
+    /// This is called periodically and allows agents to dynamically change jobs
+    /// based on what's needed for survival and what they're good at.
+    pub fn evaluate_job_preference(&self, population_needs: &PopulationNeeds) -> Option<super::profession::JobType> {
         use super::profession::JobType;
-        let mut rng = rand::thread_rng();
+        use super::skills::SkillType;
+        use super::traits::Trait;
 
-        // Weighted profession list (basic roles more common)
-        let profession_weights = vec![
-            (JobType::Farmer, 15),       // Common
-            (JobType::Woodcutter, 10),   // Common
-            (JobType::Miner, 8),         // Common
-            (JobType::Carpenter, 8),     // Common
-            (JobType::Stonemason, 6),    // Common
-            (JobType::Blacksmith, 5),    // Important
-            (JobType::Baker, 5),         // Important
-            (JobType::Hunter, 4),        // Useful
-            (JobType::Herder, 4),        // Useful
-            (JobType::Fisher, 3),        // Useful
-            (JobType::Miller, 3),        // Support
-            (JobType::Butcher, 3),       // Support
-            (JobType::Tanner, 2),        // Support
-            (JobType::Weaver, 2),        // Support
-            (JobType::Potter, 2),        // Support
-            (JobType::Brewer, 1),        // Luxury
-            (JobType::Cook, 1),          // Luxury
-            (JobType::Armorer, 1),       // Specialized
-            (JobType::Laborer, 10),      // Fallback
-        ];
-
-        // Calculate total weight
-        let total_weight: u32 = profession_weights.iter().map(|(_, w)| w).sum();
-
-        // Random selection based on weights
-        let roll = rng.gen_range(0..total_weight);
-        let mut cumulative = 0;
-
-        for (job, weight) in &profession_weights {
-            cumulative += weight;
-            if roll < cumulative {
-                self.profession = *job;
-                return;
-            }
+        // Only adults work
+        if self.state.life_stage != super::LifeStage::Adult {
+            return None;
         }
 
-        // Fallback (should never reach here)
-        self.profession = JobType::Laborer;
+        // Calculate preference scores for each job type
+        let mut job_scores: Vec<(JobType, f32)> = Vec::new();
+
+        // Food production jobs (critical for survival)
+        if population_needs.food_critical || population_needs.food_shortage {
+            let mut farmer_score = 50.0;
+            let mut hunter_score = 40.0;
+            let mut fisher_score = 35.0;
+
+            // Traits affect preference
+            if self.traits.has_trait(&Trait::Diligent) {
+                farmer_score += 20.0; // Diligent agents prefer steady farming work
+            }
+            if self.traits.has_trait(&Trait::Aggressive) || self.traits.has_trait(&Trait::Hottempered) {
+                hunter_score += 25.0; // Aggressive agents prefer hunting
+                farmer_score -= 10.0;
+            }
+            if self.traits.has_trait(&Trait::Peaceful) || self.traits.has_trait(&Trait::Calm) {
+                farmer_score += 15.0; // Peaceful agents prefer farming
+                hunter_score -= 15.0;
+            }
+            if self.traits.has_trait(&Trait::Introverted) {
+                fisher_score += 20.0; // Introverts prefer solitary fishing
+            }
+
+            // Skills affect suitability (use immutable get, default to -10 if skill doesn't exist)
+            farmer_score += self.skills.get_skill_if_exists(SkillType::Farming)
+                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
+            hunter_score += self.skills.get_skill_if_exists(SkillType::Hunting)
+                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
+            fisher_score += self.skills.get_skill_if_exists(SkillType::Fishing)
+                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
+
+            // Needs multiplier (critical needs are prioritized)
+            if population_needs.food_critical {
+                farmer_score *= 2.0;
+                hunter_score *= 2.0;
+                fisher_score *= 2.0;
+            }
+
+            job_scores.push((JobType::Farmer, farmer_score));
+            job_scores.push((JobType::Hunter, hunter_score));
+            job_scores.push((JobType::Fisher, fisher_score));
+        }
+
+        // Resource gathering jobs
+        if population_needs.wood_shortage {
+            let mut woodcutter_score = 40.0;
+            if self.traits.has_trait(&Trait::Diligent) {
+                woodcutter_score += 15.0;
+            }
+            woodcutter_score += self.skills.get_skill_if_exists(SkillType::Woodcutting)
+                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
+            job_scores.push((JobType::Woodcutter, woodcutter_score * if population_needs.wood_critical { 2.0 } else { 1.0 }));
+        }
+
+        if population_needs.stone_shortage {
+            let mut miner_score = 38.0;
+            if self.traits.has_trait(&Trait::Diligent) {
+                miner_score += 15.0;
+            }
+            miner_score += self.skills.get_skill_if_exists(SkillType::Mining)
+                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
+            job_scores.push((JobType::Miner, miner_score * if population_needs.stone_critical { 2.0 } else { 1.0 }));
+        }
+
+        // Crafting jobs (tools, weapons, buildings)
+        if population_needs.tools_shortage {
+            let mut blacksmith_score = 35.0;
+            let mut carpenter_score = 35.0;
+
+            if self.traits.has_trait(&Trait::Diligent) {
+                blacksmith_score += 20.0;
+                carpenter_score += 20.0;
+            }
+            if self.traits.has_trait(&Trait::Imaginative) {
+                blacksmith_score += 10.0; // Creative crafting
+                carpenter_score += 10.0;
+            }
+
+            blacksmith_score += self.skills.get_skill_if_exists(SkillType::Crafting)
+                .map(|s| s.level as f32 * 4.0).unwrap_or(0.0);
+            carpenter_score += self.skills.get_skill_if_exists(SkillType::Crafting)
+                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
+
+            job_scores.push((JobType::Blacksmith, blacksmith_score));
+            job_scores.push((JobType::Carpenter, carpenter_score));
+        }
+
+        // Building jobs
+        if population_needs.shelter_shortage {
+            let mut carpenter_score = 40.0;
+            let mut stonemason_score = 35.0;
+
+            if self.traits.has_trait(&Trait::Diligent) {
+                carpenter_score += 20.0;
+                stonemason_score += 20.0;
+            }
+
+            carpenter_score += self.skills.get_skill_if_exists(SkillType::Construction)
+                .map(|s| s.level as f32 * 4.0).unwrap_or(0.0);
+            stonemason_score += self.skills.get_skill_if_exists(SkillType::Construction)
+                .map(|s| s.level as f32 * 4.0).unwrap_or(0.0);
+
+            job_scores.push((JobType::Carpenter, carpenter_score * if population_needs.shelter_critical { 2.0 } else { 1.0 }));
+            job_scores.push((JobType::Stonemason, stonemason_score * if population_needs.shelter_critical { 2.0 } else { 1.0 }));
+        }
+
+        // Processing jobs
+        if population_needs.food_processing_needed {
+            let mut baker_score = 30.0;
+            let mut miller_score = 28.0;
+
+            if self.traits.has_trait(&Trait::Diligent) {
+                baker_score += 15.0;
+                miller_score += 15.0;
+            }
+            if self.traits.has_trait(&Trait::Sociable) {
+                baker_score += 10.0; // Bakers interact with community
+            }
+
+            baker_score += self.skills.get_skill_if_exists(SkillType::Crafting)
+                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
+            miller_score += self.skills.get_skill_if_exists(SkillType::Crafting)
+                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
+
+            job_scores.push((JobType::Baker, baker_score));
+            job_scores.push((JobType::Miller, miller_score));
+        }
+
+        // Fallback: General laborer (always available)
+        let mut laborer_score = 25.0;
+        if self.traits.has_trait(&Trait::Diligent) {
+            laborer_score += 10.0;
+        }
+        job_scores.push((JobType::Laborer, laborer_score));
+
+        // Sort by score (highest first)
+        job_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+        // Return the highest scoring job
+        job_scores.first().map(|(job, _)| *job)
     }
 
-    /// Check if agent should be assigned a profession (based on age)
-    pub fn should_assign_profession(&self) -> bool {
+    /// Update job selection (called during agent tick)
+    ///
+    /// Agents can change jobs based on population needs and their own traits/skills.
+    /// Job changes have a cooldown to prevent constant switching.
+    pub fn update_job_selection(&mut self, population_needs: &PopulationNeeds) {
         use super::LifeStage;
 
-        // Assign profession when becoming an adult
-        self.state.life_stage == LifeStage::Adult &&
-        self.profession == super::profession::JobType::Unemployed
+        // Only adults work
+        if self.state.life_stage != LifeStage::Adult {
+            self.current_job = None;
+            return;
+        }
+
+        // Decrease cooldown
+        if self.job_change_cooldown > 0 {
+            self.job_change_cooldown -= 1;
+        }
+
+        // Can only change jobs when cooldown expires
+        if self.job_change_cooldown == 0 {
+            let preferred_job = self.evaluate_job_preference(population_needs);
+
+            // Change job if preference changed
+            if preferred_job != self.current_job {
+                self.current_job = preferred_job;
+                // Set cooldown to prevent frequent job changes (1 day = 1440 ticks)
+                self.job_change_cooldown = 1440; // Change jobs at most once per day
+            }
+        }
     }
+}
+
+/// Population needs data structure for job selection
+#[derive(Clone, Debug, Default)]
+pub struct PopulationNeeds {
+    pub food_shortage: bool,
+    pub food_critical: bool,
+    pub wood_shortage: bool,
+    pub wood_critical: bool,
+    pub stone_shortage: bool,
+    pub stone_critical: bool,
+    pub tools_shortage: bool,
+    pub shelter_shortage: bool,
+    pub shelter_critical: bool,
+    pub food_processing_needed: bool,
 }
