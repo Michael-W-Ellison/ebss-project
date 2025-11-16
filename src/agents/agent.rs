@@ -1495,6 +1495,63 @@ impl Agent {
     pub fn get_harvesting_speed_bonus(&self) -> f32 {
         self.equipment.harvesting_speed_bonus()
     }
+
+    /// Decide what storage action to take (if any) based on inventory and storage preferences
+    /// Returns Some(Action) if agent should interact with storehouse, None otherwise
+    pub fn decide_storage_action(
+        &self,
+        storehouse_food: u32,
+        storehouse_resources: u32,
+    ) -> Option<crate::environment::Action> {
+        use crate::agents::storage_integration::{
+            count_food_in_inventory, count_resources_in_inventory, count_tools_in_inventory,
+            item_type_to_id,
+        };
+        use crate::agents::storage_management::decide_storage_action;
+        use crate::environment::Action;
+        use crate::world::ItemType;
+        use log::debug;
+
+        // Count what agent has
+        let agent_food = count_food_in_inventory(&self.inventory);
+        let agent_resources = count_resources_in_inventory(&self.inventory);
+        let agent_tools = count_tools_in_inventory(&self.inventory);
+
+        // Get preparedness drive level
+        let preparedness = self.drives.get(crate::core::DriveType::Preparedness)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+
+        // Make storage decision
+        let decision = decide_storage_action(
+            agent_food,
+            agent_resources,
+            agent_tools,
+            storehouse_food,
+            storehouse_resources,
+            preparedness,
+            &self.storage_preferences,
+        );
+
+        use crate::agents::storage_management::StorageDecision;
+        match decision {
+            StorageDecision::Deposit { item_type, quantity, reason } => {
+                debug!("Agent {} storing: {}", self.id, reason);
+                Some(Action::Store {
+                    item_type: item_type_to_id(item_type),
+                    amount: quantity,
+                })
+            }
+            StorageDecision::Retrieve { item_type, quantity, reason } => {
+                debug!("Agent {} retrieving: {}", self.id, reason);
+                Some(Action::Retrieve {
+                    item_type: item_type_to_id(item_type),
+                    amount: quantity,
+                })
+            }
+            StorageDecision::NoAction { .. } => None,
+        }
+    }
 }
 
 /// Population needs data structure for job selection

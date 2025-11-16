@@ -169,6 +169,59 @@ impl Simulation {
                     }
                 }
             }
+
+            // Check if agent should interact with storehouse (every 20 ticks, or when Preparedness is high)
+            // This happens independently of drive-based actions to enable cooperative resource sharing
+            if self.current_tick % 20 == 0 || {
+                let agent = &self.population.agents[agent_index];
+                agent.drives.get(DriveType::Preparedness)
+                    .map(|d| d.value > 0.6)
+                    .unwrap_or(false)
+            } {
+                // Calculate storehouse contents
+                let (storehouse_food, storehouse_resources) = {
+                    use crate::world::ItemType;
+                    use crate::agents::storage_integration::{count_in_agent_inventory};
+
+                    let food_types = vec![
+                        ItemType::Food, ItemType::Bread, ItemType::Cheese,
+                        ItemType::Meat, ItemType::Fish, ItemType::Honey, ItemType::Ale,
+                    ];
+                    let resource_types = vec![
+                        ItemType::Wood, ItemType::Stone, ItemType::Iron,
+                        ItemType::Clay, ItemType::Sand, ItemType::Coal,
+                    ];
+
+                    let food_total: u32 = food_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    let resource_total: u32 = resource_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    (food_total, resource_total)
+                };
+
+                // Get storage action from agent
+                let storage_action = {
+                    let agent = &self.population.agents[agent_index];
+                    agent.decide_storage_action(storehouse_food, storehouse_resources)
+                };
+
+                // Execute storage action if one was decided
+                if let Some(action) = storage_action {
+                    debug!("Agent {} performing storage action: {:?}", agent_id, action);
+                    let action_result = self.execute_action(&action, agent_index);
+
+                    debug!(
+                        "Agent {} - Storage action result: {}",
+                        agent_id, action_result.message
+                    );
+                }
+            }
         }
 
         // Process environmental damage (exposure, falling, disease)
@@ -998,6 +1051,151 @@ impl Simulation {
                 }
 
                 result
+            },
+
+            Action::Store { item_type, amount } => {
+                use crate::agents::storage_integration::{
+                    id_to_item_type, take_from_agent_inventory, add_to_agent_inventory,
+                    count_in_agent_inventory
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // Try to convert string item_type to ItemType
+                if let Some(item) = id_to_item_type(item_type) {
+                    let available = count_in_agent_inventory(&agent.inventory, item);
+
+                    if available == 0 {
+                        return ActionResult::failure(format!(
+                            "No {} in inventory to store", item_type
+                        ));
+                    }
+
+                    // Determine how much to deposit based on storage preferences
+                    let deposit_amount = (*amount).min(available);
+
+                    // Remove from agent inventory
+                    let (success, removed) = take_from_agent_inventory(
+                        &mut agent.inventory,
+                        item,
+                        deposit_amount,
+                    );
+
+                    if success && removed > 0 {
+                        // Add to world storehouse
+                        if let Some(existing) = self.world.storehouse_inventory.items.get_mut(&item) {
+                            existing.quantity += removed;
+                        } else {
+                            self.world.storehouse_inventory.items.insert(
+                                item,
+                                crate::world::inventory::Item {
+                                    item_type: item,
+                                    quantity: removed,
+                                },
+                            );
+                        }
+
+                        debug!(
+                            "Agent {} deposited {} {} to storehouse (storehouse now has {})",
+                            agent.id,
+                            removed,
+                            item_type,
+                            self.world.storehouse_inventory.items.get(&item)
+                                .map(|i| i.quantity)
+                                .unwrap_or(0)
+                        );
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Preparedness, -0.15)
+                            .with_energy_cost(5.0)
+                            .with_message(format!(
+                                "Deposited {} {} to storehouse", removed, item_type
+                            ))
+                    } else {
+                        ActionResult::failure(format!(
+                            "Failed to remove {} from inventory", item_type
+                        ))
+                    }
+                } else {
+                    ActionResult::failure(format!(
+                        "Unknown item type: {}", item_type
+                    ))
+                }
+            },
+
+            Action::Retrieve { item_type, amount } => {
+                use crate::agents::storage_integration::{
+                    id_to_item_type, add_to_agent_inventory, count_in_agent_inventory
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // Try to convert string item_type to ItemType
+                if let Some(item) = id_to_item_type(item_type) {
+                    // Check storehouse inventory
+                    let storehouse_available = self.world.storehouse_inventory.items
+                        .get(&item)
+                        .map(|i| i.quantity)
+                        .unwrap_or(0);
+
+                    if storehouse_available == 0 {
+                        return ActionResult::failure(format!(
+                            "Storehouse has no {} available", item_type
+                        ));
+                    }
+
+                    // Determine how much to retrieve
+                    let retrieve_amount = (*amount).min(storehouse_available);
+
+                    // Try to add to agent inventory
+                    let (success, added) = add_to_agent_inventory(
+                        &mut agent.inventory,
+                        item,
+                        retrieve_amount,
+                    );
+
+                    if added > 0 {
+                        // Remove from world storehouse
+                        if let Some(existing) = self.world.storehouse_inventory.items.get_mut(&item) {
+                            existing.quantity -= added;
+                            if existing.quantity == 0 {
+                                self.world.storehouse_inventory.items.remove(&item);
+                            }
+                        }
+
+                        debug!(
+                            "Agent {} retrieved {} {} from storehouse (storehouse now has {})",
+                            agent.id,
+                            added,
+                            item_type,
+                            self.world.storehouse_inventory.items.get(&item)
+                                .map(|i| i.quantity)
+                                .unwrap_or(0)
+                        );
+
+                        let message = if added < retrieve_amount {
+                            format!(
+                                "Retrieved {} {} from storehouse (inventory full, couldn't take all {})",
+                                added, item_type, retrieve_amount
+                            )
+                        } else {
+                            format!("Retrieved {} {} from storehouse", added, item_type)
+                        };
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Preparedness, -0.1)
+                            .with_energy_cost(5.0)
+                            .with_message(message)
+                    } else {
+                        ActionResult::failure(format!(
+                            "Inventory full, cannot retrieve {}", item_type
+                        ))
+                    }
+                } else {
+                    ActionResult::failure(format!(
+                        "Unknown item type: {}", item_type
+                    ))
+                }
             },
 
             // For other actions, use simplified success/failure
