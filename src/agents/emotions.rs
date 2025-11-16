@@ -116,6 +116,36 @@ impl EmotionState {
     pub fn is_distressed(&self) -> bool {
         self.anger + self.fear + self.sadness > 1.5
     }
+
+    /// Calculate happiness as inverse of negative emotions
+    /// Returns a value from -1.0 (maximum negative emotions) to 1.0 (no negative emotions)
+    pub fn happiness(&self) -> f32 {
+        let negative = (self.anger + self.fear + self.sadness) / 3.0;
+        1.0 - (negative * 2.0)
+    }
+
+    /// Calculate overall well-being (same as happiness for now)
+    pub fn well_being(&self) -> f32 {
+        self.happiness()
+    }
+
+    /// Get emotion value by type (for API compatibility)
+    pub fn get(&self, emotion_type: crate::core::EmotionType) -> Option<EmotionValue> {
+        use crate::core::EmotionType as CoreEmotionType;
+
+        match emotion_type {
+            CoreEmotionType::Happiness => Some(EmotionValue { value: self.happiness() }),
+            CoreEmotionType::Sadness => Some(EmotionValue { value: -self.sadness }),
+            CoreEmotionType::Anger => Some(EmotionValue { value: -self.anger }),
+            CoreEmotionType::Fear => Some(EmotionValue { value: -self.fear }),
+            _ => None,
+        }
+    }
+}
+
+/// Emotion value wrapper for API compatibility
+pub struct EmotionValue {
+    pub value: f32,
 }
 
 impl Default for EmotionState {

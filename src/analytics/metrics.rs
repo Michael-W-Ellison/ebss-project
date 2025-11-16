@@ -183,6 +183,21 @@ impl SimulationMetrics {
         let mut well_being_sum = 0.0;
 
         for agent in &population.agents {
+            well_being_sum += agent.emotions.well_being();
+
+            // Collect emotion values
+            emotion_map
+                .entry(crate::core::EmotionType::Anger)
+                .or_insert_with(Vec::new)
+                .push(agent.emotions.anger);
+            emotion_map
+                .entry(crate::core::EmotionType::Fear)
+                .or_insert_with(Vec::new)
+                .push(agent.emotions.fear);
+            emotion_map
+                .entry(crate::core::EmotionType::Sadness)
+                .or_insert_with(Vec::new)
+                .push(agent.emotions.sadness);
             // TODO: Implement EmotionState::well_being()
             // well_being_sum += agent.emotions.well_being();
 
@@ -216,6 +231,9 @@ impl SimulationMetrics {
     }
 
     fn snapshot_traits(&self, population: &Population) -> HashMap<Trait, u32> {
+        // Note: Trait type mismatch between core::Trait and agents::Trait
+        // Returning empty map for now - needs trait system reconciliation
+        HashMap::new()
         let mut trait_counts = HashMap::new();
 
         for _agent in &population.agents {

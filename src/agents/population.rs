@@ -1,5 +1,7 @@
 // src/agents/population.rs
-use crate::agents::{Agent, AgentConfig, SharedKnowledge, can_mate, reproduce, MateSelectionCriteria};
+use crate::agents::{Agent, AgentConfig, SharedKnowledge};
+use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
+use crate::environment::technology::TechnologyRegistry;
 use uuid::Uuid;
 use std::collections::HashMap;
 
@@ -49,10 +51,14 @@ pub struct Population {
     pub unhappiness_tracker: HashMap<Uuid, u32>, // Track how long agents have been unhappy
     pub current_tick: u32, // Current simulation tick for survival mechanics
     pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
+    pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
 }
 
 impl Population {
     pub fn new() -> Self {
+        let mut registry = TechnologyRegistry::new();
+        Self::initialize_basic_technologies(&mut registry);
+
         Self {
             agents: Vec::new(),
             stats: PopulationStats::default(),
@@ -62,11 +68,15 @@ impl Population {
             unhappiness_tracker: HashMap::new(),
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
+            technology_registry: registry,
         }
     }
 
     /// Create a new population with custom configuration
     pub fn with_config(config: PopulationConfig) -> Self {
+        let mut registry = TechnologyRegistry::new();
+        Self::initialize_basic_technologies(&mut registry);
+
         Self {
             agents: Vec::new(),
             stats: PopulationStats::default(),
@@ -76,12 +86,70 @@ impl Population {
             unhappiness_tracker: HashMap::new(),
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
+            technology_registry: registry,
         }
+    }
+
+    /// Initialize basic Stone Age technologies
+    fn initialize_basic_technologies(registry: &mut TechnologyRegistry) {
+        use crate::environment::technology::{Technology, DiscoveryMethod};
+
+        // Fire making - everyone starts with this
+        let fire = Technology::new("fire".to_string(), "Fire Making".to_string())
+            .with_description("Creating and controlling fire for warmth and cooking".to_string())
+            .with_discovery_chance(1.0); // Already known
+
+        // Basic wooden tools - easy to discover
+        let wooden_tools = Technology::new("wooden_tools".to_string(), "Wooden Tools".to_string())
+            .with_description("Crafting basic tools from wood".to_string())
+            .with_required_materials(vec!["wood".to_string()])
+            .with_discovery_chance(0.3)
+            .with_accidental_discovery(0.01);
+
+        // Flint knapping - stone age advancement
+        let flint_knapping = Technology::new("flint_knapping".to_string(), "Flint Knapping".to_string())
+            .with_description("Shaping flint into sharp tools and weapons".to_string())
+            .with_required_materials(vec!["stone".to_string()])
+            .with_prerequisites(vec!["wooden_tools".to_string()])
+            .with_discovery_chance(0.2)
+            .with_curiosity_threshold(0.4);
+
+        // Stone tools - requires flint knapping
+        let stone_tools = Technology::new("stone_tools".to_string(), "Stone Tool Crafting".to_string())
+            .with_description("Creating durable tools from stone and wood".to_string())
+            .with_required_materials(vec!["stone".to_string(), "wood".to_string()])
+            .with_prerequisites(vec!["flint_knapping".to_string()])
+            .with_discovery_chance(0.25);
+
+        // Iron working - advanced technology
+        let iron_working = Technology::new("iron_working".to_string(), "Iron Working".to_string())
+            .with_description("Smelting and working iron into tools".to_string())
+            .with_required_materials(vec!["iron".to_string(), "coal".to_string()])
+            .with_prerequisites(vec!["fire".to_string(), "stone_tools".to_string()])
+            .with_discovery_chance(0.05)
+            .with_curiosity_threshold(0.6)
+            .with_accidental_discovery(0.001);
+
+        registry.register(fire);
+        registry.register(wooden_tools);
+        registry.register(flint_knapping);
+        registry.register(stone_tools);
+        registry.register(iron_working);
     }
 
     /// Spawn a new agent
     pub fn spawn_agent(&mut self, config: AgentConfig) {
-        self.agents.push(Agent::new(config));
+        let mut agent = Agent::new(config);
+
+        // Give new agents basic starting knowledge
+        use crate::environment::technology::DiscoveryMethod;
+        agent.technology_knowledge.add_initial_technology(
+            "fire".to_string(),
+            agent.id,
+            self.current_tick as u64
+        );
+
+        self.agents.push(agent);
         self.stats.current_population = self.agents.len();
     }
 
@@ -104,6 +172,30 @@ impl Population {
             agent.state.age_tick(current_tick);
         }
 
+        // Calculate population needs for job selection
+        let population_needs = self.calculate_population_needs();
+
+        // Update job selection for all agents (dynamic, based on needs and traits)
+        for agent in &mut self.agents {
+            agent.update_job_selection(&population_needs);
+        }
+
+        // Update relationships between nearby agents
+        self.update_relationships();
+
+        // Decay distant relationships (every 100 ticks to reduce overhead)
+        if current_tick % 100 == 0 {
+            self.decay_relationships();
+        }
+
+        // Share technologies between nearby agents
+        self.share_technologies();
+
+        // Attempt technology discovery (every 50 ticks to reduce overhead)
+        if current_tick % 50 == 0 {
+            self.discover_technologies();
+        }
+
         // Process unhappiness tracking and abandonments
         self.process_abandonments();
 
@@ -118,6 +210,374 @@ impl Population {
 
         // Update statistics
         self.update_stats();
+    }
+
+    /// Calculate population needs for job selection
+    ///
+    /// This analyzes resource stockpiles, agent inventories, and population size
+    /// to determine what the population urgently needs for survival.
+    fn calculate_population_needs(&self) -> super::agent::PopulationNeeds {
+        use super::agent::PopulationNeeds;
+
+        let mut needs = PopulationNeeds::default();
+
+        // Count total resources in agent inventories
+        let mut total_food = 0u32;
+        let mut total_wood = 0u32;
+        let mut total_stone = 0u32;
+        let mut total_tools = 0u32;
+        let agent_count = self.agents.len() as u32;
+
+        for agent in &self.agents {
+            if let Some(item) = agent.inventory.get_item("food") {
+                total_food += item.quantity;
+            }
+            if let Some(item) = agent.inventory.get_item("wood") {
+                total_wood += item.quantity;
+            }
+            if let Some(item) = agent.inventory.get_item("stone") {
+                total_stone += item.quantity;
+            }
+
+            // Count tools
+            let tool_types = vec!["woodenaxe", "woodenpickaxe", "stoneaxe", "stonepickaxe",
+                                  "ironaxe", "ironpickaxe", "ironhammer"];
+            for tool_type in &tool_types {
+                if let Some(item) = agent.inventory.get_item(tool_type) {
+                    total_tools += item.quantity;
+                }
+            }
+        }
+
+        // Calculate per-agent resource amounts
+        let food_per_agent = if agent_count > 0 { total_food / agent_count } else { 0 };
+        let wood_per_agent = if agent_count > 0 { total_wood / agent_count } else { 0 };
+        let stone_per_agent = if agent_count > 0 { total_stone / agent_count } else { 0 };
+        let tools_per_agent = if agent_count > 0 { total_tools / agent_count } else { 0 };
+
+        // Determine needs based on thresholds
+        // CRITICAL: Less than 3 days worth of resources
+        // SHORTAGE: Less than 7 days worth
+
+        // Food needs (agents eat ~1 food per day = 1440 ticks)
+        needs.food_critical = food_per_agent < 3;  // Less than 3 food per agent
+        needs.food_shortage = food_per_agent < 7;  // Less than 7 food per agent
+
+        // Wood needs (used for tools, building, fuel)
+        needs.wood_critical = wood_per_agent < 10;  // Very low wood
+        needs.wood_shortage = wood_per_agent < 30;  // Low wood
+
+        // Stone needs (used for tools, building)
+        needs.stone_critical = stone_per_agent < 5;   // Very low stone
+        needs.stone_shortage = stone_per_agent < 15;  // Low stone
+
+        // Tool needs (at least 1 tool per 2 agents)
+        needs.tools_shortage = tools_per_agent == 0 || (total_tools < agent_count / 2);
+
+        // Shelter needs (check if agents have housing)
+        // For now, simplified: if population > 10, need shelter
+        needs.shelter_shortage = agent_count > 10;
+        needs.shelter_critical = agent_count > 20;
+
+        // Food processing (if we have lots of raw food, need processing)
+        needs.food_processing_needed = total_food > agent_count * 10;
+
+        needs
+    }
+
+    /// Update relationships between nearby agents
+    ///
+    /// Forms new relationships when agents meet and updates existing ones
+    /// based on proximity and trait compatibility.
+    fn update_relationships(&mut self) {
+        use super::{Relationship, RelationshipType};
+
+        // Process all pairs of agents
+        for i in 0..self.agents.len() {
+            for j in (i + 1)..self.agents.len() {
+                let agent1_id = self.agents[i].id;
+                let agent2_id = self.agents[j].id;
+                let agent1_pos = self.agents[i].state.position;
+                let agent2_pos = self.agents[j].state.position;
+
+                // Calculate distance between agents
+                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
+                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                // Agents must be within interaction range (10 tiles)
+                if distance <= 10.0 {
+                    // Get traits for compatibility check
+                    let agent1_traits = self.agents[i].traits.clone();
+                    let agent2_traits = self.agents[j].traits.clone();
+
+                    // Check if relationship exists for agent 1 -> agent 2
+                    let agent1_has_rel = self.agents[i].relationships.get_relationship(&agent2_id).is_some();
+
+                    if !agent1_has_rel {
+                        // Form new relationship as Acquaintance
+                        let new_rel = Relationship::new(agent2_id, RelationshipType::Acquaintance);
+                        self.agents[i].relationships.add_relationship(new_rel);
+                    } else {
+                        // Update existing relationship based on traits
+                        self.agents[i].relationships.update_relationship_from_traits(
+                            &agent2_id,
+                            &agent1_traits,
+                            &agent2_traits,
+                        );
+                    }
+
+                    // Check if relationship exists for agent 2 -> agent 1
+                    let agent2_has_rel = self.agents[j].relationships.get_relationship(&agent1_id).is_some();
+
+                    if !agent2_has_rel {
+                        // Form new relationship as Acquaintance
+                        let new_rel = Relationship::new(agent1_id, RelationshipType::Acquaintance);
+                        self.agents[j].relationships.add_relationship(new_rel);
+                    } else {
+                        // Update existing relationship based on traits
+                        self.agents[j].relationships.update_relationship_from_traits(
+                            &agent1_id,
+                            &agent2_traits,
+                            &agent1_traits,
+                        );
+                    }
+
+                    // Strengthen bonds slightly for nearby agents
+                    if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&agent2_id) {
+                        // Closer = stronger bond increase (inverse of distance)
+                        let proximity_bonus = (11.0 - distance) / 100.0; // Max 0.10 at distance 0
+                        rel.strengthen(proximity_bonus);
+                        rel.time_together += 1;
+                    }
+
+                    if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&agent1_id) {
+                        let proximity_bonus = (11.0 - distance) / 100.0;
+                        rel.strengthen(proximity_bonus);
+                        rel.time_together += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Decay relationships when agents don't interact
+    ///
+    /// Relationships fade over time if agents don't spend time together.
+    fn decay_relationships(&mut self) {
+        // First, collect agent positions to avoid borrowing issues
+        let agent_positions: std::collections::HashMap<Uuid, (i32, i32, i32)> =
+            self.agents.iter()
+                .map(|a| (a.id, a.state.position))
+                .collect();
+
+        // Now update relationships based on distance
+        for agent in &mut self.agents {
+            let agent_pos = agent.state.position;
+            let current_relationships: Vec<_> = agent.relationships.get_all()
+                .iter()
+                .map(|(id, _)| *id)
+                .collect();
+
+            for other_id in current_relationships {
+                if let Some(&other_pos) = agent_positions.get(&other_id) {
+                    let dx = (agent_pos.0 - other_pos.0) as f32;
+                    let dy = (agent_pos.1 - other_pos.1) as f32;
+                    let distance = (dx * dx + dy * dy).sqrt();
+
+                    // If agents are far apart (>50 tiles), decay relationship
+                    if distance > 50.0 {
+                        if let Some(rel) = agent.relationships.get_relationship_mut(&other_id) {
+                            // Not family - decay faster
+                            let decay_amount = if rel.is_family() {
+                                0.0001 // Family bonds decay very slowly
+                            } else {
+                                0.001 // Non-family decays faster
+                            };
+
+                            // Decay towards neutral
+                            if rel.bond_strength > 0.0 {
+                                rel.bond_strength = (rel.bond_strength - decay_amount).max(0.0);
+                            } else if rel.bond_strength < 0.0 {
+                                rel.bond_strength = (rel.bond_strength + decay_amount).min(0.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Share technologies between nearby agents
+    ///
+    /// Agents teach technologies they know to nearby agents through conversation.
+    fn share_technologies(&mut self) {
+        use crate::environment::technology::DiscoveryMethod;
+
+        // Process all pairs of nearby agents
+        for i in 0..self.agents.len() {
+            for j in (i + 1)..self.agents.len() {
+                let agent1_id = self.agents[i].id;
+                let agent2_id = self.agents[j].id;
+                let agent1_pos = self.agents[i].state.position;
+                let agent2_pos = self.agents[j].state.position;
+
+                // Calculate distance
+                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
+                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                // Only share when very close (within 5 tiles)
+                if distance <= 5.0 {
+                    // Get technologies each agent knows
+                    let agent1_techs: Vec<_> = self.agents[i]
+                        .technology_knowledge
+                        .known_technologies
+                        .keys()
+                        .cloned()
+                        .collect();
+
+                    let agent2_techs: Vec<_> = self.agents[j]
+                        .technology_knowledge
+                        .known_technologies
+                        .keys()
+                        .cloned()
+                        .collect();
+
+                    // Get relationship trust (for teaching confidence)
+                    let trust_1_to_2 = self.agents[i]
+                        .relationships
+                        .get_relationship(&agent2_id)
+                        .map(|r| (r.bond_strength + 1.0) / 2.0) // Map -1..1 to 0..1
+                        .unwrap_or(0.5);
+
+                    let trust_2_to_1 = self.agents[j]
+                        .relationships
+                        .get_relationship(&agent1_id)
+                        .map(|r| (r.bond_strength + 1.0) / 2.0)
+                        .unwrap_or(0.5);
+
+                    // Agent 1 teaches Agent 2
+                    for tech_id in &agent1_techs {
+                        if !agent2_techs.contains(tech_id) {
+                            let teacher_confidence = self.agents[i]
+                                .technology_knowledge
+                                .teaching_confidence(tech_id);
+
+                            // Only teach if confident enough
+                            if teacher_confidence > 0.5 {
+                                self.agents[j].technology_knowledge.learn_from_agent(
+                                    tech_id.clone(),
+                                    agent2_id,
+                                    DiscoveryMethod::Instruction,
+                                    teacher_confidence,
+                                    trust_2_to_1,
+                                    self.current_tick as u64,
+                                );
+                            }
+                        }
+                    }
+
+                    // Agent 2 teaches Agent 1
+                    for tech_id in &agent2_techs {
+                        if !agent1_techs.contains(tech_id) {
+                            let teacher_confidence = self.agents[j]
+                                .technology_knowledge
+                                .teaching_confidence(tech_id);
+
+                            if teacher_confidence > 0.5 {
+                                self.agents[i].technology_knowledge.learn_from_agent(
+                                    tech_id.clone(),
+                                    agent1_id,
+                                    DiscoveryMethod::Instruction,
+                                    teacher_confidence,
+                                    trust_1_to_2,
+                                    self.current_tick as u64,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Attempt technology discovery through experimentation
+    ///
+    /// Curious agents with required materials may discover new technologies.
+    fn discover_technologies(&mut self) {
+        use crate::environment::technology::DiscoveryMethod;
+        use crate::core::DriveType;
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let current_tick = self.current_tick;
+
+        // Collect discoveries to be made (to avoid borrowing issues)
+        let mut discoveries: Vec<(usize, String, Uuid)> = Vec::new();
+
+        // Get list of discoverable technologies for each agent
+        for agent_idx in 0..self.agents.len() {
+            let agent = &self.agents[agent_idx];
+
+            // Check curiosity drive
+            let curiosity = agent.drives
+                .get(DriveType::Curiosity)
+                .map(|d| d.value)
+                .unwrap_or(0.0);
+
+            // Only curious agents experiment
+            if curiosity < 0.3 {
+                continue;
+            }
+
+            // Get known technologies
+            let known_techs = agent.technology_knowledge.known_technologies.clone();
+
+            // Get technologies available for discovery
+            let available_techs = self.technology_registry.available_for_discovery(&known_techs);
+
+            for tech in available_techs {
+                // Check if agent meets curiosity threshold
+                if curiosity < tech.curiosity_threshold {
+                    continue;
+                }
+
+                // Check if agent has required materials in inventory
+                let has_materials = tech.required_materials.iter().all(|material| {
+                    agent.inventory.get_item(material).is_some()
+                });
+
+                if !has_materials {
+                    continue;
+                }
+
+                // Attempt discovery
+                let discovery_roll: f32 = rng.gen();
+                if discovery_roll < tech.discovery_chance * curiosity {
+                    // Record discovery for later
+                    discoveries.push((agent_idx, tech.id.clone(), agent.id));
+                    break; // Only one discovery per tick per agent
+                }
+            }
+        }
+
+        // Now apply all discoveries
+        for (agent_idx, tech_id, agent_id) in discoveries {
+            let is_world_first = self.technology_registry.record_first_discovery(
+                tech_id.clone(),
+                agent_id,
+                current_tick as u64,
+            );
+
+            self.agents[agent_idx].technology_knowledge.discover_technology(
+                tech_id,
+                agent_id,
+                DiscoveryMethod::Experimentation,
+                current_tick as u64,
+                is_world_first,
+            );
+        }
     }
 
     /// Remove dead agents from population

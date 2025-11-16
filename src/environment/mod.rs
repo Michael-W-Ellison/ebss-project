@@ -23,7 +23,7 @@ mod crafting;
 mod plugin;
 mod registry;
 mod structure;
-mod technology;
+pub mod technology;
 mod heat_source;
 pub mod clothing_recipes;
 pub mod flora;
@@ -120,6 +120,8 @@ pub struct ActionResult {
     pub experience: f32,
     /// Energy cost
     pub energy_cost: f32,
+    /// Overall drive satisfaction from this action
+    pub drive_satisfaction: f32,
     /// Message describing what happened
     pub message: Option<String>,
 }
@@ -145,6 +147,11 @@ pub enum Action {
     Explore { direction: (i32, i32, i32) },
     /// Interact with another agent
     Socialize { target_agent_id: uuid::Uuid },
+    /// Attack another agent
+    Attack {
+        target_agent_id: uuid::Uuid,
+        weapon: Option<String>,  // Optional weapon (None = unarmed)
+    },
     /// Wait/idle
     Wait,
 }
@@ -161,6 +168,7 @@ impl Action {
             Action::Store { .. } => Some(DriveType::Preparedness),
             Action::Explore { .. } => Some(DriveType::Curiosity),
             Action::Socialize { .. } => Some(DriveType::Social),
+            Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Move { .. } => None,
             Action::Wait => None,
         }
@@ -176,6 +184,8 @@ impl ActionResult {
             items_consumed: Vec::new(),
             experience: 0.0,
             energy_cost: 0.0,
+            drive_satisfaction: 0.0,
+            message: String::new(),
             message: None,
         }
     }
@@ -188,6 +198,8 @@ impl ActionResult {
             items_consumed: Vec::new(),
             experience: 0.0,
             energy_cost: 0.0,
+            drive_satisfaction: 0.0,
+            message,
             message: Some(message),
         }
     }
