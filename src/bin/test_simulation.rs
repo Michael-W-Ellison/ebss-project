@@ -443,6 +443,67 @@ fn print_population_status(population: &Population, tick: u32) {
             println!("   Current Jobs & Work:");
             println!("     • No jobs assigned yet (agents choosing based on needs)");
         }
+
+        // Calculate relationship statistics
+        let mut total_relationships = 0;
+        let mut total_positive = 0;
+        let mut total_negative = 0;
+        let mut total_loved_ones = 0;
+        let mut total_family = 0;
+        let mut total_hostile = 0;
+        let mut total_bond_strength = 0.0;
+
+        for agent in &population.agents {
+            let relationships = agent.relationships.get_all();
+            total_relationships += relationships.len();
+
+            for (_, rel) in relationships {
+                if rel.bond_strength > 0.0 {
+                    total_positive += 1;
+                    total_bond_strength += rel.bond_strength;
+                } else if rel.bond_strength < 0.0 {
+                    total_negative += 1;
+                    total_bond_strength += rel.bond_strength;
+                }
+
+                if rel.is_loved_one() {
+                    total_loved_ones += 1;
+                }
+
+                if rel.is_family() {
+                    total_family += 1;
+                }
+
+                if rel.is_hostile() {
+                    total_hostile += 1;
+                }
+            }
+        }
+
+        // Display relationship statistics if there are any
+        if total_relationships > 0 {
+            let avg_bond = total_bond_strength / total_relationships as f32;
+
+            println!("   Relationships & Social Bonds:");
+            println!("     • Total Relationships: {}", total_relationships);
+            println!("     • Positive Bonds:      {} ({:.1}%)",
+                total_positive,
+                (total_positive as f32 / total_relationships as f32) * 100.0);
+            println!("     • Negative Bonds:      {} ({:.1}%)",
+                total_negative,
+                (total_negative as f32 / total_relationships as f32) * 100.0);
+            println!("     • Average Bond Strength: {:.3}", avg_bond);
+
+            if total_loved_ones > 0 {
+                println!("     • Loved Ones:          {}", total_loved_ones);
+            }
+            if total_family > 0 {
+                println!("     • Family Bonds:        {}", total_family);
+            }
+            if total_hostile > 0 {
+                println!("     • Hostile Relationships: {}", total_hostile);
+            }
+        }
     }
 
     println!();

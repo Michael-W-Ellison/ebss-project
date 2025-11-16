@@ -112,6 +112,14 @@ impl Population {
             agent.update_job_selection(&population_needs);
         }
 
+        // Update relationships between nearby agents
+        self.update_relationships();
+
+        // Decay distant relationships (every 100 ticks to reduce overhead)
+        if current_tick % 100 == 0 {
+            self.decay_relationships();
+        }
+
         // Process unhappiness tracking and abandonments
         self.process_abandonments();
 
@@ -199,6 +207,129 @@ impl Population {
         needs.food_processing_needed = total_food > agent_count * 10;
 
         needs
+    }
+
+    /// Update relationships between nearby agents
+    ///
+    /// Forms new relationships when agents meet and updates existing ones
+    /// based on proximity and trait compatibility.
+    fn update_relationships(&mut self) {
+        use super::{Relationship, RelationshipType};
+
+        // Process all pairs of agents
+        for i in 0..self.agents.len() {
+            for j in (i + 1)..self.agents.len() {
+                let agent1_id = self.agents[i].id;
+                let agent2_id = self.agents[j].id;
+                let agent1_pos = self.agents[i].state.position;
+                let agent2_pos = self.agents[j].state.position;
+
+                // Calculate distance between agents
+                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
+                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                // Agents must be within interaction range (10 tiles)
+                if distance <= 10.0 {
+                    // Get traits for compatibility check
+                    let agent1_traits = self.agents[i].traits.clone();
+                    let agent2_traits = self.agents[j].traits.clone();
+
+                    // Check if relationship exists for agent 1 -> agent 2
+                    let agent1_has_rel = self.agents[i].relationships.get_relationship(&agent2_id).is_some();
+
+                    if !agent1_has_rel {
+                        // Form new relationship as Acquaintance
+                        let new_rel = Relationship::new(agent2_id, RelationshipType::Acquaintance);
+                        self.agents[i].relationships.add_relationship(new_rel);
+                    } else {
+                        // Update existing relationship based on traits
+                        self.agents[i].relationships.update_relationship_from_traits(
+                            &agent2_id,
+                            &agent1_traits,
+                            &agent2_traits,
+                        );
+                    }
+
+                    // Check if relationship exists for agent 2 -> agent 1
+                    let agent2_has_rel = self.agents[j].relationships.get_relationship(&agent1_id).is_some();
+
+                    if !agent2_has_rel {
+                        // Form new relationship as Acquaintance
+                        let new_rel = Relationship::new(agent1_id, RelationshipType::Acquaintance);
+                        self.agents[j].relationships.add_relationship(new_rel);
+                    } else {
+                        // Update existing relationship based on traits
+                        self.agents[j].relationships.update_relationship_from_traits(
+                            &agent1_id,
+                            &agent2_traits,
+                            &agent1_traits,
+                        );
+                    }
+
+                    // Strengthen bonds slightly for nearby agents
+                    if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&agent2_id) {
+                        // Closer = stronger bond increase (inverse of distance)
+                        let proximity_bonus = (11.0 - distance) / 100.0; // Max 0.10 at distance 0
+                        rel.strengthen(proximity_bonus);
+                        rel.time_together += 1;
+                    }
+
+                    if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&agent1_id) {
+                        let proximity_bonus = (11.0 - distance) / 100.0;
+                        rel.strengthen(proximity_bonus);
+                        rel.time_together += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Decay relationships when agents don't interact
+    ///
+    /// Relationships fade over time if agents don't spend time together.
+    fn decay_relationships(&mut self) {
+        // First, collect agent positions to avoid borrowing issues
+        let agent_positions: std::collections::HashMap<Uuid, (i32, i32, i32)> =
+            self.agents.iter()
+                .map(|a| (a.id, a.state.position))
+                .collect();
+
+        // Now update relationships based on distance
+        for agent in &mut self.agents {
+            let agent_pos = agent.state.position;
+            let current_relationships: Vec<_> = agent.relationships.get_all()
+                .iter()
+                .map(|(id, _)| *id)
+                .collect();
+
+            for other_id in current_relationships {
+                if let Some(&other_pos) = agent_positions.get(&other_id) {
+                    let dx = (agent_pos.0 - other_pos.0) as f32;
+                    let dy = (agent_pos.1 - other_pos.1) as f32;
+                    let distance = (dx * dx + dy * dy).sqrt();
+
+                    // If agents are far apart (>50 tiles), decay relationship
+                    if distance > 50.0 {
+                        if let Some(rel) = agent.relationships.get_relationship_mut(&other_id) {
+                            // Not family - decay faster
+                            let decay_amount = if rel.is_family() {
+                                0.0001 // Family bonds decay very slowly
+                            } else {
+                                0.001 // Non-family decays faster
+                            };
+
+                            // Decay towards neutral
+                            if rel.bond_strength > 0.0 {
+                                rel.bond_strength = (rel.bond_strength - decay_amount).max(0.0);
+                            } else if rel.bond_strength < 0.0 {
+                                rel.bond_strength = (rel.bond_strength + decay_amount).min(0.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Remove dead agents from population
