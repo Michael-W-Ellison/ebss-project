@@ -1,5 +1,5 @@
 // src/agents/population.rs
-use crate::agents::{Agent, AgentConfig, SharedKnowledge};
+use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
 use crate::environment::technology::TechnologyRegistry;
 use uuid::Uuid;
@@ -186,6 +186,11 @@ impl Population {
         // Decay distant relationships (every 100 ticks to reduce overhead)
         if current_tick % 100 == 0 {
             self.decay_relationships();
+        }
+
+        // Process social interactions (every 10 ticks to reduce overhead)
+        if current_tick % 10 == 0 {
+            self.process_social_interactions();
         }
 
         // Share technologies between nearby agents
@@ -791,6 +796,152 @@ impl Population {
                 distance <= radius
             })
             .collect()
+    }
+
+    /// Process social interactions between nearby agents
+    pub fn process_social_interactions(&mut self) {
+        use crate::agents::social_interactions::{
+            SocialInteractionType, ConversationTopic,
+            calculate_relationship_change, calculate_social_satisfaction,
+            should_greet, select_conversation_topic,
+        };
+        use crate::core::DriveType;
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let current_tick = self.current_tick;
+
+        // Collect interaction pairs (to avoid borrowing issues)
+        let mut interactions = Vec::new();
+
+        // Find nearby agent pairs who want to socialize
+        for i in 0..self.agents.len() {
+            if !self.agents[i].state.is_alive {
+                continue;
+            }
+
+            let agent1_id = self.agents[i].id;
+            let agent1_pos = self.agents[i].state.position;
+            let agent1_social_drive = self.agents[i].drives.get(DriveType::Social)
+                .map(|d| d.value)
+                .unwrap_or(0.0);
+
+            // Only socialize if social drive is somewhat active (>0.3)
+            if agent1_social_drive < 0.3 {
+                continue;
+            }
+
+            for j in (i + 1)..self.agents.len() {
+                if !self.agents[j].state.is_alive {
+                    continue;
+                }
+
+                let agent2_id = self.agents[j].id;
+                let agent2_pos = self.agents[j].state.position;
+
+                // Calculate distance
+                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
+                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                // Must be within social interaction range (5 tiles)
+                if distance > 5.0 {
+                    continue;
+                }
+
+                // Check if they should interact
+                // Higher social drive = higher interaction probability
+                let interaction_probability = (agent1_social_drive * 0.3).min(0.5);
+                if !rng.gen_bool(interaction_probability as f64) {
+                    continue;
+                }
+
+                interactions.push((i, j));
+            }
+        }
+
+        // Process each interaction
+        for (i, j) in interactions {
+            let agent1_id = self.agents[i].id;
+            let agent2_id = self.agents[j].id;
+
+            // Get relationship info (or create new relationship)
+            let relationship_1_to_2 = self.agents[i]
+                .social_network
+                .get_or_create_relationship(agent2_id, current_tick)
+                .clone();
+
+            let relationship_2_to_1 = self.agents[j]
+                .social_network
+                .get_or_create_relationship(agent1_id, current_tick)
+                .clone();
+
+            // Get traits
+            let agent1_traits: Vec<Trait> = self.agents[i].traits.get_traits().iter().cloned().collect();
+            let agent2_traits: Vec<Trait> = self.agents[j].traits.get_traits().iter().cloned().collect();
+
+            // Determine interaction type
+            let interaction_type = if should_greet(
+                relationship_1_to_2.last_interaction_tick,
+                current_tick,
+                &relationship_1_to_2.relationship_level,
+            ) {
+                // Greet if haven't interacted recently
+                SocialInteractionType::Greet
+            } else {
+                // Otherwise, have a conversation
+                let topic = select_conversation_topic(
+                    &relationship_1_to_2.relationship_level,
+                    &agent1_traits,
+                    &agent2_traits,
+                );
+                SocialInteractionType::Converse { topic }
+            };
+
+            // Calculate relationship changes for both agents
+            let rel_change_1 = calculate_relationship_change(
+                &interaction_type,
+                &agent1_traits,
+                &agent2_traits,
+                &relationship_1_to_2.relationship_level,
+            );
+
+            let rel_change_2 = calculate_relationship_change(
+                &interaction_type,
+                &agent2_traits,
+                &agent1_traits,
+                &relationship_2_to_1.relationship_level,
+            );
+
+            // Calculate social satisfaction for both agents
+            let satisfaction_1 = calculate_social_satisfaction(
+                &interaction_type,
+                &agent1_traits,
+                &relationship_1_to_2.relationship_level,
+            );
+
+            let satisfaction_2 = calculate_social_satisfaction(
+                &interaction_type,
+                &agent2_traits,
+                &relationship_2_to_1.relationship_level,
+            );
+
+            // Apply changes to agent 1
+            if let Some(rel) = self.agents[i].social_network.get_relationship_mut(agent2_id) {
+                rel.positive_interaction(rel_change_1, current_tick);
+            }
+            if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Social) {
+                drive.partial_satisfy(satisfaction_1);
+            }
+
+            // Apply changes to agent 2
+            if let Some(rel) = self.agents[j].social_network.get_relationship_mut(agent1_id) {
+                rel.positive_interaction(rel_change_2, current_tick);
+            }
+            if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Social) {
+                drive.partial_satisfy(satisfaction_2);
+            }
+        }
     }
 }
 

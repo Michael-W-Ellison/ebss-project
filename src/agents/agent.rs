@@ -563,6 +563,7 @@ pub struct Agent {
     pub skills: Skills,
     pub emotions: EmotionState,
     pub relationships: RelationshipMap,
+    pub social_network: super::relationships::SocialNetwork, // Social relationship and trust tracking
     pub traits: TraitSet,
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
@@ -594,6 +595,7 @@ impl Agent {
             skills: Skills::default(),
             emotions: EmotionState::default(),
             relationships: RelationshipMap::default(),
+            social_network: super::relationships::SocialNetwork::default(),
             traits: TraitSet::default(),
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
