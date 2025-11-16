@@ -193,6 +193,11 @@ impl Population {
             self.process_social_interactions();
         }
 
+        // Process observational learning (every 20 ticks to reduce overhead)
+        if current_tick % 20 == 0 {
+            self.process_observational_learning();
+        }
+
         // Process exploration for all agents (vision-based discovery)
         self.process_exploration();
 
@@ -997,6 +1002,125 @@ impl Population {
         // In a full simulation, this would call process_exploration_with_world
         // For now, it does nothing - exploration happens when world is available
     }
+
+    /// Process observational learning between agents
+    ///
+    /// This handles:
+    /// - Broadcasting actions to nearby observers
+    /// - Automatic adoption of ready behaviors
+    /// - Skill learning from adopted behaviors
+    pub fn process_observational_learning(&mut self) {
+        use super::observation_processing::{auto_adopt_ready_behaviors};
+
+        // Process auto-adoption for each agent
+        for i in 0..self.agents.len() {
+            let adopted = auto_adopt_ready_behaviors(&mut self.agents[i]);
+
+            // Log adoptions (could be extended to notify parents, etc.)
+            if !adopted.is_empty() {
+                for (teacher_id, action_type) in adopted {
+                    // Future: Could add events, notifications, or drive satisfaction here
+                    // For now, just record that learning happened
+                    let _ = (teacher_id, action_type);
+                }
+            }
+        }
+    }
+
+    /// Broadcast an action from one agent to all nearby observers
+    ///
+    /// This should be called whenever an agent performs a visible action
+    pub fn broadcast_action(
+        &mut self,
+        performer_id: uuid::Uuid,
+        position: (i32, i32, i32),
+        action_type: super::ActionType,
+        success: bool,
+        details: String,
+        timestamp: u64,
+    ) {
+        use super::observation_processing::{BroadcastAction, process_observations};
+
+        let broadcast = BroadcastAction::new(
+            performer_id,
+            position,
+            action_type,
+            success,
+            details,
+            timestamp,
+        );
+
+        process_observations(&mut self.agents, &broadcast);
+    }
+
+    /// Get observational learning statistics for the entire population
+    pub fn get_population_learning_stats(&self) -> PopulationLearningStats {
+        use super::observation_processing::get_learning_stats;
+
+        let mut total_adopted = 0;
+        let mut total_ready = 0;
+        let mut agents_learning_from_parents = 0;
+        let mut total_unique_teachers = 0;
+
+        for agent in &self.agents {
+            let stats = get_learning_stats(agent);
+            total_adopted += stats.total_adopted;
+            total_ready += stats.ready_to_adopt;
+            total_unique_teachers += stats.unique_teachers;
+            if stats.learning_from_parents > 0 {
+                agents_learning_from_parents += 1;
+            }
+        }
+
+        PopulationLearningStats {
+            total_behaviors_adopted: total_adopted,
+            total_ready_to_adopt: total_ready,
+            agents_learning_from_parents,
+            average_unique_teachers: if self.agents.is_empty() {
+                0.0
+            } else {
+                total_unique_teachers as f32 / self.agents.len() as f32
+            },
+        }
+    }
+
+    /// Check which agents are actively learning (have recent observations)
+    pub fn get_active_learners(&self) -> Vec<(uuid::Uuid, usize)> {
+        self.agents
+            .iter()
+            .filter_map(|agent| {
+                let opportunities = agent.check_learning_opportunities();
+                if opportunities.is_empty() {
+                    None
+                } else {
+                    Some((agent.id, opportunities.len()))
+                }
+            })
+            .collect()
+    }
+
+    /// Get parent-child learning pairs
+    pub fn get_parent_child_learning(&self) -> Vec<(uuid::Uuid, uuid::Uuid, Vec<super::ActionType>)> {
+        let mut learning_pairs = Vec::new();
+
+        for child in &self.agents {
+            let parent_learning = child.learning_from_parents();
+            for (parent_id, actions) in parent_learning {
+                learning_pairs.push((child.id, parent_id, actions));
+            }
+        }
+
+        learning_pairs
+    }
+}
+
+/// Statistics about observational learning in the population
+#[derive(Debug, Clone)]
+pub struct PopulationLearningStats {
+    pub total_behaviors_adopted: usize,
+    pub total_ready_to_adopt: usize,
+    pub agents_learning_from_parents: usize,
+    pub average_unique_teachers: f32,
 }
 
 impl Default for Population {

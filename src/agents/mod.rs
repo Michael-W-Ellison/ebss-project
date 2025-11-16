@@ -59,8 +59,9 @@ pub mod exploration_behavior;
 pub mod storage_management;
 pub mod storage_integration;
 pub mod sensory_processing;
+pub mod observation_processing;
 
-pub use population::{Population, PopulationConfig};
+pub use population::{Population, PopulationConfig, PopulationLearningStats};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
 pub use shared_knowledge::{SharedKnowledge, DiscoveredResource};
 pub use knowledge::{PersonalKnowledge, ResourceKnowledge, KnowledgeSource};
@@ -94,4 +95,9 @@ pub use sensory_processing::{
     Percept, DetectionMethod, ThreatType, EnvironmentType,
     process_sensory_input, calculate_salience, filter_by_salience,
     most_salient_percept,
+};
+pub use observation_processing::{
+    BroadcastAction, BehaviorContext, NeedType, LearningStats,
+    process_observations, auto_adopt_ready_behaviors,
+    apply_skill_learning, should_imitate_behavior, get_learning_stats,
 };
