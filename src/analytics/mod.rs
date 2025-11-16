@@ -85,15 +85,20 @@ impl Simulation {
 
     /// Execute one simulation tick
     pub fn tick(&mut self) {
-        self.current_tick += 1;
+        // Process population lifecycle (aging, starvation, deaths, reproduction)
+        // This also increments the tick counter and updates all agents
+        self.population.tick();
+
+        // Sync simulation tick with population tick
+        self.current_tick = self.population.current_tick;
+
         debug!("=== Tick {} ===", self.current_tick);
 
-        // Process each agent
+        // Process agent behavior and actions
+        // Note: agents have already been updated by population.tick() above
+        // This loop handles behavior tree execution and action processing
         for agent in &mut self.population.agents {
-            // 1. Update drives (accumulation)
-            agent.tick();
-
-            // 2. Select the most urgent drive and corresponding behavior tree
+            // Select the most urgent drive and corresponding behavior tree
             if let Some(urgent_drive) = agent.drives.most_urgent() {
                 let drive_type = urgent_drive.drive_type;
                 let drive_value = urgent_drive.value;
@@ -104,7 +109,7 @@ impl Simulation {
                     agent.id, drive_type, drive_value
                 );
 
-                // 3. Select and execute behavior tree
+                // Select and execute behavior tree
                 if let Some(tree) = agent.select_behavior_tree() {
                     let tree_name = tree.name.clone();
 
@@ -116,10 +121,10 @@ impl Simulation {
                         agent.id, tree_name, execution_result
                     );
 
-                    // 4. Generate action based on drive type and agent position
+                    // Generate action based on drive type and agent position
                     let action = Self::generate_action_for_drive(drive_type, agent_position);
 
-                    // 5. Execute action in environment and get feedback
+                    // Execute action in environment and get feedback
                     let action_result = Self::execute_action_static(&action);
 
                     debug!(
@@ -127,12 +132,10 @@ impl Simulation {
                         agent.id, action_result.message, action_result.drive_satisfaction
                     );
 
-                    // 6. Apply feedback to agent (drive satisfaction)
+                    // Apply feedback to agent (drive satisfaction)
                     agent.apply_feedback(&action_result, drive_type);
 
-                    // 7. Update behavior tree weights based on action success
-                    // This already happened in tree.execute(), but we could add additional
-                    // reinforcement here based on the actual action result
+                    // Update behavior tree weights based on action success
                     if let Some(tree) = agent.select_behavior_tree() {
                         if action_result.success {
                             tree.total_successes += 1;
