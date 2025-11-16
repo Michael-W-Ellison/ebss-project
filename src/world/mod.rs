@@ -75,6 +75,7 @@ pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, Dis
 pub use climate::{ClimateManager, terrain_to_biome};
 
 use crate::agents::Population;
+use crate::environment::HeatSourceRegistry;
 
 /// Complete world state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +88,7 @@ pub struct World {
     #[serde(skip)]
     pub tech_tree: TechnologyTree, // Global technology tree (not serialized, recreated)
     pub climate: ClimateManager,
+    pub heat_sources: HeatSourceRegistry,
     pub tick: u32,
 }
 
@@ -132,6 +134,7 @@ impl World {
             marketplace: Marketplace::new(),
             tech_tree: TechnologyTree::new(),
             climate: ClimateManager::default(),
+            heat_sources: HeatSourceRegistry::new(),
             tick: 0,
         };
 
@@ -254,6 +257,141 @@ impl World {
         self.resources.retain(|r| r.amount > 0);
     }
 
+    // ===== Heat Source Management =====
+
+    /// Build a new heat source at a position
+    pub fn build_heat_source(
+        &mut self,
+        heat_source_type: crate::environment::HeatSourceType,
+        position: (i32, i32, i32),
+        builder_id: Option<uuid::Uuid>,
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        let (x, y, z) = position;
+        if x < 0 || y < 0 || x >= self.grid.width as i32 || y >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        // Check if there's already a heat source at this position
+        if self.heat_sources.get_at_position(position).is_some() {
+            return Err("Heat source already exists at this position".to_string());
+        }
+
+        // Create the heat source
+        let mut heat_source = crate::environment::HeatSource::new(
+            heat_source_type,
+            position,
+            self.tick as u64,
+        );
+
+        if let Some(builder) = builder_id {
+            heat_source = heat_source.with_builder(builder);
+        }
+
+        let id = heat_source.id;
+        self.heat_sources.add(heat_source);
+
+        Ok(id)
+    }
+
+    /// Add fuel to a heat source
+    pub fn add_fuel_to_heat_source(
+        &mut self,
+        heat_source_id: &uuid::Uuid,
+        material_id: String,
+        amount: f32,
+    ) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            // Default burn time based on material (could be expanded)
+            let burn_time = match material_id.as_str() {
+                "wood" => 100,
+                "charcoal" => 200,
+                "coal" => 300,
+                _ => 50,
+            };
+
+            heat_source.add_fuel(material_id, amount, burn_time);
+            Ok(())
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Light a heat source
+    pub fn light_heat_source(&mut self, heat_source_id: &uuid::Uuid) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            if heat_source.light() {
+                Ok(())
+            } else {
+                Err("Cannot light heat source (no fuel)".to_string())
+            }
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Extinguish a heat source
+    pub fn extinguish_heat_source(&mut self, heat_source_id: &uuid::Uuid) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            heat_source.extinguish();
+            Ok(())
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Add materials to heat/smelt
+    pub fn add_to_heat_source(
+        &mut self,
+        heat_source_id: &uuid::Uuid,
+        material_id: String,
+        quantity: u32,
+    ) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            heat_source.add_contents(material_id, quantity);
+            Ok(())
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Get heat source at position (2D, assumes z=0)
+    pub fn get_heat_source_at(&self, x: i32, y: i32) -> Option<&crate::environment::HeatSource> {
+        self.heat_sources.get_at_position((x, y, 0))
+    }
+
+    /// Get all heat sources within range of a position
+    pub fn get_heat_sources_in_range(
+        &self,
+        position: (i32, i32, i32),
+        range: f32,
+    ) -> Vec<&crate::environment::HeatSource> {
+        self.heat_sources.in_range(position, range)
+    }
+
+    /// Get temperature contribution from nearby heat sources
+    pub fn environmental_temperature(&self, position: (i32, i32, i32), range: f32) -> f32 {
+        let nearby_sources = self.get_heat_sources_in_range(position, range);
+
+        let mut total_heat_contribution = 0.0;
+
+        for source in nearby_sources {
+            if source.is_lit {
+                let dx = (source.position.0 - position.0) as f32;
+                let dy = (source.position.1 - position.1) as f32;
+                let dz = (source.position.2 - position.2) as f32;
+                let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1.0);
+
+                // Heat contribution falls off with distance
+                let contribution = (source.current_temperature - 20.0) / distance;
+                total_heat_contribution += contribution;
+            }
+        }
+
+        // Base environmental temp + heat contribution
+        20.0 + total_heat_contribution
+    }
+
     pub fn tick(&mut self) {
         self.tick += 1;
 
@@ -264,6 +402,9 @@ impl World {
         for building in &mut self.buildings {
             building.tick();
         }
+
+        // Update heat sources (fuel consumption, heating)
+        self.heat_sources.tick_all();
 
         // Remove depleted resources
         self.remove_depleted_resources();
