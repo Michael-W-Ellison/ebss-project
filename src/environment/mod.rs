@@ -28,6 +28,10 @@ mod heat_source;
 pub mod clothing_recipes;
 pub mod flora;
 pub mod fauna;
+pub mod biome;
+pub mod weather;
+pub mod exposure;
+pub mod seasons;
 
 pub use material::*;
 pub use action::*;
@@ -37,8 +41,12 @@ pub use registry::*;
 pub use structure::*;
 pub use technology::*;
 pub use heat_source::*;
-pub use flora::{PlantSpecies, FloraRegistry, BiomeType, GrowthStage, PlantSize};
+pub use flora::{PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize};
 pub use fauna::{AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize};
+pub use biome::{BiomeType, Biome};
+pub use weather::{Weather, WeatherType, WeatherGenerator, PrecipitationType};
+pub use exposure::{ExposureType, ExposureStatus, ExposureProtection};
+pub use seasons::{Season, SeasonalCalendar};
 
 /// Result type for environment operations
 pub type EnvironmentResult<T> = Result<T, EnvironmentError>;

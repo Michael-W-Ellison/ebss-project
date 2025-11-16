@@ -59,6 +59,7 @@ pub mod render;
 pub mod production;
 pub mod economy;
 pub mod technology;
+pub mod climate;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -71,6 +72,7 @@ pub use render::AsciiRenderer;
 pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput, get_job_recipes, get_primary_recipe};
 pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketStatistics};
 pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
+pub use climate::{ClimateManager, terrain_to_biome};
 
 use crate::agents::Population;
 
@@ -84,6 +86,7 @@ pub struct World {
     pub marketplace: Marketplace,
     #[serde(skip)]
     pub tech_tree: TechnologyTree, // Global technology tree (not serialized, recreated)
+    pub climate: ClimateManager,
     pub tick: u32,
 }
 
@@ -128,6 +131,7 @@ impl World {
             storehouse_inventory: Inventory::new(10000), // Large capacity
             marketplace: Marketplace::new(),
             tech_tree: TechnologyTree::new(),
+            climate: ClimateManager::default(),
             tick: 0,
         };
 
@@ -252,6 +256,9 @@ impl World {
 
     pub fn tick(&mut self) {
         self.tick += 1;
+
+        // Update climate (weather, seasons, time)
+        self.climate.tick();
 
         // Update buildings
         for building in &mut self.buildings {

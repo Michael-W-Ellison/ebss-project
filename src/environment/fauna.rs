@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::flora::BiomeType;
+use super::flora::ClimateZone;
 
 /// Animal behavior classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,8 +52,8 @@ pub struct AnimalSpecies {
     pub size: AnimalSize,
 
     /// Habitat
-    pub primary_biomes: Vec<BiomeType>,
-    pub secondary_biomes: Vec<BiomeType>,
+    pub primary_biomes: Vec<ClimateZone>,
+    pub secondary_biomes: Vec<ClimateZone>,
     pub group_size: (u32, u32), // Min, max herd/pack size
 
     /// Drops when hunted/killed
@@ -119,7 +119,7 @@ impl FaunaRegistry {
         self.species.get(id)
     }
 
-    pub fn get_by_biome(&self, biome: BiomeType) -> Vec<&AnimalSpecies> {
+    pub fn get_by_biome(&self, biome: ClimateZone) -> Vec<&AnimalSpecies> {
         self.species
             .values()
             .filter(|s| s.primary_biomes.contains(&biome) || s.secondary_biomes.contains(&biome))
@@ -179,8 +179,8 @@ fn rabbit() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Desert],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Desert],
         group_size: (1, 3),
         drops: vec![
             AnimalDrop::new("rabbit_meat".to_string(), 1, 2),
@@ -204,8 +204,8 @@ fn squirrel() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
         drops: vec![
             AnimalDrop::new("squirrel_meat".to_string(), 1, 1),
@@ -228,7 +228,7 @@ fn chicken() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
-        primary_biomes: vec![BiomeType::Temperate, BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
         secondary_biomes: vec![],
         group_size: (3, 8),
         drops: vec![
@@ -262,8 +262,8 @@ fn fox() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 2),
         drops: vec![
             AnimalDrop::new("fox_meat".to_string(), 2, 3),
@@ -287,7 +287,7 @@ fn wolf() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
-        primary_biomes: vec![BiomeType::Temperate, BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (3, 7),
         drops: vec![
@@ -317,8 +317,8 @@ fn deer() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (2, 6),
         drops: vec![
             AnimalDrop::new("deer_meat".to_string(), 8, 12),
@@ -342,7 +342,7 @@ fn sheep() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
-        primary_biomes: vec![BiomeType::Temperate],
+        primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![],
         group_size: (4, 12),
         drops: vec![
@@ -373,8 +373,8 @@ fn goat() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Desert],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Desert],
         group_size: (3, 8),
         drops: vec![
             AnimalDrop::new("goat_meat".to_string(), 5, 8),
@@ -408,8 +408,8 @@ fn boar() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Omnivore,
         size: AnimalSize::Medium,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (1, 4),
         drops: vec![
             AnimalDrop::new("pork".to_string(), 10, 15),
@@ -434,8 +434,8 @@ fn cow() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (2, 8),
         drops: vec![
             AnimalDrop::new("beef".to_string(), 15, 25),
@@ -469,8 +469,8 @@ fn bear() -> AnimalSpecies {
         behavior: AnimalBehavior::Territorial,
         diet: DietType::Omnivore,
         size: AnimalSize::Large,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
         drops: vec![
             AnimalDrop::new("bear_meat".to_string(), 20, 30),
@@ -496,8 +496,8 @@ fn lion() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
-        primary_biomes: vec![BiomeType::Desert],
-        secondary_biomes: vec![BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Desert],
+        secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (3, 8),
         drops: vec![
             AnimalDrop::new("lion_meat".to_string(), 18, 25),
@@ -526,7 +526,7 @@ fn arctic_fox() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
-        primary_biomes: vec![BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (1, 2),
         drops: vec![
@@ -551,7 +551,7 @@ fn camel() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
-        primary_biomes: vec![BiomeType::Desert],
+        primary_biomes: vec![ClimateZone::Desert],
         secondary_biomes: vec![],
         group_size: (2, 6),
         drops: vec![
@@ -583,7 +583,7 @@ fn mammoth() -> AnimalSpecies {
         behavior: AnimalBehavior::Territorial,
         diet: DietType::Herbivore,
         size: AnimalSize::Huge,
-        primary_biomes: vec![BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (2, 8),
         drops: vec![
@@ -615,7 +615,7 @@ mod tests {
     fn test_biome_filtering() {
         let registry = FaunaRegistry::new();
 
-        let arctic_animals = registry.get_by_biome(BiomeType::Arctic);
+        let arctic_animals = registry.get_by_biome(ClimateZone::Arctic);
         assert!(!arctic_animals.is_empty());
 
         // Mammoth should be in arctic
