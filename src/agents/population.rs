@@ -1,7 +1,6 @@
 // src/agents/population.rs
 use crate::agents::{Agent, AgentConfig, SharedKnowledge};
-// Temporarily commented out due to API changes
-// use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
+use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
 use uuid::Uuid;
 use std::collections::HashMap;
 

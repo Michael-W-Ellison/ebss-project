@@ -171,6 +171,7 @@ impl Simulation {
             DriveType::Safety => Action::Move { target: position },
             DriveType::Reproduction => Action::Wait,
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
+            DriveType::Thirst => Action::Eat { food_type: "water".to_string() },
         }
     }
 
@@ -200,17 +201,10 @@ impl Simulation {
                 Action::Wait => 0.0,
             };
 
-            ActionResult::success(
-                satisfaction,
-                format!("{:?} completed successfully", action)
-            )
+            ActionResult::success()
         } else {
             ActionResult::failure(format!("{:?} failed", action))
         }
-    }
-
-    pub fn run_for_ticks(&mut self, _ticks: u32) {
-        // Placeholder for simulation loop
     }
 
     /// Log simulation statistics

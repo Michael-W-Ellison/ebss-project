@@ -1,7 +1,8 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use crate::core::{BehaviorTree, DriveState, Memory};
+use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences};
+use crate::environment::{Action, ActionResult};
 use std::collections::HashMap;
 
 use super::senses::Senses;
@@ -567,6 +568,9 @@ pub struct Agent {
     pub observational_learning: ObservationalLearning,
     pub transport: TransportSystem,
     pub technology_knowledge: TechnologyKnowledge,
+    pub parent_ids: Vec<Uuid>,
+    pub goals: GoalManager,
+    pub preferences: Preferences,
 }
 
 impl Agent {
@@ -593,7 +597,18 @@ impl Agent {
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
+            parent_ids: Vec::new(),
+            goals: GoalManager::new(5), // Max 5 active goals
+            preferences: Preferences::default(),
         }
+    }
+
+    /// Create an agent with specified parents
+    pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, current_tick: u32) -> Self {
+        let mut agent = Self::new(config);
+        agent.parent_ids = parent_ids;
+        agent.state.last_ate_tick = current_tick;
+        agent
     }
 
     /// Update agent state (tick senses, body, emotions, memory, and drives)
@@ -977,11 +992,9 @@ impl Agent {
             if !learning_actions.is_empty() {
                 parent_learning.push((parent_id, learning_actions));
             }
-        };
+        }
 
-        // Initialize default behavior trees for each drive
-        agent.initialize_behavior_trees();
-        agent
+        parent_learning
     }
 
     /// Initialize default behavior trees for each drive type
@@ -990,8 +1003,6 @@ impl Agent {
             let tree = Self::create_default_tree_for_drive(drive_type);
             self.behavior_trees.push(tree);
         }
-
-        parent_learning
     }
 
     /// Set age-based learning rate (child = 1.5, adult = 1.0, elder = 0.7)
@@ -1171,6 +1182,12 @@ impl Agent {
                 let mut selector = BehaviorNode::new(NodeType::Selector);
                 selector.add_child(BehaviorNode::new(NodeType::Action("seek_luxury".to_string())));
                 selector.add_child(BehaviorNode::new(NodeType::Action("decorate".to_string())));
+                selector
+            }
+            DriveType::Thirst => {
+                let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("drink_water".to_string())));
+                selector.add_child(BehaviorNode::new(NodeType::Action("find_water".to_string())));
                 selector
             }
         };
