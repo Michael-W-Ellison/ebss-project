@@ -609,9 +609,15 @@ impl Simulation {
             },
 
             Action::Craft { item_type } => {
-                use crate::world::production::{Quality as ProductionQuality, Recipe, ResourceRequirement, ProductionOutput};
+                use crate::world::production::{Quality as ProductionQuality, Recipe, ResourceRequirement, ProductionOutput, get_job_recipes};
                 use crate::world::{ItemType, ResourceType};
                 use crate::agents::skills::SkillType;
+
+                // Get agent's profession to access profession-specific recipes
+                let agent_profession = self.population.agents[agent_index].profession;
+
+                // Get profession-specific recipes
+                let mut profession_recipes = get_job_recipes(agent_profession);
 
                 // Define simple crafting recipes (anyone can craft these)
                 let simple_recipes: Vec<Recipe> = vec![
@@ -681,15 +687,22 @@ impl Simulation {
                     },
                 ];
 
+                // Combine simple recipes and profession recipes
+                profession_recipes.extend(simple_recipes);
+                let all_recipes = profession_recipes;
+
                 // Try to find a recipe that matches the item type
-                let recipe = simple_recipes.iter().find(|r| {
+                let recipe = all_recipes.iter().find(|r| {
                     r.outputs.iter().any(|output| {
                         format!("{:?}", output.item_type).to_lowercase() == item_type.to_lowercase()
                     })
                 });
 
                 if recipe.is_none() {
-                    return ActionResult::failure(format!("No recipe found for {}", item_type));
+                    return ActionResult::failure(format!(
+                        "No recipe found for {} (profession: {:?})",
+                        item_type, agent_profession
+                    ));
                 }
                 let recipe = recipe.unwrap();
 

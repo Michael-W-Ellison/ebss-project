@@ -571,6 +571,7 @@ pub struct Agent {
     pub parent_ids: Vec<Uuid>,
     pub goals: GoalManager,
     pub preferences: Preferences,
+    pub profession: super::profession::JobType,
 }
 
 impl Agent {
@@ -600,6 +601,7 @@ impl Agent {
             parent_ids: Vec::new(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
+            profession: super::profession::JobType::Unemployed, // Start unemployed
         }
     }
 
@@ -1253,5 +1255,65 @@ impl Agent {
             rng.gen_range(-1..=1),
             0
         )
+    }
+
+    /// Assign a profession to the agent
+    ///
+    /// Professions are assigned randomly from a weighted list based on societal needs.
+    /// In the future, this can be based on skills, traits, or available workplaces.
+    pub fn assign_profession(&mut self) {
+        use rand::Rng;
+        use super::profession::JobType;
+        let mut rng = rand::thread_rng();
+
+        // Weighted profession list (basic roles more common)
+        let profession_weights = vec![
+            (JobType::Farmer, 15),       // Common
+            (JobType::Woodcutter, 10),   // Common
+            (JobType::Miner, 8),         // Common
+            (JobType::Carpenter, 8),     // Common
+            (JobType::Stonemason, 6),    // Common
+            (JobType::Blacksmith, 5),    // Important
+            (JobType::Baker, 5),         // Important
+            (JobType::Hunter, 4),        // Useful
+            (JobType::Herder, 4),        // Useful
+            (JobType::Fisher, 3),        // Useful
+            (JobType::Miller, 3),        // Support
+            (JobType::Butcher, 3),       // Support
+            (JobType::Tanner, 2),        // Support
+            (JobType::Weaver, 2),        // Support
+            (JobType::Potter, 2),        // Support
+            (JobType::Brewer, 1),        // Luxury
+            (JobType::Cook, 1),          // Luxury
+            (JobType::Armorer, 1),       // Specialized
+            (JobType::Laborer, 10),      // Fallback
+        ];
+
+        // Calculate total weight
+        let total_weight: u32 = profession_weights.iter().map(|(_, w)| w).sum();
+
+        // Random selection based on weights
+        let roll = rng.gen_range(0..total_weight);
+        let mut cumulative = 0;
+
+        for (job, weight) in &profession_weights {
+            cumulative += weight;
+            if roll < cumulative {
+                self.profession = *job;
+                return;
+            }
+        }
+
+        // Fallback (should never reach here)
+        self.profession = JobType::Laborer;
+    }
+
+    /// Check if agent should be assigned a profession (based on age)
+    pub fn should_assign_profession(&self) -> bool {
+        use super::LifeStage;
+
+        // Assign profession when becoming an adult
+        self.state.life_stage == LifeStage::Adult &&
+        self.profession == super::profession::JobType::Unemployed
     }
 }

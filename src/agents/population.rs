@@ -104,6 +104,13 @@ impl Population {
             agent.tick_with_time(current_tick);
         }
 
+        // Assign professions to agents who became adults
+        for agent in &mut self.agents {
+            if agent.should_assign_profession() {
+                agent.assign_profession();
+            }
+        }
+
         // Process unhappiness tracking and abandonments
         self.process_abandonments();
 
