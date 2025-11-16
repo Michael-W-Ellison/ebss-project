@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use super::flora::ClimateZone;
+use uuid::Uuid;
 
 /// Animal behavior classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,28 +139,61 @@ impl FaunaRegistry {
         self.register(rabbit());
         self.register(squirrel());
         self.register(chicken());
+        self.register(duck());
+        self.register(goose());
+
+        // Birds
+        self.register(crow());
+        self.register(eagle());
+        self.register(hawk());
+        self.register(owl());
+        self.register(parrot());
 
         // Small animals
         self.register(fox());
         self.register(wolf());
+        self.register(snake());
 
         // Medium herbivores (domesticable)
         self.register(deer());
         self.register(sheep());
         self.register(goat());
+        self.register(elk_animal());
+        self.register(reindeer_animal());
 
         // Medium/Large omnivores
         self.register(boar());
+        self.register(pig());
         self.register(cow());
 
         // Large predators
         self.register(bear());
         self.register(lion());
+        self.register(tiger());
+        self.register(crocodile());
 
-        // Arctic/Desert specialists
+        // Arctic/Desert/Tropical specialists
         self.register(arctic_fox());
+        self.register(polar_bear());
         self.register(camel());
         self.register(mammoth());
+        self.register(monkey());
+
+        // Aquatic
+        self.register(fish());
+        self.register(otter());
+        self.register(seal());
+    }
+
+    pub fn all_species(&self) -> Vec<&AnimalSpecies> {
+        self.species.values().collect()
+    }
+
+    pub fn get_domesticable(&self) -> Vec<&AnimalSpecies> {
+        self.species
+            .values()
+            .filter(|s| s.can_domesticate)
+            .collect()
     }
 }
 
@@ -595,6 +629,880 @@ fn mammoth() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+    }
+}
+
+// ============================================================================
+// ADDITIONAL DOMESTIC ANIMALS
+// ============================================================================
+
+fn duck() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "duck".to_string(),
+        name: "Duck".to_string(),
+        description: "Waterfowl, provides eggs, meat, and feathers".to_string(),
+        health: 10.0,
+        attack_damage: 0.5,
+        defense: 0.0,
+        speed: 1.3,
+        behavior: AnimalBehavior::Passive,
+        diet: DietType::Omnivore,
+        size: AnimalSize::Tiny,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
+        group_size: (4, 10),
+        drops: vec![
+            AnimalDrop::new("duck_meat".to_string(), 2, 3),
+            AnimalDrop::new("feathers".to_string(), 4, 6),
+        ],
+        can_domesticate: true,
+        living_products: vec![
+            AnimalProduct {
+                material_id: "egg".to_string(),
+                production_time: 120,
+                quantity: 1,
+            },
+        ],
+    }
+}
+
+fn goose() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "goose".to_string(),
+        name: "Goose".to_string(),
+        description: "Large waterfowl, aggressive when defending territory".to_string(),
+        health: 15.0,
+        attack_damage: 3.0,
+        defense: 1.0,
+        speed: 1.2,
+        behavior: AnimalBehavior::Defensive,
+        diet: DietType::Herbivore,
+        size: AnimalSize::Tiny,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![],
+        group_size: (5, 12),
+        drops: vec![
+            AnimalDrop::new("goose_meat".to_string(), 3, 4),
+            AnimalDrop::new("feathers".to_string(), 6, 10), // More feathers than duck
+        ],
+        can_domesticate: true,
+        living_products: vec![
+            AnimalProduct {
+                material_id: "egg".to_string(),
+                production_time: 150,
+                quantity: 1,
+            },
+        ],
+    }
+}
+
+fn pig() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "pig".to_string(),
+        name: "Pig".to_string(),
+        description: "Domesticated boar, excellent meat source".to_string(),
+        health: 60.0,
+        attack_damage: 5.0,
+        defense: 2.0,
+        speed: 1.1,
+        behavior: AnimalBehavior::Passive,
+        diet: DietType::Omnivore,
+        size: AnimalSize::Medium,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
+        group_size: (3, 8),
+        drops: vec![
+            AnimalDrop::new("pork".to_string(), 12, 18),
+            AnimalDrop::new("leather".to_string(), 4, 6),
+        ],
+        can_domesticate: true,
+        living_products: vec![],
+    }
+}
+
+// ============================================================================
+// BIRDS
+// ============================================================================
+
+fn crow() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "crow".to_string(),
+        name: "Crow".to_string(),
+        description: "Intelligent scavenger bird, often found near settlements".to_string(),
+        health: 8.0,
+        attack_damage: 2.0,
+        defense: 0.0,
+        speed: 2.0, // Very fast (flying)
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Omnivore,
+        size: AnimalSize::Tiny,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Desert, ClimateZone::Arctic],
+        group_size: (3, 15),
+        drops: vec![
+            AnimalDrop::new("crow_meat".to_string(), 1, 1),
+            AnimalDrop::new("feathers".to_string(), 2, 3),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn eagle() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "eagle".to_string(),
+        name: "Eagle".to_string(),
+        description: "Majestic bird of prey, hunts from great heights".to_string(),
+        health: 25.0,
+        attack_damage: 10.0,
+        defense: 1.0,
+        speed: 2.5, // Extremely fast (flying)
+        behavior: AnimalBehavior::Aggressive,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Small,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Desert, ClimateZone::Arctic],
+        group_size: (1, 2),
+        drops: vec![
+            AnimalDrop::new("bird_meat".to_string(), 2, 3),
+            AnimalDrop::new("feathers".to_string(), 4, 6),
+            AnimalDrop::new("eagle_talon".to_string(), 2, 2).with_chance(0.8),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn hawk() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "hawk".to_string(),
+        name: "Hawk".to_string(),
+        description: "Swift predatory bird, can be trained for hunting".to_string(),
+        health: 20.0,
+        attack_damage: 8.0,
+        defense: 1.0,
+        speed: 2.3,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Small,
+        primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Desert],
+        secondary_biomes: vec![],
+        group_size: (1, 2),
+        drops: vec![
+            AnimalDrop::new("bird_meat".to_string(), 2, 3),
+            AnimalDrop::new("feathers".to_string(), 3, 5),
+        ],
+        can_domesticate: true, // Falconry
+        living_products: vec![],
+    }
+}
+
+fn owl() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "owl".to_string(),
+        name: "Owl".to_string(),
+        description: "Nocturnal hunter, silent and deadly".to_string(),
+        health: 18.0,
+        attack_damage: 7.0,
+        defense: 1.0,
+        speed: 2.0,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Small,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
+        group_size: (1, 1),
+        drops: vec![
+            AnimalDrop::new("bird_meat".to_string(), 1, 2),
+            AnimalDrop::new("feathers".to_string(), 3, 5),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn parrot() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "parrot".to_string(),
+        name: "Parrot".to_string(),
+        description: "Colorful tropical bird, intelligent and vocal".to_string(),
+        health: 12.0,
+        attack_damage: 3.0,
+        defense: 0.0,
+        speed: 1.8,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Omnivore,
+        size: AnimalSize::Tiny,
+        primary_biomes: vec![ClimateZone::Tropical],
+        secondary_biomes: vec![],
+        group_size: (2, 8),
+        drops: vec![
+            AnimalDrop::new("bird_meat".to_string(), 1, 2),
+            AnimalDrop::new("feathers".to_string(), 4, 6),
+        ],
+        can_domesticate: true, // As pets
+        living_products: vec![],
+    }
+}
+
+// ============================================================================
+// MORE PREDATORS
+// ============================================================================
+
+fn snake() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "snake".to_string(),
+        name: "Snake".to_string(),
+        description: "Venomous reptile, dangerous despite small size".to_string(),
+        health: 20.0,
+        attack_damage: 15.0, // Venomous
+        defense: 1.0,
+        speed: 1.2,
+        behavior: AnimalBehavior::Defensive,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Small,
+        primary_biomes: vec![ClimateZone::Desert, ClimateZone::Tropical],
+        secondary_biomes: vec![ClimateZone::Temperate],
+        group_size: (1, 1),
+        drops: vec![
+            AnimalDrop::new("snake_meat".to_string(), 2, 3),
+            AnimalDrop::new("snake_skin".to_string(), 1, 2),
+            AnimalDrop::new("venom_sac".to_string(), 1, 1).with_chance(0.5),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn tiger() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "tiger".to_string(),
+        name: "Tiger".to_string(),
+        description: "Apex predator of jungles, solitary and deadly".to_string(),
+        health: 190.0,
+        attack_damage: 32.0,
+        defense: 7.0,
+        speed: 2.0,
+        behavior: AnimalBehavior::Aggressive,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Large,
+        primary_biomes: vec![ClimateZone::Tropical],
+        secondary_biomes: vec![ClimateZone::Temperate],
+        group_size: (1, 1),
+        drops: vec![
+            AnimalDrop::new("tiger_meat".to_string(), 18, 25),
+            AnimalDrop::new("fur".to_string(), 10, 15),
+            AnimalDrop::new("thick_hide".to_string(), 6, 10),
+            AnimalDrop::new("tiger_fang".to_string(), 2, 4),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn crocodile() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "crocodile".to_string(),
+        name: "Crocodile".to_string(),
+        description: "Ancient reptilian predator, lurks in water".to_string(),
+        health: 150.0,
+        attack_damage: 35.0,
+        defense: 12.0, // Armored scales
+        speed: 0.9, // Slow on land
+        behavior: AnimalBehavior::Aggressive,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Large,
+        primary_biomes: vec![ClimateZone::Tropical],
+        secondary_biomes: vec![ClimateZone::Desert],
+        group_size: (1, 3),
+        drops: vec![
+            AnimalDrop::new("crocodile_meat".to_string(), 15, 20),
+            AnimalDrop::new("crocodile_scales".to_string(), 10, 15),
+            AnimalDrop::new("thick_hide".to_string(), 8, 12),
+            AnimalDrop::new("crocodile_tooth".to_string(), 4, 8),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn polar_bear() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "polar_bear".to_string(),
+        name: "Polar Bear".to_string(),
+        description: "Massive arctic predator, adapted to extreme cold".to_string(),
+        health: 220.0,
+        attack_damage: 35.0,
+        defense: 9.0,
+        speed: 1.4,
+        behavior: AnimalBehavior::Aggressive,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Large,
+        primary_biomes: vec![ClimateZone::Arctic],
+        secondary_biomes: vec![],
+        group_size: (1, 1),
+        drops: vec![
+            AnimalDrop::new("bear_meat".to_string(), 22, 35),
+            AnimalDrop::new("fur".to_string(), 15, 20), // Extra warm fur
+            AnimalDrop::new("thick_hide".to_string(), 10, 15),
+            AnimalDrop::new("bear_claw".to_string(), 4, 4),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+// ============================================================================
+// LARGE HERBIVORES (MOUNT-COMPATIBLE)
+// ============================================================================
+
+fn elk_animal() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "elk".to_string(),
+        name: "Elk".to_string(),
+        description: "Large forest herbivore with impressive antlers".to_string(),
+        health: 90.0,
+        attack_damage: 12.0,
+        defense: 3.0,
+        speed: 1.6,
+        behavior: AnimalBehavior::Defensive,
+        diet: DietType::Herbivore,
+        size: AnimalSize::Large,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
+        group_size: (3, 10),
+        drops: vec![
+            AnimalDrop::new("elk_meat".to_string(), 12, 18),
+            AnimalDrop::new("leather".to_string(), 6, 10),
+            AnimalDrop::new("antler".to_string(), 2, 2).with_chance(0.6),
+        ],
+        can_domesticate: true, // Can be trained as mount
+        living_products: vec![],
+    }
+}
+
+fn reindeer_animal() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "reindeer".to_string(),
+        name: "Reindeer".to_string(),
+        description: "Arctic herbivore, adapted to snow and cold".to_string(),
+        health: 70.0,
+        attack_damage: 8.0,
+        defense: 2.0,
+        speed: 1.7,
+        behavior: AnimalBehavior::Passive,
+        diet: DietType::Herbivore,
+        size: AnimalSize::Medium,
+        primary_biomes: vec![ClimateZone::Arctic],
+        secondary_biomes: vec![],
+        group_size: (5, 20),
+        drops: vec![
+            AnimalDrop::new("reindeer_meat".to_string(), 10, 15),
+            AnimalDrop::new("leather".to_string(), 5, 8),
+            AnimalDrop::new("fur".to_string(), 4, 6),
+            AnimalDrop::new("antler".to_string(), 2, 2).with_chance(0.7),
+        ],
+        can_domesticate: true, // Can be trained as mount
+        living_products: vec![],
+    }
+}
+
+// ============================================================================
+// TROPICAL SPECIALISTS
+// ============================================================================
+
+fn monkey() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "monkey".to_string(),
+        name: "Monkey".to_string(),
+        description: "Agile tree-dweller, intelligent and mischievous".to_string(),
+        health: 25.0,
+        attack_damage: 5.0,
+        defense: 1.0,
+        speed: 1.9,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Omnivore,
+        size: AnimalSize::Small,
+        primary_biomes: vec![ClimateZone::Tropical],
+        secondary_biomes: vec![],
+        group_size: (5, 15),
+        drops: vec![
+            AnimalDrop::new("monkey_meat".to_string(), 2, 4),
+            AnimalDrop::new("fur".to_string(), 1, 2),
+        ],
+        can_domesticate: true, // As companions/pets
+        living_products: vec![],
+    }
+}
+
+// ============================================================================
+// AQUATIC ANIMALS
+// ============================================================================
+
+fn fish() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "fish".to_string(),
+        name: "Fish".to_string(),
+        description: "Common fish, found in rivers and lakes".to_string(),
+        health: 5.0,
+        attack_damage: 0.0,
+        defense: 0.0,
+        speed: 1.5,
+        behavior: AnimalBehavior::Passive,
+        diet: DietType::Carnivore, // Eat smaller fish
+        size: AnimalSize::Tiny,
+        primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
+        secondary_biomes: vec![ClimateZone::Arctic],
+        group_size: (10, 50),
+        drops: vec![
+            AnimalDrop::new("fish_meat".to_string(), 1, 2),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn otter() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "otter".to_string(),
+        name: "Otter".to_string(),
+        description: "Playful aquatic mammal, hunts fish".to_string(),
+        health: 30.0,
+        attack_damage: 6.0,
+        defense: 1.0,
+        speed: 1.6,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Small,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
+        group_size: (2, 6),
+        drops: vec![
+            AnimalDrop::new("otter_meat".to_string(), 3, 5),
+            AnimalDrop::new("fur".to_string(), 3, 5), // Water-resistant fur
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+fn seal() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "seal".to_string(),
+        name: "Seal".to_string(),
+        description: "Arctic aquatic mammal, thick blubber provides warmth".to_string(),
+        health: 80.0,
+        attack_damage: 8.0,
+        defense: 4.0,
+        speed: 1.1, // Slow on land, fast in water
+        behavior: AnimalBehavior::Passive,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Medium,
+        primary_biomes: vec![ClimateZone::Arctic],
+        secondary_biomes: vec![],
+        group_size: (3, 12),
+        drops: vec![
+            AnimalDrop::new("seal_meat".to_string(), 10, 15),
+            AnimalDrop::new("blubber".to_string(), 8, 12), // Fat/oil
+            AnimalDrop::new("fur".to_string(), 4, 6),
+            AnimalDrop::new("leather".to_string(), 3, 5),
+        ],
+        can_domesticate: false,
+        living_products: vec![],
+    }
+}
+
+// ============================================================================
+// ANIMAL INSTANCE SYSTEM (Individual animals in the world)
+// ============================================================================
+
+/// AI state for animal behavior
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AnimalState {
+    /// Wandering aimlessly
+    Idle,
+    /// Moving towards food/grazing
+    Grazing,
+    /// Seeking water
+    Drinking,
+    /// Resting to recover health/stamina
+    Resting,
+    /// Following herd/pack
+    Following,
+    /// Hunting prey
+    Hunting { target_id: Option<Uuid> },
+    /// Fleeing from danger
+    Fleeing { from_position: (i32, i32) },
+    /// Attacking threat
+    Attacking { target_id: Uuid },
+    /// Dead
+    Dead,
+}
+
+/// Individual animal instance in the world
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Animal {
+    pub id: Uuid,
+    pub species_id: String,
+
+    /// Position in world
+    pub position: (i32, i32),
+    pub facing: f32, // Direction in radians
+
+    /// Stats
+    pub current_health: f32,
+    pub max_health: f32,
+    pub stamina: f32,
+    pub max_stamina: f32,
+
+    /// AI state
+    pub state: AnimalState,
+    pub state_timer: u32, // Ticks remaining in current state
+
+    /// Herd/pack affiliation
+    pub group_id: Option<Uuid>,
+
+    /// Age (in ticks)
+    pub age: u32,
+    pub maturity_age: u32, // Age when fully grown
+
+    /// Domestication
+    pub is_domesticated: bool,
+    pub tame_level: f32, // 0.0 = wild, 1.0 = fully tamed
+    pub owner_id: Option<Uuid>, // Agent who owns this animal
+
+    /// Reproduction
+    pub can_reproduce: bool,
+    pub reproduction_cooldown: u32,
+
+    /// Living product timers
+    pub product_timers: HashMap<String, u32>, // material_id -> ticks until production
+}
+
+impl Animal {
+    pub fn new(species_id: String, position: (i32, i32), species: &AnimalSpecies) -> Self {
+        let mut product_timers = HashMap::new();
+        for product in &species.living_products {
+            product_timers.insert(product.material_id.clone(), product.production_time);
+        }
+
+        Self {
+            id: Uuid::new_v4(),
+            species_id,
+            position,
+            facing: 0.0,
+            current_health: species.health,
+            max_health: species.health,
+            stamina: 100.0,
+            max_stamina: 100.0,
+            state: AnimalState::Idle,
+            state_timer: 0,
+            group_id: None,
+            age: 0,
+            maturity_age: 1000, // Default 1000 ticks to mature
+            is_domesticated: false,
+            tame_level: 0.0,
+            owner_id: None,
+            can_reproduce: true,
+            reproduction_cooldown: 0,
+            product_timers,
+        }
+    }
+
+    /// Check if animal is alive
+    pub fn is_alive(&self) -> bool {
+        self.current_health > 0.0 && self.state != AnimalState::Dead
+    }
+
+    /// Check if animal is mature (can reproduce, full stats)
+    pub fn is_mature(&self) -> bool {
+        self.age >= self.maturity_age
+    }
+
+    /// Check if animal is wild (not domesticated)
+    pub fn is_wild(&self) -> bool {
+        !self.is_domesticated
+    }
+
+    /// Damage the animal
+    pub fn take_damage(&mut self, amount: f32) {
+        self.current_health = (self.current_health - amount).max(0.0);
+        if self.current_health == 0.0 {
+            self.state = AnimalState::Dead;
+        }
+    }
+
+    /// Heal the animal
+    pub fn heal(&mut self, amount: f32) {
+        if self.is_alive() {
+            self.current_health = (self.current_health + amount).min(self.max_health);
+        }
+    }
+
+    /// Consume stamina
+    pub fn use_stamina(&mut self, amount: f32) {
+        self.stamina = (self.stamina - amount).max(0.0);
+    }
+
+    /// Recover stamina
+    pub fn recover_stamina(&mut self, amount: f32) {
+        self.stamina = (self.stamina + amount).min(self.max_stamina);
+    }
+
+    /// Check if exhausted
+    pub fn is_exhausted(&self) -> bool {
+        self.stamina < 20.0
+    }
+
+    /// Tame the animal (increase tame level)
+    pub fn tame(&mut self, amount: f32) {
+        if !self.is_domesticated {
+            self.tame_level = (self.tame_level + amount).min(1.0);
+            if self.tame_level >= 1.0 {
+                self.is_domesticated = true;
+            }
+        }
+    }
+
+    /// Tick product production timers and return ready products
+    pub fn tick_products(&mut self) -> Vec<(String, u32)> {
+        let mut produced = Vec::new();
+
+        if !self.is_alive() || !self.is_mature() {
+            return produced;
+        }
+
+        for (material_id, timer) in self.product_timers.iter_mut() {
+            if *timer > 0 {
+                *timer -= 1;
+            } else {
+                // Find the product info to get quantity
+                // We'll return the material_id and quantity
+                produced.push((material_id.clone(), 1)); // Default quantity
+                *timer = 100; // Reset timer (will be updated with actual value)
+            }
+        }
+
+        produced
+    }
+
+    /// Age the animal by one tick
+    pub fn tick_age(&mut self) {
+        self.age += 1;
+
+        // Update reproduction cooldown
+        if self.reproduction_cooldown > 0 {
+            self.reproduction_cooldown -= 1;
+        }
+    }
+
+    /// Get health percentage
+    pub fn health_percentage(&self) -> f32 {
+        self.current_health / self.max_health
+    }
+
+    /// Get stamina percentage
+    pub fn stamina_percentage(&self) -> f32 {
+        self.stamina / self.max_stamina
+    }
+}
+
+// ============================================================================
+// ANIMAL MANAGER (Manages all animals in the world)
+// ============================================================================
+
+/// Manages animal population and AI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnimalManager {
+    animals: Vec<Animal>,
+    groups: HashMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
+
+    /// Spawning parameters
+    spawn_rate: f32, // Chance per tick to spawn
+    max_population: usize,
+
+    /// Reference to fauna registry (not serialized)
+    #[serde(skip)]
+    registry: Option<FaunaRegistry>,
+}
+
+impl AnimalManager {
+    pub fn new(max_population: usize) -> Self {
+        Self {
+            animals: Vec::new(),
+            groups: HashMap::new(),
+            spawn_rate: 0.001, // 0.1% chance per tick
+            max_population,
+            registry: Some(FaunaRegistry::new()),
+        }
+    }
+
+    /// Spawn an animal at a position
+    pub fn spawn_animal(&mut self, species_id: String, position: (i32, i32)) -> Option<Uuid> {
+        if self.animals.len() >= self.max_population {
+            return None;
+        }
+
+        let species = self.registry.as_ref()?.get(&species_id)?;
+        let animal = Animal::new(species_id, position, species);
+        let id = animal.id;
+        self.animals.push(animal);
+        Some(id)
+    }
+
+    /// Spawn a herd/pack of animals
+    pub fn spawn_group(&mut self, species_id: String, center: (i32, i32), count: u32) -> Option<Uuid> {
+        let group_id = Uuid::new_v4();
+        let mut members = Vec::new();
+
+        let species = self.registry.as_ref()?.get(&species_id)?;
+
+        for i in 0..count {
+            if self.animals.len() >= self.max_population {
+                break;
+            }
+
+            // Spawn in a circle around center
+            let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
+            let radius = 3.0;
+            let x = center.0 + (angle.cos() * radius) as i32;
+            let y = center.1 + (angle.sin() * radius) as i32;
+
+            let mut animal = Animal::new(species_id.clone(), (x, y), species);
+            animal.group_id = Some(group_id);
+
+            members.push(animal.id);
+            self.animals.push(animal);
+        }
+
+        if !members.is_empty() {
+            self.groups.insert(group_id, members);
+            Some(group_id)
+        } else {
+            None
+        }
+    }
+
+    /// Get all animals
+    pub fn get_all(&self) -> &Vec<Animal> {
+        &self.animals
+    }
+
+    /// Get specific animal
+    pub fn get(&self, id: &Uuid) -> Option<&Animal> {
+        self.animals.iter().find(|a| a.id == *id)
+    }
+
+    /// Get mutable animal
+    pub fn get_mut(&mut self, id: &Uuid) -> Option<&mut Animal> {
+        self.animals.iter_mut().find(|a| a.id == *id)
+    }
+
+    /// Get all animals at a position
+    pub fn get_at_position(&self, position: (i32, i32)) -> Vec<&Animal> {
+        self.animals.iter()
+            .filter(|a| a.position == position && a.is_alive())
+            .collect()
+    }
+
+    /// Get animals in radius
+    pub fn get_in_radius(&self, center: (i32, i32), radius: f32) -> Vec<&Animal> {
+        self.animals.iter()
+            .filter(|a| {
+                if !a.is_alive() {
+                    return false;
+                }
+                let dx = (a.position.0 - center.0) as f32;
+                let dy = (a.position.1 - center.1) as f32;
+                (dx * dx + dy * dy).sqrt() <= radius
+            })
+            .collect()
+    }
+
+    /// Get animals of a specific species
+    pub fn get_by_species(&self, species_id: &str) -> Vec<&Animal> {
+        self.animals.iter()
+            .filter(|a| a.species_id == species_id && a.is_alive())
+            .collect()
+    }
+
+    /// Get domesticated animals owned by an agent
+    pub fn get_owned_by(&self, owner_id: &Uuid) -> Vec<&Animal> {
+        self.animals.iter()
+            .filter(|a| a.owner_id == Some(*owner_id) && a.is_alive())
+            .collect()
+    }
+
+    /// Remove dead animals
+    pub fn remove_dead(&mut self) {
+        self.animals.retain(|a| a.is_alive());
+    }
+
+    /// Tick all animals (age, products, natural healing)
+    pub fn tick(&mut self) {
+        for animal in &mut self.animals {
+            if !animal.is_alive() {
+                continue;
+            }
+
+            // Age
+            animal.tick_age();
+
+            // Natural stamina recovery when resting
+            if animal.state == AnimalState::Resting {
+                animal.recover_stamina(1.0);
+            }
+
+            // Slow natural healing
+            if animal.current_health < animal.max_health {
+                animal.heal(0.1);
+            }
+
+            // Tick products
+            animal.tick_products();
+
+            // Decrement state timer
+            if animal.state_timer > 0 {
+                animal.state_timer -= 1;
+            }
+        }
+    }
+
+    /// Count living animals
+    pub fn population_count(&self) -> usize {
+        self.animals.iter().filter(|a| a.is_alive()).count()
+    }
+
+    /// Count animals by species
+    pub fn count_by_species(&self, species_id: &str) -> usize {
+        self.animals.iter()
+            .filter(|a| a.species_id == species_id && a.is_alive())
+            .count()
+    }
+
+    /// Get total living animals by behavior
+    pub fn count_by_behavior(&self, behavior: AnimalBehavior) -> usize {
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return 0,
+        };
+
+        self.animals.iter()
+            .filter(|a| {
+                if !a.is_alive() {
+                    return false;
+                }
+                registry.get(&a.species_id)
+                    .map(|s| s.behavior == behavior)
+                    .unwrap_or(false)
+            })
+            .count()
+    }
+}
+
+impl Default for AnimalManager {
+    fn default() -> Self {
+        Self::new(1000) // Default max 1000 animals
     }
 }
 

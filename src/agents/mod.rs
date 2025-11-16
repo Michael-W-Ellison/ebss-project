@@ -35,6 +35,9 @@ pub use gossip::{
 };
 pub use equipment::{
     Equipment, EquipmentSlot, ClothingMaterial, ClothingTemplate,
+    EquipmentItem, EquipmentType, EquipmentMaterial, EquipmentManager,
+    MetalMaterial, WoodMaterial, StoneMaterial,
+    WeaponTemplate, ToolTemplate, ArmorTemplate,
 };
 pub use temperature::{
     BodyTemperature, Temperature, Climate,
