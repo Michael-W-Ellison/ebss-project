@@ -23,7 +23,7 @@ mod crafting;
 mod plugin;
 mod registry;
 mod structure;
-mod technology;
+pub mod technology;
 mod heat_source;
 pub mod clothing_recipes;
 pub mod flora;

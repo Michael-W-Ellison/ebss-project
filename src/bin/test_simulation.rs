@@ -504,6 +504,51 @@ fn print_population_status(population: &Population, tick: u32) {
                 println!("     • Hostile Relationships: {}", total_hostile);
             }
         }
+
+        // Calculate technology statistics
+        use std::collections::HashSet;
+        use ebss::environment::technology::TechnologyState;
+
+        let mut all_known_techs: HashSet<String> = HashSet::new();
+        let mut tech_discovery_counts: HashMap<String, usize> = HashMap::new();
+        let mut total_original_discoveries = 0;
+        let mut agents_with_tech = 0;
+
+        for agent in &population.agents {
+            let agent_techs: Vec<_> = agent.technology_knowledge
+                .known_technologies
+                .keys()
+                .collect();
+
+            if !agent_techs.is_empty() {
+                agents_with_tech += 1;
+            }
+
+            for tech_id in agent_techs {
+                all_known_techs.insert(tech_id.clone());
+                *tech_discovery_counts.entry(tech_id.clone()).or_insert(0) += 1;
+            }
+
+            total_original_discoveries += agent.technology_knowledge.original_discoveries.len();
+        }
+
+        // Display technology statistics
+        if !all_known_techs.is_empty() {
+            println!("   Technology & Knowledge:");
+            println!("     • Discovered Technologies: {}", all_known_techs.len());
+            println!("     • Agents with Knowledge:   {}/{}", agents_with_tech, count);
+            println!("     • Original Discoveries:    {}", total_original_discoveries);
+
+            // Sort technologies by how many agents know them
+            let mut tech_vec: Vec<_> = tech_discovery_counts.iter().collect();
+            tech_vec.sort_by(|a, b| b.1.cmp(a.1));
+
+            println!("     • Most Known Technologies:");
+            for (tech_id, agent_count) in tech_vec.iter().take(5) {
+                let percentage = (**agent_count as f32 / count) * 100.0;
+                println!("       - {}: {} agents ({:.0}%)", tech_id, agent_count, percentage);
+            }
+        }
     }
 
     println!();
