@@ -56,6 +56,8 @@ pub mod profession;
 pub mod social_interactions;
 pub mod exploration;
 pub mod exploration_behavior;
+pub mod storage_management;
+pub mod storage_integration;
 
 pub use population::{Population, PopulationConfig};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
@@ -76,4 +78,14 @@ pub use exploration_behavior::{
     ExplorationDecision,
     random_exploration_direction,
     calculate_exploration_direction,
+};
+pub use storage_management::{
+    StorageDecision, StoragePreferences,
+    decide_storage_action, calculate_storage_priority,
+    is_storage_critical, should_prioritize_gathering,
+};
+pub use storage_integration::{
+    take_from_agent_inventory, add_to_agent_inventory,
+    count_in_agent_inventory, count_food_in_inventory,
+    count_resources_in_inventory, count_tools_in_inventory,
 };
