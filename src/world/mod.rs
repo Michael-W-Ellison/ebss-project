@@ -60,6 +60,7 @@ pub mod production;
 pub mod economy;
 pub mod technology;
 pub mod climate;
+pub mod combat;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -91,6 +92,8 @@ pub struct World {
     pub heat_sources: HeatSourceRegistry,
     pub animals: AnimalManager,
     pub plants: PlantManager,
+    #[serde(skip)]
+    pub combat_manager: combat::CombatManager, // Combat system (not serialized)
     pub tick: u32,
 }
 
@@ -139,6 +142,7 @@ impl World {
             heat_sources: HeatSourceRegistry::new(),
             animals: AnimalManager::new(1000), // Max 1000 animals
             plants: PlantManager::new(5000), // Max 5000 plants
+            combat_manager: combat::CombatManager::new(),
             tick: 0,
         };
 
@@ -455,10 +459,11 @@ impl World {
         }
     }
 
-    /// Feed an animal
+    /// Feed an animal (restores stamina and health)
     pub fn feed_animal(&mut self, animal_id: &uuid::Uuid, amount: f32) -> Result<(), String> {
         if let Some(animal) = self.animals.get_mut(animal_id) {
-            animal.feed(amount);
+            animal.stamina = (animal.stamina + amount).min(animal.max_stamina);
+            animal.heal(amount * 0.5); // Restore some health too
             Ok(())
         } else {
             Err("Animal not found".to_string())
@@ -468,7 +473,8 @@ impl World {
     /// Damage an animal
     pub fn damage_animal(&mut self, animal_id: &uuid::Uuid, damage: f32) -> Result<bool, String> {
         if let Some(animal) = self.animals.get_mut(animal_id) {
-            let is_dead = animal.damage(damage);
+            animal.take_damage(damage);
+            let is_dead = !animal.is_alive();
             Ok(is_dead)
         } else {
             Err("Animal not found".to_string())
@@ -585,6 +591,200 @@ impl World {
             .iter()
             .filter(|p| p.is_cultivated)
             .collect()
+    }
+
+    // ===== Combat System =====
+
+    /// Attack an animal (agent vs animal combat)
+    pub fn agent_attack_animal(
+        &mut self,
+        agent_id: uuid::Uuid,
+        agent_weapon_damage: f32,
+        agent_mounted_bonus: f32,
+        animal_id: &uuid::Uuid,
+    ) -> Result<combat::CombatResult, String> {
+        // Get animal stats
+        let animal = self.animals.get(animal_id)
+            .ok_or_else(|| "Animal not found".to_string())?;
+
+        let animal_uuid = animal.id;
+        // Use stamina-based defense approximation (higher stamina = better defense)
+        let animal_armor = (animal.stamina / animal.max_stamina) * 0.2; // 0-20% defense
+
+        // Create attacker stats (agent)
+        let attacker_stats = combat::CombatStats {
+            base_damage: 5.0,
+            weapon_damage: agent_weapon_damage,
+            mounted_bonus: agent_mounted_bonus,
+            ..Default::default()
+        };
+
+        // Create defender stats (animal)
+        let defender_stats = combat::CombatStats {
+            base_damage: 0.0, // Not attacking
+            armor_rating: animal_armor, // Natural armor
+            ..Default::default()
+        };
+
+        // Execute combat
+        let mut result = self.combat_manager.execute_combat(
+            agent_id,
+            animal_uuid,
+            &attacker_stats,
+            &defender_stats,
+            Some("weapon".to_string()),
+        );
+
+        // Apply damage to animal
+        let is_dead = self.damage_animal(&animal_uuid, result.damage_dealt)?;
+        result.defender_killed = is_dead;
+
+        Ok(result)
+    }
+
+    /// Animal attacks agent
+    pub fn animal_attack_agent(
+        &mut self,
+        animal_id: &uuid::Uuid,
+        agent_id: uuid::Uuid,
+        agent_armor: f32,
+    ) -> Result<combat::CombatResult, String> {
+        // Get animal stats
+        let animal = self.animals.get(animal_id)
+            .ok_or_else(|| "Animal not found".to_string())?;
+
+        // Base attack based on animal max health (larger animals hit harder)
+        let animal_damage = (animal.max_health / 20.0).min(20.0); // 5-20 damage range
+        let animal_uuid = animal.id;
+        let species_name = animal.species_id.clone();
+
+        // Create attacker stats (animal)
+        let attacker_stats = combat::CombatStats {
+            base_damage: animal_damage,
+            weapon_damage: 0.0,
+            ..Default::default()
+        };
+
+        // Create defender stats (agent)
+        let defender_stats = combat::CombatStats {
+            base_damage: 0.0,
+            armor_rating: agent_armor,
+            ..Default::default()
+        };
+
+        // Execute combat
+        let result = self.combat_manager.execute_combat(
+            animal_uuid,
+            agent_id,
+            &attacker_stats,
+            &defender_stats,
+            Some(format!("{} attack", species_name)),
+        );
+
+        // Note: Damage to agent must be applied by caller
+        Ok(result)
+    }
+
+    /// Agent vs agent combat
+    pub fn agent_attack_agent(
+        &mut self,
+        attacker_id: uuid::Uuid,
+        defender_id: uuid::Uuid,
+        attacker_weapon_damage: f32,
+        attacker_armor: f32,
+        attacker_mounted_bonus: f32,
+        defender_weapon_damage: f32,
+        defender_armor: f32,
+        defender_mounted_bonus: f32,
+    ) -> Result<combat::CombatResult, String> {
+        // Create attacker stats
+        let attacker_stats = combat::CombatStats {
+            base_damage: 5.0,
+            weapon_damage: attacker_weapon_damage,
+            armor_rating: attacker_armor,
+            mounted_bonus: attacker_mounted_bonus,
+            ..Default::default()
+        };
+
+        // Create defender stats
+        let defender_stats = combat::CombatStats {
+            base_damage: 5.0,
+            weapon_damage: defender_weapon_damage,
+            armor_rating: defender_armor,
+            mounted_bonus: defender_mounted_bonus,
+            ..Default::default()
+        };
+
+        // Execute combat
+        let result = self.combat_manager.execute_combat(
+            attacker_id,
+            defender_id,
+            &attacker_stats,
+            &defender_stats,
+            Some("weapon".to_string()),
+        );
+
+        // Note: Damage must be applied by caller to both agents
+        Ok(result)
+    }
+
+    /// Animal vs animal combat
+    pub fn animal_attack_animal(
+        &mut self,
+        attacker_id: &uuid::Uuid,
+        defender_id: &uuid::Uuid,
+    ) -> Result<combat::CombatResult, String> {
+        // Get both animals
+        let attacker = self.animals.get(attacker_id)
+            .ok_or_else(|| "Attacker animal not found".to_string())?;
+        let defender = self.animals.get(defender_id)
+            .ok_or_else(|| "Defender animal not found".to_string())?;
+
+        let attacker_uuid = attacker.id;
+        let attacker_damage = (attacker.max_health / 20.0).min(20.0); // Based on size
+        let attacker_defense = (attacker.stamina / attacker.max_stamina) * 0.2;
+
+        let defender_uuid = defender.id;
+        let defender_damage = (defender.max_health / 20.0).min(20.0);
+        let defender_defense = (defender.stamina / defender.max_stamina) * 0.2;
+
+        // Create stats
+        let attacker_stats = combat::CombatStats {
+            base_damage: attacker_damage,
+            armor_rating: attacker_defense,
+            ..Default::default()
+        };
+
+        let defender_stats = combat::CombatStats {
+            base_damage: defender_damage,
+            armor_rating: defender_defense,
+            ..Default::default()
+        };
+
+        // Execute combat
+        let mut result = self.combat_manager.execute_combat(
+            attacker_uuid,
+            defender_uuid,
+            &attacker_stats,
+            &defender_stats,
+            None,
+        );
+
+        // Apply damage to defender
+        let is_dead = self.damage_animal(&defender_uuid, result.damage_dealt)?;
+        result.defender_killed = is_dead;
+
+        Ok(result)
+    }
+
+    /// Get combat statistics for an entity
+    pub fn get_combat_stats(&self, entity_id: &uuid::Uuid) -> combat::CombatStatistics {
+        self.combat_manager.get_combat_stats(entity_id)
+    }
+
+    /// Get recent combat log
+    pub fn get_recent_combat(&self, count: usize) -> Vec<&combat::CombatResult> {
+        self.combat_manager.get_recent_combat(count)
     }
 
     pub fn tick(&mut self) {
