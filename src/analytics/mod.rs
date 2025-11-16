@@ -613,18 +613,19 @@ impl Simulation {
                 use crate::world::{ItemType, ResourceType};
                 use crate::agents::skills::SkillType;
 
-                // Define skill-based crafting recipes
-                // Format: (recipe, required_skill_level)
+                // Define skill and technology-based crafting recipes
+                // Format: (recipe, required_skill_level, required_technology)
                 // Skill levels: -10 to 10, where 0 is untrained adult
-                let skill_gated_recipes: Vec<(Recipe, i32)> = vec![
-                    // BEGINNER (skill -10 to 0): Basic wooden tools
+                // Technology: Optional technology ID that must be known
+                let skill_gated_recipes: Vec<(Recipe, i32, Option<&str>)> = vec![
+                    // BEGINNER (skill -10 to 0): Basic wooden tools - requires wooden_tools technology
                     (Recipe {
                         name: "Craft Wooden Axe",
                         job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenAxe, 1)],
                         base_time: 80,
-                    }, -5),  // Very easy
+                    }, -5, Some("wooden_tools")),  // Very easy, needs wooden tools tech
 
                     (Recipe {
                         name: "Craft Wooden Pickaxe",
@@ -632,7 +633,7 @@ impl Simulation {
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenPickaxe, 1)],
                         base_time: 80,
-                    }, -5),
+                    }, -5, Some("wooden_tools")),
 
                     (Recipe {
                         name: "Craft Wooden Hammer",
@@ -640,75 +641,7 @@ impl Simulation {
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenHammer, 1)],
                         base_time: 80,
-                    }, -5),
-
-                    // NOVICE (skill 0-3): Stone tools
-                    (Recipe {
-                        name: "Craft Stone Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
-                        inputs: vec![
-                            ResourceRequirement::new(ResourceType::Stone, 2),
-                            ResourceRequirement::new(ResourceType::Wood, 1),
-                        ],
-                        outputs: vec![ProductionOutput::new(ItemType::StoneAxe, 1)],
-                        base_time: 90,
-                    }, 0),  // Requires basic training
-
-                    (Recipe {
-                        name: "Craft Stone Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
-                        inputs: vec![
-                            ResourceRequirement::new(ResourceType::Stone, 2),
-                            ResourceRequirement::new(ResourceType::Wood, 1),
-                        ],
-                        outputs: vec![ProductionOutput::new(ItemType::StonePickaxe, 1)],
-                        base_time: 90,
-                    }, 0),
-
-                    (Recipe {
-                        name: "Craft Stone Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
-                        inputs: vec![
-                            ResourceRequirement::new(ResourceType::Stone, 2),
-                            ResourceRequirement::new(ResourceType::Wood, 1),
-                        ],
-                        outputs: vec![ProductionOutput::new(ItemType::StoneHammer, 1)],
-                        base_time: 90,
-                    }, 0),
-
-                    // APPRENTICE (skill 3-5): Iron tools, basic weapons
-                    (Recipe {
-                        name: "Craft Iron Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
-                        inputs: vec![
-                            ResourceRequirement::new(ResourceType::Iron, 2),
-                            ResourceRequirement::new(ResourceType::Wood, 1),
-                        ],
-                        outputs: vec![ProductionOutput::new(ItemType::IronAxe, 1)],
-                        base_time: 100,
-                    }, 3),  // Requires some experience
-
-                    (Recipe {
-                        name: "Craft Iron Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
-                        inputs: vec![
-                            ResourceRequirement::new(ResourceType::Iron, 2),
-                            ResourceRequirement::new(ResourceType::Wood, 1),
-                        ],
-                        outputs: vec![ProductionOutput::new(ItemType::IronPickaxe, 1)],
-                        base_time: 100,
-                    }, 3),
-
-                    (Recipe {
-                        name: "Craft Iron Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
-                        inputs: vec![
-                            ResourceRequirement::new(ResourceType::Iron, 2),
-                            ResourceRequirement::new(ResourceType::Wood, 1),
-                        ],
-                        outputs: vec![ProductionOutput::new(ItemType::IronHammer, 1)],
-                        base_time: 100,
-                    }, 3),
+                    }, -5, Some("wooden_tools")),
 
                     (Recipe {
                         name: "Craft Wooden Spear",
@@ -719,9 +652,77 @@ impl Simulation {
                         ],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenSpear, 1)],
                         base_time: 85,
-                    }, 1),
+                    }, 1, Some("wooden_tools")),
 
-                    // JOURNEYMAN (skill 5-8): Advanced weapons
+                    // NOVICE (skill 0-3): Stone tools - requires stone_tools technology
+                    (Recipe {
+                        name: "Craft Stone Axe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Stone, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::StoneAxe, 1)],
+                        base_time: 90,
+                    }, 0, Some("stone_tools")),  // Requires basic training + stone tools tech
+
+                    (Recipe {
+                        name: "Craft Stone Pickaxe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Stone, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::StonePickaxe, 1)],
+                        base_time: 90,
+                    }, 0, Some("stone_tools")),
+
+                    (Recipe {
+                        name: "Craft Stone Hammer",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Stone, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::StoneHammer, 1)],
+                        base_time: 90,
+                    }, 0, Some("stone_tools")),
+
+                    // APPRENTICE (skill 3-5): Iron tools - requires iron_working technology
+                    (Recipe {
+                        name: "Craft Iron Axe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Iron, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::IronAxe, 1)],
+                        base_time: 100,
+                    }, 3, Some("iron_working")),  // Requires experience + iron working tech
+
+                    (Recipe {
+                        name: "Craft Iron Pickaxe",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Iron, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::IronPickaxe, 1)],
+                        base_time: 100,
+                    }, 3, Some("iron_working")),
+
+                    (Recipe {
+                        name: "Craft Iron Hammer",
+                        job: crate::agents::profession::JobType::Unemployed,
+                        inputs: vec![
+                            ResourceRequirement::new(ResourceType::Iron, 2),
+                            ResourceRequirement::new(ResourceType::Wood, 1),
+                        ],
+                        outputs: vec![ProductionOutput::new(ItemType::IronHammer, 1)],
+                        base_time: 100,
+                    }, 3, Some("iron_working")),
+
+                    // JOURNEYMAN (skill 5-8): Advanced weapons - requires iron_working technology
                     (Recipe {
                         name: "Craft Iron Sword",
                         job: crate::agents::profession::JobType::Unemployed,
@@ -731,36 +732,83 @@ impl Simulation {
                         ],
                         outputs: vec![ProductionOutput::new(ItemType::IronSword, 1)],
                         base_time: 120,
-                    }, 5),  // Requires significant experience
+                    }, 5, Some("iron_working")),  // Requires significant experience + iron working tech
                 ];
 
-                // Get agent's crafting skill level
-                let agent_skill_level = {
+                // Get agent's crafting skill level and known technologies
+                let (agent_skill_level, agent_known_techs) = {
                     let agent = &mut self.population.agents[agent_index];
-                    agent.skills.get_skill(SkillType::Crafting).level
+                    let skill = agent.skills.get_skill(SkillType::Crafting).level;
+                    let techs: std::collections::HashSet<String> = agent.technology_knowledge
+                        .known_technologies.keys().cloned().collect();
+                    (skill, techs)
                 };
 
-                // Filter recipes by skill level - only show recipes agent can craft
-                let available_recipes: Vec<&Recipe> = skill_gated_recipes
+                // Filter recipes by skill level AND technology - only show recipes agent can craft
+                let available_recipes: Vec<(&Recipe, i32, Option<&str>)> = skill_gated_recipes
                     .iter()
-                    .filter(|(_, required_skill)| agent_skill_level >= *required_skill)
-                    .map(|(recipe, _)| recipe)
+                    .filter(|(_, required_skill, required_tech)| {
+                        // Check skill requirement
+                        if agent_skill_level < *required_skill {
+                            return false;
+                        }
+
+                        // Check technology requirement
+                        if let Some(tech_id) = required_tech {
+                            if !agent_known_techs.contains(*tech_id) {
+                                return false;
+                            }
+                        }
+
+                        true
+                    })
+                    .map(|(recipe, skill, tech)| (recipe, *skill, *tech))
                     .collect();
 
                 // Try to find a recipe that matches the item type
-                let recipe = available_recipes.iter().find(|r| {
+                let recipe_match = available_recipes.iter().find(|(r, _, _)| {
                     r.outputs.iter().any(|output| {
                         format!("{:?}", output.item_type).to_lowercase() == item_type.to_lowercase()
                     })
                 });
 
-                if recipe.is_none() {
-                    return ActionResult::failure(format!(
-                        "Cannot craft {} (insufficient skill: {})",
-                        item_type, agent_skill_level
-                    ));
+                // If no recipe found in available recipes, check if it exists but agent doesn't meet requirements
+                if recipe_match.is_none() {
+                    // Find the recipe in the full list to give a helpful error message
+                    let full_recipe = skill_gated_recipes.iter().find(|(r, _, _)| {
+                        r.outputs.iter().any(|output| {
+                            format!("{:?}", output.item_type).to_lowercase() == item_type.to_lowercase()
+                        })
+                    });
+
+                    if let Some((_, required_skill, required_tech)) = full_recipe {
+                        // Determine what's missing
+                        let mut reasons = Vec::new();
+
+                        if agent_skill_level < *required_skill {
+                            reasons.push(format!("insufficient skill (need {}, have {})",
+                                required_skill, agent_skill_level));
+                        }
+
+                        if let Some(tech_id) = required_tech {
+                            if !agent_known_techs.contains(*tech_id) {
+                                reasons.push(format!("missing technology '{}'", tech_id));
+                            }
+                        }
+
+                        return ActionResult::failure(format!(
+                            "Cannot craft {}: {}",
+                            item_type,
+                            reasons.join(", ")
+                        ));
+                    } else {
+                        return ActionResult::failure(format!(
+                            "Unknown recipe: {}",
+                            item_type
+                        ));
+                    }
                 }
-                let recipe = *recipe.unwrap();
+                let (recipe, _, _) = recipe_match.unwrap();
 
                 // Check if agent has all required materials in inventory
                 let agent = &self.population.agents[agent_index];
