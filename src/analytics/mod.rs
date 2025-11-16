@@ -97,49 +97,75 @@ impl Simulation {
         // Process agent behavior and actions
         // Note: agents have already been updated by population.tick() above
         // This loop handles behavior tree execution and action processing
-        for agent in &mut self.population.agents {
-            // Select the most urgent drive and corresponding behavior tree
-            if let Some(urgent_drive) = agent.drives.most_urgent() {
-                let drive_type = urgent_drive.drive_type;
-                let drive_value = urgent_drive.value;
-                let agent_position = agent.state.position;
 
-                debug!(
-                    "Agent {} - Most urgent drive: {:?} (value: {:.2})",
-                    agent.id, drive_type, drive_value
-                );
+        // Collect agent IDs to avoid borrowing issues
+        let agent_ids: Vec<_> = self.population.agents.iter().map(|a| a.id).collect();
 
-                // Select and execute behavior tree
+        for agent_id in agent_ids {
+            // Find the agent
+            let agent_index = self.population.agents.iter().position(|a| a.id == agent_id);
+            if agent_index.is_none() {
+                continue;
+            }
+            let agent_index = agent_index.unwrap();
+
+            // Get agent data we need
+            let (drive_type, drive_value, agent_position) = {
+                let agent = &self.population.agents[agent_index];
+                if let Some(urgent_drive) = agent.drives.most_urgent() {
+                    (Some(urgent_drive.drive_type), urgent_drive.value, agent.state.position)
+                } else {
+                    (None, 0.0, agent.state.position)
+                }
+            };
+
+            if drive_type.is_none() {
+                continue;
+            }
+            let drive_type = drive_type.unwrap();
+
+            debug!(
+                "Agent {} - Most urgent drive: {:?} (value: {:.2})",
+                agent_id, drive_type, drive_value
+            );
+
+            // Select and execute behavior tree
+            let (tree_name, execution_result) = {
+                let agent = &mut self.population.agents[agent_index];
                 if let Some(tree) = agent.select_behavior_tree() {
                     let tree_name = tree.name.clone();
-
-                    // Execute the behavior tree (learning happens here automatically)
                     let execution_result = tree.execute();
+                    (Some(tree_name), Some(execution_result))
+                } else {
+                    (None, None)
+                }
+            };
 
-                    debug!(
-                        "Agent {} - Executed tree: {} -> {:?}",
-                        agent.id, tree_name, execution_result
-                    );
+            if tree_name.is_some() {
+                debug!(
+                    "Agent {} - Executed tree: {} -> {:?}",
+                    agent_id, tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
+                );
 
-                    // Generate action based on drive type and agent position
-                    let action = Self::generate_action_for_drive(drive_type, agent_position);
+                // Generate action based on drive type and agent position
+                let action = Self::generate_action_for_drive(drive_type, agent_position);
 
-                    // Execute action in environment and get feedback
-                    let action_result = Self::execute_action_static(&action);
+                // Execute action in environment and get feedback
+                let action_result = self.execute_action(&action, agent_index);
 
-                    debug!(
-                        "Agent {} - Action result: {} (satisfaction: {:.2})",
-                        agent.id, action_result.message, action_result.drive_satisfaction
-                    );
+                debug!(
+                    "Agent {} - Action result: {} (satisfaction: {:.2})",
+                    agent_id, action_result.message, action_result.drive_satisfaction
+                );
 
-                    // Apply feedback to agent (drive satisfaction)
-                    agent.apply_feedback(&action_result, drive_type);
+                // Apply feedback to agent (drive satisfaction)
+                let agent = &mut self.population.agents[agent_index];
+                agent.apply_feedback(&action_result, drive_type);
 
-                    // Update behavior tree weights based on action success
-                    if let Some(tree) = agent.select_behavior_tree() {
-                        if action_result.success {
-                            tree.total_successes += 1;
-                        }
+                // Update behavior tree weights based on action success
+                if let Some(tree) = agent.select_behavior_tree() {
+                    if action_result.success {
+                        tree.total_successes += 1;
                     }
                 }
             }
@@ -179,34 +205,112 @@ impl Simulation {
     }
 
     /// Execute an action in the environment and return the result
-    fn execute_action_static(action: &Action) -> ActionResult {
-        // Simulate action execution with some randomness
-        // In a full implementation, this would interact with the world state
-
+    fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
         use rand::Rng;
+        use crate::world::{ResourceType, Position};
+
         let mut rng = rand::thread_rng();
-        let success_probability = 0.7; // 70% success rate
 
-        let success = rng.gen_bool(success_probability);
+        match action {
+            Action::Eat { food_type } => {
+                // Find nearby food resources
+                let agent = &self.population.agents[agent_index];
+                let agent_pos = Position::new(
+                    agent.state.position.0,
+                    agent.state.position.1
+                );
 
-        if success {
-            // Calculate satisfaction based on action type
-            let satisfaction = match action {
-                Action::Eat { .. } => 0.3,
-                Action::Sleep { .. } => 0.5,
-                Action::Build { .. } => 0.2,
-                Action::Gather { .. } => 0.15,
-                Action::Craft { .. } => 0.2,
-                Action::Store { .. } => 0.1,
-                Action::Explore { .. } => 0.15,
-                Action::Socialize { .. } => 0.2,
-                Action::Move { .. } => 0.05,
-                Action::Wait => 0.0,
-            };
+                // Look for food within a 25-tile radius (half the world size)
+                let mut nearest_food: Option<(usize, u32)> = None;
+                for (i, resource) in self.world.resources.iter().enumerate() {
+                    if resource.resource_type == ResourceType::Food && resource.amount > 0 {
+                        let distance = agent_pos.distance_to(&resource.position);
+                        if distance <= 25 {
+                            if let Some((_, nearest_dist)) = nearest_food {
+                                if distance < nearest_dist {
+                                    nearest_food = Some((i, distance));
+                                }
+                            } else {
+                                nearest_food = Some((i, distance));
+                            }
+                        }
+                    }
+                }
 
-            ActionResult::success()
-        } else {
-            ActionResult::failure(format!("{:?} failed", action))
+                if let Some((food_index, _)) = nearest_food {
+                    // Harvest food
+                    let harvested = self.world.resources[food_index].harvest(1);
+
+                    if harvested > 0 {
+                        // Calculate energy restored (food provides 20-40 energy)
+                        let energy_restored = rng.gen_range(20.0..40.0);
+
+                        // Agent eats the food
+                        let agent = &mut self.population.agents[agent_index];
+                        agent.state.eat(self.current_tick, energy_restored);
+
+                        debug!(
+                            "Agent {} ate food, restored {:.1} energy, reset starvation timer",
+                            agent.id, energy_restored
+                        );
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Hunger, -0.3)
+                            .with_energy_cost(5.0) // Small energy cost to gather/eat
+                            .with_message(format!("Ate {} and restored {:.1} energy", food_type, energy_restored))
+                    } else {
+                        ActionResult::failure("Food source was empty".to_string())
+                    }
+                } else {
+                    // No food nearby, agent fails to eat
+                    ActionResult::failure("No food sources nearby".to_string())
+                }
+            },
+
+            Action::Sleep { duration } => {
+                // Restore energy based on sleep duration
+                let agent = &mut self.population.agents[agent_index];
+                let energy_restored = (*duration as f32) * 2.0; // 2 energy per tick
+                agent.state.energy = (agent.state.energy + energy_restored).min(100.0);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Rest, -0.5)
+                    .with_message(format!("Slept for {} ticks, restored {:.1} energy", duration, energy_restored))
+            },
+
+            Action::Gather { resource_type } => {
+                // Simplified gathering - just succeed with some probability
+                if rng.gen_bool(0.7) {
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Industry, -0.15)
+                        .with_energy_cost(10.0)
+                        .with_message(format!("Gathered {}", resource_type))
+                } else {
+                    ActionResult::failure(format!("Failed to gather {}", resource_type))
+                }
+            },
+
+            // For other actions, use simplified success/failure
+            _ => {
+                let success_probability = 0.7;
+                if rng.gen_bool(success_probability) {
+                    let satisfaction = match action {
+                        Action::Build { .. } => 0.2,
+                        Action::Craft { .. } => 0.2,
+                        Action::Store { .. } => 0.1,
+                        Action::Explore { .. } => 0.15,
+                        Action::Socialize { .. } => 0.2,
+                        Action::Move { .. } => 0.05,
+                        Action::Wait => 0.0,
+                        _ => 0.1,
+                    };
+
+                    ActionResult::success()
+                        .with_message(format!("{:?} succeeded", action))
+                } else {
+                    ActionResult::failure(format!("{:?} failed", action))
+                }
+            }
         }
     }
 

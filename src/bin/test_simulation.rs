@@ -70,6 +70,7 @@ fn main() {
 
         // Report at intervals
         if (tick + 1) % report_interval == 0 {
+            print_world_status(&sim.world, tick + 1);
             print_population_status(&sim.population, tick + 1);
             print_death_watch(&sim.population, tick + 1);
         }
@@ -98,6 +99,26 @@ fn parse_arg(args: &[String], flag: &str) -> Option<usize> {
         .and_then(|val| val.parse().ok())
 }
 
+/// Print world resource status
+fn print_world_status(world: &World, tick: u32) {
+    use ebss::world::ResourceType;
+
+    // Count food resources
+    let mut food_nodes = 0;
+    let mut food_amount = 0;
+
+    for resource in &world.resources {
+        if resource.resource_type == ResourceType::Food {
+            food_nodes += 1;
+            food_amount += resource.amount;
+        }
+    }
+
+    println!("🌍 World Resources at Tick {}:", tick);
+    println!("   Food Sources: {} nodes with {} total food", food_nodes, food_amount);
+    println!();
+}
+
 /// Print current population status
 fn print_population_status(population: &Population, tick: u32) {
     let stats = &population.stats;
@@ -114,6 +135,30 @@ fn print_population_status(population: &Population, tick: u32) {
     println!("     • Total Births: {}", stats.total_births);
     println!("     • Total Deaths: {}", stats.total_deaths);
     println!("     • Abandonments: {}", stats.total_abandonments);
+
+    // Calculate average hunger statistics
+    if !population.agents.is_empty() {
+        let mut total_energy = 0.0;
+        let mut total_hunger = 0.0;
+        let mut starving_count = 0;
+
+        for agent in &population.agents {
+            total_energy += agent.state.energy;
+            if let Some(hunger) = agent.drives.get(DriveType::Hunger) {
+                total_hunger += hunger.value;
+            }
+            if agent.state.is_starving() {
+                starving_count += 1;
+            }
+        }
+
+        let count = population.agents.len() as f32;
+        println!("   Survival Stats:");
+        println!("     • Avg Energy:  {:.1}/100.0", total_energy / count);
+        println!("     • Avg Hunger:  {:.2}", total_hunger / count);
+        println!("     • Starving:    {}", starving_count);
+    }
+
     println!();
 }
 
