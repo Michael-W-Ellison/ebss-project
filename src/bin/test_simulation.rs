@@ -140,6 +140,30 @@ fn print_world_status(world: &World, tick: u32) {
     println!("   Stone: {} nodes with {} total", stone_nodes, stone_amount);
     println!("   Iron:  {} nodes with {} total", iron_nodes, iron_amount);
     println!("   Food:  {} nodes with {} total", food_nodes, food_amount);
+
+    // Count buildings
+    if !world.buildings.is_empty() {
+        use ebss::world::BuildingState;
+
+        let mut completed = 0;
+        let mut under_construction = 0;
+
+        for building in &world.buildings {
+            match building.state {
+                BuildingState::Completed => completed += 1,
+                BuildingState::UnderConstruction { .. } => under_construction += 1,
+            }
+        }
+
+        println!();
+        println!("🏗️  Buildings:");
+        println!("   Total: {} buildings", world.buildings.len());
+        println!("   Completed: {}", completed);
+        if under_construction > 0 {
+            println!("   Under Construction: {}", under_construction);
+        }
+    }
+
     println!();
 }
 

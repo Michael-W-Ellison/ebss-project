@@ -380,12 +380,97 @@ impl Simulation {
                 }
             },
 
+            Action::Build { structure_type, position } => {
+                use crate::world::{BuildingType, Building, Position, ResourceType};
+
+                // Map structure string to BuildingType
+                let building_type = match structure_type.as_str() {
+                    "shelter" | "smallhouse" => BuildingType::SmallHouse,
+                    "mediumhouse" => BuildingType::MediumHouse,
+                    "largehouse" => BuildingType::LargeHouse,
+                    "workshop" => BuildingType::Workshop,
+                    "storehouse" => BuildingType::Storehouse,
+                    "farm" => BuildingType::Farm,
+                    "structure" => BuildingType::SmallHouse, // Default
+                    _ => BuildingType::SmallHouse, // Default fallback
+                };
+
+                // Get resource requirements for this building
+                let requirements = building_type.requirements();
+
+                // Check if agent has required resources in inventory
+                let agent = &self.population.agents[agent_index];
+                let mut has_all_resources = true;
+                let mut missing_resources = Vec::new();
+
+                for req in &requirements {
+                    let item_id = match req.resource_type {
+                        ResourceType::Wood => "wood",
+                        ResourceType::Stone => "stone",
+                        ResourceType::Iron => "iron",
+                        _ => continue,
+                    };
+
+                    if let Some(item) = agent.inventory.get_item(item_id) {
+                        if item.quantity < req.amount {
+                            has_all_resources = false;
+                            missing_resources.push(format!("{} {} (have {})", req.amount - item.quantity, item_id, item.quantity));
+                        }
+                    } else {
+                        has_all_resources = false;
+                        missing_resources.push(format!("{} {}", req.amount, item_id));
+                    }
+                }
+
+                if !has_all_resources {
+                    return ActionResult::failure(format!(
+                        "Missing resources for {:?}: {}",
+                        building_type,
+                        missing_resources.join(", ")
+                    ));
+                }
+
+                // Check if position is valid and not occupied
+                let build_pos = Position::new(position.0, position.1);
+                if self.world.is_position_occupied(&build_pos) {
+                    return ActionResult::failure("Position already occupied".to_string());
+                }
+
+                // Remove resources from agent inventory
+                let agent = &mut self.population.agents[agent_index];
+                for req in &requirements {
+                    let item_id = match req.resource_type {
+                        ResourceType::Wood => "wood",
+                        ResourceType::Stone => "stone",
+                        ResourceType::Iron => "iron",
+                        _ => continue,
+                    };
+
+                    agent.inventory.remove_item(item_id, req.amount);
+                }
+
+                // Create new building (under construction)
+                let building = Building::new_under_construction(building_type, build_pos);
+
+                // Add building to world
+                self.world.add_building(building);
+
+                debug!(
+                    "Agent {} started construction of {:?} at ({}, {})",
+                    agent.id, building_type, position.0, position.1
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Construction, -0.2)
+                    .with_energy_cost(20.0)
+                    .with_message(format!("Started building {:?}", building_type))
+            },
+
             // For other actions, use simplified success/failure
             _ => {
                 let success_probability = 0.7;
                 if rng.gen_bool(success_probability) {
                     let satisfaction = match action {
-                        Action::Build { .. } => 0.2,
                         Action::Craft { .. } => 0.2,
                         Action::Store { .. } => 0.1,
                         Action::Explore { .. } => 0.15,
