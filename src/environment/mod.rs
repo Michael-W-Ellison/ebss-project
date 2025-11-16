@@ -193,7 +193,6 @@ impl ActionResult {
             experience: 0.0,
             energy_cost: 0.0,
             drive_satisfaction: 0.0,
-            message: String::new(),
             message: None,
         }
     }
