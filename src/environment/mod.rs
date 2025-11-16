@@ -25,6 +25,7 @@ mod registry;
 mod structure;
 pub mod technology;
 mod heat_source;
+pub mod smelting;
 pub mod clothing_recipes;
 pub mod flora;
 pub mod fauna;

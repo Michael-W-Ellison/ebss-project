@@ -577,6 +577,7 @@ pub struct Agent {
     pub preferences: Preferences,
     pub current_job: Option<super::profession::JobType>,
     pub job_change_cooldown: u32, // Ticks until can change job again
+    pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
 }
 
 impl Agent {
@@ -612,6 +613,7 @@ impl Agent {
             preferences: Preferences::default(),
             current_job: None, // No job initially
             job_change_cooldown: 0,
+            equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
         }
     }
 
@@ -1536,6 +1538,155 @@ impl Agent {
                 }
             })
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
+    // ===== Equipment Management =====
+
+    /// Equip an item from inventory into a specific slot
+    pub fn equip_from_inventory(&mut self, item_id: &str, slot: super::equipment::EquipmentSlot) -> Result<(), String> {
+        // Check if item exists in inventory
+        if !self.inventory.has_item(item_id, 1) {
+            return Err(format!("Item '{}' not found in inventory", item_id));
+        }
+
+        // Create equipment item from inventory item
+        // For now, we'll create a basic equipment item
+        // In a full implementation, this would lookup item stats from a registry
+        let equipment_item = super::equipment::EquipmentItem::new(
+            item_id.to_string(),
+            slot,
+        );
+
+        // Equip the item (this returns the previously equipped item if any)
+        match self.equipment.equip(equipment_item) {
+            Ok(old_item) => {
+                // Remove from inventory
+                self.inventory.remove_item(item_id, 1);
+
+                // If there was an old item, add it back to inventory
+                if let Some(old) = old_item {
+                    self.inventory.add_item(InventoryItem::new(old.name, 1));
+                }
+
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Unequip an item from a slot and put it in inventory
+    pub fn unequip_to_inventory(&mut self, slot: super::equipment::EquipmentSlot) -> Result<(), String> {
+        match self.equipment.unequip(slot) {
+            Some(item) => {
+                // Add to inventory
+                if self.inventory.add_item(InventoryItem::new(item.name.clone(), 1)) {
+                    Ok(())
+                } else {
+                    // Inventory full, re-equip the item
+                    self.equipment.equip(item).ok();
+                    Err("Inventory full, cannot unequip".to_string())
+                }
+            }
+            None => Err(format!("No item equipped in slot {:?}", slot)),
+        }
+    }
+
+    /// Get reference to currently equipped item in a slot
+    pub fn get_equipped(&self, slot: super::equipment::EquipmentSlot) -> Option<&super::equipment::EquipmentItem> {
+        self.equipment.get_equipped(slot)
+    }
+
+    /// Check if a specific slot is occupied
+    pub fn is_slot_equipped(&self, slot: super::equipment::EquipmentSlot) -> bool {
+        self.equipment.get_equipped(slot).is_some()
+    }
+
+    /// Get total armor rating from all equipped armor
+    pub fn get_total_armor(&self) -> f32 {
+        self.equipment.total_armor()
+    }
+
+    /// Get total cold insulation from all equipped clothing
+    pub fn get_total_cold_insulation(&self) -> f32 {
+        self.equipment.total_cold_insulation()
+    }
+
+    /// Get total heat resistance from all equipped clothing
+    pub fn get_total_heat_resistance(&self) -> f32 {
+        self.equipment.total_heat_resistance()
+    }
+
+    /// Get attack damage bonus from equipped weapons
+    pub fn get_weapon_damage(&self) -> f32 {
+        self.equipment.weapon_damage()
+    }
+
+    /// Get tool efficiency bonus from equipped tools
+    pub fn get_tool_efficiency(&self, tool_type: &str) -> f32 {
+        // Check main hand for matching tool
+        if let Some(item) = self.equipment.get_equipped(super::equipment::EquipmentSlot::MainHand) {
+            if item.name.contains(tool_type) {
+                return item.get_tool_efficiency();
+            }
+        }
+        1.0 // Default efficiency if no tool equipped
+    }
+
+    /// Apply durability loss to equipped item in a slot (e.g., when using a tool)
+    pub fn damage_equipment(&mut self, slot: super::equipment::EquipmentSlot, damage: f32) -> Result<bool, String> {
+        if let Some(item) = self.equipment.get_equipped_mut(slot) {
+            item.take_damage(damage);
+
+            // Check if item broke
+            if item.is_broken() {
+                // Remove broken item
+                self.equipment.unequip(slot);
+                return Ok(true); // Item broke
+            }
+            Ok(false) // Item damaged but not broken
+        } else {
+            Err(format!("No item equipped in slot {:?}", slot))
+        }
+    }
+
+    /// Repair equipped item in a slot
+    pub fn repair_equipment(&mut self, slot: super::equipment::EquipmentSlot, amount: f32) -> Result<(), String> {
+        if let Some(item) = self.equipment.get_equipped_mut(slot) {
+            item.repair(amount);
+            Ok(())
+        } else {
+            Err(format!("No item equipped in slot {:?}", slot))
+        }
+    }
+
+    /// Check if agent is encumbered by equipment weight
+    pub fn is_encumbered(&self) -> bool {
+        self.equipment.is_encumbered()
+    }
+
+    /// Get encumbrance penalty (0.0 = no penalty, 1.0 = fully encumbered)
+    pub fn get_encumbrance_penalty(&self) -> f32 {
+        self.equipment.encumbrance_penalty()
+    }
+
+    /// Get movement speed multiplier based on equipment weight
+    pub fn get_movement_speed_multiplier(&self) -> f32 {
+        self.equipment.movement_speed_multiplier()
+    }
+
+    /// Get all equipped items
+    pub fn get_all_equipped(&self) -> Vec<&super::equipment::EquipmentItem> {
+        self.equipment.get_all_equipped()
+    }
+
+    /// Get mining speed bonus from equipped tools
+    pub fn get_mining_speed_bonus(&self) -> f32 {
+        self.equipment.mining_speed_bonus()
+    }
+
+    /// Get harvesting speed bonus from equipped tools
+    pub fn get_harvesting_speed_bonus(&self) -> f32 {
+        self.equipment.harvesting_speed_bonus()
     }
 }
 

@@ -2,6 +2,7 @@
 //! Complete world simulation system with terrain, resources, buildings, and spatial management.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// World size presets for common use cases
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +61,8 @@ pub mod production;
 pub mod economy;
 pub mod technology;
 pub mod climate;
+pub mod combat;
+pub mod crafting;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -75,6 +78,16 @@ pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, Dis
 pub use climate::{ClimateManager, terrain_to_biome};
 
 use crate::agents::Population;
+use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager};
+
+/// Status of a heat source for smelting
+#[derive(Debug, Clone)]
+pub struct HeatSourceStatus {
+    pub is_lit: bool,
+    pub current_temperature: f32,
+    pub fuel_remaining: f32,
+    pub contents: Vec<(String, u32, u32, f32)>, // (material_id, quantity, heating_time, current_temp)
+}
 
 /// Complete world state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +100,13 @@ pub struct World {
     #[serde(skip)]
     pub tech_tree: TechnologyTree, // Global technology tree (not serialized, recreated)
     pub climate: ClimateManager,
+    pub heat_sources: HeatSourceRegistry,
+    pub animals: AnimalManager,
+    pub plants: PlantManager,
+    #[serde(skip)]
+    pub combat_manager: combat::CombatManager, // Combat system (not serialized)
+    #[serde(skip)]
+    pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
     pub tick: u32,
 }
 
@@ -132,6 +152,11 @@ impl World {
             marketplace: Marketplace::new(),
             tech_tree: TechnologyTree::new(),
             climate: ClimateManager::default(),
+            heat_sources: HeatSourceRegistry::new(),
+            animals: AnimalManager::new(1000), // Max 1000 animals
+            plants: PlantManager::new(5000), // Max 5000 plants
+            combat_manager: combat::CombatManager::new(),
+            crafting_manager: crafting::CraftingManager::new(),
             tick: 0,
         };
 
@@ -254,6 +279,654 @@ impl World {
         self.resources.retain(|r| r.amount > 0);
     }
 
+    // ===== Heat Source Management =====
+
+    /// Build a new heat source at a position
+    pub fn build_heat_source(
+        &mut self,
+        heat_source_type: crate::environment::HeatSourceType,
+        position: (i32, i32, i32),
+        builder_id: Option<uuid::Uuid>,
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        let (x, y, z) = position;
+        if x < 0 || y < 0 || x >= self.grid.width as i32 || y >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        // Check if there's already a heat source at this position
+        if self.heat_sources.get_at_position(position).is_some() {
+            return Err("Heat source already exists at this position".to_string());
+        }
+
+        // Create the heat source
+        let mut heat_source = crate::environment::HeatSource::new(
+            heat_source_type,
+            position,
+            self.tick as u64,
+        );
+
+        if let Some(builder) = builder_id {
+            heat_source = heat_source.with_builder(builder);
+        }
+
+        let id = heat_source.id;
+        self.heat_sources.add(heat_source);
+
+        Ok(id)
+    }
+
+    /// Add fuel to a heat source
+    pub fn add_fuel_to_heat_source(
+        &mut self,
+        heat_source_id: &uuid::Uuid,
+        material_id: String,
+        amount: f32,
+    ) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            // Default burn time based on material (could be expanded)
+            let burn_time = match material_id.as_str() {
+                "wood" => 100,
+                "charcoal" => 200,
+                "coal" => 300,
+                _ => 50,
+            };
+
+            heat_source.add_fuel(material_id, amount, burn_time);
+            Ok(())
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Light a heat source
+    pub fn light_heat_source(&mut self, heat_source_id: &uuid::Uuid) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            if heat_source.light() {
+                Ok(())
+            } else {
+                Err("Cannot light heat source (no fuel)".to_string())
+            }
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Extinguish a heat source
+    pub fn extinguish_heat_source(&mut self, heat_source_id: &uuid::Uuid) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            heat_source.extinguish();
+            Ok(())
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Add materials to heat/smelt
+    pub fn add_to_heat_source(
+        &mut self,
+        heat_source_id: &uuid::Uuid,
+        material_id: String,
+        quantity: u32,
+    ) -> Result<(), String> {
+        if let Some(heat_source) = self.heat_sources.get_mut(heat_source_id) {
+            heat_source.add_contents(material_id, quantity);
+            Ok(())
+        } else {
+            Err("Heat source not found".to_string())
+        }
+    }
+
+    /// Get heat source at position (2D, assumes z=0)
+    pub fn get_heat_source_at(&self, x: i32, y: i32) -> Option<&crate::environment::HeatSource> {
+        self.heat_sources.get_at_position((x, y, 0))
+    }
+
+    /// Get all heat sources within range of a position
+    pub fn get_heat_sources_in_range(
+        &self,
+        position: (i32, i32, i32),
+        range: f32,
+    ) -> Vec<&crate::environment::HeatSource> {
+        self.heat_sources.in_range(position, range)
+    }
+
+    /// Get temperature contribution from nearby heat sources
+    pub fn environmental_temperature(&self, position: (i32, i32, i32), range: f32) -> f32 {
+        let nearby_sources = self.get_heat_sources_in_range(position, range);
+
+        let mut total_heat_contribution = 0.0;
+
+        for source in nearby_sources {
+            if source.is_lit {
+                let dx = (source.position.0 - position.0) as f32;
+                let dy = (source.position.1 - position.1) as f32;
+                let dz = (source.position.2 - position.2) as f32;
+                let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1.0);
+
+                // Heat contribution falls off with distance
+                let contribution = (source.current_temperature - 20.0) / distance;
+                total_heat_contribution += contribution;
+            }
+        }
+
+        // Base environmental temp + heat contribution
+        20.0 + total_heat_contribution
+    }
+
+    // ===== Animal Management =====
+
+    /// Spawn a wild animal at a position
+    pub fn spawn_animal(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        if position.0 < 0 || position.1 < 0 ||
+           position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.animals.spawn_animal(species_id, position)
+            .ok_or_else(|| "Failed to spawn animal (max population reached or invalid species)".to_string())
+    }
+
+    /// Spawn a group/herd of animals
+    pub fn spawn_animal_group(
+        &mut self,
+        species_id: String,
+        center: (i32, i32),
+        count: u32,
+    ) -> Result<uuid::Uuid, String> {
+        // Check if center position is valid
+        if center.0 < 0 || center.1 < 0 ||
+           center.0 >= self.grid.width as i32 || center.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.animals.spawn_group(species_id, center, count)
+            .ok_or_else(|| "Failed to spawn animal group".to_string())
+    }
+
+    /// Get animals within radius of a position
+    pub fn get_animals_in_radius(
+        &self,
+        center: (i32, i32),
+        radius: f32,
+    ) -> Vec<&crate::environment::Animal> {
+        self.animals.get_in_radius(center, radius)
+    }
+
+    /// Get animals at a specific position
+    pub fn get_animals_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Animal> {
+        self.animals.get_at_position(position)
+    }
+
+    /// Tame an animal (increase tame level)
+    pub fn tame_animal(&mut self, animal_id: &uuid::Uuid, amount: f32) -> Result<(), String> {
+        if let Some(animal) = self.animals.get_mut(animal_id) {
+            animal.tame(amount);
+            Ok(())
+        } else {
+            Err("Animal not found".to_string())
+        }
+    }
+
+    /// Feed an animal (restores stamina and health)
+    pub fn feed_animal(&mut self, animal_id: &uuid::Uuid, amount: f32) -> Result<(), String> {
+        if let Some(animal) = self.animals.get_mut(animal_id) {
+            animal.stamina = (animal.stamina + amount).min(animal.max_stamina);
+            animal.heal(amount * 0.5); // Restore some health too
+            Ok(())
+        } else {
+            Err("Animal not found".to_string())
+        }
+    }
+
+    /// Damage an animal
+    pub fn damage_animal(&mut self, animal_id: &uuid::Uuid, damage: f32) -> Result<bool, String> {
+        if let Some(animal) = self.animals.get_mut(animal_id) {
+            animal.take_damage(damage);
+            let is_dead = !animal.is_alive();
+            Ok(is_dead)
+        } else {
+            Err("Animal not found".to_string())
+        }
+    }
+
+    /// Get all animals of a specific species
+    pub fn get_animals_by_species(&self, species_id: &str) -> Vec<&crate::environment::Animal> {
+        self.animals.all_animals()
+            .iter()
+            .filter(|a| a.species_id == species_id)
+            .copied()
+            .collect()
+    }
+
+    /// Get all domesticated animals
+    pub fn get_domesticated_animals(&self) -> Vec<&crate::environment::Animal> {
+        self.animals.all_animals()
+            .iter()
+            .filter(|a| a.is_domesticated)
+            .copied()
+            .collect()
+    }
+
+    // ===== Plant Management =====
+
+    /// Plant a crop at a position (cultivated)
+    pub fn plant_crop(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+        planter_id: uuid::Uuid,
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        if position.0 < 0 || position.1 < 0 ||
+           position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.plants.plant_crop(species_id, position, planter_id)
+            .ok_or_else(|| "Failed to plant crop (max population reached or invalid species)".to_string())
+    }
+
+    /// Spawn a wild plant at a position
+    pub fn spawn_plant(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+    ) -> Result<uuid::Uuid, String> {
+        // Check if position is valid
+        if position.0 < 0 || position.1 < 0 ||
+           position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return Err("Position out of bounds".to_string());
+        }
+
+        self.plants.spawn_plant(species_id, position)
+            .ok_or_else(|| "Failed to spawn plant (max population reached or invalid species)".to_string())
+    }
+
+    /// Spawn a patch of plants (forest, field, etc.)
+    pub fn spawn_plant_patch(
+        &mut self,
+        species_id: String,
+        center: (i32, i32),
+        radius: u32,
+        density: f32,
+    ) -> Vec<uuid::Uuid> {
+        self.plants.spawn_patch(species_id, center, radius, density)
+    }
+
+    /// Harvest a plant
+    pub fn harvest_plant(
+        &mut self,
+        plant_id: &uuid::Uuid,
+    ) -> Result<Vec<crate::environment::PlantDrop>, String> {
+        self.plants.harvest_plant(plant_id)
+            .ok_or_else(|| "Failed to harvest plant (not found or not harvestable)".to_string())
+    }
+
+    /// Get harvestable plants in radius
+    pub fn get_harvestable_plants(
+        &self,
+        center: (i32, i32),
+        radius: f32,
+    ) -> Vec<&crate::environment::Plant> {
+        self.plants.get_harvestable_in_radius(center, radius)
+    }
+
+    /// Get all plants in radius
+    pub fn get_plants_in_radius(
+        &self,
+        center: (i32, i32),
+        radius: f32,
+    ) -> Vec<&crate::environment::Plant> {
+        self.plants.get_in_radius(center, radius)
+    }
+
+    /// Get plants at a specific position
+    pub fn get_plants_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Plant> {
+        self.plants.get_at_position(position)
+    }
+
+    /// Get all plants of a specific species
+    pub fn get_plants_by_species(&self, species_id: &str) -> Vec<&crate::environment::Plant> {
+        self.plants.all_plants()
+            .iter()
+            .filter(|p| p.species_id == species_id)
+            .collect()
+    }
+
+    /// Get all cultivated plants
+    pub fn get_cultivated_plants(&self) -> Vec<&crate::environment::Plant> {
+        self.plants.all_plants()
+            .iter()
+            .filter(|p| p.is_cultivated)
+            .collect()
+    }
+
+    // ===== Combat System =====
+
+    /// Attack an animal (agent vs animal combat)
+    pub fn agent_attack_animal(
+        &mut self,
+        agent_id: uuid::Uuid,
+        agent_weapon_damage: f32,
+        agent_mounted_bonus: f32,
+        animal_id: &uuid::Uuid,
+    ) -> Result<combat::CombatResult, String> {
+        // Get animal stats
+        let animal = self.animals.get(animal_id)
+            .ok_or_else(|| "Animal not found".to_string())?;
+
+        let animal_uuid = animal.id;
+        // Use stamina-based defense approximation (higher stamina = better defense)
+        let animal_armor = (animal.stamina / animal.max_stamina) * 0.2; // 0-20% defense
+
+        // Create attacker stats (agent)
+        let attacker_stats = combat::CombatStats {
+            base_damage: 5.0,
+            weapon_damage: agent_weapon_damage,
+            mounted_bonus: agent_mounted_bonus,
+            ..Default::default()
+        };
+
+        // Create defender stats (animal)
+        let defender_stats = combat::CombatStats {
+            base_damage: 0.0, // Not attacking
+            armor_rating: animal_armor, // Natural armor
+            ..Default::default()
+        };
+
+        // Execute combat
+        let mut result = self.combat_manager.execute_combat(
+            agent_id,
+            animal_uuid,
+            &attacker_stats,
+            &defender_stats,
+            Some("weapon".to_string()),
+        );
+
+        // Apply damage to animal
+        let is_dead = self.damage_animal(&animal_uuid, result.damage_dealt)?;
+        result.defender_killed = is_dead;
+
+        Ok(result)
+    }
+
+    /// Animal attacks agent
+    pub fn animal_attack_agent(
+        &mut self,
+        animal_id: &uuid::Uuid,
+        agent_id: uuid::Uuid,
+        agent_armor: f32,
+    ) -> Result<combat::CombatResult, String> {
+        // Get animal stats
+        let animal = self.animals.get(animal_id)
+            .ok_or_else(|| "Animal not found".to_string())?;
+
+        // Base attack based on animal max health (larger animals hit harder)
+        let animal_damage = (animal.max_health / 20.0).min(20.0); // 5-20 damage range
+        let animal_uuid = animal.id;
+        let species_name = animal.species_id.clone();
+
+        // Create attacker stats (animal)
+        let attacker_stats = combat::CombatStats {
+            base_damage: animal_damage,
+            weapon_damage: 0.0,
+            ..Default::default()
+        };
+
+        // Create defender stats (agent)
+        let defender_stats = combat::CombatStats {
+            base_damage: 0.0,
+            armor_rating: agent_armor,
+            ..Default::default()
+        };
+
+        // Execute combat
+        let result = self.combat_manager.execute_combat(
+            animal_uuid,
+            agent_id,
+            &attacker_stats,
+            &defender_stats,
+            Some(format!("{} attack", species_name)),
+        );
+
+        // Note: Damage to agent must be applied by caller
+        Ok(result)
+    }
+
+    /// Agent vs agent combat
+    pub fn agent_attack_agent(
+        &mut self,
+        attacker_id: uuid::Uuid,
+        defender_id: uuid::Uuid,
+        attacker_weapon_damage: f32,
+        attacker_armor: f32,
+        attacker_mounted_bonus: f32,
+        defender_weapon_damage: f32,
+        defender_armor: f32,
+        defender_mounted_bonus: f32,
+    ) -> Result<combat::CombatResult, String> {
+        // Create attacker stats
+        let attacker_stats = combat::CombatStats {
+            base_damage: 5.0,
+            weapon_damage: attacker_weapon_damage,
+            armor_rating: attacker_armor,
+            mounted_bonus: attacker_mounted_bonus,
+            ..Default::default()
+        };
+
+        // Create defender stats
+        let defender_stats = combat::CombatStats {
+            base_damage: 5.0,
+            weapon_damage: defender_weapon_damage,
+            armor_rating: defender_armor,
+            mounted_bonus: defender_mounted_bonus,
+            ..Default::default()
+        };
+
+        // Execute combat
+        let result = self.combat_manager.execute_combat(
+            attacker_id,
+            defender_id,
+            &attacker_stats,
+            &defender_stats,
+            Some("weapon".to_string()),
+        );
+
+        // Note: Damage must be applied by caller to both agents
+        Ok(result)
+    }
+
+    /// Animal vs animal combat
+    pub fn animal_attack_animal(
+        &mut self,
+        attacker_id: &uuid::Uuid,
+        defender_id: &uuid::Uuid,
+    ) -> Result<combat::CombatResult, String> {
+        // Get both animals
+        let attacker = self.animals.get(attacker_id)
+            .ok_or_else(|| "Attacker animal not found".to_string())?;
+        let defender = self.animals.get(defender_id)
+            .ok_or_else(|| "Defender animal not found".to_string())?;
+
+        let attacker_uuid = attacker.id;
+        let attacker_damage = (attacker.max_health / 20.0).min(20.0); // Based on size
+        let attacker_defense = (attacker.stamina / attacker.max_stamina) * 0.2;
+
+        let defender_uuid = defender.id;
+        let defender_damage = (defender.max_health / 20.0).min(20.0);
+        let defender_defense = (defender.stamina / defender.max_stamina) * 0.2;
+
+        // Create stats
+        let attacker_stats = combat::CombatStats {
+            base_damage: attacker_damage,
+            armor_rating: attacker_defense,
+            ..Default::default()
+        };
+
+        let defender_stats = combat::CombatStats {
+            base_damage: defender_damage,
+            armor_rating: defender_defense,
+            ..Default::default()
+        };
+
+        // Execute combat
+        let mut result = self.combat_manager.execute_combat(
+            attacker_uuid,
+            defender_uuid,
+            &attacker_stats,
+            &defender_stats,
+            None,
+        );
+
+        // Apply damage to defender
+        let is_dead = self.damage_animal(&defender_uuid, result.damage_dealt)?;
+        result.defender_killed = is_dead;
+
+        Ok(result)
+    }
+
+    /// Get combat statistics for an entity
+    pub fn get_combat_stats(&self, entity_id: &uuid::Uuid) -> combat::CombatStatistics {
+        self.combat_manager.get_combat_stats(entity_id)
+    }
+
+    /// Get recent combat log
+    pub fn get_recent_combat(&self, count: usize) -> Vec<&combat::CombatResult> {
+        self.combat_manager.get_recent_combat(count)
+    }
+
+    // ===== Crafting System =====
+
+    /// Get a crafting recipe
+    pub fn get_recipe(&self, recipe_id: &str) -> Option<&crafting::CraftingRecipe> {
+        self.crafting_manager.get_recipe(recipe_id)
+    }
+
+    /// Get all recipes in a category
+    pub fn get_recipes_by_category(&self, category: crafting::CraftingCategory) -> Vec<&crafting::CraftingRecipe> {
+        self.crafting_manager.get_recipes_by_category(category)
+    }
+
+    /// Get all available recipes
+    pub fn get_all_recipes(&self) -> Vec<&crafting::CraftingRecipe> {
+        self.crafting_manager.all_recipes()
+    }
+
+    /// Attempt to craft an item (checks materials, skills, tools)
+    pub fn attempt_craft(
+        &mut self,
+        recipe_id: &str,
+        crafter_id: uuid::Uuid,
+        inventory: &mut super::agents::agent::Inventory,
+        skills: &HashMap<String, u32>,
+        available_tools: &[crafting::ToolRequirement],
+    ) -> crafting::CraftingResult {
+        // Get inventory materials as HashMap
+        let mut inventory_materials = HashMap::new();
+        for (item_id, item) in inventory.get_all_items() {
+            inventory_materials.insert(item_id.clone(), item.quantity);
+        }
+
+        // Check if can craft
+        let check_result = self.crafting_manager.can_craft(
+            recipe_id,
+            &inventory_materials,
+            skills,
+            available_tools,
+        );
+
+        match check_result {
+            crafting::CraftingResult::Success { item_id, quantity } => {
+                // Get the recipe to consume materials
+                if let Some(recipe) = self.crafting_manager.get_recipe(recipe_id) {
+                    // Consume materials from inventory
+                    for material in &recipe.materials {
+                        inventory.remove_item(&material.material_id, material.quantity);
+                    }
+
+                    // Start crafting job
+                    if let Some(_job_id) = self.crafting_manager.start_crafting(recipe_id.to_string(), crafter_id) {
+                        crafting::CraftingResult::Success { item_id, quantity }
+                    } else {
+                        crafting::CraftingResult::RecipeNotFound
+                    }
+                } else {
+                    crafting::CraftingResult::RecipeNotFound
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// Check if an agent can craft a recipe (without consuming materials)
+    pub fn can_craft_recipe(
+        &self,
+        recipe_id: &str,
+        inventory: &super::agents::agent::Inventory,
+        skills: &HashMap<String, u32>,
+        available_tools: &[crafting::ToolRequirement],
+    ) -> crafting::CraftingResult {
+        // Get inventory materials as HashMap
+        let mut inventory_materials = HashMap::new();
+        for (item_id, item) in inventory.get_all_items() {
+            inventory_materials.insert(item_id.clone(), item.quantity);
+        }
+
+        self.crafting_manager.can_craft(
+            recipe_id,
+            &inventory_materials,
+            skills,
+            available_tools,
+        )
+    }
+
+    /// Get active crafting jobs for a crafter
+    pub fn get_crafter_jobs(&self, crafter_id: &uuid::Uuid) -> Vec<&crafting::CraftingJob> {
+        self.crafting_manager.get_crafter_jobs(crafter_id)
+    }
+
+    /// Cancel a crafting job
+    pub fn cancel_crafting_job(&mut self, job_id: &uuid::Uuid) -> bool {
+        self.crafting_manager.cancel_job(job_id)
+    }
+
+    // ===== Smelting System =====
+
+    /// Get smelting recipes for a material
+    pub fn get_smelting_recipes(&self, material_id: &str) -> Vec<&crate::environment::smelting::SmeltingRecipe> {
+        self.heat_sources.get_smelting_recipes(material_id)
+    }
+
+    /// Check if a material can be smelted
+    pub fn can_smelt_material(&self, material_id: &str) -> bool {
+        self.heat_sources.can_smelt_material(material_id)
+    }
+
+    /// Get detailed status of smelting in a heat source
+    pub fn get_smelting_status(&self, heat_source_id: &uuid::Uuid) -> Option<HeatSourceStatus> {
+        if let Some(heat_source) = self.heat_sources.get(heat_source_id) {
+            Some(HeatSourceStatus {
+                is_lit: heat_source.is_lit,
+                current_temperature: heat_source.current_temperature,
+                fuel_remaining: heat_source.fuel.iter().map(|f| f.amount).sum(),
+                contents: heat_source.contents.iter().map(|c| (
+                    c.material_id.clone(),
+                    c.quantity,
+                    c.heating_time,
+                    c.current_temp,
+                )).collect(),
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn tick(&mut self) {
         self.tick += 1;
 
@@ -264,6 +937,19 @@ impl World {
         for building in &mut self.buildings {
             building.tick();
         }
+
+        // Update heat sources (fuel consumption, heating)
+        self.heat_sources.tick_all();
+
+        // Update animals (AI, movement, aging)
+        self.animals.tick();
+
+        // Update plants (growth, regrowth)
+        self.plants.tick();
+
+        // Update crafting jobs (progress crafting)
+        let _completed_crafts = self.crafting_manager.tick();
+        // Note: Completed items should be added to crafter inventories by caller
 
         // Remove depleted resources
         self.remove_depleted_resources();
