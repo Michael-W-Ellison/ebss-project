@@ -1,5 +1,5 @@
 // src/agents/population.rs
-use crate::agents::{Agent, AgentConfig, SharedKnowledge};
+use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
 use crate::environment::technology::TechnologyRegistry;
 use uuid::Uuid;
@@ -187,6 +187,19 @@ impl Population {
         if current_tick % 100 == 0 {
             self.decay_relationships();
         }
+
+        // Process social interactions (every 10 ticks to reduce overhead)
+        if current_tick % 10 == 0 {
+            self.process_social_interactions();
+        }
+
+        // Process observational learning (every 20 ticks to reduce overhead)
+        if current_tick % 20 == 0 {
+            self.process_observational_learning();
+        }
+
+        // Process exploration for all agents (vision-based discovery)
+        self.process_exploration();
 
         // Share technologies between nearby agents
         self.share_technologies();
@@ -792,6 +805,322 @@ impl Population {
             })
             .collect()
     }
+
+    /// Process social interactions between nearby agents
+    pub fn process_social_interactions(&mut self) {
+        use crate::agents::social_interactions::{
+            SocialInteractionType, ConversationTopic,
+            calculate_relationship_change, calculate_social_satisfaction,
+            should_greet, select_conversation_topic,
+        };
+        use crate::core::DriveType;
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let current_tick = self.current_tick;
+
+        // Collect interaction pairs (to avoid borrowing issues)
+        let mut interactions = Vec::new();
+
+        // Find nearby agent pairs who want to socialize
+        for i in 0..self.agents.len() {
+            if !self.agents[i].state.is_alive {
+                continue;
+            }
+
+            let agent1_id = self.agents[i].id;
+            let agent1_pos = self.agents[i].state.position;
+            let agent1_social_drive = self.agents[i].drives.get(DriveType::Social)
+                .map(|d| d.value)
+                .unwrap_or(0.0);
+
+            // Only socialize if social drive is somewhat active (>0.3)
+            if agent1_social_drive < 0.3 {
+                continue;
+            }
+
+            for j in (i + 1)..self.agents.len() {
+                if !self.agents[j].state.is_alive {
+                    continue;
+                }
+
+                let agent2_id = self.agents[j].id;
+                let agent2_pos = self.agents[j].state.position;
+
+                // Calculate distance
+                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
+                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                // Must be within social interaction range (5 tiles)
+                if distance > 5.0 {
+                    continue;
+                }
+
+                // Check if they should interact
+                // Higher social drive = higher interaction probability
+                let interaction_probability = (agent1_social_drive * 0.3).min(0.5);
+                if !rng.gen_bool(interaction_probability as f64) {
+                    continue;
+                }
+
+                interactions.push((i, j));
+            }
+        }
+
+        // Process each interaction
+        for (i, j) in interactions {
+            let agent1_id = self.agents[i].id;
+            let agent2_id = self.agents[j].id;
+
+            // Get relationship info (or create new relationship)
+            let relationship_1_to_2 = self.agents[i]
+                .social_network
+                .get_or_create_relationship(agent2_id, current_tick)
+                .clone();
+
+            let relationship_2_to_1 = self.agents[j]
+                .social_network
+                .get_or_create_relationship(agent1_id, current_tick)
+                .clone();
+
+            // Get traits
+            let agent1_traits: Vec<Trait> = self.agents[i].traits.get_traits().iter().cloned().collect();
+            let agent2_traits: Vec<Trait> = self.agents[j].traits.get_traits().iter().cloned().collect();
+
+            // Determine interaction type
+            let interaction_type = if should_greet(
+                relationship_1_to_2.last_interaction_tick,
+                current_tick,
+                &relationship_1_to_2.relationship_level,
+            ) {
+                // Greet if haven't interacted recently
+                SocialInteractionType::Greet
+            } else {
+                // Otherwise, have a conversation
+                let topic = select_conversation_topic(
+                    &relationship_1_to_2.relationship_level,
+                    &agent1_traits,
+                    &agent2_traits,
+                );
+                SocialInteractionType::Converse { topic }
+            };
+
+            // Calculate relationship changes for both agents
+            let rel_change_1 = calculate_relationship_change(
+                &interaction_type,
+                &agent1_traits,
+                &agent2_traits,
+                &relationship_1_to_2.relationship_level,
+            );
+
+            let rel_change_2 = calculate_relationship_change(
+                &interaction_type,
+                &agent2_traits,
+                &agent1_traits,
+                &relationship_2_to_1.relationship_level,
+            );
+
+            // Calculate social satisfaction for both agents
+            let satisfaction_1 = calculate_social_satisfaction(
+                &interaction_type,
+                &agent1_traits,
+                &relationship_1_to_2.relationship_level,
+            );
+
+            let satisfaction_2 = calculate_social_satisfaction(
+                &interaction_type,
+                &agent2_traits,
+                &relationship_2_to_1.relationship_level,
+            );
+
+            // Apply changes to agent 1
+            if let Some(rel) = self.agents[i].social_network.get_relationship_mut(agent2_id) {
+                rel.positive_interaction(rel_change_1, current_tick);
+            }
+            if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Social) {
+                drive.partial_satisfy(satisfaction_1);
+            }
+
+            // Apply changes to agent 2
+            if let Some(rel) = self.agents[j].social_network.get_relationship_mut(agent1_id) {
+                rel.positive_interaction(rel_change_2, current_tick);
+            }
+            if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Social) {
+                drive.partial_satisfy(satisfaction_2);
+            }
+        }
+    }
+
+    /// Process exploration for all living agents
+    /// Agents discover tiles within their vision range
+    pub fn process_exploration_with_world(&mut self, world: &mut crate::world::World) {
+        use crate::core::DriveType;
+
+        let current_tick = self.current_tick;
+
+        for agent in &mut self.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Get agent position
+            let agent_pos = crate::world::Position::new(
+                agent.state.position.0,
+                agent.state.position.1,
+            );
+
+            // Vision range based on terrain and conditions (default 10 tiles)
+            let vision_range = 10;
+
+            // Process exploration - discovers tiles, resources, buildings
+            let new_discoveries = world.process_exploration(
+                &mut agent.exploration_knowledge,
+                &agent_pos,
+                vision_range,
+                current_tick,
+            );
+
+            // Satisfy curiosity drive based on discoveries
+            if new_discoveries > 0 {
+                if let Some(drive) = agent.drives.get_mut(DriveType::Curiosity) {
+                    // Each new tile discovery provides small curiosity satisfaction
+                    let satisfaction = (new_discoveries as f32 * 0.02).min(0.5);
+                    drive.partial_satisfy(satisfaction);
+                }
+
+                // Also track in observational learning if discovering new actions
+                // (future enhancement: learn from discovered resources/buildings)
+            }
+        }
+    }
+
+    /// Process exploration without world (for standalone population updates)
+    /// This is called from tick() and just tracks that agents are exploring
+    fn process_exploration(&mut self) {
+        // This method is a placeholder for when we don't have world access
+        // In a full simulation, this would call process_exploration_with_world
+        // For now, it does nothing - exploration happens when world is available
+    }
+
+    /// Process observational learning between agents
+    ///
+    /// This handles:
+    /// - Broadcasting actions to nearby observers
+    /// - Automatic adoption of ready behaviors
+    /// - Skill learning from adopted behaviors
+    pub fn process_observational_learning(&mut self) {
+        use super::observation_processing::{auto_adopt_ready_behaviors};
+
+        // Process auto-adoption for each agent
+        for i in 0..self.agents.len() {
+            let adopted = auto_adopt_ready_behaviors(&mut self.agents[i]);
+
+            // Log adoptions (could be extended to notify parents, etc.)
+            if !adopted.is_empty() {
+                for (teacher_id, action_type) in adopted {
+                    // Future: Could add events, notifications, or drive satisfaction here
+                    // For now, just record that learning happened
+                    let _ = (teacher_id, action_type);
+                }
+            }
+        }
+    }
+
+    /// Broadcast an action from one agent to all nearby observers
+    ///
+    /// This should be called whenever an agent performs a visible action
+    pub fn broadcast_action(
+        &mut self,
+        performer_id: uuid::Uuid,
+        position: (i32, i32, i32),
+        action_type: super::ActionType,
+        success: bool,
+        details: String,
+        timestamp: u64,
+    ) {
+        use super::observation_processing::{BroadcastAction, process_observations};
+
+        let broadcast = BroadcastAction::new(
+            performer_id,
+            position,
+            action_type,
+            success,
+            details,
+            timestamp,
+        );
+
+        process_observations(&mut self.agents, &broadcast);
+    }
+
+    /// Get observational learning statistics for the entire population
+    pub fn get_population_learning_stats(&self) -> PopulationLearningStats {
+        use super::observation_processing::get_learning_stats;
+
+        let mut total_adopted = 0;
+        let mut total_ready = 0;
+        let mut agents_learning_from_parents = 0;
+        let mut total_unique_teachers = 0;
+
+        for agent in &self.agents {
+            let stats = get_learning_stats(agent);
+            total_adopted += stats.total_adopted;
+            total_ready += stats.ready_to_adopt;
+            total_unique_teachers += stats.unique_teachers;
+            if stats.learning_from_parents > 0 {
+                agents_learning_from_parents += 1;
+            }
+        }
+
+        PopulationLearningStats {
+            total_behaviors_adopted: total_adopted,
+            total_ready_to_adopt: total_ready,
+            agents_learning_from_parents,
+            average_unique_teachers: if self.agents.is_empty() {
+                0.0
+            } else {
+                total_unique_teachers as f32 / self.agents.len() as f32
+            },
+        }
+    }
+
+    /// Check which agents are actively learning (have recent observations)
+    pub fn get_active_learners(&self) -> Vec<(uuid::Uuid, usize)> {
+        self.agents
+            .iter()
+            .filter_map(|agent| {
+                let opportunities = agent.check_learning_opportunities();
+                if opportunities.is_empty() {
+                    None
+                } else {
+                    Some((agent.id, opportunities.len()))
+                }
+            })
+            .collect()
+    }
+
+    /// Get parent-child learning pairs
+    pub fn get_parent_child_learning(&self) -> Vec<(uuid::Uuid, uuid::Uuid, Vec<super::ActionType>)> {
+        let mut learning_pairs = Vec::new();
+
+        for child in &self.agents {
+            let parent_learning = child.learning_from_parents();
+            for (parent_id, actions) in parent_learning {
+                learning_pairs.push((child.id, parent_id, actions));
+            }
+        }
+
+        learning_pairs
+    }
+}
+
+/// Statistics about observational learning in the population
+#[derive(Debug, Clone)]
+pub struct PopulationLearningStats {
+    pub total_behaviors_adopted: usize,
+    pub total_ready_to_adopt: usize,
+    pub agents_learning_from_parents: usize,
+    pub average_unique_teachers: f32,
 }
 
 impl Default for Population {

@@ -4,9 +4,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Climate zone classification
+/// Climate zone classification (broad categories)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum BiomeType {
+pub enum ClimateZone {
     Arctic,
     Temperate,
     Desert,
@@ -40,9 +40,9 @@ pub struct PlantSpecies {
     pub regrow_time: u32,
 
     /// Primary biomes where this plant thrives
-    pub primary_biomes: Vec<BiomeType>,
+    pub primary_biomes: Vec<ClimateZone>,
     /// Secondary biomes where it can grow (lower yield)
-    pub secondary_biomes: Vec<BiomeType>,
+    pub secondary_biomes: Vec<ClimateZone>,
 
     /// Materials dropped when harvested
     pub drops: Vec<PlantDrop>,
@@ -110,7 +110,7 @@ impl FloraRegistry {
         self.species.get(id)
     }
 
-    pub fn get_by_biome(&self, biome: BiomeType) -> Vec<&PlantSpecies> {
+    pub fn get_by_biome(&self, biome: ClimateZone) -> Vec<&PlantSpecies> {
         self.species
             .values()
             .filter(|s| s.primary_biomes.contains(&biome) || s.secondary_biomes.contains(&biome))
@@ -153,7 +153,7 @@ fn oak_tree() -> PlantSpecies {
         growth_time: 5000,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Temperate],
+        primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![],
         drops: vec![
             PlantDrop::new("wood".to_string(), 15, 25),
@@ -173,7 +173,7 @@ fn pine_tree() -> PlantSpecies {
         growth_time: 4500,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Arctic, BiomeType::Temperate],
+        primary_biomes: vec![ClimateZone::Arctic, ClimateZone::Temperate],
         secondary_biomes: vec![],
         drops: vec![
             PlantDrop::new("wood".to_string(), 12, 20),
@@ -194,7 +194,7 @@ fn birch_tree() -> PlantSpecies {
         growth_time: 3500,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Arctic, BiomeType::Temperate],
+        primary_biomes: vec![ClimateZone::Arctic, ClimateZone::Temperate],
         secondary_biomes: vec![],
         drops: vec![
             PlantDrop::new("wood".to_string(), 10, 15),
@@ -214,8 +214,8 @@ fn palm_tree() -> PlantSpecies {
         growth_time: 3000,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Tropical],
-        secondary_biomes: vec![BiomeType::Desert],
+        primary_biomes: vec![ClimateZone::Tropical],
+        secondary_biomes: vec![ClimateZone::Desert],
         drops: vec![
             PlantDrop::new("wood".to_string(), 8, 12),
             PlantDrop::new("plant_fiber".to_string(), 15, 20),
@@ -235,7 +235,7 @@ fn cactus() -> PlantSpecies {
         growth_time: 2000,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Desert],
+        primary_biomes: vec![ClimateZone::Desert],
         secondary_biomes: vec![],
         drops: vec![
             PlantDrop::new("plant_fiber".to_string(), 8, 12),
@@ -259,7 +259,7 @@ fn flax_plant() -> PlantSpecies {
         growth_time: 180,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Temperate],
+        primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![],
         drops: vec![
             PlantDrop::new("flax_fiber".to_string(), 3, 5),
@@ -279,7 +279,7 @@ fn cotton_plant() -> PlantSpecies {
         growth_time: 200,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Temperate, BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
         secondary_biomes: vec![],
         drops: vec![
             PlantDrop::new("cotton".to_string(), 4, 6).at_stage(GrowthStage::Fruiting),
@@ -299,8 +299,8 @@ fn hemp_plant() -> PlantSpecies {
         growth_time: 150,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
         drops: vec![
             PlantDrop::new("plant_fiber".to_string(), 5, 8),
             PlantDrop::new("hemp_seeds".to_string(), 2, 4).at_stage(GrowthStage::Fruiting),
@@ -323,8 +323,8 @@ fn berry_bush() -> PlantSpecies {
         growth_time: 500,
         regrows: true,
         regrow_time: 300,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
         drops: vec![
             PlantDrop::new("berries".to_string(), 5, 10).at_stage(GrowthStage::Fruiting),
             PlantDrop::new("plant_fiber".to_string(), 2, 4),
@@ -343,8 +343,8 @@ fn willow_shrub() -> PlantSpecies {
         growth_time: 400,
         regrows: true,
         regrow_time: 250,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Arctic],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
         drops: vec![
             PlantDrop::new("willow_branches".to_string(), 3, 6),
             PlantDrop::new("plant_fiber".to_string(), 2, 3),
@@ -367,8 +367,8 @@ fn grass() -> PlantSpecies {
         growth_time: 50,
         regrows: true,
         regrow_time: 30,
-        primary_biomes: vec![BiomeType::Temperate, BiomeType::Tropical],
-        secondary_biomes: vec![BiomeType::Desert],
+        primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
+        secondary_biomes: vec![ClimateZone::Desert],
         drops: vec![
             PlantDrop::new("plant_fiber".to_string(), 1, 2),
         ],
@@ -386,8 +386,8 @@ fn medicinal_herb() -> PlantSpecies {
         growth_time: 120,
         regrows: false,
         regrow_time: 0,
-        primary_biomes: vec![BiomeType::Temperate],
-        secondary_biomes: vec![BiomeType::Tropical],
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
         drops: vec![
             PlantDrop::new("medicinal_herbs".to_string(), 2, 4).at_stage(GrowthStage::Flowering),
         ],
@@ -414,7 +414,7 @@ mod tests {
     fn test_biome_filtering() {
         let registry = FloraRegistry::new();
 
-        let temperate_plants = registry.get_by_biome(BiomeType::Temperate);
+        let temperate_plants = registry.get_by_biome(ClimateZone::Temperate);
         assert!(!temperate_plants.is_empty());
 
         // Oak should be in temperate

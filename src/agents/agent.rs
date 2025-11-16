@@ -560,14 +560,18 @@ pub struct Agent {
     pub senses: Senses,
     pub body: Body,
     pub body_temperature: super::BodyTemperature,
+    pub exposure_status: crate::environment::ExposureStatus,
     pub skills: Skills,
     pub emotions: EmotionState,
     pub relationships: RelationshipMap,
+    pub social_network: super::relationships::SocialNetwork, // Social relationship and trust tracking
     pub traits: TraitSet,
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
     pub transport: TransportSystem,
     pub technology_knowledge: TechnologyKnowledge,
+    pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
+    pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
     pub goals: GoalManager,
     pub preferences: Preferences,
@@ -591,14 +595,18 @@ impl Agent {
             senses: Senses::default(),
             body: Body::default(),
             body_temperature: super::BodyTemperature::default(),
+            exposure_status: crate::environment::ExposureStatus::default(),
             skills: Skills::default(),
             emotions: EmotionState::default(),
             relationships: RelationshipMap::default(),
+            social_network: super::relationships::SocialNetwork::default(),
             traits: TraitSet::default(),
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
+            exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
+            storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
@@ -1455,6 +1463,79 @@ impl Agent {
                 self.job_change_cooldown = 1440; // Change jobs at most once per day
             }
         }
+    }
+
+    // ===== Sensory Processing Integration =====
+
+    /// Process current sensory input into meaningful percepts
+    pub fn process_percepts(&self) -> Vec<super::sensory_processing::Percept> {
+        super::sensory_processing::process_sensory_input(&self.senses, self.state.position)
+    }
+
+    /// Get the most salient (attention-grabbing) percept based on current drives
+    pub fn most_salient_percept(&self) -> Option<super::sensory_processing::Percept> {
+        let percepts = self.process_percepts();
+        super::sensory_processing::most_salient_percept(&percepts, &self.drives)
+            .cloned()
+    }
+
+    /// Get all percepts above a salience threshold
+    pub fn filter_percepts_by_salience(&self, threshold: f32) -> Vec<super::sensory_processing::Percept> {
+        let percepts = self.process_percepts();
+        super::sensory_processing::filter_by_salience(percepts, &self.drives, threshold)
+    }
+
+    /// Get percept salience score (0.0 to 1.0) based on current drives
+    pub fn percept_salience(&self, percept: &super::sensory_processing::Percept) -> f32 {
+        super::sensory_processing::calculate_salience(percept, &self.drives)
+    }
+
+    /// Check if any danger percepts are detected
+    pub fn senses_danger_percept(&self) -> bool {
+        let percepts = self.process_percepts();
+        percepts.iter().any(|p| matches!(p, super::sensory_processing::Percept::DangerDetected { .. }))
+    }
+
+    /// Get all detected agents from percepts
+    pub fn get_detected_agents(&self) -> Vec<Uuid> {
+        let percepts = self.process_percepts();
+        percepts.iter()
+            .filter_map(|p| {
+                if let super::sensory_processing::Percept::AgentDetected { agent_id, .. } = p {
+                    Some(*agent_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get all detected resources from percepts
+    pub fn get_detected_resources(&self) -> Vec<(String, (i32, i32, i32))> {
+        let percepts = self.process_percepts();
+        percepts.iter()
+            .filter_map(|p| {
+                if let super::sensory_processing::Percept::ResourceDetected { resource_type, position, .. } = p {
+                    Some((resource_type.clone(), *position))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get the highest-priority threat from danger percepts
+    pub fn get_primary_threat(&self) -> Option<(super::sensory_processing::ThreatType, f32)> {
+        let percepts = self.process_percepts();
+        percepts.iter()
+            .filter_map(|p| {
+                if let super::sensory_processing::Percept::DangerDetected { threat_type, severity, .. } = p {
+                    Some((*threat_type, *severity))
+                } else {
+                    None
+                }
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
     }
 }
 

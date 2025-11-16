@@ -326,12 +326,347 @@ impl Default for Speech {
     }
 }
 
+/// Olfactory (smell) perception system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Smell {
+    /// Maximum smell detection range
+    pub smell_range: f32,
+    /// Olfactory sensitivity (0.0 = no smell, 1.0 = perfect)
+    pub sensitivity: f32,
+    /// Whether smell is currently impaired
+    pub impaired: bool,
+    /// Recently detected scents
+    pub detected_scents: Vec<Scent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Scent {
+    pub source_position: (i32, i32, i32),
+    pub scent_type: ScentType,
+    pub strength: f32, // 0.0 to 1.0
+    pub age: u32, // Ticks since detected
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScentType {
+    /// Food/edible items
+    Food,
+    /// Fresh water
+    Water,
+    /// Blood (from injury or hunt)
+    Blood,
+    /// Other agents (pheromones)
+    Agent,
+    /// Smoke from fire
+    Smoke,
+    /// Decay/rot (danger warning)
+    Decay,
+    /// Pleasant scents (flowers, herbs)
+    Pleasant,
+    /// Dangerous/poisonous
+    Danger,
+    /// Custom scent
+    Custom(String),
+}
+
+impl Smell {
+    pub fn new(smell_range: f32, sensitivity: f32) -> Self {
+        Self {
+            smell_range,
+            sensitivity: sensitivity.clamp(0.0, 1.0),
+            impaired: false,
+            detected_scents: Vec::new(),
+        }
+    }
+
+    /// Check if agent can smell a scent at a position
+    pub fn can_smell(
+        &self,
+        smeller_pos: (i32, i32, i32),
+        scent_pos: (i32, i32, i32),
+        strength: f32,
+    ) -> bool {
+        if self.impaired || self.sensitivity == 0.0 {
+            return false;
+        }
+
+        let dx = (scent_pos.0 - smeller_pos.0) as f32;
+        let dy = (scent_pos.1 - smeller_pos.1) as f32;
+        let dz = (scent_pos.2 - smeller_pos.2) as f32;
+        let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+
+        // Scent diminishes with distance
+        let effective_range = self.smell_range * self.sensitivity * strength;
+        distance <= effective_range
+    }
+
+    /// Register a detected scent
+    pub fn detect_scent(&mut self, scent: Scent) {
+        self.detected_scents.push(scent);
+    }
+
+    /// Age and remove old scents
+    pub fn tick(&mut self) {
+        for scent in &mut self.detected_scents {
+            scent.age += 1;
+        }
+        // Remove scents older than 200 ticks (scents linger longer than sounds)
+        self.detected_scents.retain(|s| s.age < 200);
+    }
+
+    /// Get scents of a specific type
+    pub fn get_scents_by_type(&self, scent_type: ScentType) -> Vec<&Scent> {
+        self.detected_scents
+            .iter()
+            .filter(|s| s.scent_type == scent_type)
+            .collect()
+    }
+
+    /// Find nearest scent of a type
+    pub fn find_nearest_scent(
+        &self,
+        scent_type: ScentType,
+        agent_pos: (i32, i32, i32),
+    ) -> Option<&Scent> {
+        self.get_scents_by_type(scent_type)
+            .into_iter()
+            .min_by_key(|scent| {
+                let dx = (scent.source_position.0 - agent_pos.0).abs();
+                let dy = (scent.source_position.1 - agent_pos.1).abs();
+                let dz = (scent.source_position.2 - agent_pos.2).abs();
+                dx + dy + dz
+            })
+    }
+
+    /// Set impairment (blocked nose, etc.)
+    pub fn set_impaired(&mut self, impaired: bool) {
+        self.impaired = impaired;
+        if impaired {
+            self.detected_scents.clear();
+        }
+    }
+
+    /// Modify sensitivity
+    pub fn modify_sensitivity(&mut self, delta: f32) {
+        self.sensitivity = (self.sensitivity + delta).clamp(0.0, 1.0);
+    }
+
+    /// Get effective smell range
+    pub fn effective_range(&self) -> f32 {
+        if self.impaired {
+            0.0
+        } else {
+            self.smell_range * self.sensitivity
+        }
+    }
+}
+
+impl Default for Smell {
+    fn default() -> Self {
+        Self::new(25.0, 1.0) // 25 units range, perfect sensitivity
+    }
+}
+
+/// Attention/focus system - what the agent is currently paying attention to
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attention {
+    /// Current focus target (agent, position, or nothing)
+    pub focus: Option<Focus>,
+    /// Attention span (how long can maintain focus without distraction)
+    pub attention_span: u32,
+    /// Current attention duration
+    pub current_duration: u32,
+    /// Distractibility (0.0 = laser focus, 1.0 = easily distracted)
+    pub distractibility: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Focus {
+    /// Focusing on a specific agent
+    Agent(Uuid),
+    /// Focusing on a position/object
+    Position((i32, i32, i32)),
+    /// Focusing on a task/activity
+    Activity(String),
+}
+
+impl Attention {
+    pub fn new(attention_span: u32, distractibility: f32) -> Self {
+        Self {
+            focus: None,
+            attention_span,
+            current_duration: 0,
+            distractibility: distractibility.clamp(0.0, 1.0),
+        }
+    }
+
+    /// Set focus on something
+    pub fn focus_on(&mut self, target: Focus) {
+        self.focus = Some(target);
+        self.current_duration = 0;
+    }
+
+    /// Clear focus
+    pub fn clear_focus(&mut self) {
+        self.focus = None;
+        self.current_duration = 0;
+    }
+
+    /// Update attention state
+    pub fn tick(&mut self) {
+        if self.focus.is_some() {
+            self.current_duration += 1;
+
+            // Check if attention span exceeded
+            if self.current_duration > self.attention_span {
+                // Chance to lose focus based on distractibility
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                if rng.gen_bool(self.distractibility as f64 * 0.1) {
+                    self.clear_focus();
+                }
+            }
+        }
+    }
+
+    /// Check if agent is currently focused
+    pub fn is_focused(&self) -> bool {
+        self.focus.is_some()
+    }
+
+    /// Check if focused on specific agent
+    pub fn is_focused_on_agent(&self, agent_id: Uuid) -> bool {
+        matches!(&self.focus, Some(Focus::Agent(id)) if *id == agent_id)
+    }
+
+    /// Get remaining attention time
+    pub fn remaining_attention(&self) -> u32 {
+        if let Some(_) = self.focus {
+            self.attention_span.saturating_sub(self.current_duration)
+        } else {
+            0
+        }
+    }
+}
+
+impl Default for Attention {
+    fn default() -> Self {
+        Self::new(100, 0.3) // 100 ticks attention span, moderate distractibility
+    }
+}
+
+/// Sensory memory - remembers what was sensed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SensoryMemory {
+    /// Recently seen agents (agent_id, last_position, ticks_since_seen)
+    pub seen_agents: Vec<(Uuid, (i32, i32, i32), u32)>,
+    /// Recently seen positions of interest
+    pub seen_positions: Vec<((i32, i32, i32), String, u32)>, // position, description, age
+    /// Maximum memory capacity
+    pub capacity: usize,
+}
+
+impl SensoryMemory {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            seen_agents: Vec::new(),
+            seen_positions: Vec::new(),
+            capacity,
+        }
+    }
+
+    /// Remember seeing an agent
+    pub fn remember_agent(&mut self, agent_id: Uuid, position: (i32, i32, i32)) {
+        // Update if already in memory
+        if let Some(entry) = self.seen_agents.iter_mut().find(|(id, _, _)| *id == agent_id) {
+            entry.1 = position;
+            entry.2 = 0;
+            return;
+        }
+
+        // Add new memory
+        self.seen_agents.push((agent_id, position, 0));
+
+        // Enforce capacity
+        if self.seen_agents.len() > self.capacity {
+            // Remove oldest (highest age)
+            if let Some((idx, _)) = self.seen_agents.iter()
+                .enumerate()
+                .max_by_key(|(_, (_, _, age))| *age) {
+                self.seen_agents.remove(idx);
+            }
+        }
+    }
+
+    /// Remember seeing a position of interest
+    pub fn remember_position(&mut self, position: (i32, i32, i32), description: String) {
+        // Update if already in memory
+        if let Some(entry) = self.seen_positions.iter_mut().find(|(pos, _, _)| *pos == position) {
+            entry.1 = description;
+            entry.2 = 0;
+            return;
+        }
+
+        // Add new memory
+        self.seen_positions.push((position, description, 0));
+
+        // Enforce capacity
+        if self.seen_positions.len() > self.capacity {
+            if let Some((idx, _)) = self.seen_positions.iter()
+                .enumerate()
+                .max_by_key(|(_, (_, _, age))| *age) {
+                self.seen_positions.remove(idx);
+            }
+        }
+    }
+
+    /// Get last known position of an agent
+    pub fn get_agent_position(&self, agent_id: Uuid) -> Option<(i32, i32, i32)> {
+        self.seen_agents
+            .iter()
+            .find(|(id, _, _)| *id == agent_id)
+            .map(|(_, pos, _)| *pos)
+    }
+
+    /// Age memories
+    pub fn tick(&mut self) {
+        for entry in &mut self.seen_agents {
+            entry.2 += 1;
+        }
+        for entry in &mut self.seen_positions {
+            entry.2 += 1;
+        }
+
+        // Remove very old memories (>1000 ticks)
+        self.seen_agents.retain(|(_, _, age)| *age < 1000);
+        self.seen_positions.retain(|(_, _, age)| *age < 1000);
+    }
+
+    /// Get all recently seen agents (within N ticks)
+    pub fn get_recent_agents(&self, max_age: u32) -> Vec<(Uuid, (i32, i32, i32))> {
+        self.seen_agents
+            .iter()
+            .filter(|(_, _, age)| *age <= max_age)
+            .map(|(id, pos, _)| (*id, *pos))
+            .collect()
+    }
+}
+
+impl Default for SensoryMemory {
+    fn default() -> Self {
+        Self::new(50) // Remember up to 50 things
+    }
+}
+
 /// Complete sensory system for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Senses {
     pub vision: Vision,
     pub hearing: Hearing,
     pub speech: Speech,
+    pub smell: Smell,
+    pub attention: Attention,
+    pub memory: SensoryMemory,
 }
 
 impl Senses {
@@ -340,6 +675,9 @@ impl Senses {
             vision: Vision::default(),
             hearing: Hearing::default(),
             speech: Speech::default(),
+            smell: Smell::default(),
+            attention: Attention::default(),
+            memory: SensoryMemory::default(),
         }
     }
 
@@ -347,6 +685,9 @@ impl Senses {
     pub fn tick(&mut self) {
         self.hearing.tick();
         self.speech.tick();
+        self.smell.tick();
+        self.attention.tick();
+        self.memory.tick();
     }
 
     /// Get overall sensory health (0.0 to 1.0)
@@ -354,8 +695,86 @@ impl Senses {
         let vision_health = if self.vision.impaired { 0.0 } else { self.vision.acuity };
         let hearing_health = if self.hearing.impaired { 0.0 } else { self.hearing.sensitivity };
         let speech_health = if !self.speech.can_speak || self.speech.impaired { 0.0 } else { 1.0 };
+        let smell_health = if self.smell.impaired { 0.0 } else { self.smell.sensitivity };
 
-        (vision_health + hearing_health + speech_health) / 3.0
+        (vision_health + hearing_health + speech_health + smell_health) / 4.0
+    }
+
+    /// Check if any important sense is impaired
+    pub fn has_impairment(&self) -> bool {
+        self.vision.impaired || self.hearing.impaired || self.smell.impaired || self.speech.impaired
+    }
+
+    /// Get count of detected threats (loud sounds, danger scents, etc.)
+    pub fn threat_level(&self) -> u32 {
+        let mut threats = 0;
+
+        // Loud sounds nearby are threatening
+        threats += self.hearing.heard_sounds.iter()
+            .filter(|s| matches!(s.sound_type, SoundType::Combat) && s.loudness > 0.7)
+            .count() as u32;
+
+        // Danger scents
+        threats += self.smell.get_scents_by_type(ScentType::Danger).len() as u32;
+        threats += self.smell.get_scents_by_type(ScentType::Blood).len() as u32;
+        threats += self.smell.get_scents_by_type(ScentType::Decay).len() as u32;
+
+        threats
+    }
+
+    /// Find food using senses (smell + memory)
+    pub fn find_food_source(&self, agent_pos: (i32, i32, i32)) -> Option<(i32, i32, i32)> {
+        // First check smell
+        if let Some(scent) = self.smell.find_nearest_scent(ScentType::Food, agent_pos) {
+            return Some(scent.source_position);
+        }
+
+        // Check memory for food positions
+        for (pos, desc, age) in &self.memory.seen_positions {
+            if desc.contains("food") && *age < 500 {
+                return Some(*pos);
+            }
+        }
+
+        None
+    }
+
+    /// Find water using senses
+    pub fn find_water_source(&self, agent_pos: (i32, i32, i32)) -> Option<(i32, i32, i32)> {
+        if let Some(scent) = self.smell.find_nearest_scent(ScentType::Water, agent_pos) {
+            return Some(scent.source_position);
+        }
+
+        for (pos, desc, age) in &self.memory.seen_positions {
+            if desc.contains("water") && *age < 500 {
+                return Some(*pos);
+            }
+        }
+
+        None
+    }
+
+    /// Find other agents using all senses
+    pub fn find_nearby_agents(&self) -> Vec<Uuid> {
+        let mut agents = Vec::new();
+
+        // From vision
+        agents.extend(self.vision.visible_agents.iter());
+
+        // From recent memory
+        let recent = self.memory.get_recent_agents(50);
+        for (id, _pos) in recent {
+            if !agents.contains(&id) {
+                agents.push(id);
+            }
+        }
+
+        agents
+    }
+
+    /// Check if can sense danger
+    pub fn senses_danger(&self) -> bool {
+        self.threat_level() > 0
     }
 }
 
@@ -455,5 +874,164 @@ mod tests {
         let mut impaired_senses = Senses::new();
         impaired_senses.vision.set_impaired(true);
         assert!(impaired_senses.overall_health() < 1.0);
+    }
+
+    #[test]
+    fn test_smell_detection() {
+        let smell = Smell::new(25.0, 1.0);
+
+        // Close food should be smelled
+        assert!(smell.can_smell((0, 0, 0), (10, 0, 0), 1.0));
+
+        // Distant food should not be smelled
+        assert!(!smell.can_smell((0, 0, 0), (100, 0, 0), 1.0));
+    }
+
+    #[test]
+    fn test_smell_find_nearest() {
+        let mut smell = Smell::default();
+
+        smell.detect_scent(Scent {
+            source_position: (10, 10, 0),
+            scent_type: ScentType::Food,
+            strength: 1.0,
+            age: 0,
+        });
+
+        smell.detect_scent(Scent {
+            source_position: (5, 5, 0),
+            scent_type: ScentType::Food,
+            strength: 1.0,
+            age: 0,
+        });
+
+        let nearest = smell.find_nearest_scent(ScentType::Food, (0, 0, 0));
+        assert!(nearest.is_some());
+        assert_eq!(nearest.unwrap().source_position, (5, 5, 0));
+    }
+
+    #[test]
+    fn test_attention_focus() {
+        let mut attention = Attention::default();
+
+        assert!(!attention.is_focused());
+
+        attention.focus_on(Focus::Activity("Mining".to_string()));
+        assert!(attention.is_focused());
+
+        attention.clear_focus();
+        assert!(!attention.is_focused());
+    }
+
+    #[test]
+    fn test_attention_span() {
+        let mut attention = Attention::new(10, 0.0); // 10 tick span, no distractibility
+
+        attention.focus_on(Focus::Activity("Building".to_string()));
+
+        for _ in 0..5 {
+            attention.tick();
+        }
+
+        assert!(attention.is_focused());
+        assert_eq!(attention.remaining_attention(), 5);
+    }
+
+    #[test]
+    fn test_sensory_memory_agent() {
+        let mut memory = SensoryMemory::new(10);
+        let agent_id = Uuid::new_v4();
+
+        memory.remember_agent(agent_id, (10, 10, 0));
+        assert_eq!(memory.get_agent_position(agent_id), Some((10, 10, 0)));
+
+        // Update position
+        memory.remember_agent(agent_id, (20, 20, 0));
+        assert_eq!(memory.get_agent_position(agent_id), Some((20, 20, 0)));
+    }
+
+    #[test]
+    fn test_sensory_memory_positions() {
+        let mut memory = SensoryMemory::new(10);
+
+        memory.remember_position((5, 5, 0), "Resource node".to_string());
+        assert_eq!(memory.seen_positions.len(), 1);
+
+        memory.tick();
+        assert_eq!(memory.seen_positions[0].2, 1); // Age should increase
+    }
+
+    #[test]
+    fn test_sensory_memory_capacity() {
+        let mut memory = SensoryMemory::new(3);
+
+        for i in 0..5 {
+            let id = Uuid::new_v4();
+            memory.remember_agent(id, (i, i, 0));
+        }
+
+        assert!(memory.seen_agents.len() <= 3); // Should not exceed capacity
+    }
+
+    #[test]
+    fn test_senses_find_food() {
+        let mut senses = Senses::new();
+
+        // Add food scent
+        senses.smell.detect_scent(Scent {
+            source_position: (15, 15, 0),
+            scent_type: ScentType::Food,
+            strength: 1.0,
+            age: 0,
+        });
+
+        let food_pos = senses.find_food_source((0, 0, 0));
+        assert!(food_pos.is_some());
+        assert_eq!(food_pos.unwrap(), (15, 15, 0));
+    }
+
+    #[test]
+    fn test_senses_threat_detection() {
+        let mut senses = Senses::new();
+
+        assert_eq!(senses.threat_level(), 0);
+        assert!(!senses.senses_danger());
+
+        // Add danger scent
+        senses.smell.detect_scent(Scent {
+            source_position: (5, 5, 0),
+            scent_type: ScentType::Danger,
+            strength: 1.0,
+            age: 0,
+        });
+
+        assert!(senses.threat_level() > 0);
+        assert!(senses.senses_danger());
+    }
+
+    #[test]
+    fn test_senses_tick() {
+        let mut senses = Senses::new();
+
+        // Add various stimuli
+        senses.smell.detect_scent(Scent {
+            source_position: (0, 0, 0),
+            scent_type: ScentType::Food,
+            strength: 1.0,
+            age: 0,
+        });
+
+        senses.hearing.hear_sound(Sound {
+            source_position: (0, 0, 0),
+            loudness: 1.0,
+            sound_type: SoundType::Speech,
+            age: 0,
+        });
+
+        senses.tick();
+
+        // Ages should have increased
+        assert_eq!(senses.smell.detected_scents[0].age, 1);
+        assert_eq!(senses.hearing.heard_sounds[0].age, 1);
     }
 }

@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::world::{World, Position, ResourceType, BuildingType, ItemType};
+use crate::agents::social_interactions::{SocialInteractionType, ConversationTopic, HelpType};
 use uuid::Uuid;
 
 /// Actions that agents can perform
@@ -50,6 +51,17 @@ pub enum Action {
 
     /// Rest/idle
     Rest { duration: u32 },
+
+    /// Perform a social interaction with another agent
+    SocialInteraction {
+        target_agent_id: Uuid,
+        interaction_type: SocialInteractionType,
+    },
+
+    /// Move towards another agent to socialize
+    SeekSocialInteraction {
+        target_agent_id: Uuid,
+    },
 }
 
 /// Result of action execution
@@ -59,11 +71,17 @@ pub enum ActionResult {
     SuccessWithItems { message: String, item_type: ItemType, quantity: u32 },
     Failure { reason: String },
     Partial { completed: f32, message: String },
+    SocialSuccess {
+        message: String,
+        relationship_change: i8,
+        trust_change: i8,
+        social_satisfaction: f32,
+    },
 }
 
 impl ActionResult {
     pub fn is_success(&self) -> bool {
-        matches!(self, ActionResult::Success { .. } | ActionResult::SuccessWithItems { .. })
+        matches!(self, ActionResult::Success { .. } | ActionResult::SuccessWithItems { .. } | ActionResult::SocialSuccess { .. })
     }
 
     /// Extract harvested items from the result, if any
@@ -73,6 +91,24 @@ impl ActionResult {
                 Some((*item_type, *quantity))
             }
             _ => None,
+        }
+    }
+
+    /// Extract social satisfaction from the result, if any
+    pub fn social_satisfaction(&self) -> f32 {
+        match self {
+            ActionResult::SocialSuccess { social_satisfaction, .. } => *social_satisfaction,
+            _ => 0.0,
+        }
+    }
+
+    /// Extract relationship change from the result, if any
+    pub fn relationship_change(&self) -> (i8, i8) {
+        match self {
+            ActionResult::SocialSuccess { relationship_change, trust_change, .. } => {
+                (*relationship_change, *trust_change)
+            }
+            _ => (0, 0),
         }
     }
 }
