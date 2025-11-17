@@ -155,7 +155,34 @@ impl Simulation {
                     agent_id, tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
                 );
 
-                // Generate action based on priority: shelter needs > percepts > drives
+                // Generate goals periodically based on drives and emotions
+                if self.current_tick % 50 == 0 {
+                    let agent = &mut self.population.agents[agent_index];
+
+                    // Collect current drive types and emotion values
+                    let drive_types: Vec<crate::core::DriveType> = crate::core::DriveType::all().to_vec();
+                    let emotion_values: Vec<(crate::core::EmotionType, f32)> = vec![
+                        (crate::core::EmotionType::Happiness, agent.emotions.happiness()),
+                        (crate::core::EmotionType::Fear, agent.emotions.fear),
+                        (crate::core::EmotionType::Anger, agent.emotions.anger),
+                        (crate::core::EmotionType::Sadness, agent.emotions.sadness),
+                        (crate::core::EmotionType::Curiosity, 0.5), // Default curiosity level
+                    ];
+
+                    // Generate common goals based on current state
+                    let new_goals = crate::core::goals::GoalManager::generate_common_goals(
+                        &drive_types,
+                        &emotion_values,
+                        self.current_tick,
+                    );
+
+                    // Add generated goals to agent's goals
+                    for goal in new_goals {
+                        agent.goals.add_goal(goal);
+                    }
+                }
+
+                // Generate action based on priority: shelter needs > percepts > goals > drives
                 let action = {
                     let agent = &self.population.agents[agent_index];
 
@@ -171,10 +198,22 @@ impl Simulation {
                             agent_position,
                         );
 
-                        // PRIORITY 3: Use percept-based action if available, otherwise use drive-based
-                        percept_action.unwrap_or_else(|| {
-                            Self::generate_action_for_drive(drive_type, agent_position)
-                        })
+                        if percept_action.is_some() {
+                            percept_action.unwrap()
+                        } else {
+                            // PRIORITY 3: Check if we have active goals and generate goal-aligned action
+                            if let Some(active_goal) = agent.goals.highest_priority_goal() {
+                                let goal_action = Self::generate_action_for_goal(active_goal, agent_position, drive_type);
+
+                                // Use goal-aligned action if available, otherwise fall back to drive-based
+                                goal_action.unwrap_or_else(|| {
+                                    Self::generate_action_for_drive(drive_type, agent_position)
+                                })
+                            } else {
+                                // PRIORITY 4: Use drive-based action
+                                Self::generate_action_for_drive(drive_type, agent_position)
+                            }
+                        }
                     }
                 };
 
@@ -215,6 +254,47 @@ impl Simulation {
                     if action_result.success {
                         tree.total_successes += 1;
                     }
+                }
+
+                // Update goal progress based on action result
+                if action_result.success {
+                    let action_name = format!("{:?}", action);
+                    let agent = &mut self.population.agents[agent_index];
+
+                    // Check if action aligns with any active goals and update progress
+                    if agent.goals.action_aligns_with_goals(&action_name) {
+                        // Find the highest priority goal that aligns with this action
+                        if let Some(goal) = agent.goals.highest_priority_goal() {
+                            let progress_delta = match &action {
+                                // Resource gathering actions
+                                crate::environment::Action::Gather { .. } => 0.2,
+                                crate::environment::Action::Hunt { .. } => 0.15,
+
+                                // Building and crafting
+                                crate::environment::Action::Build { .. } => 0.3,
+                                crate::environment::Action::Craft { .. } => 0.25,
+
+                                // Social actions
+                                crate::environment::Action::Mate { .. } => 0.2,
+                                crate::environment::Action::Socialize { .. } => 0.15,
+
+                                // Emotional satisfaction
+                                crate::environment::Action::Sleep { .. } => 0.1,
+                                crate::environment::Action::Eat { .. } => 0.1,
+
+                                _ => 0.05, // Small progress for other actions
+                            };
+
+                            let goal_id = goal.id;
+                            agent.goals.update_goal_progress(goal_id, progress_delta);
+                        }
+                    }
+                }
+
+                // Cleanup completed goals periodically
+                if self.current_tick % 100 == 0 {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.goals.cleanup_completed();
                 }
             }
 
@@ -437,6 +517,107 @@ impl Simulation {
             DriveType::Reproduction => Action::Mate { target_agent_id: uuid::Uuid::nil() },
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
             DriveType::Thirst => Action::Eat { food_type: "water".to_string() },
+        }
+    }
+
+    /// Generate an action based on an active goal
+    fn generate_action_for_goal(
+        goal: &crate::core::goals::Goal,
+        position: (i32, i32, i32),
+        fallback_drive: DriveType,
+    ) -> Option<Action> {
+        use crate::core::goals::{InternalGoal, ExternalGoal};
+        use crate::core::EmotionType;
+
+        // Check if it's an internal goal
+        if let Some(internal) = &goal.internal {
+            match internal {
+                InternalGoal::IncreaseEmotion(emotion_type, _target) => {
+                    // Map emotions to actions that satisfy them
+                    match emotion_type {
+                        EmotionType::Happiness => Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() }),
+                        EmotionType::Curiosity => Some(Action::Move {
+                            target: (position.0 + 10, position.1 + 10, position.2)
+                        }),
+                        _ => None,
+                    }
+                },
+                InternalGoal::DecreaseEmotion(emotion_type, _target) => {
+                    match emotion_type {
+                        EmotionType::Fear => Some(Action::SeekShelter),
+                        EmotionType::Anger => Some(Action::Sleep { duration: 10 }),
+                        EmotionType::Sadness => Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() }),
+                        _ => None,
+                    }
+                },
+                InternalGoal::MaintainWellBeing(_threshold) => {
+                    Some(Action::Sleep { duration: 10 })
+                },
+                InternalGoal::ReduceStress => {
+                    Some(Action::Sleep { duration: 10 })
+                },
+                InternalGoal::SeekEntertainment => {
+                    Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
+                },
+            }
+        // Check if it's an external goal
+        } else if let Some(external) = &goal.external {
+            match external {
+                ExternalGoal::OwnHouse => {
+                    Some(Action::Build {
+                        structure_type: "house".to_string(),
+                        position,
+                    })
+                },
+                ExternalGoal::StockHouseFood(_amount) => {
+                    Some(Action::Gather { resource_type: "food".to_string() })
+                },
+                ExternalGoal::ContributeFoodToStorehouse(amount) => {
+                    Some(Action::Store {
+                        item_type: "food".to_string(),
+                        amount: *amount,
+                    })
+                },
+                ExternalGoal::ObtainProtection => {
+                    Some(Action::Craft { item_type: "leatherarmor".to_string() })
+                },
+                ExternalGoal::CraftItem(item_name) => {
+                    Some(Action::Craft { item_type: item_name.clone() })
+                },
+                ExternalGoal::BuildStructure(structure_name) => {
+                    Some(Action::Build {
+                        structure_type: structure_name.clone(),
+                        position,
+                    })
+                },
+                ExternalGoal::GatherResource(resource_name, _amount) => {
+                    Some(Action::Gather { resource_type: resource_name.clone() })
+                },
+                ExternalGoal::LearnSkill(_skill_name) => {
+                    // Learning happens through practice - choose relevant action
+                    // For now, map to a generic action
+                    None
+                },
+                ExternalGoal::FormRelationship(_relationship_type) => {
+                    Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
+                },
+                ExternalGoal::CompleteJob(_job_name) => {
+                    // Jobs are complex, fall back to drive-based action
+                    None
+                },
+                ExternalGoal::ContributeMaterialsToStorehouse(amount) => {
+                    Some(Action::Store {
+                        item_type: "resource".to_string(),
+                        amount: *amount,
+                    })
+                },
+                ExternalGoal::EnsureToolsAvailable(_count) => {
+                    Some(Action::Craft { item_type: "woodenaxe".to_string() })
+                },
+            }
+        } else {
+            // Goal has neither internal nor external set (shouldn't happen)
+            None
         }
     }
 
