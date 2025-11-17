@@ -27,6 +27,10 @@ use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
 use log::{info, debug, warn};
+use serde::{Serialize, Deserialize};
+use std::path::Path;
+use std::fs::File;
+use std::io::{Write, Read};
 
 pub struct Simulation {
     pub world: World,
@@ -38,6 +42,23 @@ pub struct Simulation {
 pub struct SimulationConfig;
 pub struct Analytics;
 pub struct BehaviorAnalysis;
+
+/// Serializable simulation state for save/load functionality
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SerializableSimulationState {
+    world: World,
+    agents: Vec<crate::agents::Agent>,
+    current_tick: u32,
+    population_stats: PopulationStatsSnapshot,
+}
+
+/// Snapshot of population stats for serialization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PopulationStatsSnapshot {
+    total_births: u64,
+    total_deaths: u64,
+    total_abandonments: u64,
+}
 
 impl Simulation {
     pub fn new(world: World, population: Population) -> Self {
@@ -2911,4 +2932,66 @@ impl Simulation {
             }
         }
     }
+
+    /// Save simulation state to a file
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+        // Create serializable state
+        let state = SerializableSimulationState {
+            world: self.world.clone(),
+            agents: self.population.agents.clone(),
+            current_tick: self.current_tick,
+            population_stats: PopulationStatsSnapshot {
+                total_births: self.population.stats.total_births,
+                total_deaths: self.population.stats.total_deaths,
+                total_abandonments: self.population.stats.total_abandonments,
+            },
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string_pretty(&state)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        // Write to file
+        let mut file = File::create(path)?;
+        file.write_all(json.as_bytes())?;
+
+        info!("Simulation saved at tick {}", self.current_tick);
+        Ok(())
+    }
+
+    /// Load simulation state from a file
+    pub fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        // Read file
+        let mut file = File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        // Deserialize from JSON
+        let state: SerializableSimulationState = serde_json::from_str(&contents)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        // Reconstruct Population
+        let mut population = Population::new();
+        population.agents = state.agents;
+        population.current_tick = state.current_tick;
+        population.stats.total_births = state.population_stats.total_births;
+        population.stats.total_deaths = state.population_stats.total_deaths;
+        population.stats.total_abandonments = state.population_stats.total_abandonments;
+
+        // Reconstruct Simulation
+        let sim = Simulation {
+            world: state.world,
+            population,
+            current_tick: state.current_tick,
+            renderer: None,
+        };
+
+        info!("Simulation loaded from tick {}", sim.current_tick);
+        Ok(sim)
+    }
 }
+
+
+#[cfg(test)]
+mod tests;
+
