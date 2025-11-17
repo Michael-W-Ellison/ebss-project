@@ -345,10 +345,10 @@ mod tests {
         let mut weather = Weather::clear();
         weather.base_temperature = 20.0;
 
-        let clear_temp = weather.effective_temperature();
+        let clear_temp = weather.effective_temperature(weather.base_temperature);
 
         weather.weather_type = WeatherType::Blizzard;
-        let blizzard_temp = weather.effective_temperature();
+        let blizzard_temp = weather.effective_temperature(weather.base_temperature);
 
         assert!(blizzard_temp < clear_temp);
     }
@@ -368,10 +368,10 @@ mod tests {
 
     #[test]
     fn test_weather_generator() {
-        let generator = WeatherGenerator::new(false, true); // Dry, cold climate
-        let weather = generator.generate_weather(-5.0); // Cold temperature
+        let generator = WeatherGenerator::new(Season::Winter, false, true); // Winter, dry, cold climate
+        let weather = generator.generate_weather(); // Generate weather
 
-        // In cold temperature, precipitation should be snow if it occurs
+        // In cold winter, precipitation should be snow if it occurs
         if weather.weather_type.precipitation_type() != PrecipitationType::None {
             assert_eq!(weather.weather_type.precipitation_type(), PrecipitationType::Snow);
         }

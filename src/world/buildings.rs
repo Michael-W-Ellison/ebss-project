@@ -894,12 +894,12 @@ mod tests {
 
         assert!(!building.is_completed());
 
-        // Add progress
-        let completed = building.add_construction_progress(100);
+        // Add progress (work_amount, worker_skill)
+        let completed = building.add_construction_progress(100, 5);
         assert!(!completed); // Not enough progress
 
         // Complete construction
-        let completed = building.add_construction_progress(300);
+        let completed = building.add_construction_progress(300, 5);
         assert!(completed);
         assert!(building.is_completed());
     }
