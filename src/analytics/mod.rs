@@ -26,7 +26,7 @@ pub use performance::{PerformanceMonitor, PerformanceSnapshot};
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
-use log::{info, debug};
+use log::{info, debug, warn};
 
 pub struct Simulation {
     pub world: World,
@@ -1244,8 +1244,8 @@ impl Simulation {
                                 crate::world::inventory::Item {
                                     item_type: item,
                                     quantity: removed,
-                                    durability: 100.0,
-                                    max_durability: 100.0,
+                                    durability: 100,
+                                    max_durability: 100,
                                 },
                             );
                         }
@@ -1354,21 +1354,28 @@ impl Simulation {
             },
 
             Action::Hunt { animal_id, weapon } => {
-                // Find the target animal
-                if let Some(animal) = self.world.animals.get_mut(animal_id) {
-                    if !animal.is_alive() {
-                        return ActionResult::failure("Animal is already dead".to_string());
-                    }
-                    if animal.is_domesticated {
-                        return ActionResult::failure("Cannot hunt domesticated animals".to_string());
-                    }
+                // Get species data first (clone to avoid borrow issues)
+                let species = {
+                    if let Some(animal) = self.world.animals.get(animal_id) {
+                        if !animal.is_alive() {
+                            return ActionResult::failure("Animal is already dead".to_string());
+                        }
+                        if animal.is_domesticated {
+                            return ActionResult::failure("Cannot hunt domesticated animals".to_string());
+                        }
 
-                    // Get animal species for stats
-                    let species_id = animal.species_id.clone();
-                    let species = match self.world.animals.get_species(&species_id) {
-                        Some(s) => s,
-                        None => return ActionResult::failure("Unknown animal species".to_string()),
-                    };
+                        let species_id = animal.species_id.clone();
+                        match self.world.animals.get_species(&species_id) {
+                            Some(s) => s.clone(),
+                            None => return ActionResult::failure("Unknown animal species".to_string()),
+                        }
+                    } else {
+                        return ActionResult::failure("Animal not found".to_string());
+                    }
+                };
+
+                // Now get mutable reference to animal
+                if let Some(animal) = self.world.animals.get_mut(animal_id) {
 
                     // Calculate success based on agent skill and weapon
                     let agent = &self.population.agents[agent_index];
@@ -1439,34 +1446,40 @@ impl Simulation {
             },
 
             Action::Tame { animal_id, food_type } => {
-                // Find the target animal
+                // Get species data first (clone to avoid borrow issues)
+                let species = {
+                    if let Some(animal) = self.world.animals.get(animal_id) {
+                        if !animal.is_alive() {
+                            return ActionResult::failure("Animal is dead".to_string());
+                        }
+                        if animal.is_domesticated {
+                            return ActionResult::failure("Animal is already domesticated".to_string());
+                        }
+
+                        let species_id = animal.species_id.clone();
+                        match self.world.animals.get_species(&species_id) {
+                            Some(s) => s.clone(),
+                            None => return ActionResult::failure("Unknown animal species".to_string()),
+                        }
+                    } else {
+                        return ActionResult::failure("Animal not found".to_string());
+                    }
+                };
+
+                if !species.can_domesticate {
+                    return ActionResult::failure(format!("{} cannot be domesticated", species.name));
+                }
+
+                // Calculate taming progress based on food and agent relationship skills (using Farming)
+                let agent = &self.population.agents[agent_index];
+                let social_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::Farming)
+                    .map(|s| s.level)
+                    .unwrap_or(-5);
+                let taming_bonus = if food_type.is_some() { 0.15 } else { 0.05 };
+                let taming_progress = 0.1 + (social_skill as f32 * 0.02) + taming_bonus;
+
+                // Now get mutable reference to animal
                 if let Some(animal) = self.world.animals.get_mut(animal_id) {
-                    if !animal.is_alive() {
-                        return ActionResult::failure("Animal is dead".to_string());
-                    }
-                    if animal.is_domesticated {
-                        return ActionResult::failure("Animal is already domesticated".to_string());
-                    }
-
-                    // Get species info
-                    let species_id = animal.species_id.clone();
-                    let species = match self.world.animals.get_species(&species_id) {
-                        Some(s) => s,
-                        None => return ActionResult::failure("Unknown animal species".to_string()),
-                    };
-
-                    if !species.can_domesticate {
-                        return ActionResult::failure(format!("{} cannot be domesticated", species.name));
-                    }
-
-                    // Calculate taming progress based on food and agent relationship skills (using Farming)
-                    let agent = &self.population.agents[agent_index];
-                    let social_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::Farming)
-                        .map(|s| s.level)
-                        .unwrap_or(-5);
-                    let taming_bonus = if food_type.is_some() { 0.15 } else { 0.05 };
-                    let taming_progress = 0.1 + (social_skill as f32 * 0.02) + taming_bonus;
-
                     animal.tame(taming_progress);
 
                     if animal.is_domesticated {
@@ -1494,29 +1507,35 @@ impl Simulation {
             },
 
             Action::CollectAnimalProduct { animal_id } => {
-                // Find the target animal
+                // Get species data first (clone to avoid borrow issues)
+                let species = {
+                    if let Some(animal) = self.world.animals.get(animal_id) {
+                        if !animal.is_alive() {
+                            return ActionResult::failure("Animal is dead".to_string());
+                        }
+                        if !animal.is_domesticated {
+                            return ActionResult::failure("Can only collect from domesticated animals".to_string());
+                        }
+                        if !animal.is_mature() {
+                            return ActionResult::failure("Animal is not yet mature enough to produce".to_string());
+                        }
+
+                        let species_id = animal.species_id.clone();
+                        match self.world.animals.get_species(&species_id) {
+                            Some(s) => s.clone(),
+                            None => return ActionResult::failure("Unknown animal species".to_string()),
+                        }
+                    } else {
+                        return ActionResult::failure("Animal not found".to_string());
+                    }
+                };
+
+                if species.living_products.is_empty() {
+                    return ActionResult::failure(format!("{} does not produce any products", species.name));
+                }
+
+                // Now get mutable reference to animal
                 if let Some(animal) = self.world.animals.get_mut(animal_id) {
-                    if !animal.is_alive() {
-                        return ActionResult::failure("Animal is dead".to_string());
-                    }
-                    if !animal.is_domesticated {
-                        return ActionResult::failure("Can only collect from domesticated animals".to_string());
-                    }
-                    if !animal.is_mature() {
-                        return ActionResult::failure("Animal is not yet mature enough to produce".to_string());
-                    }
-
-                    // Get species info for product data
-                    let species_id = animal.species_id.clone();
-                    let species = match self.world.animals.get_species(&species_id) {
-                        Some(s) => s,
-                        None => return ActionResult::failure("Unknown animal species".to_string()),
-                    };
-
-                    if species.living_products.is_empty() {
-                        return ActionResult::failure(format!("{} does not produce any products", species.name));
-                    }
-
                     // Check which products are ready
                     let mut collected_products = Vec::new();
                     for product in &species.living_products {
@@ -1575,24 +1594,31 @@ impl Simulation {
             },
 
             Action::HarvestPlant { plant_id } => {
-                // Find the target plant
-                if let Some(plant) = self.world.plants.get_mut(plant_id) {
-                    if !plant.is_harvestable {
-                        return ActionResult::failure("Plant is not ready for harvest".to_string());
-                    }
-                    if plant.has_been_harvested && !plant.is_cultivated {
-                        return ActionResult::failure("Plant has already been harvested".to_string());
-                    }
+                // Get species data first (clone to avoid borrow issues)
+                let species = {
+                    if let Some(plant) = self.world.plants.get(plant_id) {
+                        if !plant.is_harvestable {
+                            return ActionResult::failure("Plant is not ready for harvest".to_string());
+                        }
+                        if plant.has_been_harvested && !plant.is_cultivated {
+                            return ActionResult::failure("Plant has already been harvested".to_string());
+                        }
 
-                    // Get species info for drops
-                    let species_id = plant.species_id.clone();
-                    let species = match self.world.plants.get_species(&species_id) {
-                        Some(s) => s,
-                        None => return ActionResult::failure("Unknown plant species".to_string()),
-                    };
+                        let species_id = plant.species_id.clone();
+                        match self.world.plants.get_species(&species_id) {
+                            Some(s) => s.clone(),
+                            None => return ActionResult::failure("Unknown plant species".to_string()),
+                        }
+                    } else {
+                        return ActionResult::failure("Plant not found".to_string());
+                    }
+                };
+
+                // Now get mutable reference to plant
+                if let Some(plant) = self.world.plants.get_mut(plant_id) {
 
                     // Harvest the plant
-                    let drops = plant.harvest(species);
+                    let drops = plant.harvest(&species);
 
                     if !drops.is_empty() {
                         let mut items_gained = Vec::new();
@@ -1652,7 +1678,8 @@ impl Simulation {
 
             Action::SeekShelter => {
                 // Find nearest shelter (completed building or forest)
-                let agent_pos = self.population.agents[agent_index].state.position;
+                let agent_tuple_pos = self.population.agents[agent_index].state.position;
+                let agent_pos = crate::world::Position::new(agent_tuple_pos.0, agent_tuple_pos.1);
 
                 // Check if already in shelter
                 let in_building = self.world.buildings.iter().any(|b| {
@@ -1660,7 +1687,7 @@ impl Simulation {
                 });
 
                 let in_forest = self.world.grid.get_tile(&agent_pos)
-                    .map(|t| matches!(t.terrain, crate::world::TerrainType::Forest))
+                    .map(|t| matches!(t.terrain.terrain_type, crate::world::TerrainType::Forest))
                     .unwrap_or(false);
 
                 if in_building || in_forest {
@@ -1679,7 +1706,7 @@ impl Simulation {
 
                 // Find nearest shelter
                 let mut nearest_shelter: Option<crate::world::Position> = None;
-                let mut min_distance = f32::MAX;
+                let mut min_distance = u32::MAX;
 
                 // Check buildings
                 for building in &self.world.buildings {
@@ -1701,7 +1728,7 @@ impl Simulation {
                         );
 
                         if let Some(tile) = self.world.grid.get_tile(&check_pos) {
-                            if matches!(tile.terrain, crate::world::TerrainType::Forest) {
+                            if matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest) {
                                 let dist = agent_pos.distance_to(&check_pos);
                                 if dist < min_distance {
                                     min_distance = dist;
@@ -1724,7 +1751,7 @@ impl Simulation {
 
                     // Check if path is walkable
                     if self.world.grid.get_tile(&new_pos).map(|t| t.terrain.is_walkable()).unwrap_or(false) {
-                        agent.state.position = new_pos;
+                        agent.state.position = (new_pos.x, new_pos.y, 0);
 
                         ActionResult::success()
                             .with_drive_change(DriveType::Safety, -0.1)
@@ -1768,7 +1795,7 @@ impl Simulation {
                     }
                 }
 
-                if rng.gen_bool(success_probability) {
+                if rng.gen_bool(success_probability as f64) {
                     let satisfaction = match action {
                         Action::Craft { .. } => 0.2,
                         Action::Store { .. } => 0.1,

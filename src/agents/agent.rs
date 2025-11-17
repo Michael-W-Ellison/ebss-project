@@ -1461,9 +1461,20 @@ impl Agent {
         // Create equipment item from inventory item
         // For now, we'll create a basic equipment item
         // In a full implementation, this would lookup item stats from a registry
+        use super::equipment::{EquipmentType, EquipmentMaterial, WoodMaterial};
+        use super::skills::Quality;
+
+        let equipment_type = match slot {
+            super::equipment::EquipmentSlot::MainHand | super::equipment::EquipmentSlot::OffHand => EquipmentType::Pickaxe,
+            _ => EquipmentType::Clothing,
+        };
+
         let equipment_item = super::equipment::EquipmentItem::new(
             item_id.to_string(),
+            equipment_type,
             slot,
+            EquipmentMaterial::Wood(WoodMaterial::Oak),
+            Quality::Basic,
         );
 
         // Equip the item (this returns the previously equipped item if any)

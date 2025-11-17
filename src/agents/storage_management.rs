@@ -162,7 +162,7 @@ pub fn calculate_storage_priority(
     preparedness_drive: f32,
     preferences: &StoragePreferences,
 ) -> f32 {
-    let mut priority = 0.0;
+    let mut priority = 0.0_f32;
 
     // Very urgent if food is critically low
     if agent_food_count < preferences.min_personal_food / 2 {
