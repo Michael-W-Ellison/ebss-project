@@ -384,6 +384,7 @@ impl Simulation {
             }
             Action::Socialize { .. } => Some(ActionType::Social),
             Action::ShareInformation { .. } => Some(ActionType::Social), // Information sharing is social
+            Action::Mate { .. } => Some(ActionType::Social), // Mating is a social interaction
             Action::Move { .. } | Action::Explore { .. } => Some(ActionType::Navigation),
             Action::Store { .. } | Action::Retrieve { .. } => Some(ActionType::ToolUse), // Resource management
             _ => None, // Sleep, Wait, etc. are not observable learning opportunities
@@ -432,7 +433,7 @@ impl Simulation {
                 let target_y = position.1 + rng.gen_range(-5..=5);
                 Action::Move { target: (target_x, target_y, position.2) }
             },
-            DriveType::Reproduction => Action::Wait,
+            DriveType::Reproduction => Action::Mate { target_agent_id: uuid::Uuid::nil() },
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
             DriveType::Thirst => Action::Eat { food_type: "water".to_string() },
         }
@@ -2045,37 +2046,44 @@ impl Simulation {
                 }
 
                 let current_tick = self.current_tick;
-                let initiator = &self.population.agents[agent_index];
-                let initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
 
-                // Select information to share from initiator's knowledge base
-                let info_to_share = if !initiator.knowledge.known_information.is_empty() {
-                    // Pick a random piece of information from their knowledge
-                    let info_list: Vec<_> = initiator.knowledge.known_information.values().collect();
-                    let idx = rng.gen_range(0..info_list.len());
-                    let original_info = info_list[idx].clone();
+                // Capture initiator data before mutable borrows
+                let (initiator_id, info_to_share) = {
+                    let initiator = &self.population.agents[agent_index];
+                    let initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
+                    let initiator_id = initiator.id;
 
-                    // Check if initiator would distort information based on traits
-                    if let Some(distortion_trait) = initiator.traits.would_distort_info() {
-                        // Distort the information
-                        original_info.distort(distortion_trait, initiator.id)
+                    // Select information to share from initiator's knowledge base
+                    let info = if !initiator.knowledge.known_information.is_empty() {
+                        // Pick a random piece of information from their knowledge
+                        let info_list: Vec<_> = initiator.knowledge.known_information.values().collect();
+                        let idx = rng.gen_range(0..info_list.len());
+                        let original_info = info_list[idx].clone();
+
+                        // Check if initiator would distort information based on traits
+                        if let Some(distortion_trait) = initiator.traits.would_distort_info() {
+                            // Distort the information
+                            original_info.distort(distortion_trait, initiator_id)
+                        } else {
+                            // Share truthfully
+                            original_info
+                        }
                     } else {
-                        // Share truthfully
-                        original_info
-                    }
-                } else {
-                    // Generate new information if they don't have any
-                    // Share a resource location they might know about
-                    let agent_pos = initiator.state.position;
-                    Information::new(
-                        InformationType::ResourceLocation {
-                            resource: "generic".to_string(),
-                            location: agent_pos,
-                        },
-                        initiator.id,
-                        true, // Assume they know their current location
-                        current_tick as u64,
-                    )
+                        // Generate new information if they don't have any
+                        // Share a resource location they might know about
+                        let agent_pos = initiator.state.position;
+                        Information::new(
+                            InformationType::ResourceLocation {
+                                resource: "generic".to_string(),
+                                location: agent_pos,
+                            },
+                            initiator_id,
+                            true, // Assume they know their current location
+                            current_tick as u64,
+                        )
+                    };
+
+                    (initiator_id, info)
                 };
 
                 // Get recipient's traits for belief calculation
@@ -2083,10 +2091,11 @@ impl Simulation {
 
                 // Share the information with recipient
                 let target = &mut self.population.agents[target_index];
+                let target_id = target.id;
                 target.knowledge.receive_information(
                     info_to_share.clone(),
-                    initiator.id,
-                    target.id,
+                    initiator_id,
+                    target_id,
                     &recipient_traits,
                     current_tick as u64,
                 );
@@ -2118,7 +2127,7 @@ impl Simulation {
 
                 debug!(
                     "Agent {} shared information with agent {} (distorted: {}, reliability: {:.2})",
-                    initiator.id,
+                    initiator_id,
                     target_agent_id,
                     info_to_share.distortion.is_some(),
                     info_to_share.reliability
@@ -2128,6 +2137,152 @@ impl Simulation {
                     .with_drive_change(DriveType::Social, -social_satisfaction)
                     .with_energy_cost(2.0)
                     .with_message(message)
+            },
+
+            Action::Mate { target_agent_id } => {
+                use crate::agents::reproduction::{can_mate, reproduce, MateSelectionCriteria};
+                use crate::agents::gossip::{Information, InformationType};
+
+                // Find the target agent
+                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
+                if target_index.is_none() {
+                    return ActionResult::failure("Target agent not found".to_string());
+                }
+                let target_index = target_index.unwrap();
+
+                // Don't mate with self
+                if target_index == agent_index {
+                    return ActionResult::failure("Cannot mate with self".to_string());
+                }
+
+                // Check if both agents can mate
+                let initiator = &self.population.agents[agent_index];
+                let target = &self.population.agents[target_index];
+                let criteria = MateSelectionCriteria::default();
+
+                if !can_mate(initiator, target, &criteria) {
+                    // Determine specific reason for failure
+                    let reason = if !initiator.can_reproduce() {
+                        "Initiator cannot reproduce (too young, too old, or pregnant)".to_string()
+                    } else if !target.can_reproduce() {
+                        "Target cannot reproduce (too young, too old, or pregnant)".to_string()
+                    } else if initiator.fertility() < criteria.min_fertility {
+                        format!("Initiator fertility too low ({:.2})", initiator.fertility())
+                    } else if target.fertility() < criteria.min_fertility {
+                        format!("Target fertility too low ({:.2})", target.fertility())
+                    } else if target.parent_ids.contains(&initiator.id) || initiator.parent_ids.contains(&target.id) {
+                        "Cannot mate with parent/child".to_string()
+                    } else {
+                        "Agents too far apart for mating".to_string()
+                    };
+
+                    return ActionResult::failure(reason);
+                }
+
+                // Calculate mating success probability based on relationship
+                let initiator_id = initiator.id;
+                let target_id = target.id;
+                let mut success_probability = 0.5; // Base 50% chance
+
+                // Check relationship - better relationships increase success
+                if let Some(relationship) = initiator.social_network.get_relationship(target_id) {
+                    match &relationship.relationship_level {
+                        crate::agents::relationships::RelationshipLevel::Loves(_) => {
+                            success_probability = 0.9; // High success with loved ones
+                        }
+                        crate::agents::relationships::RelationshipLevel::Likes(_) => {
+                            success_probability = 0.7; // Good success with friends
+                        }
+                        crate::agents::relationships::RelationshipLevel::Neutral(_) => {
+                            success_probability = 0.5; // Neutral success
+                        }
+                        _ => {
+                            success_probability = 0.2; // Low success with dislikes/hates
+                        }
+                    }
+                }
+
+                // Attempt mating
+                if rng.gen_bool(success_probability as f64) {
+                    // Mating successful - create offspring
+                    // Clone parent positions before creating offspring to avoid borrow issues
+                    let parent1_pos = self.population.agents[agent_index].state.position;
+                    let offspring = {
+                        let parent1 = &self.population.agents[agent_index];
+                        let parent2 = &self.population.agents[target_index];
+                        let current_tick = self.current_tick;
+                        reproduce(parent1, parent2, current_tick)
+                    };
+                    let offspring_id = offspring.id;
+
+                    // Add offspring to population
+                    self.population.agents.push(offspring);
+
+                    debug!(
+                        "Agent {} and agent {} successfully mated! Offspring: {}",
+                        initiator_id, target_id, offspring_id
+                    );
+
+                    // Generate gossip about the birth
+                    let current_tick = self.current_tick;
+                    let birth_info = Information::new(
+                        InformationType::Childbirth {
+                            agent: initiator_id,
+                            child: offspring_id,
+                        },
+                        initiator_id,
+                        true, // This is true information
+                        current_tick as u64,
+                    );
+
+                    // Share birth information with nearby agents
+                    for other_agent in &mut self.population.agents {
+                        if other_agent.id != initiator_id && other_agent.id != target_id && other_agent.id != offspring_id {
+                            // Calculate distance
+                            let distance = {
+                                let dx = (other_agent.state.position.0 - parent1_pos.0) as f32;
+                                let dy = (other_agent.state.position.1 - parent1_pos.1) as f32;
+                                (dx * dx + dy * dy).sqrt()
+                            };
+
+                            // Share with agents within 20 tiles
+                            if distance <= 20.0 {
+                                other_agent.knowledge.receive_information(
+                                    birth_info.clone(),
+                                    initiator_id,
+                                    other_agent.id,
+                                    &other_agent.traits,
+                                    current_tick as u64,
+                                );
+                            }
+                        }
+                    }
+
+                    // Update relationships - parents bond with child
+                    // Update reproduction drives for both parents
+                    let agent = &mut self.population.agents[agent_index];
+                    if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
+                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
+                    }
+
+                    let target = &mut self.population.agents[target_index];
+                    if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
+                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
+                    }
+
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Reproduction, -0.8)
+                        .with_energy_cost(15.0) // Mating is energy-intensive
+                        .with_message(format!("Successfully mated with agent, offspring: {}", offspring_id))
+                } else {
+                    // Mating attempt rejected
+                    debug!(
+                        "Agent {} mating attempt with agent {} was rejected",
+                        initiator_id, target_id
+                    );
+
+                    ActionResult::failure("Mating attempt rejected by partner".to_string())
+                }
             },
 
             // For other actions, use simplified success/failure
@@ -2164,6 +2319,7 @@ impl Simulation {
                         Action::Explore { .. } => 0.15,
                         Action::Socialize { .. } => 0.2,
                         Action::ShareInformation { .. } => 0.15, // Handled separately above
+                        Action::Mate { .. } => 0.0, // Handled separately above
                         Action::Hunt { .. } => 0.3,
                         Action::Tame { .. } => 0.25,
                         Action::CollectAnimalProduct { .. } => 0.15,

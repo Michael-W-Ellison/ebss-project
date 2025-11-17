@@ -188,6 +188,10 @@ pub enum Action {
     ShareInformation {
         target_agent_id: uuid::Uuid,
     },
+    /// Attempt to mate with another agent
+    Mate {
+        target_agent_id: uuid::Uuid,
+    },
     /// Seek shelter from dangerous weather
     SeekShelter,
     /// Wait/idle
@@ -208,6 +212,7 @@ impl Action {
             Action::Explore { .. } => Some(DriveType::Curiosity),
             Action::Socialize { .. } => Some(DriveType::Social),
             Action::ShareInformation { .. } => Some(DriveType::Social), // Information sharing is social
+            Action::Mate { .. } => Some(DriveType::Reproduction), // Mating satisfies reproduction drive
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
