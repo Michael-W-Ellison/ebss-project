@@ -1768,6 +1768,258 @@ impl Simulation {
                 }
             },
 
+            Action::Socialize { target_agent_id } => {
+                use crate::agents::social_interactions::{
+                    SocialInteractionType, ConversationTopic, HelpType,
+                    calculate_relationship_change, calculate_social_satisfaction,
+                    should_greet, select_conversation_topic, calculate_gift_value, would_accept_gift
+                };
+                use crate::agents::traits::Trait;
+
+                // Find the target agent
+                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
+                if target_index.is_none() {
+                    return ActionResult::failure("Target agent not found".to_string());
+                }
+                let target_index = target_index.unwrap();
+
+                // Don't socialize with self
+                if target_index == agent_index {
+                    return ActionResult::failure("Cannot socialize with self".to_string());
+                }
+
+                // Get relationship data (clone to avoid borrow issues)
+                let initiator_traits: Vec<Trait> = self.population.agents[agent_index]
+                    .traits.get_traits().iter().copied().collect();
+                let recipient_traits: Vec<Trait> = self.population.agents[target_index]
+                    .traits.get_traits().iter().copied().collect();
+
+                // Get or create relationship
+                let current_tick = self.current_tick;
+                let initiator_agent = &mut self.population.agents[agent_index];
+                let relationship = initiator_agent.social_network
+                    .get_or_create_relationship(*target_agent_id, current_tick);
+
+                let current_relationship = relationship.relationship_level.clone();
+                let current_trust = relationship.trust_level.clone();
+                let last_interaction_tick = relationship.last_interaction_tick;
+
+                // Determine interaction type based on relationship and context
+                let interaction_type = if should_greet(last_interaction_tick, current_tick, &current_relationship) {
+                    // Greet if haven't interacted in a while
+                    SocialInteractionType::Greet
+                } else {
+                    // Choose conversation or other interaction based on relationship
+                    let choice = rng.gen_range(0..100);
+
+                    match &current_relationship {
+                        crate::agents::relationships::RelationshipLevel::Loves(_) => {
+                            // Close relationships: more variety
+                            if choice < 40 {
+                                let topic = select_conversation_topic(&current_relationship, &initiator_traits, &recipient_traits);
+                                SocialInteractionType::Converse { topic }
+                            } else if choice < 60 {
+                                SocialInteractionType::ShareMeal
+                            } else if choice < 75 {
+                                SocialInteractionType::Compliment
+                            } else if choice < 90 {
+                                SocialInteractionType::OfferHelp {
+                                    help_type: HelpType::General,
+                                }
+                            } else {
+                                // Try to give a gift if we have something
+                                let initiator = &self.population.agents[agent_index];
+                                if let Some((item_id, item)) = initiator.inventory.get_all_items().iter().next() {
+                                    if item.quantity > 1 {
+                                        // Map item_id string to ItemType
+                                        let item_type = match item_id.to_lowercase().as_str() {
+                                            "wood" => crate::world::ItemType::Wood,
+                                            "stone" => crate::world::ItemType::Stone,
+                                            "iron" => crate::world::ItemType::Iron,
+                                            "food" => crate::world::ItemType::Food,
+                                            "bread" => crate::world::ItemType::Bread,
+                                            _ => crate::world::ItemType::Wood, // Default
+                                        };
+                                        SocialInteractionType::GiveGift {
+                                            item_type,
+                                            quantity: 1,
+                                        }
+                                    } else {
+                                        let topic = select_conversation_topic(&current_relationship, &initiator_traits, &recipient_traits);
+                                        SocialInteractionType::Converse { topic }
+                                    }
+                                } else {
+                                    let topic = select_conversation_topic(&current_relationship, &initiator_traits, &recipient_traits);
+                                    SocialInteractionType::Converse { topic }
+                                }
+                            }
+                        }
+                        crate::agents::relationships::RelationshipLevel::Likes(_) => {
+                            // Friends: mostly conversation and help
+                            if choice < 60 {
+                                let topic = select_conversation_topic(&current_relationship, &initiator_traits, &recipient_traits);
+                                SocialInteractionType::Converse { topic }
+                            } else if choice < 80 {
+                                SocialInteractionType::Compliment
+                            } else {
+                                SocialInteractionType::OfferHelp {
+                                    help_type: HelpType::General,
+                                }
+                            }
+                        }
+                        _ => {
+                            // Neutral or negative: stick to safe interactions
+                            if choice < 80 {
+                                let topic = select_conversation_topic(&current_relationship, &initiator_traits, &recipient_traits);
+                                SocialInteractionType::Converse { topic }
+                            } else {
+                                SocialInteractionType::ThankYou
+                            }
+                        }
+                    }
+                };
+
+                // Calculate interaction effects
+                let relationship_change = calculate_relationship_change(
+                    &interaction_type,
+                    &initiator_traits,
+                    &recipient_traits,
+                    &current_relationship,
+                );
+
+                let social_satisfaction = calculate_social_satisfaction(
+                    &interaction_type,
+                    &initiator_traits,
+                    &current_relationship,
+                );
+
+                // Handle gift giving specially (may fail if rejected)
+                let mut success = true;
+                let mut message = String::new();
+
+                match &interaction_type {
+                    SocialInteractionType::GiveGift { item_type, quantity } => {
+                        // Check if gift would be accepted
+                        if would_accept_gift(&current_relationship, &current_trust, &recipient_traits) {
+                            // Format item_type as string for inventory operations
+                            let item_str = format!("{:?}", item_type).to_lowercase();
+
+                            // Remove from initiator inventory
+                            let initiator = &mut self.population.agents[agent_index];
+                            if let Some(_removed) = initiator.inventory.remove_item(&item_str, *quantity) {
+                                // Add to recipient inventory
+                                let recipient = &mut self.population.agents[target_index];
+                                let gift_item = crate::agents::InventoryItem::new_with_weight(
+                                    item_str.clone(),
+                                    *quantity,
+                                    2.0, // Default weight
+                                );
+                                recipient.inventory.add_item(gift_item);
+
+                                let gift_value = calculate_gift_value(item_type, *quantity);
+                                message = format!("Gave {} {:?} to agent (value: {:.1})", quantity, item_type, gift_value);
+                                success = true;
+                            } else {
+                                message = "Don't have enough to give as gift".to_string();
+                                success = false;
+                            }
+                        } else {
+                            message = "Gift was politely refused".to_string();
+                            success = false;
+                        }
+                    }
+                    SocialInteractionType::Greet => {
+                        message = format!("Greeted agent (relationship: {:?})", current_relationship);
+                    }
+                    SocialInteractionType::Converse { topic } => {
+                        message = format!("Had conversation about {:?}", topic);
+                    }
+                    SocialInteractionType::OfferHelp { help_type } => {
+                        message = format!("Offered {:?} help", help_type);
+                    }
+                    SocialInteractionType::ThankYou => {
+                        message = "Expressed gratitude".to_string();
+                    }
+                    SocialInteractionType::Compliment => {
+                        message = "Gave a compliment".to_string();
+                    }
+                    SocialInteractionType::ShareMeal => {
+                        message = "Shared a meal together".to_string();
+                    }
+                }
+
+                // Update initiator's relationship
+                let initiator = &mut self.population.agents[agent_index];
+                let relationship = initiator.social_network
+                    .get_or_create_relationship(*target_agent_id, current_tick);
+
+                if success && relationship_change != 0 {
+                    if relationship_change > 0 {
+                        relationship.positive_interaction(relationship_change, current_tick);
+                    } else {
+                        relationship.negative_interaction(relationship_change.abs(), current_tick);
+                    }
+                }
+                relationship.last_interaction_tick = current_tick;
+                relationship.total_interactions += 1;
+
+                // Also update target's relationship (reciprocal, but may differ based on their traits)
+                let target_relationship_change = calculate_relationship_change(
+                    &interaction_type,
+                    &recipient_traits,
+                    &initiator_traits,
+                    &current_relationship,
+                );
+
+                // Capture initiator's ID before mutable borrow
+                let initiator_id = self.population.agents[agent_index].id;
+
+                let target = &mut self.population.agents[target_index];
+                let target_relationship = target.social_network
+                    .get_or_create_relationship(initiator_id, current_tick);
+
+                if success && target_relationship_change != 0 {
+                    if target_relationship_change > 0 {
+                        target_relationship.positive_interaction(target_relationship_change, current_tick);
+                    } else {
+                        target_relationship.negative_interaction(target_relationship_change.abs(), current_tick);
+                    }
+                }
+                target_relationship.last_interaction_tick = current_tick;
+                target_relationship.total_interactions += 1;
+
+                // Calculate target's social satisfaction too
+                let target_satisfaction = calculate_social_satisfaction(
+                    &interaction_type,
+                    &recipient_traits,
+                    &current_relationship,
+                );
+
+                // Update target's social drive
+                let target = &mut self.population.agents[target_index];
+                if let Some(social_drive) = target.drives.get_mut(DriveType::Social) {
+                    social_drive.decrease(target_satisfaction);
+                }
+
+                if success {
+                    debug!(
+                        "Agent {} socialized with agent {}: {} (relationship change: {:+}, satisfaction: {:.2})",
+                        self.population.agents[agent_index].id,
+                        target_agent_id,
+                        message,
+                        relationship_change,
+                        social_satisfaction
+                    );
+
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Social, -social_satisfaction)
+                        .with_energy_cost(3.0)
+                        .with_message(message)
+                } else {
+                    ActionResult::failure(message)
+                }
+            },
+
             // For other actions, use simplified success/failure
             _ => {
                 // Base success probability
