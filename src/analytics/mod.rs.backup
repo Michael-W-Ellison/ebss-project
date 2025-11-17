@@ -1776,12 +1776,17 @@ impl Simulation {
                 }
             },
 
+<<<<<<< HEAD
+            Action::ShareInformation { target_agent_id } => {
+                use crate::agents::gossip::{Information, InformationType};
+=======
             Action::Socialize { target_agent_id } => {
                 use crate::agents::social_interactions::{
                     SocialInteractionType, ConversationTopic, HelpType,
                     calculate_relationship_change, calculate_social_satisfaction,
                     should_greet, select_conversation_topic, calculate_gift_value, would_accept_gift
                 };
+>>>>>>> fd2f62ab985de0d1f0c4138b7125138c9e252dae
                 use crate::agents::traits::Trait;
 
                 // Find the target agent
@@ -1791,6 +1796,97 @@ impl Simulation {
                 }
                 let target_index = target_index.unwrap();
 
+<<<<<<< HEAD
+                // Don't share with self
+                if target_index == agent_index {
+                    return ActionResult::failure("Cannot share information with self".to_string());
+                }
+
+                let current_tick = self.current_tick;
+                let initiator = &self.population.agents[agent_index];
+                let initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
+
+                // Select information to share from initiator's knowledge base
+                let info_to_share = if !initiator.knowledge.known_information.is_empty() {
+                    // Pick a random piece of information from their knowledge
+                    let info_list: Vec<_> = initiator.knowledge.known_information.values().collect();
+                    let idx = rng.gen_range(0..info_list.len());
+                    let original_info = info_list[idx].clone();
+
+                    // Check if initiator would distort information based on traits
+                    if let Some(distortion_trait) = initiator.traits.would_distort_info() {
+                        // Distort the information
+                        original_info.distort(distortion_trait, initiator.id)
+                    } else {
+                        // Share truthfully
+                        original_info
+                    }
+                } else {
+                    // Generate new information if they don't have any
+                    // Share a resource location they might know about
+                    let agent_pos = initiator.state.position;
+                    Information::new(
+                        InformationType::ResourceLocation {
+                            resource: "generic".to_string(),
+                            location: agent_pos,
+                        },
+                        initiator.id,
+                        true, // Assume they know their current location
+                        current_tick as u64,
+                    )
+                };
+
+                // Get recipient's traits for belief calculation
+                let recipient_traits = self.population.agents[target_index].traits.clone();
+
+                // Share the information with recipient
+                let target = &mut self.population.agents[target_index];
+                target.knowledge.receive_information(
+                    info_to_share.clone(),
+                    initiator.id,
+                    target.id,
+                    &recipient_traits,
+                    current_tick as u64,
+                );
+
+                // Determine message based on information type
+                let message = match &info_to_share.info_type {
+                    InformationType::ResourceLocation { resource, location } => {
+                        format!("Shared knowledge about {} at ({}, {}, {})",
+                            resource, location.0, location.1, location.2)
+                    }
+                    InformationType::Conflict { agent1, agent2 } => {
+                        format!("Gossiped about conflict between agents")
+                    }
+                    InformationType::Death { agent, cause } => {
+                        format!("Shared news of death: {}", cause)
+                    }
+                    InformationType::TechnologyDiscovered { tech } => {
+                        format!("Shared discovery of {} technology", tech)
+                    }
+                    InformationType::Accusation { accused, crime, .. } => {
+                        format!("Shared accusation of {}", crime)
+                    }
+                    _ => "Shared information".to_string(),
+                };
+
+                // Distortion affects satisfaction
+                let distortion_penalty = if info_to_share.distortion.is_some() { 0.05 } else { 0.0 };
+                let social_satisfaction = 0.15 - distortion_penalty;
+
+                debug!(
+                    "Agent {} shared information with agent {} (distorted: {}, reliability: {:.2})",
+                    initiator.id,
+                    target_agent_id,
+                    info_to_share.distortion.is_some(),
+                    info_to_share.reliability
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Social, -social_satisfaction)
+                    .with_energy_cost(2.0)
+                    .with_message(message)
+=======
                 // Don't socialize with self
                 if target_index == agent_index {
                     return ActionResult::failure("Cannot socialize with self".to_string());
@@ -2026,108 +2122,7 @@ impl Simulation {
                 } else {
                     ActionResult::failure(message)
                 }
-            },
-
-            Action::ShareInformation { target_agent_id } => {
-                use crate::agents::gossip::{Information, InformationType};
-                use crate::agents::traits::Trait;
-
-                // Find the target agent
-                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
-                if target_index.is_none() {
-                    return ActionResult::failure("Target agent not found".to_string());
-                }
-                let target_index = target_index.unwrap();
-
-                // Don't share with self
-                if target_index == agent_index {
-                    return ActionResult::failure("Cannot share information with self".to_string());
-                }
-
-                let current_tick = self.current_tick;
-                let initiator = &self.population.agents[agent_index];
-                let initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
-
-                // Select information to share from initiator's knowledge base
-                let info_to_share = if !initiator.knowledge.known_information.is_empty() {
-                    // Pick a random piece of information from their knowledge
-                    let info_list: Vec<_> = initiator.knowledge.known_information.values().collect();
-                    let idx = rng.gen_range(0..info_list.len());
-                    let original_info = info_list[idx].clone();
-
-                    // Check if initiator would distort information based on traits
-                    if let Some(distortion_trait) = initiator.traits.would_distort_info() {
-                        // Distort the information
-                        original_info.distort(distortion_trait, initiator.id)
-                    } else {
-                        // Share truthfully
-                        original_info
-                    }
-                } else {
-                    // Generate new information if they don't have any
-                    // Share a resource location they might know about
-                    let agent_pos = initiator.state.position;
-                    Information::new(
-                        InformationType::ResourceLocation {
-                            resource: "generic".to_string(),
-                            location: agent_pos,
-                        },
-                        initiator.id,
-                        true, // Assume they know their current location
-                        current_tick as u64,
-                    )
-                };
-
-                // Get recipient's traits for belief calculation
-                let recipient_traits = self.population.agents[target_index].traits.clone();
-
-                // Share the information with recipient
-                let target = &mut self.population.agents[target_index];
-                target.knowledge.receive_information(
-                    info_to_share.clone(),
-                    initiator.id,
-                    target.id,
-                    &recipient_traits,
-                    current_tick as u64,
-                );
-
-                // Determine message based on information type
-                let message = match &info_to_share.info_type {
-                    InformationType::ResourceLocation { resource, location } => {
-                        format!("Shared knowledge about {} at ({}, {}, {})",
-                            resource, location.0, location.1, location.2)
-                    }
-                    InformationType::Conflict { agent1, agent2 } => {
-                        format!("Gossiped about conflict between agents")
-                    }
-                    InformationType::Death { agent, cause } => {
-                        format!("Shared news of death: {}", cause)
-                    }
-                    InformationType::TechnologyDiscovered { tech } => {
-                        format!("Shared discovery of {} technology", tech)
-                    }
-                    InformationType::Accusation { accused, crime, .. } => {
-                        format!("Shared accusation of {}", crime)
-                    }
-                    _ => "Shared information".to_string(),
-                };
-
-                // Distortion affects satisfaction
-                let distortion_penalty = if info_to_share.distortion.is_some() { 0.05 } else { 0.0 };
-                let social_satisfaction = 0.15 - distortion_penalty;
-
-                debug!(
-                    "Agent {} shared information with agent {} (distorted: {}, reliability: {:.2})",
-                    initiator.id,
-                    target_agent_id,
-                    info_to_share.distortion.is_some(),
-                    info_to_share.reliability
-                );
-
-                ActionResult::success()
-                    .with_drive_change(DriveType::Social, -social_satisfaction)
-                    .with_energy_cost(2.0)
-                    .with_message(message)
+>>>>>>> fd2f62ab985de0d1f0c4138b7125138c9e252dae
             },
 
             // For other actions, use simplified success/failure
