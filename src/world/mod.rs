@@ -139,6 +139,61 @@ impl Default for WorldConfig {
     }
 }
 
+impl WorldConfig {
+    /// Set world size
+    pub fn with_size(mut self, width: usize, height: usize) -> Self {
+        self.size = (width, height);
+        self
+    }
+
+    /// Set resource configuration
+    pub fn with_resources(mut self, resources: ResourceConfig) -> Self {
+        self.initial_resources = resources;
+        self
+    }
+
+    /// Validate configuration values
+    pub fn validate(&self) -> Result<(), String> {
+        let (width, height) = self.size;
+
+        // Check for zero dimensions
+        if width == 0 {
+            return Err("World width must be greater than 0".to_string());
+        }
+        if height == 0 {
+            return Err("World height must be greater than 0".to_string());
+        }
+
+        // Check minimum size (must be large enough for agents to move)
+        const MIN_SIZE: usize = 10;
+        if width < MIN_SIZE || height < MIN_SIZE {
+            return Err(format!("World dimensions must be at least {}x{} (minimum playable size)", MIN_SIZE, MIN_SIZE));
+        }
+
+        // Check maximum size (prevent memory issues)
+        const MAX_SIZE: usize = 2000;
+        if width > MAX_SIZE || height > MAX_SIZE {
+            return Err(format!("World dimensions must not exceed {}x{} (maximum supported size)", MAX_SIZE, MAX_SIZE));
+        }
+
+        // Validate resource counts don't exceed world tiles
+        let total_tiles = width * height;
+        let total_resources = self.initial_resources.wood_nodes
+            + self.initial_resources.stone_nodes
+            + self.initial_resources.iron_nodes
+            + self.initial_resources.food_nodes;
+
+        if total_resources > total_tiles {
+            return Err(format!(
+                "Total resource nodes ({}) exceeds world tiles ({})",
+                total_resources, total_tiles
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 impl World {
     pub fn new(config: WorldConfig) -> Self {
         let mut grid = Grid::new(config.size.0, config.size.1);

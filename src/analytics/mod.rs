@@ -28,18 +28,121 @@ use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
 use log::{info, debug, warn};
 use serde::{Serialize, Deserialize};
-use std::path::Path;
-use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::fs::{File, self};
 use std::io::{Write, Read};
+
+/// Auto-save configuration for checkpointing
+#[derive(Debug, Clone)]
+pub struct AutoSaveConfig {
+    pub enabled: bool,
+    pub interval_ticks: u32,
+    pub max_checkpoints: usize,
+    pub save_directory: PathBuf,
+}
+
+impl Default for AutoSaveConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_ticks: 100,
+            max_checkpoints: 5,
+            save_directory: PathBuf::from("./checkpoints"),
+        }
+    }
+}
 
 pub struct Simulation {
     pub world: World,
     pub population: Population,
     pub current_tick: u32,
     pub renderer: Option<AsciiRenderer>,
+    autosave_config: Option<AutoSaveConfig>,
+    last_autosave_tick: u32,
 }
 
-pub struct SimulationConfig;
+/// Configuration for simulation behavior and limits
+#[derive(Debug, Clone)]
+pub struct SimulationConfig {
+    /// Random seed for deterministic simulations (None = random)
+    pub random_seed: Option<i64>,
+    /// Maximum number of ticks before simulation auto-stops (None = unlimited)
+    pub max_ticks: Option<u32>,
+    /// Enable logging output
+    pub enable_logging: bool,
+    /// Enable metrics collection
+    pub enable_metrics: bool,
+    /// How often to record metrics (every N ticks)
+    pub metrics_interval: u32,
+}
+
+impl Default for SimulationConfig {
+    fn default() -> Self {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Generate a random seed from system time
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_secs() as i64);
+
+        Self {
+            random_seed: seed,
+            max_ticks: None,
+            enable_logging: true,
+            enable_metrics: true,
+            metrics_interval: 1,
+        }
+    }
+}
+
+impl SimulationConfig {
+    /// Set a specific random seed for deterministic simulations
+    pub fn with_seed(mut self, seed: i64) -> Self {
+        self.random_seed = Some(seed);
+        self
+    }
+
+    /// Set maximum number of ticks
+    pub fn with_max_ticks(mut self, max_ticks: u32) -> Self {
+        self.max_ticks = Some(max_ticks);
+        self
+    }
+
+    /// Enable or disable logging
+    pub fn with_logging(mut self, enable: bool) -> Self {
+        self.enable_logging = enable;
+        self
+    }
+
+    /// Enable or disable metrics collection
+    pub fn with_metrics(mut self, enable: bool) -> Self {
+        self.enable_metrics = enable;
+        self
+    }
+
+    /// Set metrics collection interval
+    pub fn with_metrics_interval(mut self, interval: u32) -> Self {
+        self.metrics_interval = interval;
+        self
+    }
+
+    /// Validate configuration values
+    pub fn validate(&self) -> Result<(), String> {
+        if let Some(max_ticks) = self.max_ticks {
+            if max_ticks == 0 {
+                return Err("max_ticks must be greater than 0".to_string());
+            }
+        }
+
+        if self.metrics_interval == 0 {
+            return Err("metrics_interval must be greater than 0".to_string());
+        }
+
+        Ok(())
+    }
+}
+
 pub struct Analytics;
 pub struct BehaviorAnalysis;
 
@@ -67,6 +170,8 @@ impl Simulation {
             population,
             current_tick: 0,
             renderer: None,
+            autosave_config: None,
+            last_autosave_tick: 0,
         }
     }
 
@@ -383,6 +488,11 @@ impl Simulation {
         // Log statistics every 10 ticks
         if self.current_tick % 10 == 0 {
             self.log_statistics();
+        }
+
+        // Check if autosave should trigger
+        if let Err(e) = self.check_autosave() {
+            warn!("Auto-save failed: {}", e);
         }
     }
 
@@ -2984,10 +3094,139 @@ impl Simulation {
             population,
             current_tick: state.current_tick,
             renderer: None,
+            autosave_config: None,
+            last_autosave_tick: 0,
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);
         Ok(sim)
+    }
+
+    /// Enable auto-save with given configuration
+    pub fn enable_autosave(&mut self, config: AutoSaveConfig) -> std::io::Result<()> {
+        // Create save directory if it doesn't exist
+        if !config.save_directory.exists() {
+            fs::create_dir_all(&config.save_directory)?;
+        }
+
+        self.autosave_config = Some(config);
+        self.last_autosave_tick = self.current_tick;
+
+        info!("Auto-save enabled: interval={}, max_checkpoints={}, directory={:?}",
+              self.autosave_config.as_ref().unwrap().interval_ticks,
+              self.autosave_config.as_ref().unwrap().max_checkpoints,
+              self.autosave_config.as_ref().unwrap().save_directory);
+
+        Ok(())
+    }
+
+    /// Disable auto-save
+    pub fn disable_autosave(&mut self) {
+        self.autosave_config = None;
+        info!("Auto-save disabled");
+    }
+
+    /// Check if auto-save should trigger and perform it
+    fn check_autosave(&mut self) -> std::io::Result<()> {
+        if let Some(config) = &self.autosave_config {
+            if !config.enabled {
+                return Ok(());
+            }
+
+            // Check if it's time to auto-save
+            let ticks_since_last_save = self.current_tick - self.last_autosave_tick;
+            if ticks_since_last_save >= config.interval_ticks {
+                self.perform_autosave()?;
+                self.last_autosave_tick = self.current_tick;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Perform an auto-save checkpoint
+    fn perform_autosave(&self) -> std::io::Result<()> {
+        if let Some(config) = &self.autosave_config {
+            // Generate checkpoint filename with timestamp
+            let filename = format!("checkpoint_tick_{:08}.json", self.current_tick);
+            let checkpoint_path = config.save_directory.join(&filename);
+
+            // Save the simulation
+            self.save(&checkpoint_path)?;
+
+            info!("Auto-save checkpoint created: {}", filename);
+
+            // Clean up old checkpoints
+            self.cleanup_old_checkpoints()?;
+        }
+
+        Ok(())
+    }
+
+    /// Remove old checkpoints, keeping only the most recent max_checkpoints
+    fn cleanup_old_checkpoints(&self) -> std::io::Result<()> {
+        if let Some(config) = &self.autosave_config {
+            // Get all checkpoint files
+            let mut checkpoint_files: Vec<_> = fs::read_dir(&config.save_directory)?
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| n.starts_with("checkpoint_") && n.ends_with(".json"))
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            // Sort by modification time (newest first)
+            checkpoint_files.sort_by_cached_key(|path| {
+                fs::metadata(path)
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+            });
+            checkpoint_files.reverse();
+
+            // Remove old checkpoints beyond max_checkpoints
+            if checkpoint_files.len() > config.max_checkpoints {
+                for old_checkpoint in checkpoint_files.iter().skip(config.max_checkpoints) {
+                    fs::remove_file(old_checkpoint)?;
+                    debug!("Removed old checkpoint: {:?}", old_checkpoint.file_name());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the latest checkpoint file from a directory
+    pub fn get_latest_checkpoint<P: AsRef<Path>>(checkpoint_dir: P) -> std::io::Result<PathBuf> {
+        let mut checkpoint_files: Vec<_> = fs::read_dir(checkpoint_dir)?
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("checkpoint_") && n.ends_with(".json"))
+                    .unwrap_or(false)
+            })
+            .collect();
+
+        if checkpoint_files.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "No checkpoint files found"
+            ));
+        }
+
+        // Sort by modification time (newest first)
+        checkpoint_files.sort_by_cached_key(|path| {
+            fs::metadata(path)
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        });
+        checkpoint_files.reverse();
+
+        Ok(checkpoint_files[0].clone())
     }
 }
 
