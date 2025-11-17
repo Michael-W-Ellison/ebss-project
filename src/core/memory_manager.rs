@@ -368,7 +368,7 @@ mod tests {
         let mut manager = MemoryManager::new();
 
         manager.remember_location(
-            super::SpatialMemoryType::Food,
+            crate::core::SpatialMemoryType::Food,
             (5, 5, 0),
             "Found berry bush".to_string(),
         );

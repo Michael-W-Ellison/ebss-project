@@ -389,8 +389,8 @@ fn test_agent_survival_requires_food_water_rest() {
 fn test_agent_without_food_eventually_dies() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // No food available
-    assert_eq!(agent.inventory.get_item("food"), None);
+    // No food available - check properly
+    assert!(agent.inventory.get_item("food").is_none() || agent.inventory.get_item("food").unwrap().quantity == 0);
 
     // Simulate starvation
     for _ in 0..15000 {

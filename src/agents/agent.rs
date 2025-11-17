@@ -1302,12 +1302,7 @@ impl Agent {
                 selector.add_child(BehaviorNode::new(NodeType::Action("decorate".to_string())));
                 selector
             }
-            DriveType::Thirst => {
-                let mut selector = BehaviorNode::new(NodeType::Selector);
-                selector.add_child(BehaviorNode::new(NodeType::Action("drink_water".to_string())));
-                selector.add_child(BehaviorNode::new(NodeType::Action("find_water".to_string())));
-                selector
-            }
+            // Thirst is already handled at line 1230 above
         };
 
         BehaviorTree::new(format!("{:?}_tree", drive_type), root)
@@ -1669,6 +1664,114 @@ impl Agent {
             }
             StorageDecision::NoAction { .. } => None,
         }
+    }
+
+    // ========== Survival API Methods (for TDD tests) ==========
+
+    /// Eat food from inventory and satisfy hunger drive
+    /// Returns true if food was consumed
+    pub fn eat_food(&mut self, amount: u32) -> bool {
+        // Try to get food from inventory
+        if let Some(food_item) = self.inventory.get_item_mut("food") {
+            if food_item.quantity >= amount {
+                food_item.quantity -= amount;
+
+                // Restore energy (each food unit restores 20 energy)
+                let energy_restored = (amount as f32) * 20.0;
+                self.state.energy = (self.state.energy + energy_restored).min(100.0);
+
+                // Reset starvation (use current age as approximation of tick)
+                self.state.last_ate_tick = self.state.age;
+                self.state.ticks_without_food = 0;
+
+                // Satisfy hunger drive
+                let hunger_reduction = (amount as f32) * 0.2; // Each food reduces hunger by 0.2
+                if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+                    hunger.decrease(hunger_reduction);
+                }
+
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Drink water from inventory and satisfy thirst drive
+    /// Returns true if water was consumed
+    pub fn drink_water(&mut self, amount: f32) -> bool {
+        let drunk = self.inventory.drink_water(amount);
+
+        if drunk > 0.0 {
+            // Satisfy thirst drive
+            let thirst_reduction = drunk * 0.2; // Each liter reduces thirst by 0.2
+            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                thirst.decrease(thirst_reduction);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Rest and restore energy, satisfy rest drive
+    pub fn rest(&mut self, amount: f32) {
+        self.state.energy = (self.state.energy + amount).min(100.0);
+
+        // Satisfy rest drive
+        let rest_reduction = amount * 0.01; // Resting reduces the rest drive
+        if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
+            rest_drive.decrease(rest_reduction);
+        }
+    }
+
+    /// Consume energy from activity
+    pub fn consume_energy(&mut self, amount: f32) {
+        self.state.energy = (self.state.energy - amount).max(0.0);
+
+        // When energy is depleted, health starts decreasing
+        if self.state.energy <= 0.0 {
+            self.state.health = (self.state.health - 0.05).max(0.0);
+        }
+    }
+
+    /// Take damage (wrapper for AgentState method)
+    pub fn take_damage(&mut self, amount: f32) {
+        self.state.take_damage(amount);
+    }
+
+    /// Check if agent is dead
+    pub fn is_dead(&self) -> bool {
+        !self.state.is_alive || self.state.health <= 0.0
+    }
+
+    /// Age the agent by one tick
+    pub fn age_tick(&mut self) {
+        // Use age as an approximation of tick for the basic test API
+        self.state.age_tick(self.state.age);
+    }
+
+    /// Update starvation counter (called each tick)
+    pub fn update_starvation(&mut self) {
+        self.state.ticks_without_food += 1;
+    }
+
+    /// Apply damage from starvation
+    pub fn apply_starvation_damage(&mut self) {
+        // Damage is already applied in age_tick, but this is for explicit calls
+        if self.state.is_starving() {
+            let days_starving = self.state.ticks_without_food / 1440;
+            let damage = (days_starving as f32) * 0.5;
+            self.state.health = (self.state.health - damage).max(0.0);
+
+            if self.state.health <= 0.0 {
+                self.state.is_alive = false;
+            }
+        }
+    }
+
+    /// Update life stage based on age
+    pub fn update_life_stage(&mut self) {
+        self.state.life_stage = LifeStage::from_age(self.state.age);
     }
 }
 

@@ -1306,6 +1306,6 @@ mod tests {
     }
 }
 
-// External test modules
+// External TDD test modules
 #[cfg(test)]
-mod tests;
+mod tdd_tests;
