@@ -641,8 +641,38 @@ impl Agent {
         // Process sensory input into percepts and store them
         let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);
 
-        // Store percepts with timestamp
+        // Store percepts with timestamp and integrate important ones into long-term memory
         for percept in new_percepts {
+            // Calculate salience to determine if worth remembering
+            let salience = super::sensory_processing::calculate_salience(&percept, &self.drives);
+
+            // Store important percepts (> 0.5 salience) in long-term memory
+            if salience > 0.5 {
+                use super::sensory_processing::Percept;
+                use crate::core::memory::SpatialMemoryType;
+
+                match &percept {
+                    Percept::ResourceDetected { resource_type, position, .. } => {
+                        // Remember resource locations
+                        let mem_type = match resource_type.as_str() {
+                            "Food" => SpatialMemoryType::Food,
+                            "Water" => SpatialMemoryType::Water,
+                            _ => SpatialMemoryType::Resource,
+                        };
+                        self.memory.remember_location(mem_type, *position);
+                    }
+                    Percept::DangerDetected { position: Some(pos), .. } => {
+                        // Remember danger locations
+                        self.memory.remember_location(SpatialMemoryType::Danger, *pos);
+                    }
+                    Percept::AgentDetected { agent_id, .. } => {
+                        // Update social relationship (neutral interaction for just seeing them)
+                        self.memory.record_interaction(*agent_id, true, 0.01);
+                    }
+                    _ => {}
+                }
+            }
+
             self.recent_percepts.push((current_tick, percept));
         }
 

@@ -173,6 +173,24 @@ impl Simulation {
                     agent_id, action_result.message, action_result.drive_satisfaction
                 );
 
+                // Broadcast action to nearby observers (for observational learning)
+                if action_result.success {
+                    let agent = &self.population.agents[agent_index];
+                    let agent_pos = agent.state.position;
+
+                    // Map action to ActionType for broadcasting
+                    if let Some(broadcast_type) = Self::map_action_to_broadcast_type(&action) {
+                        self.population.broadcast_action(
+                            agent_id,
+                            agent_pos,
+                            broadcast_type,
+                            true, // success
+                            format!("{:?}", action),
+                            self.current_tick as u64,
+                        );
+                    }
+                }
+
                 // Apply feedback to agent (drive satisfaction)
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
@@ -330,6 +348,25 @@ impl Simulation {
         }
 
         None
+    }
+
+    /// Map environment Action to observable ActionType for broadcasting
+    fn map_action_to_broadcast_type(action: &Action) -> Option<crate::agents::observational_learning::ActionType> {
+        use crate::agents::observational_learning::ActionType;
+
+        match action {
+            Action::Gather { .. } => Some(ActionType::Mining),
+            Action::Craft { .. } => Some(ActionType::Crafting),
+            Action::Build { .. } => Some(ActionType::Building),
+            Action::Attack { .. } => Some(ActionType::Combat),
+            Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
+                Some(ActionType::Cooking)
+            }
+            Action::Socialize { .. } => Some(ActionType::Social),
+            Action::Move { .. } | Action::Explore { .. } => Some(ActionType::Navigation),
+            Action::Store { .. } | Action::Retrieve { .. } => Some(ActionType::ToolUse), // Resource management
+            _ => None, // Sleep, Wait, etc. are not observable learning opportunities
+        }
     }
 
     /// Generate an action based on drive type and position
@@ -1296,7 +1333,31 @@ impl Simulation {
 
             // For other actions, use simplified success/failure
             _ => {
-                let success_probability = 0.7;
+                // Base success probability
+                let mut success_probability = 0.7;
+
+                // Check if agent has learned this behavior through observation
+                // Learned behaviors boost success probability
+                if let Some(broadcast_type) = Self::map_action_to_broadcast_type(action) {
+                    let agent = &self.population.agents[agent_index];
+                    let adopted_behaviors = agent.observational_learning.get_adopted_behaviors();
+
+                    // Check if this action type has been adopted from anyone
+                    for (_, action_type, confidence) in adopted_behaviors {
+                        if action_type == broadcast_type {
+                            // Boost success probability based on confidence in learned behavior
+                            // Confidence ranges 0.0 to 1.0, provides up to +0.25 boost
+                            let learning_boost = confidence * 0.25;
+                            success_probability = (success_probability + learning_boost).min(0.95);
+                            debug!(
+                                "Agent {} has learned {:?} (confidence: {:.2}), success probability: {:.2}",
+                                agent.id, action_type, confidence, success_probability
+                            );
+                            break;
+                        }
+                    }
+                }
+
                 if rng.gen_bool(success_probability) {
                     let satisfaction = match action {
                         Action::Craft { .. } => 0.2,
