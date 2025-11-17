@@ -922,8 +922,15 @@ impl Simulation {
                 };
 
                 // Get attacker's tool efficiency (arm health affects combat)
-                let attacker_efficiency = self.population.agents[agent_index].body.tool_efficiency_multiplier();
-                let actual_damage = base_damage * attacker_efficiency;
+                let attacker = &self.population.agents[agent_index];
+                let attacker_efficiency = attacker.body.tool_efficiency_multiplier();
+
+                // Get mounted combat bonus (warhorses provide significant advantage!)
+                let mount_bonus = attacker.transport.mounted_combat_bonus();
+                let combat_multiplier = 1.0 + mount_bonus;
+
+                // Apply all modifiers: base * arm_health * mount_bonus
+                let actual_damage = base_damage * attacker_efficiency * combat_multiplier;
 
                 // Select random body part to hit (weighted toward torso/limbs)
                 let body_parts = [
@@ -977,14 +984,19 @@ impl Simulation {
                 let target_alive = self.population.agents[target_index].body.is_alive()
                     && self.population.agents[target_index].state.health > 0.0;
 
+                let attacker_id = self.population.agents[agent_index].id;
+                let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
+
                 debug!(
-                    "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({})",
-                    self.population.agents[agent_index].id,
+                    "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({}, mounted: {}, bonus: +{:.0}%)",
+                    attacker_id,
                     self.population.agents[target_index].id,
                     weapon.as_ref().unwrap_or(&"unarmed".to_string()),
                     actual_damage,
                     target_part,
-                    if target_alive { "survived" } else { "FATAL" }
+                    if target_alive { "survived" } else { "FATAL" },
+                    if attacker_mounted { "yes" } else { "no" },
+                    mount_bonus * 100.0
                 );
 
                 if !target_alive {
@@ -1358,7 +1370,13 @@ impl Simulation {
 
                 // Get movement speed multiplier from leg health
                 let agent = &self.population.agents[agent_index];
-                let movement_speed = agent.body.movement_speed_multiplier();
+                let body_speed = agent.body.movement_speed_multiplier();
+
+                // Get transport speed multiplier (mounts provide speed boost!)
+                let transport_speed = agent.transport.effective_speed_modifier();
+
+                // Combined movement speed (body health * transport bonus)
+                let movement_speed = body_speed * transport_speed;
 
                 // Base energy cost (modified by speed and distance)
                 let base_energy_cost = 2.0;
@@ -1374,9 +1392,10 @@ impl Simulation {
                 agent.state.position = (next_x, next_y, target.2);
 
                 debug!(
-                    "Agent {} moved from ({}, {}) to ({}, {}) (distance to target: {}, speed: {:.2}x)",
+                    "Agent {} moved from ({}, {}) to ({}, {}) (distance to target: {}, speed: {:.2}x, mounted: {})",
                     agent.id, current_pos.0, current_pos.1, next_x, next_y,
-                    distance - 1, movement_speed
+                    distance - 1, movement_speed,
+                    if agent.transport.is_mounted() { "yes" } else { "no" }
                 );
 
                 // Determine drive satisfaction based on purpose (Safety or Curiosity)
@@ -1568,17 +1587,24 @@ impl Simulation {
                 // Now get mutable reference to animal
                 if let Some(animal) = self.world.animals.get_mut(animal_id) {
 
-                    // Calculate success based on agent skill and weapon
+                    // Calculate success based on agent skill, weapon, and mount
                     let agent = &self.population.agents[agent_index];
                     let hunting_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::MeleeCombat)
                         .map(|s| s.level)
                         .unwrap_or(-5);
                     let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
-                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus).min(0.95_f32);
+
+                    // Get mounted combat bonus (hunting from horseback is advantageous!)
+                    let mount_bonus = agent.transport.mounted_combat_bonus();
+
+                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus + mount_bonus).min(0.95_f32);
 
                     if rng.gen_bool(success_prob as f64) {
                         // Successful hunt - damage the animal
-                        let damage = species.health * 0.7; // Deal 70% of max health
+                        // Base damage is 70% of max health, modified by mount bonus
+                        let base_damage = species.health * 0.7;
+                        let combat_multiplier = 1.0 + mount_bonus;
+                        let damage = base_damage * combat_multiplier;
                         animal.take_damage(damage);
 
                         // If killed, get drops
