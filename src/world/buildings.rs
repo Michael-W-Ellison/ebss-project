@@ -399,6 +399,78 @@ impl BuildingType {
         )
     }
 
+    /// Get the upgrade path for this building (if any)
+    pub fn can_upgrade_to(&self) -> Option<BuildingType> {
+        match self {
+            BuildingType::Longhouse => Some(BuildingType::UpgradedLonghouse),
+            BuildingType::SmallHouse => Some(BuildingType::MediumHouse),
+            BuildingType::MediumHouse => Some(BuildingType::LargeHouse),
+            BuildingType::LargeHouse => Some(BuildingType::Manor),
+            BuildingType::Workshop => Some(BuildingType::Smithy),
+            BuildingType::Forge => Some(BuildingType::Smithy),
+            BuildingType::Shrine => Some(BuildingType::Temple),
+            _ => None,
+        }
+    }
+
+    /// Get upgrade cost (additional resources needed beyond base building)
+    pub fn upgrade_cost(&self) -> Vec<Resource> {
+        if let Some(upgraded) = self.can_upgrade_to() {
+            let base_cost = self.requirements();
+            let upgrade_cost = upgraded.requirements();
+
+            // Calculate difference
+            let mut additional = Vec::new();
+            for upgrade_req in upgrade_cost {
+                let base_amount = base_cost
+                    .iter()
+                    .find(|r| r.resource_type == upgrade_req.resource_type)
+                    .map(|r| r.amount)
+                    .unwrap_or(0);
+
+                let additional_amount = upgrade_req.amount.saturating_sub(base_amount);
+                if additional_amount > 0 {
+                    additional.push(Resource::new(upgrade_req.resource_type, additional_amount));
+                }
+            }
+            additional
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Get minimum construction skill recommended for this building
+    /// Returns (min_skill, recommended_skill)
+    pub fn skill_requirements(&self) -> (i32, i32) {
+        match self {
+            // Simple buildings - anyone can build
+            BuildingType::SmallHouse | BuildingType::Farm | BuildingType::AnimalPen => (0, 2),
+
+            // Basic buildings - some skill helpful
+            BuildingType::Longhouse | BuildingType::Storehouse | BuildingType::Workshop => (1, 3),
+
+            // Intermediate buildings - skill important
+            BuildingType::MediumHouse | BuildingType::Bakery | BuildingType::WeaverHut |
+            BuildingType::PotteryKiln | BuildingType::Tannery | BuildingType::Mill |
+            BuildingType::Butchery => (2, 4),
+
+            // Advanced buildings - skilled workers needed
+            BuildingType::LargeHouse | BuildingType::UpgradedLonghouse | BuildingType::Forge |
+            BuildingType::Brewery | BuildingType::Dairy | BuildingType::Glassworks |
+            BuildingType::Dyeworks | BuildingType::Ropewalk | BuildingType::Brickyard => (3, 5),
+
+            // Complex buildings - expert builders required
+            BuildingType::Manor | BuildingType::Smithy | BuildingType::TownCenter |
+            BuildingType::TownStorage | BuildingType::GuardPost | BuildingType::PaperMill => (4, 6),
+
+            // Master buildings - only skilled masters
+            BuildingType::Temple | BuildingType::MedicalBuilding => (5, 8),
+
+            // Specialty buildings
+            _ => (2, 4),
+        }
+    }
+
     /// Check if this is a religious building
     pub fn is_religious(&self) -> bool {
         matches!(self, BuildingType::Shrine | BuildingType::Temple)
@@ -513,9 +585,13 @@ impl BuildingType {
 }
 
 /// Building construction state
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BuildingState {
-    UnderConstruction { progress: u32 }, // Progress in ticks
+    UnderConstruction {
+        progress: u32, // Work progress in ticks
+        resources_delivered: Vec<Resource>, // Resources already delivered
+        workers: Vec<uuid::Uuid>, // Agents currently working on this building
+    },
     Completed,
 }
 
@@ -544,16 +620,134 @@ impl Building {
         Self {
             building_type,
             position,
-            state: BuildingState::UnderConstruction { progress: 0 },
+            state: BuildingState::UnderConstruction {
+                progress: 0,
+                resources_delivered: Vec::new(),
+                workers: Vec::new(),
+            },
             owner: None,
             occupants: Vec::new(),
         }
     }
 
-    /// Advance construction progress
-    pub fn add_construction_progress(&mut self, ticks: u32) -> bool {
-        if let BuildingState::UnderConstruction { progress } = &mut self.state {
-            *progress += ticks;
+    /// Deliver resources to construction site
+    /// Returns true if resource was accepted (needed), false if not needed
+    pub fn deliver_resource(&mut self, resource: Resource) -> bool {
+        if let BuildingState::UnderConstruction { resources_delivered, .. } = &mut self.state {
+            let requirements = self.building_type.requirements();
+
+            // Find which resource this is
+            if let Some(req) = requirements.iter().find(|r| r.resource_type == resource.resource_type) {
+                // Check how much we've already delivered
+                let already_delivered = resources_delivered
+                    .iter()
+                    .filter(|r| r.resource_type == resource.resource_type)
+                    .map(|r| r.amount)
+                    .sum::<u32>();
+
+                // Accept only what's needed
+                let needed = req.amount.saturating_sub(already_delivered);
+                if needed > 0 {
+                    let amount_to_accept = resource.amount.min(needed);
+                    resources_delivered.push(Resource::new(resource.resource_type, amount_to_accept));
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if all required resources have been delivered
+    pub fn has_all_resources(&self) -> bool {
+        if let BuildingState::UnderConstruction { resources_delivered, .. } = &self.state {
+            let requirements = self.building_type.requirements();
+
+            for req in requirements {
+                let delivered = resources_delivered
+                    .iter()
+                    .filter(|r| r.resource_type == req.resource_type)
+                    .map(|r| r.amount)
+                    .sum::<u32>();
+
+                if delivered < req.amount {
+                    return false;
+                }
+            }
+            true
+        } else {
+            true // Completed buildings have all resources
+        }
+    }
+
+    /// Get missing resources
+    pub fn missing_resources(&self) -> Vec<Resource> {
+        if let BuildingState::UnderConstruction { resources_delivered, .. } = &self.state {
+            let mut missing = Vec::new();
+            let requirements = self.building_type.requirements();
+
+            for req in requirements {
+                let delivered = resources_delivered
+                    .iter()
+                    .filter(|r| r.resource_type == req.resource_type)
+                    .map(|r| r.amount)
+                    .sum::<u32>();
+
+                let remaining = req.amount.saturating_sub(delivered);
+                if remaining > 0 {
+                    missing.push(Resource::new(req.resource_type, remaining));
+                }
+            }
+            missing
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Assign a worker to this building
+    pub fn assign_worker(&mut self, worker_id: uuid::Uuid) -> bool {
+        if let BuildingState::UnderConstruction { workers, .. } = &mut self.state {
+            if !workers.contains(&worker_id) {
+                workers.push(worker_id);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Remove a worker from this building
+    pub fn remove_worker(&mut self, worker_id: uuid::Uuid) {
+        if let BuildingState::UnderConstruction { workers, .. } = &mut self.state {
+            workers.retain(|id| id != &worker_id);
+        }
+    }
+
+    /// Get current workers
+    pub fn get_workers(&self) -> Vec<uuid::Uuid> {
+        if let BuildingState::UnderConstruction { workers, .. } = &self.state {
+            workers.clone()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Advance construction progress (worker performs work)
+    /// Returns true if construction completed
+    ///
+    /// # Arguments
+    /// * `work_amount` - Amount of work done (in ticks), modified by worker skill
+    /// * `worker_skill` - Construction skill level (0-10+, affects speed)
+    pub fn add_construction_progress(&mut self, work_amount: u32, worker_skill: i32) -> bool {
+        // Can only work if resources are available
+        if !self.has_all_resources() {
+            return false;
+        }
+
+        if let BuildingState::UnderConstruction { progress, .. } = &mut self.state {
+            // Skill multiplier: skill 0 = 1.0x, skill 5 = 1.5x, skill 10 = 2.0x
+            let skill_multiplier = 1.0 + (worker_skill as f32 * 0.1);
+            let effective_work = (work_amount as f32 * skill_multiplier) as u32;
+
+            *progress += effective_work;
             let required = self.building_type.construction_time();
 
             if *progress >= required {
@@ -562,6 +756,47 @@ impl Building {
             }
         }
         false
+    }
+
+    /// Get construction progress (0.0 to 1.0)
+    pub fn construction_progress(&self) -> f32 {
+        if let BuildingState::UnderConstruction { progress, .. } = &self.state {
+            let required = self.building_type.construction_time() as f32;
+            (*progress as f32 / required).min(1.0)
+        } else {
+            1.0
+        }
+    }
+
+    /// Get resource delivery progress (0.0 to 1.0)
+    pub fn resource_progress(&self) -> f32 {
+        if let BuildingState::UnderConstruction { resources_delivered, .. } = &self.state {
+            let requirements = self.building_type.requirements();
+            if requirements.is_empty() {
+                return 1.0;
+            }
+
+            let mut total_required = 0;
+            let mut total_delivered = 0;
+
+            for req in requirements {
+                total_required += req.amount;
+                let delivered = resources_delivered
+                    .iter()
+                    .filter(|r| r.resource_type == req.resource_type)
+                    .map(|r| r.amount)
+                    .sum::<u32>();
+                total_delivered += delivered;
+            }
+
+            if total_required == 0 {
+                1.0
+            } else {
+                (total_delivered as f32 / total_required as f32).min(1.0)
+            }
+        } else {
+            1.0
+        }
     }
 
     pub fn is_completed(&self) -> bool {
@@ -594,6 +829,43 @@ impl Building {
 
     pub fn remove_occupant(&mut self, agent_id: uuid::Uuid) {
         self.occupants.retain(|id| id != &agent_id);
+    }
+
+    /// Check if this building can be upgraded
+    pub fn can_upgrade(&self) -> bool {
+        self.is_completed() && self.building_type.can_upgrade_to().is_some()
+    }
+
+    /// Start upgrading this building to the next tier
+    /// Returns the upgraded building type if successful
+    pub fn start_upgrade(&mut self) -> Option<BuildingType> {
+        if !self.can_upgrade() {
+            return None;
+        }
+
+        if let Some(upgraded_type) = self.building_type.can_upgrade_to() {
+            // Convert to under construction with the upgraded type
+            self.building_type = upgraded_type;
+            self.state = BuildingState::UnderConstruction {
+                progress: 0,
+                resources_delivered: Vec::new(),
+                workers: Vec::new(),
+            };
+            Some(upgraded_type)
+        } else {
+            None
+        }
+    }
+
+    /// Get upgrade information
+    pub fn upgrade_info(&self) -> Option<(BuildingType, Vec<Resource>, u32)> {
+        if let Some(upgraded_type) = self.building_type.can_upgrade_to() {
+            let cost = self.building_type.upgrade_cost();
+            let time = upgraded_type.construction_time();
+            Some((upgraded_type, cost, time))
+        } else {
+            None
+        }
     }
 
     pub fn tick(&mut self) {

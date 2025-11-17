@@ -41,6 +41,7 @@ pub enum Action {
     WorkOnConstruction {
         building_position: Position,
         work_amount: u32,
+        worker_skill: i32, // Construction skill of the worker
     },
 
     /// Craft an item
@@ -139,7 +140,8 @@ impl World {
             Action::WorkOnConstruction {
                 building_position,
                 work_amount,
-            } => self.execute_construction_work(building_position, *work_amount),
+                worker_skill,
+            } => self.execute_construction_work(building_position, *work_amount, *worker_skill),
 
             Action::Rest { duration } => ActionResult::Success {
                 message: format!("Rested for {} ticks", duration),
@@ -327,17 +329,36 @@ impl World {
         }
     }
 
-    fn execute_construction_work(&mut self, building_position: &Position, work_amount: u32) -> ActionResult {
+    fn execute_construction_work(&mut self, building_position: &Position, work_amount: u32, worker_skill: i32) -> ActionResult {
         // Find building under construction
         if let Some(building) = self.buildings.iter_mut().find(|b| &b.position == building_position) {
-            if building.add_construction_progress(work_amount) {
+            // Check if building has required resources
+            if !building.has_all_resources() {
+                let missing = building.missing_resources();
+                return ActionResult::Failure {
+                    reason: format!(
+                        "Missing resources: {}",
+                        missing.iter()
+                            .map(|r| format!("{:?} x{}", r.resource_type, r.amount))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                };
+            }
+
+            if building.add_construction_progress(work_amount, worker_skill) {
                 ActionResult::Success {
                     message: format!("Completed construction of {:?}", building.building_type),
                 }
             } else {
+                let progress = building.construction_progress();
                 ActionResult::Partial {
-                    completed: 0.5, // Could calculate actual percentage
-                    message: format!("Worked on {:?} construction", building.building_type),
+                    completed: progress,
+                    message: format!(
+                        "Worked on {:?} construction ({:.0}% complete)",
+                        building.building_type,
+                        progress * 100.0
+                    ),
                 }
             }
         } else {
