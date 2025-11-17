@@ -198,16 +198,6 @@ impl SimulationMetrics {
                 .entry(crate::core::EmotionType::Sadness)
                 .or_insert_with(Vec::new)
                 .push(agent.emotions.sadness);
-            // TODO: Implement EmotionState::well_being()
-            // well_being_sum += agent.emotions.well_being();
-
-            // TODO: Fix EmotionState API
-            // for emotion in &agent.emotions.emotions {
-            //     emotion_map
-            //         .entry(emotion.emotion_type.clone())
-            //         .or_insert_with(Vec::new)
-            //         .push(emotion.value);
-            // }
         }
 
         let average_well_being = if population.agents.is_empty() {
