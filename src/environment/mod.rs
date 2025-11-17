@@ -166,6 +166,24 @@ pub enum Action {
         target_agent_id: uuid::Uuid,
         weapon: Option<String>,  // Optional weapon (None = unarmed)
     },
+    /// Hunt a wild animal
+    Hunt {
+        animal_id: uuid::Uuid,
+        weapon: Option<String>,
+    },
+    /// Tame a wild animal
+    Tame {
+        animal_id: uuid::Uuid,
+        food_type: Option<String>,
+    },
+    /// Collect product from domesticated animal (eggs, milk, wool)
+    CollectAnimalProduct {
+        animal_id: uuid::Uuid,
+    },
+    /// Harvest a plant (crop or wild)
+    HarvestPlant {
+        plant_id: uuid::Uuid,
+    },
     /// Wait/idle
     Wait,
 }
@@ -184,6 +202,10 @@ impl Action {
             Action::Explore { .. } => Some(DriveType::Curiosity),
             Action::Socialize { .. } => Some(DriveType::Social),
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
+            Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
+            Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
+            Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
+            Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::Move { .. } => None,
             Action::Wait => None,
         }

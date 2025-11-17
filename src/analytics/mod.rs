@@ -92,6 +92,10 @@ impl Simulation {
         // Sync simulation tick with population tick
         self.current_tick = self.population.current_tick;
 
+        // Tick world systems (fauna and flora AI, growth, etc.)
+        self.world.animals.tick();
+        self.world.plants.tick();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -359,6 +363,10 @@ impl Simulation {
             Action::Craft { .. } => Some(ActionType::Crafting),
             Action::Build { .. } => Some(ActionType::Building),
             Action::Attack { .. } => Some(ActionType::Combat),
+            Action::Hunt { .. } => Some(ActionType::Combat), // Hunting is combat-like
+            Action::Tame { .. } => Some(ActionType::Social), // Taming requires social skills
+            Action::CollectAnimalProduct { .. } => Some(ActionType::Farming), // Animal husbandry
+            Action::HarvestPlant { .. } => Some(ActionType::Farming), // Plant farming
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)
             }
@@ -1331,6 +1339,284 @@ impl Simulation {
                 }
             },
 
+            Action::Hunt { animal_id, weapon } => {
+                // Find the target animal
+                if let Some(animal) = self.world.animals.get_mut(animal_id) {
+                    if !animal.is_alive() {
+                        return ActionResult::failure("Animal is already dead".to_string());
+                    }
+                    if animal.is_domesticated {
+                        return ActionResult::failure("Cannot hunt domesticated animals".to_string());
+                    }
+
+                    // Get animal species for stats
+                    let species_id = animal.species_id.clone();
+                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown animal species".to_string()),
+                    };
+
+                    // Calculate success based on agent skill and weapon
+                    let agent = &self.population.agents[agent_index];
+                    let hunting_skill = agent.skills.get_level(crate::agents::skills::SkillType::Melee);
+                    let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
+                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus).min(0.95);
+
+                    if rng.gen_bool(success_prob as f64) {
+                        // Successful hunt - damage the animal
+                        let damage = species.health * 0.7; // Deal 70% of max health
+                        animal.take_damage(damage);
+
+                        // If killed, get drops
+                        let mut items_gained = Vec::new();
+                        if !animal.is_alive() {
+                            for drop in &species.drops {
+                                if rng.gen_bool(drop.drop_chance as f64) {
+                                    let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                                    items_gained.push(crate::environment::ItemStack {
+                                        material_id: drop.material_id.clone(),
+                                        quantity,
+                                    });
+                                }
+                            }
+
+                            // Add items to agent inventory
+                            let agent = &mut self.population.agents[agent_index];
+                            for item_stack in &items_gained {
+                                use crate::agents::InventoryItem;
+                                let item = InventoryItem::new_with_weight(
+                                    item_stack.material_id.clone(),
+                                    item_stack.quantity,
+                                    2.0, // Default weight for animal drops
+                                );
+                                agent.inventory.add_item(item);
+                            }
+
+                            // Increase hunting skill
+                            let agent = &mut self.population.agents[agent_index];
+                            agent.skills.practice(crate::agents::skills::SkillType::Melee, 0.3);
+
+                            ActionResult::success()
+                                .with_drive_change(DriveType::Hunger, -0.4)
+                                .with_energy_cost(20.0)
+                                .with_items_gained(items_gained)
+                                .with_experience(5.0)
+                                .with_message(format!("Successfully hunted {} and obtained materials", species.name))
+                        } else {
+                            ActionResult::success()
+                                .with_drive_change(DriveType::Hunger, -0.1)
+                                .with_energy_cost(15.0)
+                                .with_message(format!("Wounded {} but it escaped", species.name))
+                        }
+                    } else {
+                        ActionResult::failure(format!("{} escaped", species.name))
+                            .with_energy_cost(10.0)
+                    }
+                } else {
+                    ActionResult::failure("Animal not found".to_string())
+                }
+            },
+
+            Action::Tame { animal_id, food_type } => {
+                // Find the target animal
+                if let Some(animal) = self.world.animals.get_mut(animal_id) {
+                    if !animal.is_alive() {
+                        return ActionResult::failure("Animal is dead".to_string());
+                    }
+                    if animal.is_domesticated {
+                        return ActionResult::failure("Animal is already domesticated".to_string());
+                    }
+
+                    // Get species info
+                    let species_id = animal.species_id.clone();
+                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown animal species".to_string()),
+                    };
+
+                    if !species.can_domesticate {
+                        return ActionResult::failure(format!("{} cannot be domesticated", species.name));
+                    }
+
+                    // Calculate taming progress based on food and agent relationship skills
+                    let agent = &self.population.agents[agent_index];
+                    let social_skill = agent.skills.get_level(crate::agents::skills::SkillType::Social);
+                    let taming_bonus = if food_type.is_some() { 0.15 } else { 0.05 };
+                    let taming_progress = 0.1 + (social_skill as f32 * 0.02) + taming_bonus;
+
+                    animal.tame(taming_progress);
+
+                    if animal.is_domesticated {
+                        // Successfully domesticated
+                        animal.owner_id = Some(agent.id);
+
+                        // Increase social skill
+                        let agent = &mut self.population.agents[agent_index];
+                        agent.skills.practice(crate::agents::skills::SkillType::Social, 0.2);
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Utility, -0.3)
+                            .with_energy_cost(10.0)
+                            .with_experience(10.0)
+                            .with_message(format!("Successfully tamed {}!", species.name))
+                    } else {
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Utility, -0.1)
+                            .with_energy_cost(8.0)
+                            .with_message(format!("Made progress taming {} ({:.0}%)", species.name, animal.tame_level * 100.0))
+                    }
+                } else {
+                    ActionResult::failure("Animal not found".to_string())
+                }
+            },
+
+            Action::CollectAnimalProduct { animal_id } => {
+                // Find the target animal
+                if let Some(animal) = self.world.animals.get_mut(animal_id) {
+                    if !animal.is_alive() {
+                        return ActionResult::failure("Animal is dead".to_string());
+                    }
+                    if !animal.is_domesticated {
+                        return ActionResult::failure("Can only collect from domesticated animals".to_string());
+                    }
+                    if !animal.is_mature() {
+                        return ActionResult::failure("Animal is not yet mature enough to produce".to_string());
+                    }
+
+                    // Get species info for product data
+                    let species_id = animal.species_id.clone();
+                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown animal species".to_string()),
+                    };
+
+                    if species.living_products.is_empty() {
+                        return ActionResult::failure(format!("{} does not produce any products", species.name));
+                    }
+
+                    // Check which products are ready
+                    let mut collected_products = Vec::new();
+                    for product in &species.living_products {
+                        if let Some(timer) = animal.product_timers.get(&product.material_id) {
+                            if *timer == 0 {
+                                // Product is ready
+                                collected_products.push(crate::environment::ItemStack {
+                                    material_id: product.material_id.clone(),
+                                    quantity: product.quantity,
+                                });
+
+                                // Reset timer
+                                animal.product_timers.insert(product.material_id.clone(), product.production_time);
+                            }
+                        }
+                    }
+
+                    if !collected_products.is_empty() {
+                        // Add to agent inventory
+                        let agent = &mut self.population.agents[agent_index];
+                        for item_stack in &collected_products {
+                            use crate::agents::InventoryItem;
+                            let item = InventoryItem::new_with_weight(
+                                item_stack.material_id.clone(),
+                                item_stack.quantity,
+                                1.0, // Animal products are generally light
+                            );
+                            agent.inventory.add_item(item);
+                        }
+
+                        // Practice industry skill
+                        let agent = &mut self.population.agents[agent_index];
+                        agent.skills.practice(crate::agents::skills::SkillType::Mining, 0.1);
+
+                        let products_str = collected_products.iter()
+                            .map(|p| format!("{} {}", p.quantity, p.material_id))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Industry, -0.2)
+                            .with_energy_cost(5.0)
+                            .with_items_gained(collected_products)
+                            .with_message(format!("Collected {} from {}", products_str, species.name))
+                    } else {
+                        ActionResult::failure("No products ready for collection yet".to_string())
+                    }
+                } else {
+                    ActionResult::failure("Animal not found".to_string())
+                }
+            },
+
+            Action::HarvestPlant { plant_id } => {
+                // Find the target plant
+                if let Some(plant) = self.world.plants.get_mut(plant_id) {
+                    if !plant.is_harvestable {
+                        return ActionResult::failure("Plant is not ready for harvest".to_string());
+                    }
+                    if plant.has_been_harvested && !plant.is_cultivated {
+                        return ActionResult::failure("Plant has already been harvested".to_string());
+                    }
+
+                    // Get species info for drops
+                    let species_id = plant.species_id.clone();
+                    let species = match self.world.plants.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown plant species".to_string()),
+                    };
+
+                    // Harvest the plant
+                    let drops = plant.harvest(species);
+
+                    if !drops.is_empty() {
+                        let mut items_gained = Vec::new();
+
+                        // Generate items from drops
+                        for drop in &drops {
+                            let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                            items_gained.push(crate::environment::ItemStack {
+                                material_id: drop.material_id.clone(),
+                                quantity,
+                            });
+                        }
+
+                        // Add to agent inventory
+                        let agent = &mut self.population.agents[agent_index];
+                        for item_stack in &items_gained {
+                            use crate::agents::InventoryItem;
+                            let item = InventoryItem::new_with_weight(
+                                item_stack.material_id.clone(),
+                                item_stack.quantity,
+                                1.5, // Plant materials weight
+                            );
+                            agent.inventory.add_item(item);
+                        }
+
+                        // Practice farming skill if cultivated, gathering otherwise
+                        let agent = &mut self.population.agents[agent_index];
+                        if plant.is_cultivated {
+                            agent.skills.practice(crate::agents::skills::SkillType::Farming, 0.2);
+                        } else {
+                            agent.skills.practice(crate::agents::skills::SkillType::Mining, 0.15);
+                        }
+
+                        let items_str = items_gained.iter()
+                            .map(|i| format!("{} {}", i.quantity, i.material_id))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Industry, -0.2)
+                            .with_energy_cost(8.0)
+                            .with_items_gained(items_gained)
+                            .with_experience(3.0)
+                            .with_message(format!("Harvested {} from {}", items_str, species.name))
+                    } else {
+                        ActionResult::failure("Plant yielded nothing".to_string())
+                    }
+                } else {
+                    ActionResult::failure("Plant not found".to_string())
+                }
+            },
+
             // For other actions, use simplified success/failure
             _ => {
                 // Base success probability
@@ -1364,6 +1650,10 @@ impl Simulation {
                         Action::Store { .. } => 0.1,
                         Action::Explore { .. } => 0.15,
                         Action::Socialize { .. } => 0.2,
+                        Action::Hunt { .. } => 0.3,
+                        Action::Tame { .. } => 0.25,
+                        Action::CollectAnimalProduct { .. } => 0.15,
+                        Action::HarvestPlant { .. } => 0.15,
                         Action::Move { .. } => 0.05,
                         Action::Wait => 0.0,
                         _ => 0.1,

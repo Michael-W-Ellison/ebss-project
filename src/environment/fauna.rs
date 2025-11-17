@@ -1438,8 +1438,14 @@ impl AnimalManager {
         self.animals.retain(|a| a.is_alive());
     }
 
-    /// Tick all animals (age, products, natural healing)
+    /// Tick all animals (age, products, natural healing, AI behaviors)
     pub fn tick(&mut self) {
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return,
+        };
+
+        // First pass: basic updates
         for animal in &mut self.animals {
             if !animal.is_alive() {
                 continue;
@@ -1451,6 +1457,9 @@ impl AnimalManager {
             // Natural stamina recovery when resting
             if animal.state == AnimalState::Resting {
                 animal.recover_stamina(1.0);
+            } else if animal.state != AnimalState::Dead {
+                // Gradual stamina consumption for active animals
+                animal.use_stamina(0.1);
             }
 
             // Slow natural healing
@@ -1464,6 +1473,99 @@ impl AnimalManager {
             // Decrement state timer
             if animal.state_timer > 0 {
                 animal.state_timer -= 1;
+            }
+        }
+
+        // Second pass: AI behavior (needs mutable access and species lookup)
+        let animals_data: Vec<(usize, String, AnimalBehavior, bool)> = self.animals
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.is_alive())
+            .filter_map(|(idx, a)| {
+                let species = registry.get(&a.species_id)?;
+                Some((idx, a.species_id.clone(), species.behavior, a.is_wild()))
+            })
+            .collect();
+
+        for (idx, species_id, behavior, is_wild) in animals_data {
+            self.update_animal_behavior(idx, behavior, is_wild);
+        }
+    }
+
+    /// Update individual animal AI behavior
+    fn update_animal_behavior(&mut self, animal_idx: usize, behavior: AnimalBehavior, is_wild: bool) {
+        let animal = &mut self.animals[animal_idx];
+
+        // If state timer is active, continue current behavior
+        if animal.state_timer > 0 {
+            return;
+        }
+
+        // Transition to new state based on behavior type and conditions
+        match behavior {
+            AnimalBehavior::Passive => {
+                // Passive animals: graze, rest, or idle
+                if animal.is_exhausted() {
+                    animal.state = AnimalState::Resting;
+                    animal.state_timer = 50;
+                } else if rand::random::<f32>() < 0.3 {
+                    animal.state = AnimalState::Grazing;
+                    animal.state_timer = 30;
+                    // Move slightly while grazing
+                    let offset = (rand::random::<i32>() % 3 - 1, rand::random::<i32>() % 3 - 1);
+                    animal.position.0 += offset.0;
+                    animal.position.1 += offset.1;
+                } else {
+                    animal.state = AnimalState::Idle;
+                    animal.state_timer = 20;
+                }
+            }
+            AnimalBehavior::Neutral => {
+                // Neutral animals: idle, drink, or graze
+                if animal.is_exhausted() {
+                    animal.state = AnimalState::Resting;
+                    animal.state_timer = 40;
+                } else if rand::random::<f32>() < 0.2 {
+                    animal.state = AnimalState::Drinking;
+                    animal.state_timer = 25;
+                } else if rand::random::<f32>() < 0.4 {
+                    animal.state = AnimalState::Grazing;
+                    animal.state_timer = 30;
+                } else {
+                    animal.state = AnimalState::Idle;
+                    animal.state_timer = 25;
+                }
+            }
+            AnimalBehavior::Defensive => {
+                // Defensive animals: mostly graze but ready to react
+                if animal.is_exhausted() {
+                    animal.state = AnimalState::Resting;
+                    animal.state_timer = 45;
+                } else if rand::random::<f32>() < 0.5 {
+                    animal.state = AnimalState::Grazing;
+                    animal.state_timer = 35;
+                } else {
+                    animal.state = AnimalState::Idle;
+                    animal.state_timer = 20;
+                }
+            }
+            AnimalBehavior::Aggressive | AnimalBehavior::Territorial => {
+                // Aggressive/territorial animals: hunt or patrol
+                if animal.is_exhausted() {
+                    animal.state = AnimalState::Resting;
+                    animal.state_timer = 60;
+                } else if is_wild && rand::random::<f32>() < 0.3 {
+                    // Wild predators occasionally hunt
+                    animal.state = AnimalState::Hunting { target_id: None };
+                    animal.state_timer = 50;
+                    // Patrol/move while hunting
+                    let offset = (rand::random::<i32>() % 5 - 2, rand::random::<i32>() % 5 - 2);
+                    animal.position.0 += offset.0;
+                    animal.position.1 += offset.1;
+                } else {
+                    animal.state = AnimalState::Idle;
+                    animal.state_timer = 30;
+                }
             }
         }
     }
