@@ -2499,6 +2499,106 @@ impl Simulation {
                     .with_message("Dismounted from transport".to_string())
             },
 
+            Action::Wait => {
+                // Wait/rest action - restores energy, calms emotions
+                let agent = &mut self.population.agents[agent_index];
+
+                // Restore a small amount of energy (resting)
+                let energy_restored = rng.gen_range(3.0..6.0);
+                agent.state.energy = (agent.state.energy + energy_restored).min(100.0);
+
+                // Reduce negative emotions slightly (calming effect)
+                agent.emotions.anger = (agent.emotions.anger - 0.02).max(0.0);
+                agent.emotions.fear = (agent.emotions.fear - 0.02).max(0.0);
+
+                debug!(
+                    "Agent {} waited, restored {:.1} energy, reduced stress",
+                    agent.id, energy_restored
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Rest, -0.15) // Satisfies rest drive
+                    .with_message(format!("Rested and recovered {:.1} energy", energy_restored))
+            },
+
+            Action::Explore { direction } => {
+                // Exploration action - move and discover new areas
+                let agent = &mut self.population.agents[agent_index];
+                let agent_id = agent.id;
+                let current_pos = agent.state.position;
+
+                // Calculate target position in exploration direction
+                let target_x = current_pos.0 + direction.0;
+                let target_y = current_pos.1 + direction.1;
+                let target_z = current_pos.2 + direction.2;
+                let target_pos = (target_x, target_y, target_z);
+
+                // Move agent to new position
+                agent.state.position = target_pos;
+
+                // Mark tiles as explored in a radius around new position
+                let mut newly_explored_count = 0;
+                let exploration_radius = 3; // Can see 3 tiles in each direction
+
+                for dx in -exploration_radius..=exploration_radius {
+                    for dy in -exploration_radius..=exploration_radius {
+                        let explore_pos = crate::world::Position::new(
+                            target_x + dx,
+                            target_y + dy,
+                        );
+
+                        if agent.exploration_knowledge.explore_tile(explore_pos, self.current_tick) {
+                            newly_explored_count += 1;
+                        }
+                    }
+                }
+
+                // Discover nearby resources (within exploration radius)
+                let mut discoveries = Vec::new();
+                for resource in &self.world.resources {
+                    let resource_pos = crate::world::Position::new(
+                        resource.position.x,
+                        resource.position.y,
+                    );
+                    let dx = (resource_pos.x - target_x).abs();
+                    let dy = (resource_pos.y - target_y).abs();
+
+                    if dx <= exploration_radius && dy <= exploration_radius {
+                        if agent.exploration_knowledge.discover_resource(
+                            resource_pos,
+                            resource.resource_type,
+                            self.current_tick,
+                        ) {
+                            discoveries.push(format!("{:?}", resource.resource_type));
+                        }
+                    }
+                }
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // Construct message about exploration results
+                let mut message = format!(
+                    "Explored new area, discovered {} tiles",
+                    newly_explored_count
+                );
+                if !discoveries.is_empty() {
+                    message.push_str(&format!(", found: {}", discoveries.join(", ")));
+                }
+
+                debug!(
+                    "Agent {} explored to ({}, {}, {}), discovered {} new tiles",
+                    agent_id, target_x, target_y, target_z, newly_explored_count
+                );
+
+                // Exploration is rewarding
+                let curiosity_satisfaction = if newly_explored_count > 0 { 0.3 } else { 0.1 };
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Curiosity, -curiosity_satisfaction)
+                    .with_energy_cost(5.0) // Exploration takes energy
+                    .with_message(message)
+            },
+
             // For other actions, use simplified success/failure
             _ => {
                 // Base success probability
@@ -2530,19 +2630,19 @@ impl Simulation {
                     let satisfaction = match action {
                         Action::Craft { .. } => 0.2,
                         Action::Store { .. } => 0.1,
-                        Action::Explore { .. } => 0.15,
                         Action::Socialize { .. } => 0.2,
                         Action::ShareInformation { .. } => 0.15, // Handled separately above
                         Action::Mate { .. } => 0.0, // Handled separately above
                         Action::Mount { .. } => 0.0, // Handled separately above
                         Action::Dismount => 0.0, // Handled separately above
+                        Action::Wait => 0.0, // Handled separately above
+                        Action::Explore { .. } => 0.0, // Handled separately above
                         Action::Hunt { .. } => 0.3,
                         Action::Tame { .. } => 0.25,
                         Action::CollectAnimalProduct { .. } => 0.15,
                         Action::HarvestPlant { .. } => 0.15,
                         Action::SeekShelter => 0.0, // Handled separately above
                         Action::Move { .. } => 0.05,
-                        Action::Wait => 0.0,
                         _ => 0.1,
                     };
 
