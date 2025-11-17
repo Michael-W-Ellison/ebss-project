@@ -9,6 +9,9 @@
 
 use crate::core::drives::{Drive, DriveType, DriveState};
 
+// Floating-point comparison tolerance
+const EPSILON: f32 = 0.0001;
+
 #[test]
 fn test_drive_accumulation_over_time() {
     let mut drive = Drive::new(DriveType::Hunger);
@@ -18,7 +21,7 @@ fn test_drive_accumulation_over_time() {
 
     // Accumulate over time (Hunger has 0.01 base rate)
     drive.tick();
-    assert_eq!(drive.value, 0.01);
+    assert!((drive.value - 0.01).abs() < EPSILON, "Expected ~0.01, got {}", drive.value);
 
     // Continue accumulating
     for _ in 0..99 {
@@ -26,11 +29,11 @@ fn test_drive_accumulation_over_time() {
     }
 
     // After 100 ticks, should be at 1.0
-    assert_eq!(drive.value, 1.0);
+    assert!((drive.value - 1.0).abs() < EPSILON, "Expected ~1.0, got {}", drive.value);
 
     // Should not exceed 1.0
     drive.tick();
-    assert_eq!(drive.value, 1.0);
+    assert!((drive.value - 1.0).abs() < EPSILON, "Expected ~1.0, got {}", drive.value);
 }
 
 #[test]
@@ -43,13 +46,15 @@ fn test_drive_threshold_activation() {
     // Not active yet
     assert!(!drive.is_active());
 
-    // Accumulate to threshold
-    for _ in 0..70 {
+    // Accumulate past threshold (use 71 ticks to account for floating-point precision)
+    // 71 * 0.01 = 0.71, ensuring we're definitely above 0.7
+    for _ in 0..71 {
         drive.tick();
     }
 
     // Now should be active
-    assert!(drive.value >= drive.threshold);
+    assert!(drive.value > drive.threshold,
+            "Expected value ({}) to be > threshold ({})", drive.value, drive.threshold);
     assert!(drive.is_active());
 }
 
@@ -62,7 +67,7 @@ fn test_drive_satisfaction_resets_value() {
         drive.tick();
     }
 
-    assert_eq!(drive.value, 0.5);
+    assert!((drive.value - 0.5).abs() < EPSILON, "Expected ~0.5, got {}", drive.value);
 
     // Satisfy the drive (eating food)
     drive.satisfy();
@@ -80,13 +85,13 @@ fn test_partial_drive_satisfaction() {
         drive.tick();
     }
 
-    assert_eq!(drive.value, 0.8);
+    assert!((drive.value - 0.8).abs() < EPSILON, "Expected ~0.8, got {}", drive.value);
 
     // Partially satisfy (e.g., small snack reduces by 0.3)
     drive.partial_satisfy(0.3);
 
     // Should be reduced but not zero
-    assert_eq!(drive.value, 0.5);
+    assert!((drive.value - 0.5).abs() < EPSILON, "Expected ~0.5, got {}", drive.value);
 }
 
 #[test]
@@ -103,9 +108,9 @@ fn test_multiple_drives_accumulate_independently() {
     }
 
     // Each should accumulate at its own rate
-    assert_eq!(hunger.value, 1.0);  // Capped at 1.0
-    assert!((thirst.value - 1.0).abs() < 0.01); // Should be at cap
-    assert_eq!(rest.value, 0.8);    // 100 * 0.008
+    assert!((hunger.value - 1.0).abs() < EPSILON, "Hunger expected ~1.0, got {}", hunger.value);  // Capped at 1.0
+    assert!((thirst.value - 1.0).abs() < 0.01, "Thirst expected ~1.0, got {}", thirst.value); // Should be at cap
+    assert!((rest.value - 0.8).abs() < EPSILON, "Rest expected ~0.8, got {}", rest.value);    // 100 * 0.008
 }
 
 #[test]
@@ -168,10 +173,10 @@ fn test_drive_state_update_all_drives() {
 
     // Each drive should have accumulated
     let hunger = drive_state.get(DriveType::Hunger).unwrap();
-    assert_eq!(hunger.value, 0.01);
+    assert!((hunger.value - 0.01).abs() < EPSILON, "Expected ~0.01, got {}", hunger.value);
 
     let thirst = drive_state.get(DriveType::Thirst).unwrap();
-    assert_eq!(thirst.value, 0.012);
+    assert!((thirst.value - 0.012).abs() < EPSILON, "Expected ~0.012, got {}", thirst.value);
 }
 
 #[test]
@@ -239,8 +244,8 @@ fn test_thirst_accumulates_faster_than_hunger() {
     }
 
     // Thirst should be higher
-    assert_eq!(hunger.value, 0.5);
-    assert_eq!(thirst.value, 0.6);
+    assert!((hunger.value - 0.5).abs() < EPSILON, "Expected ~0.5, got {}", hunger.value);
+    assert!((thirst.value - 0.6).abs() < EPSILON, "Expected ~0.6, got {}", thirst.value);
     assert!(thirst.value > hunger.value);
 }
 

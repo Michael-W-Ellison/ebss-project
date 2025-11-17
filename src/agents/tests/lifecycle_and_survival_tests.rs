@@ -296,24 +296,29 @@ fn test_life_stage_progression() {
     agent.state.life_stage = LifeStage::Infant;
     agent.state.age = 0;
 
-    // Age through stages
-    // Infant -> Child (around age 2000)
-    agent.state.age = 2500;
+    // Age through stages (based on LifeStage::from_age thresholds)
+    // Infant (0-500)
+    agent.state.age = 250;
+    agent.update_life_stage();
+    assert_eq!(agent.state.life_stage, LifeStage::Infant);
+
+    // Child (501-1500)
+    agent.state.age = 1000;
     agent.update_life_stage();
     assert_eq!(agent.state.life_stage, LifeStage::Child);
 
-    // Child -> Adolescent
-    agent.state.age = 6000;
+    // Adolescent (1501-2500)
+    agent.state.age = 2000;
     agent.update_life_stage();
     assert_eq!(agent.state.life_stage, LifeStage::Adolescent);
 
-    // Adolescent -> Adult
-    agent.state.age = 10000;
+    // Adult (2501-8000)
+    agent.state.age = 5000;
     agent.update_life_stage();
     assert_eq!(agent.state.life_stage, LifeStage::Adult);
 
-    // Adult -> Elderly
-    agent.state.age = agent.state.max_age - 5000;
+    // Elderly (8001+)
+    agent.state.age = 9000;
     agent.update_life_stage();
     assert_eq!(agent.state.life_stage, LifeStage::Elderly);
 }
