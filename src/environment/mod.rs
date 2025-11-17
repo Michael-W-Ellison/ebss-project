@@ -184,6 +184,8 @@ pub enum Action {
     HarvestPlant {
         plant_id: uuid::Uuid,
     },
+    /// Seek shelter from dangerous weather
+    SeekShelter,
     /// Wait/idle
     Wait,
 }
@@ -206,6 +208,7 @@ impl Action {
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
+            Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
             Action::Move { .. } => None,
             Action::Wait => None,
         }
@@ -235,7 +238,6 @@ impl ActionResult {
             experience: 0.0,
             energy_cost: 0.0,
             drive_satisfaction: 0.0,
-            message,
             message: Some(message),
         }
     }

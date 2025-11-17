@@ -339,6 +339,123 @@ impl ResourceNode {
         }
         (self.amount as f32 / self.max_amount as f32) * 100.0
     }
+
+    /// Regenerate resources based on climate and weather conditions
+    /// Returns the amount regenerated
+    pub fn regenerate(&mut self, temperature: f32, precipitation: f32, season_modifier: f32) -> u32 {
+        if self.amount >= self.max_amount {
+            return 0; // Already at max
+        }
+
+        // Base regeneration rate per tick (0-1 units)
+        let base_rate = match self.resource_type {
+            // Renewable resources
+            ResourceType::Wood => 0.01,       // Trees grow slowly
+            ResourceType::Food => 0.05,       // Berries/fruits regenerate faster
+            ResourceType::Grain => 0.03,      // Crops regenerate moderately
+            ResourceType::Herbs => 0.04,      // Herbs grow quickly
+            ResourceType::Flax => 0.03,
+            ResourceType::Cotton => 0.03,
+            ResourceType::Honey => 0.02,      // Bees produce honey steadily
+
+            // Slow renewable
+            ResourceType::Fish => 0.02,       // Fish populations regenerate
+
+            // Non-renewable (mineral resources don't regenerate)
+            ResourceType::Stone |
+            ResourceType::Iron |
+            ResourceType::Clay |
+            ResourceType::Sand |
+            ResourceType::Coal => 0.0,
+
+            // Processed/finished goods don't regenerate naturally
+            _ => 0.0,
+        };
+
+        if base_rate == 0.0 {
+            return 0;
+        }
+
+        // Apply temperature modifier (most resources prefer moderate temps)
+        let temp_modifier = match self.resource_type {
+            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => {
+                // Plants prefer 15-25°C
+                if temperature >= 15.0 && temperature <= 25.0 {
+                    1.5 // Ideal conditions
+                } else if temperature >= 5.0 && temperature <= 35.0 {
+                    1.0 // Acceptable
+                } else if temperature < -10.0 || temperature > 40.0 {
+                    0.1 // Extreme temps slow growth severely
+                } else {
+                    0.5 // Suboptimal
+                }
+            },
+            ResourceType::Wood => {
+                // Trees are hardier
+                if temperature >= -5.0 && temperature <= 30.0 {
+                    1.0
+                } else {
+                    0.3
+                }
+            },
+            ResourceType::Cotton => {
+                // Cotton prefers warmer climates
+                if temperature >= 20.0 && temperature <= 30.0 {
+                    1.5
+                } else if temperature >= 15.0 {
+                    1.0
+                } else {
+                    0.3
+                }
+            },
+            _ => 1.0, // No temperature preference
+        };
+
+        // Apply precipitation modifier (water availability)
+        let precip_modifier = match self.resource_type {
+            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs | ResourceType::Flax => {
+                // Most crops need moderate precipitation
+                if precipitation >= 0.4 && precipitation <= 0.8 {
+                    1.5 // Good rainfall
+                } else if precipitation >= 0.2 {
+                    1.0 // Adequate
+                } else if precipitation < 0.1 {
+                    0.2 // Drought
+                } else {
+                    0.7 // Too dry or too wet
+                }
+            },
+            ResourceType::Wood => {
+                // Trees need regular water
+                if precipitation >= 0.3 {
+                    1.2
+                } else {
+                    0.5
+                }
+            },
+            ResourceType::Cotton => {
+                // Cotton prefers drier conditions
+                if precipitation >= 0.2 && precipitation <= 0.5 {
+                    1.3
+                } else if precipitation > 0.8 {
+                    0.6 // Too wet
+                } else {
+                    0.8
+                }
+            },
+            _ => 1.0,
+        };
+
+        // Calculate total regeneration
+        let regen_amount = base_rate * temp_modifier * precip_modifier * season_modifier;
+        let regen_units = (regen_amount * 100.0).round() as u32; // Convert to whole units
+
+        // Add regenerated amount, capped at max
+        let actual_regen = regen_units.min(self.max_amount - self.amount);
+        self.amount += actual_regen;
+
+        actual_regen
+    }
 }
 
 /// Resource for tracking what's needed

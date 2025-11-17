@@ -93,8 +93,12 @@ impl Simulation {
         self.current_tick = self.population.current_tick;
 
         // Tick world systems (fauna and flora AI, growth, etc.)
+        self.world.climate.tick();
         self.world.animals.tick();
         self.world.plants.tick();
+
+        // Update exposure damage for all agents
+        self.update_agent_exposure();
 
         debug!("=== Tick {} ===", self.current_tick);
 
@@ -151,22 +155,27 @@ impl Simulation {
                     agent_id, tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
                 );
 
-                // Generate action based on percepts first (if any high-salience percepts exist),
-                // then fall back to drive-based actions
+                // Generate action based on priority: shelter needs > percepts > drives
                 let action = {
                     let agent = &self.population.agents[agent_index];
 
-                    // Check for high-salience percepts that should override drive-based actions
-                    let percept_action = Self::generate_action_from_percepts(
-                        &agent.recent_percepts,
-                        &agent.drives,
-                        agent_position,
-                    );
+                    // PRIORITY 1: Check if agent needs shelter due to exposure
+                    if agent.needs_shelter() && agent.shelter_priority() > 0.7 {
+                        // Critical shelter need - override all other actions
+                        crate::environment::Action::SeekShelter
+                    } else {
+                        // PRIORITY 2: Check for high-salience percepts that should override drive-based actions
+                        let percept_action = Self::generate_action_from_percepts(
+                            &agent.recent_percepts,
+                            &agent.drives,
+                            agent_position,
+                        );
 
-                    // Use percept-based action if available, otherwise use drive-based
-                    percept_action.unwrap_or_else(|| {
-                        Self::generate_action_for_drive(drive_type, agent_position)
-                    })
+                        // PRIORITY 3: Use percept-based action if available, otherwise use drive-based
+                        percept_action.unwrap_or_else(|| {
+                            Self::generate_action_for_drive(drive_type, agent_position)
+                        })
+                    }
                 };
 
                 // Execute action in environment and get feedback
@@ -1617,6 +1626,97 @@ impl Simulation {
                 }
             },
 
+            Action::SeekShelter => {
+                // Find nearest shelter (completed building or forest)
+                let agent_pos = self.population.agents[agent_index].state.position;
+
+                // Check if already in shelter
+                let in_building = self.world.buildings.iter().any(|b| {
+                    b.position == agent_pos && b.is_completed()
+                });
+
+                let in_forest = self.world.grid.get_tile(&agent_pos)
+                    .map(|t| matches!(t.terrain, crate::world::TerrainType::Forest))
+                    .unwrap_or(false);
+
+                if in_building || in_forest {
+                    // Already in shelter - recover from exposure
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.exposure_status.recover(0.05);
+
+                    return ActionResult::success()
+                        .with_drive_change(DriveType::Safety, -0.3)
+                        .with_energy_cost(0.0)
+                        .with_message(format!(
+                            "Taking shelter (exposure: {:.2})",
+                            agent.exposure_status.exposure_damage
+                        ));
+                }
+
+                // Find nearest shelter
+                let mut nearest_shelter: Option<crate::world::Position> = None;
+                let mut min_distance = f32::MAX;
+
+                // Check buildings
+                for building in &self.world.buildings {
+                    if building.is_completed() {
+                        let dist = agent_pos.distance_to(&building.position);
+                        if dist < min_distance {
+                            min_distance = dist;
+                            nearest_shelter = Some(building.position);
+                        }
+                    }
+                }
+
+                // Check for forest tiles (within reasonable search radius)
+                for dx in -5..=5 {
+                    for dy in -5..=5 {
+                        let check_pos = crate::world::Position::new(
+                            agent_pos.x + dx,
+                            agent_pos.y + dy
+                        );
+
+                        if let Some(tile) = self.world.grid.get_tile(&check_pos) {
+                            if matches!(tile.terrain, crate::world::TerrainType::Forest) {
+                                let dist = agent_pos.distance_to(&check_pos);
+                                if dist < min_distance {
+                                    min_distance = dist;
+                                    nearest_shelter = Some(check_pos);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Move towards nearest shelter
+                if let Some(shelter_pos) = nearest_shelter {
+                    let agent = &mut self.population.agents[agent_index];
+                    let dx = (shelter_pos.x - agent_pos.x).signum();
+                    let dy = (shelter_pos.y - agent_pos.y).signum();
+                    let new_pos = crate::world::Position::new(
+                        agent_pos.x + dx,
+                        agent_pos.y + dy
+                    );
+
+                    // Check if path is walkable
+                    if self.world.grid.get_tile(&new_pos).map(|t| t.terrain.is_walkable()).unwrap_or(false) {
+                        agent.state.position = new_pos;
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Safety, -0.1)
+                            .with_energy_cost(5.0)
+                            .with_message(format!(
+                                "Moving towards shelter at ({}, {})",
+                                shelter_pos.x, shelter_pos.y
+                            ))
+                    } else {
+                        ActionResult::failure("Path to shelter blocked".to_string())
+                    }
+                } else {
+                    ActionResult::failure("No shelter found nearby".to_string())
+                }
+            },
+
             // For other actions, use simplified success/failure
             _ => {
                 // Base success probability
@@ -1654,6 +1754,7 @@ impl Simulation {
                         Action::Tame { .. } => 0.25,
                         Action::CollectAnimalProduct { .. } => 0.15,
                         Action::HarvestPlant { .. } => 0.15,
+                        Action::SeekShelter => 0.0, // Handled separately above
                         Action::Move { .. } => 0.05,
                         Action::Wait => 0.0,
                         _ => 0.1,
@@ -1825,6 +1926,61 @@ impl Simulation {
             info!("Average Hunger: {:.2}", total_hunger / agent_count);
             info!("Average Rest: {:.2}", total_rest / agent_count);
             info!("Average Curiosity: {:.2}", total_curiosity / agent_count);
+        }
+    }
+
+    /// Update exposure damage for all agents based on weather and environmental conditions
+    fn update_agent_exposure(&mut self) {
+        let weather = self.world.climate.weather.clone();
+        let time_of_day = self.world.climate.calendar.time_of_day;
+
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Get environmental temperature at agent's position
+            let terrain = self.world.grid.get_tile(&agent.state.position)
+                .map(|t| t.terrain)
+                .unwrap_or(crate::world::TerrainType::Plains);
+
+            let environmental_temp = self.world.climate.get_temperature(agent.state.position, terrain);
+
+            // Check if agent has shelter
+            // Agent has shelter if they're in a completed building
+            let has_shelter = self.world.buildings.iter().any(|b| {
+                b.position == agent.state.position && b.is_completed()
+            }) || matches!(terrain, crate::world::TerrainType::Forest); // Forest provides partial shelter
+
+            // Check if agent has water access (simplified: check inventory for water containers)
+            let has_water_access = agent.inventory.get_item("waterskin")
+                .map(|item| item.fill_percentage() > 0.1)
+                .unwrap_or(false);
+
+            // Update exposure and apply damage
+            let damage = agent.update_exposure(
+                &weather,
+                environmental_temp,
+                has_shelter,
+                has_water_access,
+                time_of_day,
+            );
+
+            // Log critical exposure events
+            if damage > 0.05 {
+                debug!(
+                    "Agent {} taking exposure damage: {:.3} (exposures: {:?})",
+                    agent.id, damage, agent.exposure_status.active_exposures
+                );
+            }
+
+            // If agent is in critical exposure condition, they may die
+            if agent.exposure_status.is_critical() && agent.state.health < 20.0 {
+                warn!(
+                    "Agent {} in critical exposure condition! Health: {:.1}, Exposure: {:.2}",
+                    agent.id, agent.state.health, agent.exposure_status.exposure_damage
+                );
+            }
         }
     }
 }

@@ -707,6 +707,59 @@ impl Agent {
         self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
     }
 
+    /// Update exposure status based on environmental conditions
+    ///
+    /// # Arguments
+    /// * `weather` - Current weather conditions
+    /// * `environmental_temp` - Ambient temperature
+    /// * `has_shelter` - Whether the agent is in shelter
+    /// * `has_water_access` - Whether the agent has access to water
+    /// * `time_of_day` - Current time of day (0-24)
+    ///
+    /// Returns the amount of exposure damage taken this tick
+    pub fn update_exposure(
+        &mut self,
+        weather: &crate::environment::Weather,
+        environmental_temp: super::temperature::Temperature,
+        has_shelter: bool,
+        has_water_access: bool,
+        time_of_day: f32,
+    ) -> f32 {
+        let damage = self.exposure_status.update(
+            &self.body_temperature,
+            environmental_temp,
+            weather,
+            has_shelter,
+            has_water_access,
+            time_of_day,
+        );
+
+        // Apply exposure damage to health
+        if damage > 0.0 {
+            self.state.health = (self.state.health - damage * 10.0).max(0.0);
+        }
+
+        damage
+    }
+
+    /// Check if agent needs shelter based on current exposure
+    pub fn needs_shelter(&self) -> bool {
+        // Seek shelter if exposure is getting dangerous
+        self.exposure_status.is_critical() ||
+        !self.exposure_status.active_exposures.is_empty()
+    }
+
+    /// Get recommended shelter-seeking priority (0.0 to 1.0)
+    pub fn shelter_priority(&self) -> f32 {
+        if self.exposure_status.is_critical() {
+            1.0 // Critical - seek shelter immediately
+        } else if !self.exposure_status.active_exposures.is_empty() {
+            0.5 + (self.exposure_status.total_severity() * 0.5) // Moderate priority
+        } else {
+            0.0 // No exposure risk
+        }
+    }
+
     /// Respond emotionally to a threat
     ///
     /// # Arguments
