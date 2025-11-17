@@ -558,6 +558,8 @@ pub struct Agent {
     pub memory: Memory,
     pub inventory: Inventory,
     pub senses: Senses,
+    /// Recent percepts processed from sensory input (last 20 ticks)
+    pub recent_percepts: Vec<(u32, super::sensory_processing::Percept)>, // (tick, percept)
     pub body: Body,
     pub body_temperature: super::BodyTemperature,
     pub exposure_status: crate::environment::ExposureStatus,
@@ -592,6 +594,7 @@ impl Agent {
             memory: Memory::new(),
             inventory: Inventory::default(),
             senses: Senses::default(),
+            recent_percepts: Vec::new(),
             body: Body::default(),
             body_temperature: super::BodyTemperature::default(),
             exposure_status: crate::environment::ExposureStatus::default(),
@@ -623,12 +626,28 @@ impl Agent {
 
     /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
+        self.tick_with_percepts(0); // Default tick uses tick 0
+    }
+
+    /// Tick with percept processing (requires current tick for timestamping)
+    pub fn tick_with_percepts(&mut self, current_tick: u32) {
         // Update subsystems
         self.senses.tick();
         self.body.tick();
         self.emotions.tick();
         self.memory.tick();
         self.drives.tick();
+
+        // Process sensory input into percepts and store them
+        let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);
+
+        // Store percepts with timestamp
+        for percept in new_percepts {
+            self.recent_percepts.push((current_tick, percept));
+        }
+
+        // Trim old percepts (keep only last 20 ticks worth)
+        self.recent_percepts.retain(|(tick, _)| current_tick.saturating_sub(*tick) <= 20);
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;

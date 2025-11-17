@@ -168,7 +168,7 @@ impl Population {
         // Update all agents
         let current_tick = self.current_tick;
         for agent in &mut self.agents {
-            agent.tick();
+            agent.tick_with_percepts(current_tick); // Process percepts with timestamp
             agent.state.age_tick(current_tick);
         }
 

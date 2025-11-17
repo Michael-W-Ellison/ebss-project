@@ -147,8 +147,23 @@ impl Simulation {
                     agent_id, tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
                 );
 
-                // Generate action based on drive type and agent position
-                let action = Self::generate_action_for_drive(drive_type, agent_position);
+                // Generate action based on percepts first (if any high-salience percepts exist),
+                // then fall back to drive-based actions
+                let action = {
+                    let agent = &self.population.agents[agent_index];
+
+                    // Check for high-salience percepts that should override drive-based actions
+                    let percept_action = Self::generate_action_from_percepts(
+                        &agent.recent_percepts,
+                        &agent.drives,
+                        agent_position,
+                    );
+
+                    // Use percept-based action if available, otherwise use drive-based
+                    percept_action.unwrap_or_else(|| {
+                        Self::generate_action_for_drive(drive_type, agent_position)
+                    })
+                };
 
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
@@ -234,6 +249,87 @@ impl Simulation {
         if self.current_tick % 10 == 0 {
             self.log_statistics();
         }
+    }
+
+    /// Generate an action based on recent percepts (if high-salience percepts exist)
+    /// Returns None if no percept warrants immediate action
+    fn generate_action_from_percepts(
+        recent_percepts: &[(u32, crate::agents::sensory_processing::Percept)],
+        agent_drives: &crate::core::DriveState,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::sensory_processing::{Percept, calculate_salience, ThreatType};
+
+        if recent_percepts.is_empty() {
+            return None;
+        }
+
+        // Find the most salient recent percept
+        let most_salient = recent_percepts.iter()
+            .max_by(|(_, a), (_, b)| {
+                let sal_a = calculate_salience(a, agent_drives);
+                let sal_b = calculate_salience(b, agent_drives);
+                sal_a.partial_cmp(&sal_b).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+        if let Some((_, percept)) = most_salient {
+            let salience = calculate_salience(percept, agent_drives);
+
+            // Only override drive-based actions if salience is high (> 0.7)
+            if salience > 0.7 {
+                match percept {
+                    Percept::DangerDetected { threat_type, position, severity } => {
+                        // High-priority: flee from danger
+                        if let Some(danger_pos) = position {
+                            // Move away from danger position
+                            let dx = agent_position.0 - danger_pos.0;
+                            let dy = agent_position.1 - danger_pos.1;
+
+                            // Normalize and extend to flee further
+                            let distance = ((dx * dx + dy * dy) as f32).sqrt().max(1.0);
+                            let flee_distance = (severity * 15.0) as i32;
+
+                            let flee_x = agent_position.0 + ((dx as f32 / distance) * flee_distance as f32) as i32;
+                            let flee_y = agent_position.1 + ((dy as f32 / distance) * flee_distance as f32) as i32;
+
+                            return Some(Action::Move {
+                                target: (flee_x, flee_y, agent_position.2),
+                            });
+                        } else {
+                            // Unknown danger location - move to random safe spot
+                            use rand::Rng;
+                            let mut rng = rand::thread_rng();
+                            let safe_x = agent_position.0 + rng.gen_range(-10..=10);
+                            let safe_y = agent_position.1 + rng.gen_range(-10..=10);
+
+                            return Some(Action::Move {
+                                target: (safe_x, safe_y, agent_position.2),
+                            });
+                        }
+                    }
+                    Percept::ResourceDetected { resource_type, position, .. } => {
+                        // High-salience resource (usually means high hunger/thirst)
+                        // Move towards it
+                        return Some(Action::Move {
+                            target: *position,
+                        });
+                    }
+                    Percept::AgentDetected { agent_id, position, .. } => {
+                        // High-salience agent (usually means high social drive)
+                        // Attempt social interaction
+                        return Some(Action::Socialize {
+                            target_agent_id: *agent_id,
+                        });
+                    }
+                    _ => {
+                        // Other percepts don't warrant action override
+                        return None;
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Generate an action based on drive type and position
