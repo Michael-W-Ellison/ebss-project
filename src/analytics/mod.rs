@@ -1372,7 +1372,9 @@ impl Simulation {
 
                     // Calculate success based on agent skill and weapon
                     let agent = &self.population.agents[agent_index];
-                    let hunting_skill = agent.skills.get_level(crate::agents::skills::SkillType::Melee);
+                    let hunting_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::MeleeCombat)
+                        .map(|s| s.level)
+                        .unwrap_or(-5);
                     let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
                     let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus).min(0.95_f32);
 
@@ -1408,14 +1410,19 @@ impl Simulation {
 
                             // Increase hunting skill
                             let agent = &mut self.population.agents[agent_index];
-                            agent.skills.practice(crate::agents::skills::SkillType::Melee, 0.3);
+                            agent.skills.gain_experience(crate::agents::skills::SkillType::MeleeCombat, 3);
 
-                            ActionResult::success()
+                            let mut result = ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.4)
                                 .with_energy_cost(20.0)
-                                .with_items_gained(items_gained)
                                 .with_experience(5.0)
-                                .with_message(format!("Successfully hunted {} and obtained materials", species.name))
+                                .with_message(format!("Successfully hunted {} and obtained materials", species.name));
+
+                            // Add all items gained
+                            for item in items_gained {
+                                result = result.with_item_gained(item);
+                            }
+                            result
                         } else {
                             ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.1)
@@ -1452,9 +1459,11 @@ impl Simulation {
                         return ActionResult::failure(format!("{} cannot be domesticated", species.name));
                     }
 
-                    // Calculate taming progress based on food and agent relationship skills
+                    // Calculate taming progress based on food and agent relationship skills (using Farming)
                     let agent = &self.population.agents[agent_index];
-                    let social_skill = agent.skills.get_level(crate::agents::skills::SkillType::Social);
+                    let social_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::Farming)
+                        .map(|s| s.level)
+                        .unwrap_or(-5);
                     let taming_bonus = if food_type.is_some() { 0.15 } else { 0.05 };
                     let taming_progress = 0.1 + (social_skill as f32 * 0.02) + taming_bonus;
 
@@ -1547,11 +1556,16 @@ impl Simulation {
                             .collect::<Vec<_>>()
                             .join(", ");
 
-                        ActionResult::success()
+                        let mut result = ActionResult::success()
                             .with_drive_change(DriveType::Industry, -0.2)
                             .with_energy_cost(5.0)
-                            .with_items_gained(collected_products)
-                            .with_message(format!("Collected {} from {}", products_str, species.name))
+                            .with_message(format!("Collected {} from {}", products_str, species.name));
+
+                        // Add all collected products
+                        for product in collected_products {
+                            result = result.with_item_gained(product);
+                        }
+                        result
                     } else {
                         ActionResult::failure("No products ready for collection yet".to_string())
                     }
@@ -1617,12 +1631,17 @@ impl Simulation {
                             .collect::<Vec<_>>()
                             .join(", ");
 
-                        ActionResult::success()
+                        let mut result = ActionResult::success()
                             .with_drive_change(DriveType::Industry, -0.2)
                             .with_energy_cost(8.0)
-                            .with_items_gained(items_gained)
                             .with_experience(3.0)
-                            .with_message(format!("Harvested {} from {}", items_str, species.name))
+                            .with_message(format!("Harvested {} from {}", items_str, species.name));
+
+                        // Add all harvested items
+                        for item in items_gained {
+                            result = result.with_item_gained(item);
+                        }
+                        result
                     } else {
                         ActionResult::failure("Plant yielded nothing".to_string())
                     }
