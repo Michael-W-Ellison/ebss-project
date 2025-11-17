@@ -1434,6 +1434,11 @@ impl AnimalManager {
             .collect()
     }
 
+    /// Get species from registry
+    pub fn get_species(&self, species_id: &str) -> Option<&AnimalSpecies> {
+        self.registry.as_ref()?.get(species_id)
+    }
+
     /// Remove dead animals
     pub fn remove_dead(&mut self) {
         self.animals.retain(|a| a.is_alive());

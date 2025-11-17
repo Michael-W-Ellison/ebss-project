@@ -1365,7 +1365,7 @@ impl Simulation {
 
                     // Get animal species for stats
                     let species_id = animal.species_id.clone();
-                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                    let species = match self.world.animals.get_species(&species_id) {
                         Some(s) => s,
                         None => return ActionResult::failure("Unknown animal species".to_string()),
                     };
@@ -1450,7 +1450,7 @@ impl Simulation {
 
                     // Get species info
                     let species_id = animal.species_id.clone();
-                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                    let species = match self.world.animals.get_species(&species_id) {
                         Some(s) => s,
                         None => return ActionResult::failure("Unknown animal species".to_string()),
                     };
@@ -1508,7 +1508,7 @@ impl Simulation {
 
                     // Get species info for product data
                     let species_id = animal.species_id.clone();
-                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                    let species = match self.world.animals.get_species(&species_id) {
                         Some(s) => s,
                         None => return ActionResult::failure("Unknown animal species".to_string()),
                     };
@@ -1586,7 +1586,7 @@ impl Simulation {
 
                     // Get species info for drops
                     let species_id = plant.species_id.clone();
-                    let species = match self.world.plants.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                    let species = match self.world.plants.get_species(&species_id) {
                         Some(s) => s,
                         None => return ActionResult::failure("Unknown plant species".to_string()),
                     };

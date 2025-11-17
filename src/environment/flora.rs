@@ -1552,6 +1552,16 @@ impl PlantManager {
         Some(plant.harvest(species))
     }
 
+    /// Get all plants
+    pub fn get_all(&self) -> &Vec<Plant> {
+        &self.plants
+    }
+
+    /// Get species from registry
+    pub fn get_species(&self, species_id: &str) -> Option<&PlantSpecies> {
+        self.registry.as_ref()?.get(species_id)
+    }
+
     /// Tick all plants (growth, regrowth)
     pub fn tick(&mut self) {
         let registry = match &self.registry {
