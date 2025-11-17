@@ -1703,9 +1703,24 @@ impl Simulation {
                         // Successfully domesticated
                         animal.owner_id = Some(agent.id);
 
+                        // Create Transport for the tamed animal (if suitable)
+                        let transport_type = match species.name.as_str() {
+                            "Cow" => Some(crate::agents::transport::TransportType::OxCart),
+                            "Sheep" => Some(crate::agents::transport::TransportType::PackDonkey),
+                            "Goat" => Some(crate::agents::transport::TransportType::PackDonkey),
+                            // Rabbit, Chicken, and Wild Boar are too small or unsuitable for transport
+                            _ => None,
+                        };
+
                         // Increase social skill
                         let agent = &mut self.population.agents[agent_index];
                         agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
+
+                        // Add transport to agent's inventory if applicable
+                        if let Some(t_type) = transport_type {
+                            let transport = crate::agents::transport::Transport::with_animal(t_type, *animal_id);
+                            agent.transport.transports.push(transport);
+                        }
 
                         ActionResult::success()
                             .with_drive_change(DriveType::Utility, -0.3)
