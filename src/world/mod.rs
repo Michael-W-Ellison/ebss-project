@@ -497,19 +497,17 @@ impl World {
 
     /// Get all animals of a specific species
     pub fn get_animals_by_species(&self, species_id: &str) -> Vec<&crate::environment::Animal> {
-        self.animals.all_animals()
+        self.animals.get_all()
             .iter()
             .filter(|a| a.species_id == species_id)
-            .copied()
             .collect()
     }
 
     /// Get all domesticated animals
     pub fn get_domesticated_animals(&self) -> Vec<&crate::environment::Animal> {
-        self.animals.all_animals()
+        self.animals.get_all()
             .iter()
             .filter(|a| a.is_domesticated)
-            .copied()
             .collect()
     }
 
@@ -968,11 +966,11 @@ impl World {
 
         for resource in &mut self.resources {
             // Get temperature at resource position
-            let terrain = self.grid.get_tile(&resource.position)
-                .map(|t| t.terrain)
+            let terrain_type = self.grid.get_tile(&resource.position)
+                .map(|t| t.terrain.terrain_type)
                 .unwrap_or(TerrainType::Plains);
 
-            let temperature = self.climate.get_temperature(resource.position, terrain);
+            let temperature = self.climate.get_temperature(resource.position, terrain_type);
 
             // Regenerate the resource
             let _regen_amount = resource.regenerate(temperature, precipitation, season_modifier);

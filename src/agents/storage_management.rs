@@ -185,7 +185,7 @@ pub fn calculate_storage_priority(
         priority += 0.15;
     }
 
-    priority.min(1.0)
+    priority.min(1.0_f32)
 }
 
 /// Calculate how much food the community should stockpile

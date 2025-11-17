@@ -183,7 +183,9 @@ impl Simulation {
 
                 debug!(
                     "Agent {} - Action result: {} (satisfaction: {:.2})",
-                    agent_id, action_result.message, action_result.drive_satisfaction
+                    agent_id,
+                    action_result.message.as_ref().map(|s| s.as_str()).unwrap_or("No message"),
+                    action_result.drive_satisfaction
                 );
 
                 // Broadcast action to nearby observers (for observational learning)
@@ -264,7 +266,8 @@ impl Simulation {
 
                     debug!(
                         "Agent {} - Storage action result: {}",
-                        agent_id, action_result.message
+                        agent_id,
+                        action_result.message.as_ref().map(|s| s.as_str()).unwrap_or("No message")
                     );
                 }
             }
@@ -374,8 +377,8 @@ impl Simulation {
             Action::Attack { .. } => Some(ActionType::Combat),
             Action::Hunt { .. } => Some(ActionType::Combat), // Hunting is combat-like
             Action::Tame { .. } => Some(ActionType::Social), // Taming requires social skills
-            Action::CollectAnimalProduct { .. } => Some(ActionType::Farming), // Animal husbandry
-            Action::HarvestPlant { .. } => Some(ActionType::Farming), // Plant farming
+            Action::CollectAnimalProduct { .. } => Some(ActionType::Crafting), // Animal husbandry
+            Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)
             }
@@ -1241,6 +1244,8 @@ impl Simulation {
                                 crate::world::inventory::Item {
                                     item_type: item,
                                     quantity: removed,
+                                    durability: 100.0,
+                                    max_durability: 100.0,
                                 },
                             );
                         }
@@ -1369,7 +1374,7 @@ impl Simulation {
                     let agent = &self.population.agents[agent_index];
                     let hunting_skill = agent.skills.get_level(crate::agents::skills::SkillType::Melee);
                     let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
-                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus).min(0.95);
+                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus).min(0.95_f32);
 
                     if rng.gen_bool(success_prob as f64) {
                         // Successful hunt - damage the animal
@@ -1940,17 +1945,18 @@ impl Simulation {
             }
 
             // Get environmental temperature at agent's position
-            let terrain = self.world.grid.get_tile(&agent.state.position)
-                .map(|t| t.terrain)
+            let agent_pos = crate::world::Position::new(agent.state.position.0, agent.state.position.1);
+            let terrain_type = self.world.grid.get_tile(&agent_pos)
+                .map(|t| t.terrain.terrain_type)
                 .unwrap_or(crate::world::TerrainType::Plains);
 
-            let environmental_temp = self.world.climate.get_temperature(agent.state.position, terrain);
+            let environmental_temp = self.world.climate.get_temperature(agent_pos, terrain_type);
 
             // Check if agent has shelter
             // Agent has shelter if they're in a completed building
             let has_shelter = self.world.buildings.iter().any(|b| {
-                b.position == agent.state.position && b.is_completed()
-            }) || matches!(terrain, crate::world::TerrainType::Forest); // Forest provides partial shelter
+                b.position == agent_pos && b.is_completed()
+            }) || matches!(terrain_type, crate::world::TerrainType::Forest); // Forest provides partial shelter
 
             // Check if agent has water access (simplified: check inventory for water containers)
             let has_water_access = agent.inventory.get_item("waterskin")
