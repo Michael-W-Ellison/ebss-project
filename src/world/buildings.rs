@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::world::{Position, Resource, ResourceType};
 
 /// Types of buildings
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BuildingType {
     // Shelter progression
     Longhouse,         // Basic: Shared housing (10 capacity)

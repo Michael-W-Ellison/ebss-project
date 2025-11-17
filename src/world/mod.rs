@@ -63,6 +63,7 @@ pub mod technology;
 pub mod climate;
 pub mod combat;
 pub mod crafting;
+pub mod spatial_planning;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -108,6 +109,8 @@ pub struct World {
     #[serde(skip)]
     pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
     pub tick: u32,
+    pub config: WorldConfig, // Store configuration for spatial planning
+    pub resource_nodes: std::collections::HashMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
 }
 
 /// World configuration
@@ -213,6 +216,8 @@ impl World {
             combat_manager: combat::CombatManager::new(),
             crafting_manager: crafting::CraftingManager::new(),
             tick: 0,
+            config: config.clone(),
+            resource_nodes: std::collections::HashMap::new(),
         };
 
         // Place initial resources
@@ -1171,6 +1176,47 @@ impl World {
     /// Get total number of tiles in the world
     pub fn total_tiles(&self) -> usize {
         self.grid.width * self.grid.height
+    }
+
+    // ===== Helper Methods for Spatial Planning and Testing =====
+
+    /// Place a resource node at a specific position (for testing and spatial planning)
+    pub fn place_resource_node(&mut self, resource_type: &str, position: (i32, i32, i32)) {
+        self.resource_nodes
+            .entry(resource_type.to_string())
+            .or_insert_with(Vec::new)
+            .push(position);
+    }
+
+    /// Add a building at a specific position (for testing and spatial planning)
+    pub fn add_building_at(&mut self, building_type: BuildingType, position: (i32, i32, i32)) {
+        use crate::world::buildings::Building;
+        let pos = Position::new(position.0, position.1);
+        let building = Building::new(building_type, pos);
+        self.buildings.push(building);
+    }
+
+    /// Check if terrain at position is passable
+    pub fn is_terrain_passable(&self, position: (i32, i32, i32)) -> bool {
+        // Check bounds
+        if position.0 < 0 || position.1 < 0 {
+            return false;
+        }
+        if position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return false;
+        }
+
+        // For now, all in-bounds terrain is passable
+        // In the future, check for water, mountains, etc.
+        true
+    }
+
+    /// Mark an area as impassable (for testing terrain constraints)
+    pub fn set_terrain_impassable(&mut self, center: (i32, i32, i32), _radius: i32) {
+        // This would modify terrain in the grid
+        // For now, we'll just note this as a placeholder
+        // The actual implementation would mark tiles in self.grid
+        // as impassable terrain types
     }
 }
 
