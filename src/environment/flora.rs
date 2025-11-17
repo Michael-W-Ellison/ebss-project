@@ -89,6 +89,7 @@ impl PlantDrop {
 }
 
 /// Plant species database
+#[derive(Debug, Clone)]
 pub struct FloraRegistry {
     species: HashMap<String, PlantSpecies>,
 }

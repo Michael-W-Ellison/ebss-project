@@ -98,6 +98,7 @@ pub struct AnimalProduct {
 }
 
 /// Animal species database
+#[derive(Debug, Clone)]
 pub struct FaunaRegistry {
     species: HashMap<String, AnimalSpecies>,
 }
