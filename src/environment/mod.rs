@@ -192,6 +192,12 @@ pub enum Action {
     Mate {
         target_agent_id: uuid::Uuid,
     },
+    /// Mount a transport (horse, camel, etc.)
+    Mount {
+        transport_id: uuid::Uuid,
+    },
+    /// Dismount from current mount
+    Dismount,
     /// Seek shelter from dangerous weather
     SeekShelter,
     /// Wait/idle
@@ -213,6 +219,8 @@ impl Action {
             Action::Socialize { .. } => Some(DriveType::Social),
             Action::ShareInformation { .. } => Some(DriveType::Social), // Information sharing is social
             Action::Mate { .. } => Some(DriveType::Reproduction), // Mating satisfies reproduction drive
+            Action::Mount { .. } => Some(DriveType::Utility), // Mounting provides travel utility
+            Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility

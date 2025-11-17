@@ -385,6 +385,7 @@ impl Simulation {
             Action::Socialize { .. } => Some(ActionType::Social),
             Action::ShareInformation { .. } => Some(ActionType::Social), // Information sharing is social
             Action::Mate { .. } => Some(ActionType::Social), // Mating is a social interaction
+            Action::Mount { .. } | Action::Dismount => Some(ActionType::ToolUse), // Mount management is tool use
             Action::Move { .. } | Action::Explore { .. } => Some(ActionType::Navigation),
             Action::Store { .. } | Action::Retrieve { .. } => Some(ActionType::ToolUse), // Resource management
             _ => None, // Sleep, Wait, etc. are not observable learning opportunities
@@ -2285,6 +2286,38 @@ impl Simulation {
                 }
             },
 
+            Action::Mount { transport_id } => {
+                let agent = &mut self.population.agents[agent_index];
+
+                // Try to mount the transport
+                match agent.transport.mount_transport(transport_id) {
+                    Ok(()) => {
+                        debug!("Agent {} mounted transport {}", agent.id, transport_id);
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Utility, -0.1)
+                            .with_energy_cost(2.0)
+                            .with_message("Successfully mounted".to_string())
+                    }
+                    Err(err) => ActionResult::failure(err),
+                }
+            },
+
+            Action::Dismount => {
+                let agent = &mut self.population.agents[agent_index];
+
+                if !agent.transport.is_mounted() {
+                    return ActionResult::failure("Not currently mounted".to_string());
+                }
+
+                agent.transport.dismount_current();
+                debug!("Agent {} dismounted", agent.id);
+
+                ActionResult::success()
+                    .with_energy_cost(1.0)
+                    .with_message("Dismounted from transport".to_string())
+            },
+
             // For other actions, use simplified success/failure
             _ => {
                 // Base success probability
@@ -2320,6 +2353,8 @@ impl Simulation {
                         Action::Socialize { .. } => 0.2,
                         Action::ShareInformation { .. } => 0.15, // Handled separately above
                         Action::Mate { .. } => 0.0, // Handled separately above
+                        Action::Mount { .. } => 0.0, // Handled separately above
+                        Action::Dismount => 0.0, // Handled separately above
                         Action::Hunt { .. } => 0.3,
                         Action::Tame { .. } => 0.25,
                         Action::CollectAnimalProduct { .. } => 0.15,
