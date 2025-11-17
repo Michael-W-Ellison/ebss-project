@@ -1349,12 +1349,16 @@ impl Agent {
 
     /// Process feedback from action execution
     pub fn apply_feedback(&mut self, action_result: &ActionResult, drive_type: DriveType) {
-        // Update drive satisfaction
-        if let Some(drive) = self.drives.get_mut(drive_type) {
-            if action_result.success {
-                // TODO: Use drive_changes from ActionResult once API is stabilized
-                // drive.partial_satisfy(amount);
-                let _ = action_result; // Suppress unused warning
+        // Apply all drive changes from the action result
+        for (affected_drive, change_amount) in &action_result.drive_changes {
+            if let Some(drive) = self.drives.get_mut(*affected_drive) {
+                if *change_amount < 0.0 {
+                    // Negative value = satisfaction (decrease drive)
+                    drive.partial_satisfy(change_amount.abs());
+                } else {
+                    // Positive value = increase drive
+                    drive.increase(*change_amount);
+                }
             }
         }
     }
