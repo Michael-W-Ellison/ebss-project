@@ -1475,7 +1475,7 @@ impl Simulation {
 
                         // Increase social skill
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.practice(crate::agents::skills::SkillType::Social, 0.2);
+                        agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
 
                         ActionResult::success()
                             .with_drive_change(DriveType::Utility, -0.3)
@@ -1549,7 +1549,7 @@ impl Simulation {
 
                         // Practice industry skill
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.practice(crate::agents::skills::SkillType::Mining, 0.1);
+                        agent.skills.gain_experience(crate::agents::skills::SkillType::Mining, 1);
 
                         let products_str = collected_products.iter()
                             .map(|p| format!("{} {}", p.quantity, p.material_id))
@@ -1621,9 +1621,9 @@ impl Simulation {
                         // Practice farming skill if cultivated, gathering otherwise
                         let agent = &mut self.population.agents[agent_index];
                         if plant.is_cultivated {
-                            agent.skills.practice(crate::agents::skills::SkillType::Farming, 0.2);
+                            agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
                         } else {
-                            agent.skills.practice(crate::agents::skills::SkillType::Mining, 0.15);
+                            agent.skills.gain_experience(crate::agents::skills::SkillType::Mining, 2);
                         }
 
                         let items_str = items_gained.iter()

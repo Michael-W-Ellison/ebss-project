@@ -1535,7 +1535,8 @@ impl Agent {
         // Check main hand for matching tool
         if let Some(item) = self.equipment.get_equipped(super::equipment::EquipmentSlot::MainHand) {
             if item.name.contains(tool_type) {
-                return item.get_tool_efficiency();
+                // Use average of mining and harvesting speed as tool efficiency
+                return (item.effective_mining_speed() + item.effective_harvesting_speed()) / 2.0;
             }
         }
         1.0 // Default efficiency if no tool equipped
@@ -1544,7 +1545,7 @@ impl Agent {
     /// Apply durability loss to equipped item in a slot (e.g., when using a tool)
     pub fn damage_equipment(&mut self, slot: super::equipment::EquipmentSlot, damage: f32) -> Result<bool, String> {
         if let Some(item) = self.equipment.get_equipped_mut(slot) {
-            item.take_damage(damage);
+            item.apply_wear(damage);
 
             // Check if item broke
             if item.is_broken() {
