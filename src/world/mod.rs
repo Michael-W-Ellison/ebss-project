@@ -72,7 +72,7 @@ pub use inventory::{Inventory, Item, ItemType};
 pub use actions::{Action, ActionResult};
 pub use grid::{Grid, Position};
 pub use render::AsciiRenderer;
-pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput, get_job_recipes, get_primary_recipe};
+pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput};
 pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketStatistics};
 pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
 pub use climate::{ClimateManager, terrain_to_biome};

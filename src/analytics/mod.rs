@@ -92,6 +92,10 @@ impl Simulation {
         // Sync simulation tick with population tick
         self.current_tick = self.population.current_tick;
 
+        // Tick world systems (fauna and flora AI, growth, etc.)
+        self.world.animals.tick();
+        self.world.plants.tick();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -147,8 +151,23 @@ impl Simulation {
                     agent_id, tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
                 );
 
-                // Generate action based on drive type and agent position
-                let action = Self::generate_action_for_drive(drive_type, agent_position);
+                // Generate action based on percepts first (if any high-salience percepts exist),
+                // then fall back to drive-based actions
+                let action = {
+                    let agent = &self.population.agents[agent_index];
+
+                    // Check for high-salience percepts that should override drive-based actions
+                    let percept_action = Self::generate_action_from_percepts(
+                        &agent.recent_percepts,
+                        &agent.drives,
+                        agent_position,
+                    );
+
+                    // Use percept-based action if available, otherwise use drive-based
+                    percept_action.unwrap_or_else(|| {
+                        Self::generate_action_for_drive(drive_type, agent_position)
+                    })
+                };
 
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
@@ -157,6 +176,24 @@ impl Simulation {
                     "Agent {} - Action result: {} (satisfaction: {:.2})",
                     agent_id, action_result.message, action_result.drive_satisfaction
                 );
+
+                // Broadcast action to nearby observers (for observational learning)
+                if action_result.success {
+                    let agent = &self.population.agents[agent_index];
+                    let agent_pos = agent.state.position;
+
+                    // Map action to ActionType for broadcasting
+                    if let Some(broadcast_type) = Self::map_action_to_broadcast_type(&action) {
+                        self.population.broadcast_action(
+                            agent_id,
+                            agent_pos,
+                            broadcast_type,
+                            true, // success
+                            format!("{:?}", action),
+                            self.current_tick as u64,
+                        );
+                    }
+                }
 
                 // Apply feedback to agent (drive satisfaction)
                 let agent = &mut self.population.agents[agent_index];
@@ -167,6 +204,59 @@ impl Simulation {
                     if action_result.success {
                         tree.total_successes += 1;
                     }
+                }
+            }
+
+            // Check if agent should interact with storehouse (every 20 ticks, or when Preparedness is high)
+            // This happens independently of drive-based actions to enable cooperative resource sharing
+            if self.current_tick % 20 == 0 || {
+                let agent = &self.population.agents[agent_index];
+                agent.drives.get(DriveType::Preparedness)
+                    .map(|d| d.value > 0.6)
+                    .unwrap_or(false)
+            } {
+                // Calculate storehouse contents
+                let (storehouse_food, storehouse_resources) = {
+                    use crate::world::ItemType;
+                    use crate::agents::storage_integration::{count_in_agent_inventory};
+
+                    let food_types = vec![
+                        ItemType::Food, ItemType::Bread, ItemType::Cheese,
+                        ItemType::Meat, ItemType::Fish, ItemType::Honey, ItemType::Ale,
+                    ];
+                    let resource_types = vec![
+                        ItemType::Wood, ItemType::Stone, ItemType::Iron,
+                        ItemType::Clay, ItemType::Sand, ItemType::Coal,
+                    ];
+
+                    let food_total: u32 = food_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    let resource_total: u32 = resource_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    (food_total, resource_total)
+                };
+
+                // Get storage action from agent
+                let storage_action = {
+                    let agent = &self.population.agents[agent_index];
+                    agent.decide_storage_action(storehouse_food, storehouse_resources)
+                };
+
+                // Execute storage action if one was decided
+                if let Some(action) = storage_action {
+                    debug!("Agent {} performing storage action: {:?}", agent_id, action);
+                    let action_result = self.execute_action(&action, agent_index);
+
+                    debug!(
+                        "Agent {} - Storage action result: {}",
+                        agent_id, action_result.message
+                    );
                 }
             }
         }
@@ -180,6 +270,110 @@ impl Simulation {
         // Log statistics every 10 ticks
         if self.current_tick % 10 == 0 {
             self.log_statistics();
+        }
+    }
+
+    /// Generate an action based on recent percepts (if high-salience percepts exist)
+    /// Returns None if no percept warrants immediate action
+    fn generate_action_from_percepts(
+        recent_percepts: &[(u32, crate::agents::sensory_processing::Percept)],
+        agent_drives: &crate::core::DriveState,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::sensory_processing::{Percept, calculate_salience, ThreatType};
+
+        if recent_percepts.is_empty() {
+            return None;
+        }
+
+        // Find the most salient recent percept
+        let most_salient = recent_percepts.iter()
+            .max_by(|(_, a), (_, b)| {
+                let sal_a = calculate_salience(a, agent_drives);
+                let sal_b = calculate_salience(b, agent_drives);
+                sal_a.partial_cmp(&sal_b).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+        if let Some((_, percept)) = most_salient {
+            let salience = calculate_salience(percept, agent_drives);
+
+            // Only override drive-based actions if salience is high (> 0.7)
+            if salience > 0.7 {
+                match percept {
+                    Percept::DangerDetected { threat_type, position, severity } => {
+                        // High-priority: flee from danger
+                        if let Some(danger_pos) = position {
+                            // Move away from danger position
+                            let dx = agent_position.0 - danger_pos.0;
+                            let dy = agent_position.1 - danger_pos.1;
+
+                            // Normalize and extend to flee further
+                            let distance = ((dx * dx + dy * dy) as f32).sqrt().max(1.0);
+                            let flee_distance = (severity * 15.0) as i32;
+
+                            let flee_x = agent_position.0 + ((dx as f32 / distance) * flee_distance as f32) as i32;
+                            let flee_y = agent_position.1 + ((dy as f32 / distance) * flee_distance as f32) as i32;
+
+                            return Some(Action::Move {
+                                target: (flee_x, flee_y, agent_position.2),
+                            });
+                        } else {
+                            // Unknown danger location - move to random safe spot
+                            use rand::Rng;
+                            let mut rng = rand::thread_rng();
+                            let safe_x = agent_position.0 + rng.gen_range(-10..=10);
+                            let safe_y = agent_position.1 + rng.gen_range(-10..=10);
+
+                            return Some(Action::Move {
+                                target: (safe_x, safe_y, agent_position.2),
+                            });
+                        }
+                    }
+                    Percept::ResourceDetected { resource_type, position, .. } => {
+                        // High-salience resource (usually means high hunger/thirst)
+                        // Move towards it
+                        return Some(Action::Move {
+                            target: *position,
+                        });
+                    }
+                    Percept::AgentDetected { agent_id, position, .. } => {
+                        // High-salience agent (usually means high social drive)
+                        // Attempt social interaction
+                        return Some(Action::Socialize {
+                            target_agent_id: *agent_id,
+                        });
+                    }
+                    _ => {
+                        // Other percepts don't warrant action override
+                        return None;
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Map environment Action to observable ActionType for broadcasting
+    fn map_action_to_broadcast_type(action: &Action) -> Option<crate::agents::observational_learning::ActionType> {
+        use crate::agents::observational_learning::ActionType;
+
+        match action {
+            Action::Gather { .. } => Some(ActionType::Mining),
+            Action::Craft { .. } => Some(ActionType::Crafting),
+            Action::Build { .. } => Some(ActionType::Building),
+            Action::Attack { .. } => Some(ActionType::Combat),
+            Action::Hunt { .. } => Some(ActionType::Combat), // Hunting is combat-like
+            Action::Tame { .. } => Some(ActionType::Social), // Taming requires social skills
+            Action::CollectAnimalProduct { .. } => Some(ActionType::Farming), // Animal husbandry
+            Action::HarvestPlant { .. } => Some(ActionType::Farming), // Plant farming
+            Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
+                Some(ActionType::Cooking)
+            }
+            Action::Socialize { .. } => Some(ActionType::Social),
+            Action::Move { .. } | Action::Explore { .. } => Some(ActionType::Navigation),
+            Action::Store { .. } | Action::Retrieve { .. } => Some(ActionType::ToolUse), // Resource management
+            _ => None, // Sleep, Wait, etc. are not observable learning opportunities
         }
     }
 
@@ -622,7 +816,6 @@ impl Simulation {
                     // BEGINNER (skill -10 to 0): Basic wooden tools - requires wooden_tools technology
                     (Recipe {
                         name: "Craft Wooden Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenAxe, 1)],
                         base_time: 80,
@@ -630,7 +823,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Wooden Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenPickaxe, 1)],
                         base_time: 80,
@@ -638,7 +830,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Wooden Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                         outputs: vec![ProductionOutput::new(ItemType::WoodenHammer, 1)],
                         base_time: 80,
@@ -646,7 +837,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Wooden Spear",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Wood, 2),
                             ResourceRequirement::new(ResourceType::Stone, 1),
@@ -658,7 +848,6 @@ impl Simulation {
                     // NOVICE (skill 0-3): Stone tools - requires stone_tools technology
                     (Recipe {
                         name: "Craft Stone Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Stone, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -669,7 +858,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Stone Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Stone, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -680,7 +868,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Stone Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Stone, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -692,7 +879,6 @@ impl Simulation {
                     // APPRENTICE (skill 3-5): Iron tools - requires iron_working technology
                     (Recipe {
                         name: "Craft Iron Axe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -703,7 +889,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Iron Pickaxe",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -714,7 +899,6 @@ impl Simulation {
 
                     (Recipe {
                         name: "Craft Iron Hammer",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 2),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -726,7 +910,6 @@ impl Simulation {
                     // JOURNEYMAN (skill 5-8): Advanced weapons - requires iron_working technology
                     (Recipe {
                         name: "Craft Iron Sword",
-                        job: crate::agents::profession::JobType::Unemployed,
                         inputs: vec![
                             ResourceRequirement::new(ResourceType::Iron, 3),
                             ResourceRequirement::new(ResourceType::Wood, 1),
@@ -1011,15 +1194,466 @@ impl Simulation {
                 result
             },
 
+            Action::Store { item_type, amount } => {
+                use crate::agents::storage_integration::{
+                    id_to_item_type, take_from_agent_inventory, add_to_agent_inventory,
+                    count_in_agent_inventory
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // Try to convert string item_type to ItemType
+                if let Some(item) = id_to_item_type(item_type) {
+                    let available = count_in_agent_inventory(&agent.inventory, item);
+
+                    if available == 0 {
+                        return ActionResult::failure(format!(
+                            "No {} in inventory to store", item_type
+                        ));
+                    }
+
+                    // Determine how much to deposit based on storage preferences
+                    let deposit_amount = (*amount).min(available);
+
+                    // Remove from agent inventory
+                    let (success, removed) = take_from_agent_inventory(
+                        &mut agent.inventory,
+                        item,
+                        deposit_amount,
+                    );
+
+                    if success && removed > 0 {
+                        // Add to world storehouse
+                        if let Some(existing) = self.world.storehouse_inventory.items.get_mut(&item) {
+                            existing.quantity += removed;
+                        } else {
+                            self.world.storehouse_inventory.items.insert(
+                                item,
+                                crate::world::inventory::Item {
+                                    item_type: item,
+                                    quantity: removed,
+                                },
+                            );
+                        }
+
+                        debug!(
+                            "Agent {} deposited {} {} to storehouse (storehouse now has {})",
+                            agent.id,
+                            removed,
+                            item_type,
+                            self.world.storehouse_inventory.items.get(&item)
+                                .map(|i| i.quantity)
+                                .unwrap_or(0)
+                        );
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Preparedness, -0.15)
+                            .with_energy_cost(5.0)
+                            .with_message(format!(
+                                "Deposited {} {} to storehouse", removed, item_type
+                            ))
+                    } else {
+                        ActionResult::failure(format!(
+                            "Failed to remove {} from inventory", item_type
+                        ))
+                    }
+                } else {
+                    ActionResult::failure(format!(
+                        "Unknown item type: {}", item_type
+                    ))
+                }
+            },
+
+            Action::Retrieve { item_type, amount } => {
+                use crate::agents::storage_integration::{
+                    id_to_item_type, add_to_agent_inventory, count_in_agent_inventory
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // Try to convert string item_type to ItemType
+                if let Some(item) = id_to_item_type(item_type) {
+                    // Check storehouse inventory
+                    let storehouse_available = self.world.storehouse_inventory.items
+                        .get(&item)
+                        .map(|i| i.quantity)
+                        .unwrap_or(0);
+
+                    if storehouse_available == 0 {
+                        return ActionResult::failure(format!(
+                            "Storehouse has no {} available", item_type
+                        ));
+                    }
+
+                    // Determine how much to retrieve
+                    let retrieve_amount = (*amount).min(storehouse_available);
+
+                    // Try to add to agent inventory
+                    let (success, added) = add_to_agent_inventory(
+                        &mut agent.inventory,
+                        item,
+                        retrieve_amount,
+                    );
+
+                    if added > 0 {
+                        // Remove from world storehouse
+                        if let Some(existing) = self.world.storehouse_inventory.items.get_mut(&item) {
+                            existing.quantity -= added;
+                            if existing.quantity == 0 {
+                                self.world.storehouse_inventory.items.remove(&item);
+                            }
+                        }
+
+                        debug!(
+                            "Agent {} retrieved {} {} from storehouse (storehouse now has {})",
+                            agent.id,
+                            added,
+                            item_type,
+                            self.world.storehouse_inventory.items.get(&item)
+                                .map(|i| i.quantity)
+                                .unwrap_or(0)
+                        );
+
+                        let message = if added < retrieve_amount {
+                            format!(
+                                "Retrieved {} {} from storehouse (inventory full, couldn't take all {})",
+                                added, item_type, retrieve_amount
+                            )
+                        } else {
+                            format!("Retrieved {} {} from storehouse", added, item_type)
+                        };
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Preparedness, -0.1)
+                            .with_energy_cost(5.0)
+                            .with_message(message)
+                    } else {
+                        ActionResult::failure(format!(
+                            "Inventory full, cannot retrieve {}", item_type
+                        ))
+                    }
+                } else {
+                    ActionResult::failure(format!(
+                        "Unknown item type: {}", item_type
+                    ))
+                }
+            },
+
+            Action::Hunt { animal_id, weapon } => {
+                // Find the target animal
+                if let Some(animal) = self.world.animals.get_mut(animal_id) {
+                    if !animal.is_alive() {
+                        return ActionResult::failure("Animal is already dead".to_string());
+                    }
+                    if animal.is_domesticated {
+                        return ActionResult::failure("Cannot hunt domesticated animals".to_string());
+                    }
+
+                    // Get animal species for stats
+                    let species_id = animal.species_id.clone();
+                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown animal species".to_string()),
+                    };
+
+                    // Calculate success based on agent skill and weapon
+                    let agent = &self.population.agents[agent_index];
+                    let hunting_skill = agent.skills.get_level(crate::agents::skills::SkillType::Melee);
+                    let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
+                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus).min(0.95);
+
+                    if rng.gen_bool(success_prob as f64) {
+                        // Successful hunt - damage the animal
+                        let damage = species.health * 0.7; // Deal 70% of max health
+                        animal.take_damage(damage);
+
+                        // If killed, get drops
+                        let mut items_gained = Vec::new();
+                        if !animal.is_alive() {
+                            for drop in &species.drops {
+                                if rng.gen_bool(drop.drop_chance as f64) {
+                                    let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                                    items_gained.push(crate::environment::ItemStack {
+                                        material_id: drop.material_id.clone(),
+                                        quantity,
+                                    });
+                                }
+                            }
+
+                            // Add items to agent inventory
+                            let agent = &mut self.population.agents[agent_index];
+                            for item_stack in &items_gained {
+                                use crate::agents::InventoryItem;
+                                let item = InventoryItem::new_with_weight(
+                                    item_stack.material_id.clone(),
+                                    item_stack.quantity,
+                                    2.0, // Default weight for animal drops
+                                );
+                                agent.inventory.add_item(item);
+                            }
+
+                            // Increase hunting skill
+                            let agent = &mut self.population.agents[agent_index];
+                            agent.skills.practice(crate::agents::skills::SkillType::Melee, 0.3);
+
+                            ActionResult::success()
+                                .with_drive_change(DriveType::Hunger, -0.4)
+                                .with_energy_cost(20.0)
+                                .with_items_gained(items_gained)
+                                .with_experience(5.0)
+                                .with_message(format!("Successfully hunted {} and obtained materials", species.name))
+                        } else {
+                            ActionResult::success()
+                                .with_drive_change(DriveType::Hunger, -0.1)
+                                .with_energy_cost(15.0)
+                                .with_message(format!("Wounded {} but it escaped", species.name))
+                        }
+                    } else {
+                        ActionResult::failure(format!("{} escaped", species.name))
+                            .with_energy_cost(10.0)
+                    }
+                } else {
+                    ActionResult::failure("Animal not found".to_string())
+                }
+            },
+
+            Action::Tame { animal_id, food_type } => {
+                // Find the target animal
+                if let Some(animal) = self.world.animals.get_mut(animal_id) {
+                    if !animal.is_alive() {
+                        return ActionResult::failure("Animal is dead".to_string());
+                    }
+                    if animal.is_domesticated {
+                        return ActionResult::failure("Animal is already domesticated".to_string());
+                    }
+
+                    // Get species info
+                    let species_id = animal.species_id.clone();
+                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown animal species".to_string()),
+                    };
+
+                    if !species.can_domesticate {
+                        return ActionResult::failure(format!("{} cannot be domesticated", species.name));
+                    }
+
+                    // Calculate taming progress based on food and agent relationship skills
+                    let agent = &self.population.agents[agent_index];
+                    let social_skill = agent.skills.get_level(crate::agents::skills::SkillType::Social);
+                    let taming_bonus = if food_type.is_some() { 0.15 } else { 0.05 };
+                    let taming_progress = 0.1 + (social_skill as f32 * 0.02) + taming_bonus;
+
+                    animal.tame(taming_progress);
+
+                    if animal.is_domesticated {
+                        // Successfully domesticated
+                        animal.owner_id = Some(agent.id);
+
+                        // Increase social skill
+                        let agent = &mut self.population.agents[agent_index];
+                        agent.skills.practice(crate::agents::skills::SkillType::Social, 0.2);
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Utility, -0.3)
+                            .with_energy_cost(10.0)
+                            .with_experience(10.0)
+                            .with_message(format!("Successfully tamed {}!", species.name))
+                    } else {
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Utility, -0.1)
+                            .with_energy_cost(8.0)
+                            .with_message(format!("Made progress taming {} ({:.0}%)", species.name, animal.tame_level * 100.0))
+                    }
+                } else {
+                    ActionResult::failure("Animal not found".to_string())
+                }
+            },
+
+            Action::CollectAnimalProduct { animal_id } => {
+                // Find the target animal
+                if let Some(animal) = self.world.animals.get_mut(animal_id) {
+                    if !animal.is_alive() {
+                        return ActionResult::failure("Animal is dead".to_string());
+                    }
+                    if !animal.is_domesticated {
+                        return ActionResult::failure("Can only collect from domesticated animals".to_string());
+                    }
+                    if !animal.is_mature() {
+                        return ActionResult::failure("Animal is not yet mature enough to produce".to_string());
+                    }
+
+                    // Get species info for product data
+                    let species_id = animal.species_id.clone();
+                    let species = match self.world.animals.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown animal species".to_string()),
+                    };
+
+                    if species.living_products.is_empty() {
+                        return ActionResult::failure(format!("{} does not produce any products", species.name));
+                    }
+
+                    // Check which products are ready
+                    let mut collected_products = Vec::new();
+                    for product in &species.living_products {
+                        if let Some(timer) = animal.product_timers.get(&product.material_id) {
+                            if *timer == 0 {
+                                // Product is ready
+                                collected_products.push(crate::environment::ItemStack {
+                                    material_id: product.material_id.clone(),
+                                    quantity: product.quantity,
+                                });
+
+                                // Reset timer
+                                animal.product_timers.insert(product.material_id.clone(), product.production_time);
+                            }
+                        }
+                    }
+
+                    if !collected_products.is_empty() {
+                        // Add to agent inventory
+                        let agent = &mut self.population.agents[agent_index];
+                        for item_stack in &collected_products {
+                            use crate::agents::InventoryItem;
+                            let item = InventoryItem::new_with_weight(
+                                item_stack.material_id.clone(),
+                                item_stack.quantity,
+                                1.0, // Animal products are generally light
+                            );
+                            agent.inventory.add_item(item);
+                        }
+
+                        // Practice industry skill
+                        let agent = &mut self.population.agents[agent_index];
+                        agent.skills.practice(crate::agents::skills::SkillType::Mining, 0.1);
+
+                        let products_str = collected_products.iter()
+                            .map(|p| format!("{} {}", p.quantity, p.material_id))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Industry, -0.2)
+                            .with_energy_cost(5.0)
+                            .with_items_gained(collected_products)
+                            .with_message(format!("Collected {} from {}", products_str, species.name))
+                    } else {
+                        ActionResult::failure("No products ready for collection yet".to_string())
+                    }
+                } else {
+                    ActionResult::failure("Animal not found".to_string())
+                }
+            },
+
+            Action::HarvestPlant { plant_id } => {
+                // Find the target plant
+                if let Some(plant) = self.world.plants.get_mut(plant_id) {
+                    if !plant.is_harvestable {
+                        return ActionResult::failure("Plant is not ready for harvest".to_string());
+                    }
+                    if plant.has_been_harvested && !plant.is_cultivated {
+                        return ActionResult::failure("Plant has already been harvested".to_string());
+                    }
+
+                    // Get species info for drops
+                    let species_id = plant.species_id.clone();
+                    let species = match self.world.plants.registry.as_ref().and_then(|r| r.get(&species_id)) {
+                        Some(s) => s,
+                        None => return ActionResult::failure("Unknown plant species".to_string()),
+                    };
+
+                    // Harvest the plant
+                    let drops = plant.harvest(species);
+
+                    if !drops.is_empty() {
+                        let mut items_gained = Vec::new();
+
+                        // Generate items from drops
+                        for drop in &drops {
+                            let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                            items_gained.push(crate::environment::ItemStack {
+                                material_id: drop.material_id.clone(),
+                                quantity,
+                            });
+                        }
+
+                        // Add to agent inventory
+                        let agent = &mut self.population.agents[agent_index];
+                        for item_stack in &items_gained {
+                            use crate::agents::InventoryItem;
+                            let item = InventoryItem::new_with_weight(
+                                item_stack.material_id.clone(),
+                                item_stack.quantity,
+                                1.5, // Plant materials weight
+                            );
+                            agent.inventory.add_item(item);
+                        }
+
+                        // Practice farming skill if cultivated, gathering otherwise
+                        let agent = &mut self.population.agents[agent_index];
+                        if plant.is_cultivated {
+                            agent.skills.practice(crate::agents::skills::SkillType::Farming, 0.2);
+                        } else {
+                            agent.skills.practice(crate::agents::skills::SkillType::Mining, 0.15);
+                        }
+
+                        let items_str = items_gained.iter()
+                            .map(|i| format!("{} {}", i.quantity, i.material_id))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Industry, -0.2)
+                            .with_energy_cost(8.0)
+                            .with_items_gained(items_gained)
+                            .with_experience(3.0)
+                            .with_message(format!("Harvested {} from {}", items_str, species.name))
+                    } else {
+                        ActionResult::failure("Plant yielded nothing".to_string())
+                    }
+                } else {
+                    ActionResult::failure("Plant not found".to_string())
+                }
+            },
+
             // For other actions, use simplified success/failure
             _ => {
-                let success_probability = 0.7;
+                // Base success probability
+                let mut success_probability = 0.7;
+
+                // Check if agent has learned this behavior through observation
+                // Learned behaviors boost success probability
+                if let Some(broadcast_type) = Self::map_action_to_broadcast_type(action) {
+                    let agent = &self.population.agents[agent_index];
+                    let adopted_behaviors = agent.observational_learning.get_adopted_behaviors();
+
+                    // Check if this action type has been adopted from anyone
+                    for (_, action_type, confidence) in adopted_behaviors {
+                        if action_type == broadcast_type {
+                            // Boost success probability based on confidence in learned behavior
+                            // Confidence ranges 0.0 to 1.0, provides up to +0.25 boost
+                            let learning_boost = confidence * 0.25;
+                            success_probability = (success_probability + learning_boost).min(0.95);
+                            debug!(
+                                "Agent {} has learned {:?} (confidence: {:.2}), success probability: {:.2}",
+                                agent.id, action_type, confidence, success_probability
+                            );
+                            break;
+                        }
+                    }
+                }
+
                 if rng.gen_bool(success_probability) {
                     let satisfaction = match action {
                         Action::Craft { .. } => 0.2,
                         Action::Store { .. } => 0.1,
                         Action::Explore { .. } => 0.15,
                         Action::Socialize { .. } => 0.2,
+                        Action::Hunt { .. } => 0.3,
+                        Action::Tame { .. } => 0.25,
+                        Action::CollectAnimalProduct { .. } => 0.15,
+                        Action::HarvestPlant { .. } => 0.15,
                         Action::Move { .. } => 0.05,
                         Action::Wait => 0.0,
                         _ => 0.1,
@@ -1161,9 +1795,6 @@ impl Simulation {
 
             // 4. NATURAL HEALING - Process body tick (handles conditions, bleeding, etc.)
             agent.body.tick();
-            ActionResult::success()
-        } else {
-            ActionResult::failure(format!("{:?} failed", action))
         }
     }
 

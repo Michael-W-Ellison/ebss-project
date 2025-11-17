@@ -153,8 +153,10 @@ pub enum Action {
     Build { structure_type: String, position: (i32, i32, i32) },
     /// Craft an item
     Craft { item_type: String },
-    /// Store items in inventory or stockpile
+    /// Store items in communal storehouse
     Store { item_type: String, amount: u32 },
+    /// Retrieve items from communal storehouse
+    Retrieve { item_type: String, amount: u32 },
     /// Explore a new area
     Explore { direction: (i32, i32, i32) },
     /// Interact with another agent
@@ -163,6 +165,24 @@ pub enum Action {
     Attack {
         target_agent_id: uuid::Uuid,
         weapon: Option<String>,  // Optional weapon (None = unarmed)
+    },
+    /// Hunt a wild animal
+    Hunt {
+        animal_id: uuid::Uuid,
+        weapon: Option<String>,
+    },
+    /// Tame a wild animal
+    Tame {
+        animal_id: uuid::Uuid,
+        food_type: Option<String>,
+    },
+    /// Collect product from domesticated animal (eggs, milk, wool)
+    CollectAnimalProduct {
+        animal_id: uuid::Uuid,
+    },
+    /// Harvest a plant (crop or wild)
+    HarvestPlant {
+        plant_id: uuid::Uuid,
     },
     /// Wait/idle
     Wait,
@@ -178,9 +198,14 @@ impl Action {
             Action::Gather { .. } => Some(DriveType::Industry),
             Action::Craft { .. } => Some(DriveType::Utility),
             Action::Store { .. } => Some(DriveType::Preparedness),
+            Action::Retrieve { .. } => Some(DriveType::Preparedness),
             Action::Explore { .. } => Some(DriveType::Curiosity),
             Action::Socialize { .. } => Some(DriveType::Social),
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
+            Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
+            Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
+            Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
+            Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::Move { .. } => None,
             Action::Wait => None,
         }

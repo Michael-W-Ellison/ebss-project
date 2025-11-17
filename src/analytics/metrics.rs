@@ -234,16 +234,6 @@ impl SimulationMetrics {
         // Note: Trait type mismatch between core::Trait and agents::Trait
         // Returning empty map for now - needs trait system reconciliation
         HashMap::new()
-        let mut trait_counts = HashMap::new();
-
-        for _agent in &population.agents {
-            // TODO: Make TraitSet.traits public or add accessor
-            // for trait_item in &agent.traits.traits {
-            //     *trait_counts.entry(trait_item.clone()).or_insert(0) += 1;
-            // }
-        }
-
-        trait_counts
     }
 
     fn snapshot_relationships(&self, population: &Population) -> RelationshipSnapshot {

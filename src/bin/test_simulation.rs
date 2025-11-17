@@ -399,52 +399,8 @@ fn print_population_status(population: &Population, tick: u32) {
             }
         }
 
-        // Calculate job statistics (dynamic job selection based on needs)
-        use std::collections::HashMap;
-        use ebss::agents::profession::JobType;
-        use ebss::agents::LifeStage;
-
-        let mut job_counts: HashMap<JobType, u32> = HashMap::new();
-        let mut adults_with_jobs = 0;
-        let mut total_adults = 0;
-
-        for agent in &population.agents {
-            if agent.state.life_stage == LifeStage::Adult {
-                total_adults += 1;
-                if let Some(job) = agent.current_job {
-                    adults_with_jobs += 1;
-                    *job_counts.entry(job).or_insert(0) += 1;
-                }
-            }
-        }
-
-        // Display job statistics if there are jobs assigned
-        if adults_with_jobs > 0 {
-            println!("   Current Jobs & Work:");
-            println!("     • Adults with Jobs: {}/{}",
-                adults_with_jobs, total_adults);
-
-            // Sort jobs by count (most common first)
-            let mut job_vec: Vec<_> = job_counts.iter().collect();
-            job_vec.sort_by(|a, b| b.1.cmp(a.1));
-
-            // Display top jobs (limit to top 10)
-            println!("     • Active Jobs:");
-            for (job, count) in job_vec.iter().take(10) {
-                println!("       - {:?}: {} agents", job, count);
-            }
-
-            if job_vec.len() > 10 {
-                let remaining: u32 = job_vec.iter().skip(10).map(|(_, c)| **c).sum();
-                println!("       - {} other jobs: {} agents",
-                    job_vec.len() - 10, remaining);
-            }
-        } else if total_adults > 0 {
-            println!("   Current Jobs & Work:");
-            println!("     • No jobs assigned yet (agents choosing based on needs)");
-        }
-
         // Calculate relationship statistics
+        use std::collections::HashMap;
         let mut total_relationships = 0;
         let mut total_positive = 0;
         let mut total_negative = 0;

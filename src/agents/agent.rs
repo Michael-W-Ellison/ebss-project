@@ -558,6 +558,8 @@ pub struct Agent {
     pub memory: Memory,
     pub inventory: Inventory,
     pub senses: Senses,
+    /// Recent percepts processed from sensory input (last 20 ticks)
+    pub recent_percepts: Vec<(u32, super::sensory_processing::Percept)>, // (tick, percept)
     pub body: Body,
     pub body_temperature: super::BodyTemperature,
     pub exposure_status: crate::environment::ExposureStatus,
@@ -575,8 +577,6 @@ pub struct Agent {
     pub parent_ids: Vec<Uuid>,
     pub goals: GoalManager,
     pub preferences: Preferences,
-    pub current_job: Option<super::profession::JobType>,
-    pub job_change_cooldown: u32, // Ticks until can change job again
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
 }
 
@@ -594,6 +594,7 @@ impl Agent {
             memory: Memory::new(),
             inventory: Inventory::default(),
             senses: Senses::default(),
+            recent_percepts: Vec::new(),
             body: Body::default(),
             body_temperature: super::BodyTemperature::default(),
             exposure_status: crate::environment::ExposureStatus::default(),
@@ -611,8 +612,6 @@ impl Agent {
             parent_ids: Vec::new(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
-            current_job: None, // No job initially
-            job_change_cooldown: 0,
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
         }
     }
@@ -627,12 +626,58 @@ impl Agent {
 
     /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
+        self.tick_with_percepts(0); // Default tick uses tick 0
+    }
+
+    /// Tick with percept processing (requires current tick for timestamping)
+    pub fn tick_with_percepts(&mut self, current_tick: u32) {
         // Update subsystems
         self.senses.tick();
         self.body.tick();
         self.emotions.tick();
         self.memory.tick();
         self.drives.tick();
+
+        // Process sensory input into percepts and store them
+        let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);
+
+        // Store percepts with timestamp and integrate important ones into long-term memory
+        for percept in new_percepts {
+            // Calculate salience to determine if worth remembering
+            let salience = super::sensory_processing::calculate_salience(&percept, &self.drives);
+
+            // Store important percepts (> 0.5 salience) in long-term memory
+            if salience > 0.5 {
+                use super::sensory_processing::Percept;
+                use crate::core::memory::SpatialMemoryType;
+
+                match &percept {
+                    Percept::ResourceDetected { resource_type, position, .. } => {
+                        // Remember resource locations
+                        let mem_type = match resource_type.as_str() {
+                            "Food" => SpatialMemoryType::Food,
+                            "Water" => SpatialMemoryType::Water,
+                            _ => SpatialMemoryType::Resource,
+                        };
+                        self.memory.remember_location(mem_type, *position);
+                    }
+                    Percept::DangerDetected { position: Some(pos), .. } => {
+                        // Remember danger locations
+                        self.memory.remember_location(SpatialMemoryType::Danger, *pos);
+                    }
+                    Percept::AgentDetected { agent_id, .. } => {
+                        // Update social relationship (neutral interaction for just seeing them)
+                        self.memory.record_interaction(*agent_id, true, 0.01);
+                    }
+                    _ => {}
+                }
+            }
+
+            self.recent_percepts.push((current_tick, percept));
+        }
+
+        // Trim old percepts (keep only last 20 ticks worth)
+        self.recent_percepts.retain(|(tick, _)| current_tick.saturating_sub(*tick) <= 20);
 
         // Sync body health to agent state
         self.state.health = self.body.overall_health() * 100.0;
@@ -1278,195 +1323,6 @@ impl Agent {
         )
     }
 
-    /// Evaluate and select a job based on traits, skills, and population needs
-    ///
-    /// This is called periodically and allows agents to dynamically change jobs
-    /// based on what's needed for survival and what they're good at.
-    pub fn evaluate_job_preference(&self, population_needs: &PopulationNeeds) -> Option<super::profession::JobType> {
-        use super::profession::JobType;
-        use super::skills::SkillType;
-        use super::traits::Trait;
-
-        // Only adults work
-        if self.state.life_stage != super::LifeStage::Adult {
-            return None;
-        }
-
-        // Calculate preference scores for each job type
-        let mut job_scores: Vec<(JobType, f32)> = Vec::new();
-
-        // Food production jobs (critical for survival)
-        if population_needs.food_critical || population_needs.food_shortage {
-            let mut farmer_score = 50.0;
-            let mut hunter_score = 40.0;
-            let mut fisher_score = 35.0;
-
-            // Traits affect preference
-            if self.traits.has_trait(&Trait::Diligent) {
-                farmer_score += 20.0; // Diligent agents prefer steady farming work
-            }
-            if self.traits.has_trait(&Trait::Aggressive) || self.traits.has_trait(&Trait::Hottempered) {
-                hunter_score += 25.0; // Aggressive agents prefer hunting
-                farmer_score -= 10.0;
-            }
-            if self.traits.has_trait(&Trait::Peaceful) || self.traits.has_trait(&Trait::Calm) {
-                farmer_score += 15.0; // Peaceful agents prefer farming
-                hunter_score -= 15.0;
-            }
-            if self.traits.has_trait(&Trait::Introverted) {
-                fisher_score += 20.0; // Introverts prefer solitary fishing
-            }
-
-            // Skills affect suitability (use immutable get, default to -10 if skill doesn't exist)
-            farmer_score += self.skills.get_skill_if_exists(SkillType::Farming)
-                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
-            hunter_score += self.skills.get_skill_if_exists(SkillType::Hunting)
-                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
-            fisher_score += self.skills.get_skill_if_exists(SkillType::Fishing)
-                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
-
-            // Needs multiplier (critical needs are prioritized)
-            if population_needs.food_critical {
-                farmer_score *= 2.0;
-                hunter_score *= 2.0;
-                fisher_score *= 2.0;
-            }
-
-            job_scores.push((JobType::Farmer, farmer_score));
-            job_scores.push((JobType::Hunter, hunter_score));
-            job_scores.push((JobType::Fisher, fisher_score));
-        }
-
-        // Resource gathering jobs
-        if population_needs.wood_shortage {
-            let mut woodcutter_score = 40.0;
-            if self.traits.has_trait(&Trait::Diligent) {
-                woodcutter_score += 15.0;
-            }
-            woodcutter_score += self.skills.get_skill_if_exists(SkillType::Woodcutting)
-                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
-            job_scores.push((JobType::Woodcutter, woodcutter_score * if population_needs.wood_critical { 2.0 } else { 1.0 }));
-        }
-
-        if population_needs.stone_shortage {
-            let mut miner_score = 38.0;
-            if self.traits.has_trait(&Trait::Diligent) {
-                miner_score += 15.0;
-            }
-            miner_score += self.skills.get_skill_if_exists(SkillType::Mining)
-                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
-            job_scores.push((JobType::Miner, miner_score * if population_needs.stone_critical { 2.0 } else { 1.0 }));
-        }
-
-        // Crafting jobs (tools, weapons, buildings)
-        if population_needs.tools_shortage {
-            let mut blacksmith_score = 35.0;
-            let mut carpenter_score = 35.0;
-
-            if self.traits.has_trait(&Trait::Diligent) {
-                blacksmith_score += 20.0;
-                carpenter_score += 20.0;
-            }
-            if self.traits.has_trait(&Trait::Imaginative) {
-                blacksmith_score += 10.0; // Creative crafting
-                carpenter_score += 10.0;
-            }
-
-            blacksmith_score += self.skills.get_skill_if_exists(SkillType::Crafting)
-                .map(|s| s.level as f32 * 4.0).unwrap_or(0.0);
-            carpenter_score += self.skills.get_skill_if_exists(SkillType::Crafting)
-                .map(|s| s.level as f32 * 3.0).unwrap_or(0.0);
-
-            job_scores.push((JobType::Blacksmith, blacksmith_score));
-            job_scores.push((JobType::Carpenter, carpenter_score));
-        }
-
-        // Building jobs
-        if population_needs.shelter_shortage {
-            let mut carpenter_score = 40.0;
-            let mut stonemason_score = 35.0;
-
-            if self.traits.has_trait(&Trait::Diligent) {
-                carpenter_score += 20.0;
-                stonemason_score += 20.0;
-            }
-
-            carpenter_score += self.skills.get_skill_if_exists(SkillType::Construction)
-                .map(|s| s.level as f32 * 4.0).unwrap_or(0.0);
-            stonemason_score += self.skills.get_skill_if_exists(SkillType::Construction)
-                .map(|s| s.level as f32 * 4.0).unwrap_or(0.0);
-
-            job_scores.push((JobType::Carpenter, carpenter_score * if population_needs.shelter_critical { 2.0 } else { 1.0 }));
-            job_scores.push((JobType::Stonemason, stonemason_score * if population_needs.shelter_critical { 2.0 } else { 1.0 }));
-        }
-
-        // Processing jobs
-        if population_needs.food_processing_needed {
-            let mut baker_score = 30.0;
-            let mut miller_score = 28.0;
-
-            if self.traits.has_trait(&Trait::Diligent) {
-                baker_score += 15.0;
-                miller_score += 15.0;
-            }
-            if self.traits.has_trait(&Trait::Sociable) {
-                baker_score += 10.0; // Bakers interact with community
-            }
-
-            baker_score += self.skills.get_skill_if_exists(SkillType::Crafting)
-                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
-            miller_score += self.skills.get_skill_if_exists(SkillType::Crafting)
-                .map(|s| s.level as f32 * 2.0).unwrap_or(0.0);
-
-            job_scores.push((JobType::Baker, baker_score));
-            job_scores.push((JobType::Miller, miller_score));
-        }
-
-        // Fallback: General laborer (always available)
-        let mut laborer_score = 25.0;
-        if self.traits.has_trait(&Trait::Diligent) {
-            laborer_score += 10.0;
-        }
-        job_scores.push((JobType::Laborer, laborer_score));
-
-        // Sort by score (highest first)
-        job_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-
-        // Return the highest scoring job
-        job_scores.first().map(|(job, _)| *job)
-    }
-
-    /// Update job selection (called during agent tick)
-    ///
-    /// Agents can change jobs based on population needs and their own traits/skills.
-    /// Job changes have a cooldown to prevent constant switching.
-    pub fn update_job_selection(&mut self, population_needs: &PopulationNeeds) {
-        use super::LifeStage;
-
-        // Only adults work
-        if self.state.life_stage != LifeStage::Adult {
-            self.current_job = None;
-            return;
-        }
-
-        // Decrease cooldown
-        if self.job_change_cooldown > 0 {
-            self.job_change_cooldown -= 1;
-        }
-
-        // Can only change jobs when cooldown expires
-        if self.job_change_cooldown == 0 {
-            let preferred_job = self.evaluate_job_preference(population_needs);
-
-            // Change job if preference changed
-            if preferred_job != self.current_job {
-                self.current_job = preferred_job;
-                // Set cooldown to prevent frequent job changes (1 day = 1440 ticks)
-                self.job_change_cooldown = 1440; // Change jobs at most once per day
-            }
-        }
-    }
-
     // ===== Sensory Processing Integration =====
 
     /// Process current sensory input into meaningful percepts
@@ -1687,6 +1543,63 @@ impl Agent {
     /// Get harvesting speed bonus from equipped tools
     pub fn get_harvesting_speed_bonus(&self) -> f32 {
         self.equipment.harvesting_speed_bonus()
+    }
+
+    /// Decide what storage action to take (if any) based on inventory and storage preferences
+    /// Returns Some(Action) if agent should interact with storehouse, None otherwise
+    pub fn decide_storage_action(
+        &self,
+        storehouse_food: u32,
+        storehouse_resources: u32,
+    ) -> Option<crate::environment::Action> {
+        use crate::agents::storage_integration::{
+            count_food_in_inventory, count_resources_in_inventory, count_tools_in_inventory,
+            item_type_to_id,
+        };
+        use crate::agents::storage_management::decide_storage_action;
+        use crate::environment::Action;
+        use crate::world::ItemType;
+        use log::debug;
+
+        // Count what agent has
+        let agent_food = count_food_in_inventory(&self.inventory);
+        let agent_resources = count_resources_in_inventory(&self.inventory);
+        let agent_tools = count_tools_in_inventory(&self.inventory);
+
+        // Get preparedness drive level
+        let preparedness = self.drives.get(crate::core::DriveType::Preparedness)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+
+        // Make storage decision
+        let decision = decide_storage_action(
+            agent_food,
+            agent_resources,
+            agent_tools,
+            storehouse_food,
+            storehouse_resources,
+            preparedness,
+            &self.storage_preferences,
+        );
+
+        use crate::agents::storage_management::StorageDecision;
+        match decision {
+            StorageDecision::Deposit { item_type, quantity, reason } => {
+                debug!("Agent {} storing: {}", self.id, reason);
+                Some(Action::Store {
+                    item_type: item_type_to_id(item_type),
+                    amount: quantity,
+                })
+            }
+            StorageDecision::Retrieve { item_type, quantity, reason } => {
+                debug!("Agent {} retrieving: {}", self.id, reason);
+                Some(Action::Retrieve {
+                    item_type: item_type_to_id(item_type),
+                    amount: quantity,
+                })
+            }
+            StorageDecision::NoAction { .. } => None,
+        }
     }
 }
 
