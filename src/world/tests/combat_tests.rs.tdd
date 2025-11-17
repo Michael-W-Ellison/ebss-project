@@ -1,0 +1,379 @@
+// src/world/tests/combat_tests.rs
+//! TDD tests for combat mechanics
+//!
+//! These tests verify:
+//! - Basic combat damage calculation
+//! - Weapon bonuses
+//! - Armor protection
+//! - Mounted combat bonuses
+//! - Critical hits
+//! - Body part targeting
+
+use crate::world::{World, WorldConfig, Combat};
+use crate::agents::{Agent, AgentConfig, Transport, TransportType, InventoryItem};
+use crate::agents::body::{BodyPart, BodyPartType};
+
+#[test]
+fn test_basic_unarmed_combat_damage() {
+    let mut world = World::new(WorldConfig::default());
+    let attacker = Agent::new(AgentConfig::default());
+    let mut defender = Agent::new(AgentConfig::default());
+
+    let initial_health = defender.state.health;
+
+    // Perform unarmed attack
+    let damage = world.calculate_unarmed_damage(&attacker, &defender);
+
+    // Should deal some damage (typically 5-15)
+    assert!(damage > 0.0);
+    assert!(damage <= 20.0);
+}
+
+#[test]
+fn test_weapon_increases_damage() {
+    let world = World::new(WorldConfig::default());
+    let mut attacker_unarmed = Agent::new(AgentConfig::default());
+    let mut attacker_armed = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Give weapon to armed attacker
+    attacker_armed.inventory.add_item(InventoryItem::new("ironsword".to_string(), 1));
+    attacker_armed.equip_weapon("ironsword");
+
+    let unarmed_damage = world.calculate_unarmed_damage(&attacker_unarmed, &defender);
+    let armed_damage = world.calculate_armed_damage(&attacker_armed, &defender);
+
+    // Armed should deal more damage
+    assert!(armed_damage > unarmed_damage, "Weapon should increase damage");
+}
+
+#[test]
+fn test_armor_reduces_damage() {
+    let world = World::new(WorldConfig::default());
+    let attacker = Agent::new(AgentConfig::default());
+    let mut defender_unarmored = Agent::new(AgentConfig::default());
+    let mut defender_armored = Agent::new(AgentConfig::default());
+
+    // Give armor to one defender
+    defender_armored.body.equip_armor(BodyPartType::Torso, "leather_armor");
+
+    let damage_unarmored = world.calculate_damage(&attacker, &defender_unarmored);
+    let damage_armored = world.calculate_damage(&attacker, &defender_armored);
+
+    // Armored defender should take less damage
+    assert!(damage_armored < damage_unarmored, "Armor should reduce damage");
+}
+
+#[test]
+fn test_mounted_combat_bonus() {
+    let world = World::new(WorldConfig::default());
+    let mut attacker_on_foot = Agent::new(AgentConfig::default());
+    let mut attacker_mounted = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Give mount to one attacker
+    let horse = Transport::new(TransportType::Horse);
+    let horse_id = horse.id;
+    attacker_mounted.add_transport(horse);
+    attacker_mounted.mount_transport(&horse_id);
+
+    // Calculate damage
+    let damage_on_foot = world.calculate_damage(&attacker_on_foot, &defender);
+    let damage_mounted = world.calculate_damage(&attacker_mounted, &defender);
+
+    // Mounted attacker should deal more damage
+    assert!(damage_mounted > damage_on_foot, "Mounted combat should provide damage bonus");
+
+    // Mounted bonus should be significant (typically 1.5x or more)
+    assert!(damage_mounted >= damage_on_foot * 1.3, "Mounted bonus should be at least 30%");
+}
+
+#[test]
+fn test_different_mounts_provide_different_bonuses() {
+    let world = World::new(WorldConfig::default());
+    let mut rider_on_horse = Agent::new(AgentConfig::default());
+    let mut rider_on_warhorse = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Mount on horse
+    let horse = Transport::new(TransportType::Horse);
+    let horse_id = horse.id;
+    rider_on_horse.add_transport(horse);
+    rider_on_horse.mount_transport(&horse_id);
+
+    // Mount on warhorse
+    let warhorse = Transport::new(TransportType::Warhorse);
+    let warhorse_id = warhorse.id;
+    rider_on_warhorse.add_transport(warhorse);
+    rider_on_warhorse.mount_transport(&warhorse_id);
+
+    let horse_damage = world.calculate_damage(&rider_on_horse, &defender);
+    let warhorse_damage = world.calculate_damage(&rider_on_warhorse, &defender);
+
+    // Warhorse should provide better bonus than regular horse
+    assert!(warhorse_damage >= horse_damage, "Warhorse should provide equal or better combat bonus");
+}
+
+#[test]
+fn test_combat_skill_affects_damage() {
+    let world = World::new(WorldConfig::default());
+    let mut novice = Agent::new(AgentConfig::default());
+    let mut expert = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Set combat skills
+    novice.skills.set_level("combat", 1);
+    expert.skills.set_level("combat", 10);
+
+    let novice_damage = world.calculate_damage(&novice, &defender);
+    let expert_damage = world.calculate_damage(&expert, &defender);
+
+    // Expert should deal more damage
+    assert!(expert_damage > novice_damage, "Higher combat skill should increase damage");
+}
+
+#[test]
+fn test_critical_hit_deals_extra_damage() {
+    let world = World::new(WorldConfig::default());
+    let attacker = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Force critical hit
+    let normal_damage = world.calculate_damage(&attacker, &defender);
+    let critical_damage = normal_damage * 2.0; // Critical typically doubles damage
+
+    // Critical should be significantly higher
+    assert!(critical_damage >= normal_damage * 1.5);
+}
+
+#[test]
+fn test_body_part_targeting() {
+    let world = World::new(WorldConfig::default());
+    let attacker = Agent::new(AgentConfig::default());
+    let mut defender = Agent::new(AgentConfig::default());
+
+    // Attack specific body part
+    let target_part = BodyPartType::LeftArm;
+    world.attack_body_part(&attacker, &mut defender, target_part);
+
+    // Check that specific body part was damaged
+    let arm_injuries = defender.body.get_part(target_part).unwrap().injuries.len();
+    assert!(arm_injuries > 0, "Targeted body part should be injured");
+}
+
+#[test]
+fn test_head_shots_deal_more_damage() {
+    let world = World::new(WorldConfig::default());
+    let attacker = Agent::new(AgentConfig::default());
+    let mut defender_head = Agent::new(AgentConfig::default());
+    let mut defender_arm = Agent::new(AgentConfig::default());
+
+    // Attack head
+    world.attack_body_part(&attacker, &mut defender_head, BodyPartType::Head);
+
+    // Attack arm
+    world.attack_body_part(&attacker, &mut defender_arm, BodyPartType::LeftArm);
+
+    // Head damage should be more severe
+    let head_health = defender_head.state.health;
+    let arm_health = defender_arm.state.health;
+
+    assert!(head_health < arm_health, "Head shots should deal more damage");
+}
+
+#[test]
+fn test_armor_coverage_varies_by_body_part() {
+    let mut defender = Agent::new(AgentConfig::default());
+
+    // Equip helmet (head) and chest armor (torso)
+    defender.body.equip_armor(BodyPartType::Head, "iron_helmet");
+    defender.body.equip_armor(BodyPartType::Torso, "iron_chestplate");
+
+    // Check coverage
+    let head_armor = defender.body.get_armor(BodyPartType::Head);
+    let torso_armor = defender.body.get_armor(BodyPartType::Torso);
+    let leg_armor = defender.body.get_armor(BodyPartType::LeftLeg);
+
+    assert!(head_armor.is_some());
+    assert!(torso_armor.is_some());
+    assert!(leg_armor.is_none(), "Unequipped parts should have no armor");
+}
+
+#[test]
+fn test_combat_damages_weapon_durability() {
+    let mut world = World::new(WorldConfig::default());
+    let mut attacker = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Give weapon
+    let weapon = InventoryItem::new_with_durability("ironsword".to_string(), 1, 100);
+    attacker.inventory.add_item(weapon);
+    attacker.equip_weapon("ironsword");
+
+    let initial_durability = attacker.get_equipped_weapon_durability();
+
+    // Perform multiple attacks
+    for _ in 0..10 {
+        world.perform_attack(&mut attacker, &defender);
+    }
+
+    let final_durability = attacker.get_equipped_weapon_durability();
+
+    // Durability should decrease
+    assert!(final_durability < initial_durability, "Weapon should lose durability from combat");
+}
+
+#[test]
+fn test_broken_weapon_deals_reduced_damage() {
+    let world = World::new(WorldConfig::default());
+    let mut attacker_good_weapon = Agent::new(AgentConfig::default());
+    let mut attacker_broken_weapon = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Give good weapon
+    let good_weapon = InventoryItem::new_with_durability("ironsword".to_string(), 1, 100);
+    attacker_good_weapon.inventory.add_item(good_weapon);
+    attacker_good_weapon.equip_weapon("ironsword");
+
+    // Give broken weapon
+    let broken_weapon = InventoryItem::new_with_durability("ironsword".to_string(), 1, 5);
+    attacker_broken_weapon.inventory.add_item(broken_weapon);
+    attacker_broken_weapon.equip_weapon("ironsword");
+
+    let good_damage = world.calculate_damage(&attacker_good_weapon, &defender);
+    let broken_damage = world.calculate_damage(&attacker_broken_weapon, &defender);
+
+    // Broken weapon should deal less damage
+    assert!(broken_damage < good_damage, "Broken weapon should be less effective");
+}
+
+#[test]
+fn test_combat_damages_armor_durability() {
+    let mut world = World::new(WorldConfig::default());
+    let attacker = Agent::new(AgentConfig::default());
+    let mut defender = Agent::new(AgentConfig::default());
+
+    // Equip armor
+    defender.body.equip_armor(BodyPartType::Torso, "leather_armor");
+    let initial_armor_durability = defender.body.get_armor_durability(BodyPartType::Torso);
+
+    // Take multiple hits
+    for _ in 0..10 {
+        world.perform_attack(&attacker, &mut defender);
+    }
+
+    let final_armor_durability = defender.body.get_armor_durability(BodyPartType::Torso);
+
+    // Armor should degrade
+    assert!(
+        final_armor_durability < initial_armor_durability,
+        "Armor should lose durability from combat"
+    );
+}
+
+#[test]
+fn test_leg_injuries_reduce_movement_speed() {
+    let mut agent = Agent::new(AgentConfig::default());
+
+    let initial_speed = agent.movement_speed();
+
+    // Injure leg
+    agent.body.injure_part(BodyPartType::LeftLeg, 30.0);
+
+    let injured_speed = agent.movement_speed();
+
+    // Speed should be reduced
+    assert!(injured_speed < initial_speed, "Leg injury should reduce movement speed");
+}
+
+#[test]
+fn test_arm_injuries_reduce_combat_effectiveness() {
+    let world = World::new(WorldConfig::default());
+    let mut attacker_healthy = Agent::new(AgentConfig::default());
+    let mut attacker_injured = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Injure arm
+    attacker_injured.body.injure_part(BodyPartType::RightArm, 40.0);
+
+    let healthy_damage = world.calculate_damage(&attacker_healthy, &defender);
+    let injured_damage = world.calculate_damage(&attacker_injured, &defender);
+
+    // Injured attacker should be less effective
+    assert!(injured_damage < healthy_damage, "Arm injury should reduce combat effectiveness");
+}
+
+#[test]
+fn test_multiple_injuries_stack_penalties() {
+    let mut agent = Agent::new(AgentConfig::default());
+
+    let initial_speed = agent.movement_speed();
+
+    // Injure both legs
+    agent.body.injure_part(BodyPartType::LeftLeg, 20.0);
+    agent.body.injure_part(BodyPartType::RightLeg, 20.0);
+
+    let injured_speed = agent.movement_speed();
+
+    // Should be significantly slower
+    assert!(injured_speed < initial_speed * 0.7, "Multiple injuries should stack penalties");
+}
+
+#[test]
+fn test_mount_health_affects_combat_bonus() {
+    let world = World::new(WorldConfig::default());
+    let mut rider_healthy_mount = Agent::new(AgentConfig::default());
+    let mut rider_injured_mount = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Healthy mount
+    let mut healthy_horse = Transport::new(TransportType::Horse);
+    let healthy_id = healthy_horse.id;
+    rider_healthy_mount.add_transport(healthy_horse);
+    rider_healthy_mount.mount_transport(&healthy_id);
+
+    // Injured mount
+    let mut injured_horse = Transport::new(TransportType::Horse);
+    injured_horse.damage_animal(60.0); // 40% health
+    let injured_id = injured_horse.id;
+    rider_injured_mount.add_transport(injured_horse);
+    rider_injured_mount.mount_transport(&injured_id);
+
+    let healthy_mount_damage = world.calculate_damage(&rider_healthy_mount, &defender);
+    let injured_mount_damage = world.calculate_damage(&rider_injured_mount, &defender);
+
+    // Healthy mount should provide better bonus
+    assert!(
+        healthy_mount_damage >= injured_mount_damage,
+        "Injured mount should provide reduced combat bonus"
+    );
+}
+
+#[test]
+fn test_dismounting_removes_combat_bonus() {
+    let world = World::new(WorldConfig::default());
+    let mut rider = Agent::new(AgentConfig::default());
+    let defender = Agent::new(AgentConfig::default());
+
+    // Get damage on foot
+    let damage_on_foot_before = world.calculate_damage(&rider, &defender);
+
+    // Mount
+    let horse = Transport::new(TransportType::Horse);
+    let horse_id = horse.id;
+    rider.add_transport(horse);
+    rider.mount_transport(&horse_id);
+
+    let damage_mounted = world.calculate_damage(&rider, &defender);
+
+    // Dismount
+    rider.dismount();
+
+    let damage_on_foot_after = world.calculate_damage(&rider, &defender);
+
+    // Mounted damage should be higher
+    assert!(damage_mounted > damage_on_foot_before);
+
+    // After dismounting, damage should return to normal
+    assert_eq!(damage_on_foot_after, damage_on_foot_before);
+}

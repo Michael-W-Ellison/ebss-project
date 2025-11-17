@@ -1305,3 +1305,7 @@ mod tests {
         assert!(tiny.estimated_memory_mb() < 50.0); // Tiny should be small
     }
 }
+
+// External test modules
+#[cfg(test)]
+mod tests;

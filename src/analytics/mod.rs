@@ -1719,7 +1719,7 @@ impl Simulation {
                         // Add transport to agent's inventory if applicable
                         if let Some(t_type) = transport_type {
                             let transport = crate::agents::transport::Transport::with_animal(t_type, *animal_id);
-                            agent.transport.transports.push(transport);
+                            agent.transport.add_transport(transport);
                         }
 
                         ActionResult::success()

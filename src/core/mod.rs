@@ -15,6 +15,9 @@ pub mod preferences;
 pub mod drive_progression;
 pub mod planning;
 
+#[cfg(test)]
+mod tests;
+
 pub use behavior_tree::{BehaviorTree, BehaviorNode, NodeType, ExecutionResult};
 pub use drives::{Drive, DriveType, DriveState};
 pub use learning::{ObservableEvent, ObservableEventType, LearningResult, observe_and_learn, process_population_learning};
