@@ -79,9 +79,8 @@ pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
     // Inherit behavior trees from parents with pruning and mutation
     offspring.behavior_trees = inherit_behavior_trees(&parent1.behavior_trees, &parent2.behavior_trees);
 
-    // Inherit traits from parents (mix of both with some variation)
-    // Note: Using default for now as trait inheritance needs type alignment
-    offspring.traits = crate::agents::TraitSet::default();
+    // Inherit traits from parents (mix of both with mutation)
+    offspring.traits = inherit_traits(&parent1.traits, &parent2.traits);
 
     // Start with neutral emotions
     offspring.emotions = crate::agents::EmotionState::default();
@@ -147,9 +146,49 @@ fn inherit_behavior_trees(trees1: &[BehaviorTree], trees2: &[BehaviorTree]) -> V
 
 /// Inherit traits from two parents
 fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::TraitSet) -> crate::agents::TraitSet {
-    // For now, just return a default TraitSet
-    // TODO: Implement proper trait inheritance when TraitSet API is stable
-    crate::agents::TraitSet::default()
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    let mut offspring_traits = crate::agents::TraitSet::new();
+
+    // Collect all parent traits
+    let parent1_traits: Vec<_> = traits1.get_traits().iter().copied().collect();
+    let parent2_traits: Vec<_> = traits2.get_traits().iter().copied().collect();
+
+    // Inherit traits from parent 1 (50% chance for each trait)
+    for &trait_item in &parent1_traits {
+        if rng.gen_bool(0.5) {
+            // Try to add trait (will fail if incompatible with already inherited traits)
+            offspring_traits.add_trait(trait_item);
+        }
+    }
+
+    // Inherit traits from parent 2 (50% chance for each trait)
+    for &trait_item in &parent2_traits {
+        if rng.gen_bool(0.5) {
+            // Try to add trait (will fail if incompatible with already inherited traits)
+            offspring_traits.add_trait(trait_item);
+        }
+    }
+
+    // Small chance of mutation: randomly gain a new trait (5% chance)
+    if rng.gen_bool(0.05) {
+        use crate::agents::Trait;
+
+        let all_traits = vec![
+            Trait::Imaginative, Trait::Manipulative, Trait::Forgiving,
+            Trait::Trusting, Trait::Suspicious, Trait::Believer, Trait::Atheist,
+            Trait::Diligent, Trait::Lazy, Trait::Sociable, Trait::Introverted,
+            Trait::Aggressive, Trait::Peaceful, Trait::Honest, Trait::Dishonest,
+            Trait::Hottempered, Trait::Calm, Trait::Empathetic, Trait::Callous,
+        ];
+
+        // Try to add a random trait (may fail if incompatible)
+        let random_trait = all_traits[rng.gen_range(0..all_traits.len())];
+        offspring_traits.add_trait(random_trait);
+    }
+
+    offspring_traits
 }
 
 /// Calculate offspring position (near parents)

@@ -172,6 +172,13 @@ impl GoalManager {
             .collect()
     }
 
+    /// Update progress for a specific goal by ID
+    pub fn update_goal_progress(&mut self, goal_id: uuid::Uuid, amount: f32) {
+        if let Some(goal) = self.goals.iter_mut().find(|g| g.id == goal_id) {
+            goal.update_progress(amount);
+        }
+    }
+
     /// Check if action aligns with any goals
     pub fn action_aligns_with_goals(&self, action: &str) -> bool {
         self.goals

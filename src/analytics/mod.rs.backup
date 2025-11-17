@@ -155,34 +155,7 @@ impl Simulation {
                     agent_id, tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
                 );
 
-                // Generate goals periodically based on drives and emotions
-                if self.current_tick % 50 == 0 {
-                    let agent = &mut self.population.agents[agent_index];
-
-                    // Collect current drive types and emotion values
-                    let drive_types: Vec<crate::core::DriveType> = crate::core::DriveType::all().to_vec();
-                    let emotion_values: Vec<(crate::core::EmotionType, f32)> = vec![
-                        (crate::core::EmotionType::Happiness, agent.emotions.happiness()),
-                        (crate::core::EmotionType::Fear, agent.emotions.fear),
-                        (crate::core::EmotionType::Anger, agent.emotions.anger),
-                        (crate::core::EmotionType::Sadness, agent.emotions.sadness),
-                        (crate::core::EmotionType::Curiosity, 0.5), // Default curiosity level
-                    ];
-
-                    // Generate common goals based on current state
-                    let new_goals = crate::core::goals::GoalManager::generate_common_goals(
-                        &drive_types,
-                        &emotion_values,
-                        self.current_tick,
-                    );
-
-                    // Add generated goals to agent's goals
-                    for goal in new_goals {
-                        agent.goals.add_goal(goal);
-                    }
-                }
-
-                // Generate action based on priority: shelter needs > percepts > goals > drives
+                // Generate action based on priority: shelter needs > percepts > drives
                 let action = {
                     let agent = &self.population.agents[agent_index];
 
@@ -198,22 +171,10 @@ impl Simulation {
                             agent_position,
                         );
 
-                        if percept_action.is_some() {
-                            percept_action.unwrap()
-                        } else {
-                            // PRIORITY 3: Check if we have active goals and generate goal-aligned action
-                            if let Some(active_goal) = agent.goals.highest_priority_goal() {
-                                let goal_action = Self::generate_action_for_goal(active_goal, agent_position, drive_type);
-
-                                // Use goal-aligned action if available, otherwise fall back to drive-based
-                                goal_action.unwrap_or_else(|| {
-                                    Self::generate_action_for_drive(drive_type, agent_position)
-                                })
-                            } else {
-                                // PRIORITY 4: Use drive-based action
-                                Self::generate_action_for_drive(drive_type, agent_position)
-                            }
-                        }
+                        // PRIORITY 3: Use percept-based action if available, otherwise use drive-based
+                        percept_action.unwrap_or_else(|| {
+                            Self::generate_action_for_drive(drive_type, agent_position)
+                        })
                     }
                 };
 
@@ -254,47 +215,6 @@ impl Simulation {
                     if action_result.success {
                         tree.total_successes += 1;
                     }
-                }
-
-                // Update goal progress based on action result
-                if action_result.success {
-                    let action_name = format!("{:?}", action);
-                    let agent = &mut self.population.agents[agent_index];
-
-                    // Check if action aligns with any active goals and update progress
-                    if agent.goals.action_aligns_with_goals(&action_name) {
-                        // Find the highest priority goal that aligns with this action
-                        if let Some(goal) = agent.goals.highest_priority_goal() {
-                            let progress_delta = match &action {
-                                // Resource gathering actions
-                                crate::environment::Action::Gather { .. } => 0.2,
-                                crate::environment::Action::Hunt { .. } => 0.15,
-
-                                // Building and crafting
-                                crate::environment::Action::Build { .. } => 0.3,
-                                crate::environment::Action::Craft { .. } => 0.25,
-
-                                // Social actions
-                                crate::environment::Action::Mate { .. } => 0.2,
-                                crate::environment::Action::Socialize { .. } => 0.15,
-
-                                // Emotional satisfaction
-                                crate::environment::Action::Sleep { .. } => 0.1,
-                                crate::environment::Action::Eat { .. } => 0.1,
-
-                                _ => 0.05, // Small progress for other actions
-                            };
-
-                            let goal_id = goal.id;
-                            agent.goals.update_goal_progress(goal_id, progress_delta);
-                        }
-                    }
-                }
-
-                // Cleanup completed goals periodically
-                if self.current_tick % 100 == 0 {
-                    let agent = &mut self.population.agents[agent_index];
-                    agent.goals.cleanup_completed();
                 }
             }
 
@@ -464,8 +384,6 @@ impl Simulation {
             }
             Action::Socialize { .. } => Some(ActionType::Social),
             Action::ShareInformation { .. } => Some(ActionType::Social), // Information sharing is social
-            Action::Mate { .. } => Some(ActionType::Social), // Mating is a social interaction
-            Action::Mount { .. } | Action::Dismount => Some(ActionType::ToolUse), // Mount management is tool use
             Action::Move { .. } | Action::Explore { .. } => Some(ActionType::Navigation),
             Action::Store { .. } | Action::Retrieve { .. } => Some(ActionType::ToolUse), // Resource management
             _ => None, // Sleep, Wait, etc. are not observable learning opportunities
@@ -514,110 +432,9 @@ impl Simulation {
                 let target_y = position.1 + rng.gen_range(-5..=5);
                 Action::Move { target: (target_x, target_y, position.2) }
             },
-            DriveType::Reproduction => Action::Mate { target_agent_id: uuid::Uuid::nil() },
+            DriveType::Reproduction => Action::Wait,
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
             DriveType::Thirst => Action::Eat { food_type: "water".to_string() },
-        }
-    }
-
-    /// Generate an action based on an active goal
-    fn generate_action_for_goal(
-        goal: &crate::core::goals::Goal,
-        position: (i32, i32, i32),
-        fallback_drive: DriveType,
-    ) -> Option<Action> {
-        use crate::core::goals::{InternalGoal, ExternalGoal};
-        use crate::core::EmotionType;
-
-        // Check if it's an internal goal
-        if let Some(internal) = &goal.internal {
-            match internal {
-                InternalGoal::IncreaseEmotion(emotion_type, _target) => {
-                    // Map emotions to actions that satisfy them
-                    match emotion_type {
-                        EmotionType::Happiness => Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() }),
-                        EmotionType::Curiosity => Some(Action::Move {
-                            target: (position.0 + 10, position.1 + 10, position.2)
-                        }),
-                        _ => None,
-                    }
-                },
-                InternalGoal::DecreaseEmotion(emotion_type, _target) => {
-                    match emotion_type {
-                        EmotionType::Fear => Some(Action::SeekShelter),
-                        EmotionType::Anger => Some(Action::Sleep { duration: 10 }),
-                        EmotionType::Sadness => Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() }),
-                        _ => None,
-                    }
-                },
-                InternalGoal::MaintainWellBeing(_threshold) => {
-                    Some(Action::Sleep { duration: 10 })
-                },
-                InternalGoal::ReduceStress => {
-                    Some(Action::Sleep { duration: 10 })
-                },
-                InternalGoal::SeekEntertainment => {
-                    Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
-                },
-            }
-        // Check if it's an external goal
-        } else if let Some(external) = &goal.external {
-            match external {
-                ExternalGoal::OwnHouse => {
-                    Some(Action::Build {
-                        structure_type: "house".to_string(),
-                        position,
-                    })
-                },
-                ExternalGoal::StockHouseFood(_amount) => {
-                    Some(Action::Gather { resource_type: "food".to_string() })
-                },
-                ExternalGoal::ContributeFoodToStorehouse(amount) => {
-                    Some(Action::Store {
-                        item_type: "food".to_string(),
-                        amount: *amount,
-                    })
-                },
-                ExternalGoal::ObtainProtection => {
-                    Some(Action::Craft { item_type: "leatherarmor".to_string() })
-                },
-                ExternalGoal::CraftItem(item_name) => {
-                    Some(Action::Craft { item_type: item_name.clone() })
-                },
-                ExternalGoal::BuildStructure(structure_name) => {
-                    Some(Action::Build {
-                        structure_type: structure_name.clone(),
-                        position,
-                    })
-                },
-                ExternalGoal::GatherResource(resource_name, _amount) => {
-                    Some(Action::Gather { resource_type: resource_name.clone() })
-                },
-                ExternalGoal::LearnSkill(_skill_name) => {
-                    // Learning happens through practice - choose relevant action
-                    // For now, map to a generic action
-                    None
-                },
-                ExternalGoal::FormRelationship(_relationship_type) => {
-                    Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
-                },
-                ExternalGoal::CompleteJob(_job_name) => {
-                    // Jobs are complex, fall back to drive-based action
-                    None
-                },
-                ExternalGoal::ContributeMaterialsToStorehouse(amount) => {
-                    Some(Action::Store {
-                        item_type: "resource".to_string(),
-                        amount: *amount,
-                    })
-                },
-                ExternalGoal::EnsureToolsAvailable(_count) => {
-                    Some(Action::Craft { item_type: "woodenaxe".to_string() })
-                },
-            }
-        } else {
-            // Goal has neither internal nor external set (shouldn't happen)
-            None
         }
     }
 
@@ -922,15 +739,8 @@ impl Simulation {
                 };
 
                 // Get attacker's tool efficiency (arm health affects combat)
-                let attacker = &self.population.agents[agent_index];
-                let attacker_efficiency = attacker.body.tool_efficiency_multiplier();
-
-                // Get mounted combat bonus (warhorses provide significant advantage!)
-                let mount_bonus = attacker.transport.mounted_combat_bonus();
-                let combat_multiplier = 1.0 + mount_bonus;
-
-                // Apply all modifiers: base * arm_health * mount_bonus
-                let actual_damage = base_damage * attacker_efficiency * combat_multiplier;
+                let attacker_efficiency = self.population.agents[agent_index].body.tool_efficiency_multiplier();
+                let actual_damage = base_damage * attacker_efficiency;
 
                 // Select random body part to hit (weighted toward torso/limbs)
                 let body_parts = [
@@ -984,19 +794,14 @@ impl Simulation {
                 let target_alive = self.population.agents[target_index].body.is_alive()
                     && self.population.agents[target_index].state.health > 0.0;
 
-                let attacker_id = self.population.agents[agent_index].id;
-                let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
-
                 debug!(
-                    "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({}, mounted: {}, bonus: +{:.0}%)",
-                    attacker_id,
+                    "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({})",
+                    self.population.agents[agent_index].id,
                     self.population.agents[target_index].id,
                     weapon.as_ref().unwrap_or(&"unarmed".to_string()),
                     actual_damage,
                     target_part,
-                    if target_alive { "survived" } else { "FATAL" },
-                    if attacker_mounted { "yes" } else { "no" },
-                    mount_bonus * 100.0
+                    if target_alive { "survived" } else { "FATAL" }
                 );
 
                 if !target_alive {
@@ -1370,13 +1175,7 @@ impl Simulation {
 
                 // Get movement speed multiplier from leg health
                 let agent = &self.population.agents[agent_index];
-                let body_speed = agent.body.movement_speed_multiplier();
-
-                // Get transport speed multiplier (mounts provide speed boost!)
-                let transport_speed = agent.transport.effective_speed_modifier();
-
-                // Combined movement speed (body health * transport bonus)
-                let movement_speed = body_speed * transport_speed;
+                let movement_speed = agent.body.movement_speed_multiplier();
 
                 // Base energy cost (modified by speed and distance)
                 let base_energy_cost = 2.0;
@@ -1392,10 +1191,9 @@ impl Simulation {
                 agent.state.position = (next_x, next_y, target.2);
 
                 debug!(
-                    "Agent {} moved from ({}, {}) to ({}, {}) (distance to target: {}, speed: {:.2}x, mounted: {})",
+                    "Agent {} moved from ({}, {}) to ({}, {}) (distance to target: {}, speed: {:.2}x)",
                     agent.id, current_pos.0, current_pos.1, next_x, next_y,
-                    distance - 1, movement_speed,
-                    if agent.transport.is_mounted() { "yes" } else { "no" }
+                    distance - 1, movement_speed
                 );
 
                 // Determine drive satisfaction based on purpose (Safety or Curiosity)
@@ -1587,24 +1385,17 @@ impl Simulation {
                 // Now get mutable reference to animal
                 if let Some(animal) = self.world.animals.get_mut(animal_id) {
 
-                    // Calculate success based on agent skill, weapon, and mount
+                    // Calculate success based on agent skill and weapon
                     let agent = &self.population.agents[agent_index];
                     let hunting_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::MeleeCombat)
                         .map(|s| s.level)
                         .unwrap_or(-5);
                     let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
-
-                    // Get mounted combat bonus (hunting from horseback is advantageous!)
-                    let mount_bonus = agent.transport.mounted_combat_bonus();
-
-                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus + mount_bonus).min(0.95_f32);
+                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus).min(0.95_f32);
 
                     if rng.gen_bool(success_prob as f64) {
                         // Successful hunt - damage the animal
-                        // Base damage is 70% of max health, modified by mount bonus
-                        let base_damage = species.health * 0.7;
-                        let combat_multiplier = 1.0 + mount_bonus;
-                        let damage = base_damage * combat_multiplier;
+                        let damage = species.health * 0.7; // Deal 70% of max health
                         animal.take_damage(damage);
 
                         // If killed, get drops
@@ -1703,24 +1494,9 @@ impl Simulation {
                         // Successfully domesticated
                         animal.owner_id = Some(agent.id);
 
-                        // Create Transport for the tamed animal (if suitable)
-                        let transport_type = match species.name.as_str() {
-                            "Cow" => Some(crate::agents::transport::TransportType::OxCart),
-                            "Sheep" => Some(crate::agents::transport::TransportType::PackDonkey),
-                            "Goat" => Some(crate::agents::transport::TransportType::PackDonkey),
-                            // Rabbit, Chicken, and Wild Boar are too small or unsuitable for transport
-                            _ => None,
-                        };
-
                         // Increase social skill
                         let agent = &mut self.population.agents[agent_index];
                         agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
-
-                        // Add transport to agent's inventory if applicable
-                        if let Some(t_type) = transport_type {
-                            let transport = crate::agents::transport::Transport::with_animal(t_type, *animal_id);
-                            agent.transport.transports.push(transport);
-                        }
 
                         ActionResult::success()
                             .with_drive_change(DriveType::Utility, -0.3)
@@ -2000,12 +1776,17 @@ impl Simulation {
                 }
             },
 
+<<<<<<< HEAD
+            Action::ShareInformation { target_agent_id } => {
+                use crate::agents::gossip::{Information, InformationType};
+=======
             Action::Socialize { target_agent_id } => {
                 use crate::agents::social_interactions::{
                     SocialInteractionType, ConversationTopic, HelpType,
                     calculate_relationship_change, calculate_social_satisfaction,
                     should_greet, select_conversation_topic, calculate_gift_value, would_accept_gift
                 };
+>>>>>>> fd2f62ab985de0d1f0c4138b7125138c9e252dae
                 use crate::agents::traits::Trait;
 
                 // Find the target agent
@@ -2015,6 +1796,97 @@ impl Simulation {
                 }
                 let target_index = target_index.unwrap();
 
+<<<<<<< HEAD
+                // Don't share with self
+                if target_index == agent_index {
+                    return ActionResult::failure("Cannot share information with self".to_string());
+                }
+
+                let current_tick = self.current_tick;
+                let initiator = &self.population.agents[agent_index];
+                let initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
+
+                // Select information to share from initiator's knowledge base
+                let info_to_share = if !initiator.knowledge.known_information.is_empty() {
+                    // Pick a random piece of information from their knowledge
+                    let info_list: Vec<_> = initiator.knowledge.known_information.values().collect();
+                    let idx = rng.gen_range(0..info_list.len());
+                    let original_info = info_list[idx].clone();
+
+                    // Check if initiator would distort information based on traits
+                    if let Some(distortion_trait) = initiator.traits.would_distort_info() {
+                        // Distort the information
+                        original_info.distort(distortion_trait, initiator.id)
+                    } else {
+                        // Share truthfully
+                        original_info
+                    }
+                } else {
+                    // Generate new information if they don't have any
+                    // Share a resource location they might know about
+                    let agent_pos = initiator.state.position;
+                    Information::new(
+                        InformationType::ResourceLocation {
+                            resource: "generic".to_string(),
+                            location: agent_pos,
+                        },
+                        initiator.id,
+                        true, // Assume they know their current location
+                        current_tick as u64,
+                    )
+                };
+
+                // Get recipient's traits for belief calculation
+                let recipient_traits = self.population.agents[target_index].traits.clone();
+
+                // Share the information with recipient
+                let target = &mut self.population.agents[target_index];
+                target.knowledge.receive_information(
+                    info_to_share.clone(),
+                    initiator.id,
+                    target.id,
+                    &recipient_traits,
+                    current_tick as u64,
+                );
+
+                // Determine message based on information type
+                let message = match &info_to_share.info_type {
+                    InformationType::ResourceLocation { resource, location } => {
+                        format!("Shared knowledge about {} at ({}, {}, {})",
+                            resource, location.0, location.1, location.2)
+                    }
+                    InformationType::Conflict { agent1, agent2 } => {
+                        format!("Gossiped about conflict between agents")
+                    }
+                    InformationType::Death { agent, cause } => {
+                        format!("Shared news of death: {}", cause)
+                    }
+                    InformationType::TechnologyDiscovered { tech } => {
+                        format!("Shared discovery of {} technology", tech)
+                    }
+                    InformationType::Accusation { accused, crime, .. } => {
+                        format!("Shared accusation of {}", crime)
+                    }
+                    _ => "Shared information".to_string(),
+                };
+
+                // Distortion affects satisfaction
+                let distortion_penalty = if info_to_share.distortion.is_some() { 0.05 } else { 0.0 };
+                let social_satisfaction = 0.15 - distortion_penalty;
+
+                debug!(
+                    "Agent {} shared information with agent {} (distorted: {}, reliability: {:.2})",
+                    initiator.id,
+                    target_agent_id,
+                    info_to_share.distortion.is_some(),
+                    info_to_share.reliability
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Social, -social_satisfaction)
+                    .with_energy_cost(2.0)
+                    .with_message(message)
+=======
                 // Don't socialize with self
                 if target_index == agent_index {
                     return ActionResult::failure("Cannot socialize with self".to_string());
@@ -2250,394 +2122,7 @@ impl Simulation {
                 } else {
                     ActionResult::failure(message)
                 }
-            },
-
-            Action::ShareInformation { target_agent_id } => {
-                use crate::agents::gossip::{Information, InformationType};
-                use crate::agents::traits::Trait;
-
-                // Find the target agent
-                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
-                if target_index.is_none() {
-                    return ActionResult::failure("Target agent not found".to_string());
-                }
-                let target_index = target_index.unwrap();
-
-                // Don't share with self
-                if target_index == agent_index {
-                    return ActionResult::failure("Cannot share information with self".to_string());
-                }
-
-                let current_tick = self.current_tick;
-
-                // Capture initiator data before mutable borrows
-                let (initiator_id, info_to_share) = {
-                    let initiator = &self.population.agents[agent_index];
-                    let initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
-                    let initiator_id = initiator.id;
-
-                    // Select information to share from initiator's knowledge base
-                    let info = if !initiator.knowledge.known_information.is_empty() {
-                        // Pick a random piece of information from their knowledge
-                        let info_list: Vec<_> = initiator.knowledge.known_information.values().collect();
-                        let idx = rng.gen_range(0..info_list.len());
-                        let original_info = info_list[idx].clone();
-
-                        // Check if initiator would distort information based on traits
-                        if let Some(distortion_trait) = initiator.traits.would_distort_info() {
-                            // Distort the information
-                            original_info.distort(distortion_trait, initiator_id)
-                        } else {
-                            // Share truthfully
-                            original_info
-                        }
-                    } else {
-                        // Generate new information if they don't have any
-                        // Share a resource location they might know about
-                        let agent_pos = initiator.state.position;
-                        Information::new(
-                            InformationType::ResourceLocation {
-                                resource: "generic".to_string(),
-                                location: agent_pos,
-                            },
-                            initiator_id,
-                            true, // Assume they know their current location
-                            current_tick as u64,
-                        )
-                    };
-
-                    (initiator_id, info)
-                };
-
-                // Get recipient's traits for belief calculation
-                let recipient_traits = self.population.agents[target_index].traits.clone();
-
-                // Share the information with recipient
-                let target = &mut self.population.agents[target_index];
-                let target_id = target.id;
-                target.knowledge.receive_information(
-                    info_to_share.clone(),
-                    initiator_id,
-                    target_id,
-                    &recipient_traits,
-                    current_tick as u64,
-                );
-
-                // Determine message based on information type
-                let message = match &info_to_share.info_type {
-                    InformationType::ResourceLocation { resource, location } => {
-                        format!("Shared knowledge about {} at ({}, {}, {})",
-                            resource, location.0, location.1, location.2)
-                    }
-                    InformationType::Conflict { agent1, agent2 } => {
-                        format!("Gossiped about conflict between agents")
-                    }
-                    InformationType::Death { agent, cause } => {
-                        format!("Shared news of death: {}", cause)
-                    }
-                    InformationType::TechnologyDiscovered { tech } => {
-                        format!("Shared discovery of {} technology", tech)
-                    }
-                    InformationType::Accusation { accused, crime, .. } => {
-                        format!("Shared accusation of {}", crime)
-                    }
-                    _ => "Shared information".to_string(),
-                };
-
-                // Distortion affects satisfaction
-                let distortion_penalty = if info_to_share.distortion.is_some() { 0.05 } else { 0.0 };
-                let social_satisfaction = 0.15 - distortion_penalty;
-
-                debug!(
-                    "Agent {} shared information with agent {} (distorted: {}, reliability: {:.2})",
-                    initiator_id,
-                    target_agent_id,
-                    info_to_share.distortion.is_some(),
-                    info_to_share.reliability
-                );
-
-                ActionResult::success()
-                    .with_drive_change(DriveType::Social, -social_satisfaction)
-                    .with_energy_cost(2.0)
-                    .with_message(message)
-            },
-
-            Action::Mate { target_agent_id } => {
-                use crate::agents::reproduction::{can_mate, reproduce, MateSelectionCriteria};
-                use crate::agents::gossip::{Information, InformationType};
-
-                // Find the target agent
-                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
-                if target_index.is_none() {
-                    return ActionResult::failure("Target agent not found".to_string());
-                }
-                let target_index = target_index.unwrap();
-
-                // Don't mate with self
-                if target_index == agent_index {
-                    return ActionResult::failure("Cannot mate with self".to_string());
-                }
-
-                // Check if both agents can mate
-                let initiator = &self.population.agents[agent_index];
-                let target = &self.population.agents[target_index];
-                let criteria = MateSelectionCriteria::default();
-
-                if !can_mate(initiator, target, &criteria) {
-                    // Determine specific reason for failure
-                    let reason = if !initiator.can_reproduce() {
-                        "Initiator cannot reproduce (too young, too old, or pregnant)".to_string()
-                    } else if !target.can_reproduce() {
-                        "Target cannot reproduce (too young, too old, or pregnant)".to_string()
-                    } else if initiator.fertility() < criteria.min_fertility {
-                        format!("Initiator fertility too low ({:.2})", initiator.fertility())
-                    } else if target.fertility() < criteria.min_fertility {
-                        format!("Target fertility too low ({:.2})", target.fertility())
-                    } else if target.parent_ids.contains(&initiator.id) || initiator.parent_ids.contains(&target.id) {
-                        "Cannot mate with parent/child".to_string()
-                    } else {
-                        "Agents too far apart for mating".to_string()
-                    };
-
-                    return ActionResult::failure(reason);
-                }
-
-                // Calculate mating success probability based on relationship
-                let initiator_id = initiator.id;
-                let target_id = target.id;
-                let mut success_probability = 0.5; // Base 50% chance
-
-                // Check relationship - better relationships increase success
-                if let Some(relationship) = initiator.social_network.get_relationship(target_id) {
-                    match &relationship.relationship_level {
-                        crate::agents::relationships::RelationshipLevel::Loves(_) => {
-                            success_probability = 0.9; // High success with loved ones
-                        }
-                        crate::agents::relationships::RelationshipLevel::Likes(_) => {
-                            success_probability = 0.7; // Good success with friends
-                        }
-                        crate::agents::relationships::RelationshipLevel::Neutral(_) => {
-                            success_probability = 0.5; // Neutral success
-                        }
-                        _ => {
-                            success_probability = 0.2; // Low success with dislikes/hates
-                        }
-                    }
-                }
-
-                // Attempt mating
-                if rng.gen_bool(success_probability as f64) {
-                    // Mating successful - create offspring
-                    // Clone parent positions before creating offspring to avoid borrow issues
-                    let parent1_pos = self.population.agents[agent_index].state.position;
-                    let offspring = {
-                        let parent1 = &self.population.agents[agent_index];
-                        let parent2 = &self.population.agents[target_index];
-                        let current_tick = self.current_tick;
-                        reproduce(parent1, parent2, current_tick)
-                    };
-                    let offspring_id = offspring.id;
-
-                    // Add offspring to population
-                    self.population.agents.push(offspring);
-
-                    debug!(
-                        "Agent {} and agent {} successfully mated! Offspring: {}",
-                        initiator_id, target_id, offspring_id
-                    );
-
-                    // Generate gossip about the birth
-                    let current_tick = self.current_tick;
-                    let birth_info = Information::new(
-                        InformationType::Childbirth {
-                            agent: initiator_id,
-                            child: offspring_id,
-                        },
-                        initiator_id,
-                        true, // This is true information
-                        current_tick as u64,
-                    );
-
-                    // Share birth information with nearby agents
-                    for other_agent in &mut self.population.agents {
-                        if other_agent.id != initiator_id && other_agent.id != target_id && other_agent.id != offspring_id {
-                            // Calculate distance
-                            let distance = {
-                                let dx = (other_agent.state.position.0 - parent1_pos.0) as f32;
-                                let dy = (other_agent.state.position.1 - parent1_pos.1) as f32;
-                                (dx * dx + dy * dy).sqrt()
-                            };
-
-                            // Share with agents within 20 tiles
-                            if distance <= 20.0 {
-                                other_agent.knowledge.receive_information(
-                                    birth_info.clone(),
-                                    initiator_id,
-                                    other_agent.id,
-                                    &other_agent.traits,
-                                    current_tick as u64,
-                                );
-                            }
-                        }
-                    }
-
-                    // Update relationships - parents bond with child
-                    // Update reproduction drives for both parents
-                    let agent = &mut self.population.agents[agent_index];
-                    if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
-                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
-                    }
-
-                    let target = &mut self.population.agents[target_index];
-                    if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
-                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
-                    }
-
-                    ActionResult::success()
-                        .with_drive_change(DriveType::Reproduction, -0.8)
-                        .with_energy_cost(15.0) // Mating is energy-intensive
-                        .with_message(format!("Successfully mated with agent, offspring: {}", offspring_id))
-                } else {
-                    // Mating attempt rejected
-                    debug!(
-                        "Agent {} mating attempt with agent {} was rejected",
-                        initiator_id, target_id
-                    );
-
-                    ActionResult::failure("Mating attempt rejected by partner".to_string())
-                }
-            },
-
-            Action::Mount { transport_id } => {
-                let agent = &mut self.population.agents[agent_index];
-
-                // Try to mount the transport
-                match agent.transport.mount_transport(transport_id) {
-                    Ok(()) => {
-                        debug!("Agent {} mounted transport {}", agent.id, transport_id);
-
-                        ActionResult::success()
-                            .with_drive_change(DriveType::Utility, -0.1)
-                            .with_energy_cost(2.0)
-                            .with_message("Successfully mounted".to_string())
-                    }
-                    Err(err) => ActionResult::failure(err),
-                }
-            },
-
-            Action::Dismount => {
-                let agent = &mut self.population.agents[agent_index];
-
-                if !agent.transport.is_mounted() {
-                    return ActionResult::failure("Not currently mounted".to_string());
-                }
-
-                agent.transport.dismount_current();
-                debug!("Agent {} dismounted", agent.id);
-
-                ActionResult::success()
-                    .with_energy_cost(1.0)
-                    .with_message("Dismounted from transport".to_string())
-            },
-
-            Action::Wait => {
-                // Wait/rest action - restores energy, calms emotions
-                let agent = &mut self.population.agents[agent_index];
-
-                // Restore a small amount of energy (resting)
-                let energy_restored = rng.gen_range(3.0..6.0);
-                agent.state.energy = (agent.state.energy + energy_restored).min(100.0);
-
-                // Reduce negative emotions slightly (calming effect)
-                agent.emotions.anger = (agent.emotions.anger - 0.02).max(0.0);
-                agent.emotions.fear = (agent.emotions.fear - 0.02).max(0.0);
-
-                debug!(
-                    "Agent {} waited, restored {:.1} energy, reduced stress",
-                    agent.id, energy_restored
-                );
-
-                ActionResult::success()
-                    .with_drive_change(DriveType::Rest, -0.15) // Satisfies rest drive
-                    .with_message(format!("Rested and recovered {:.1} energy", energy_restored))
-            },
-
-            Action::Explore { direction } => {
-                // Exploration action - move and discover new areas
-                let agent = &mut self.population.agents[agent_index];
-                let agent_id = agent.id;
-                let current_pos = agent.state.position;
-
-                // Calculate target position in exploration direction
-                let target_x = current_pos.0 + direction.0;
-                let target_y = current_pos.1 + direction.1;
-                let target_z = current_pos.2 + direction.2;
-                let target_pos = (target_x, target_y, target_z);
-
-                // Move agent to new position
-                agent.state.position = target_pos;
-
-                // Mark tiles as explored in a radius around new position
-                let mut newly_explored_count = 0;
-                let exploration_radius = 3; // Can see 3 tiles in each direction
-
-                for dx in -exploration_radius..=exploration_radius {
-                    for dy in -exploration_radius..=exploration_radius {
-                        let explore_pos = crate::world::Position::new(
-                            target_x + dx,
-                            target_y + dy,
-                        );
-
-                        if agent.exploration_knowledge.explore_tile(explore_pos, self.current_tick) {
-                            newly_explored_count += 1;
-                        }
-                    }
-                }
-
-                // Discover nearby resources (within exploration radius)
-                let mut discoveries = Vec::new();
-                for resource in &self.world.resources {
-                    let resource_pos = crate::world::Position::new(
-                        resource.position.x,
-                        resource.position.y,
-                    );
-                    let dx = (resource_pos.x - target_x).abs();
-                    let dy = (resource_pos.y - target_y).abs();
-
-                    if dx <= exploration_radius && dy <= exploration_radius {
-                        if agent.exploration_knowledge.discover_resource(
-                            resource_pos,
-                            resource.resource_type,
-                            self.current_tick,
-                        ) {
-                            discoveries.push(format!("{:?}", resource.resource_type));
-                        }
-                    }
-                }
-
-                let agent = &mut self.population.agents[agent_index];
-
-                // Construct message about exploration results
-                let mut message = format!(
-                    "Explored new area, discovered {} tiles",
-                    newly_explored_count
-                );
-                if !discoveries.is_empty() {
-                    message.push_str(&format!(", found: {}", discoveries.join(", ")));
-                }
-
-                debug!(
-                    "Agent {} explored to ({}, {}, {}), discovered {} new tiles",
-                    agent_id, target_x, target_y, target_z, newly_explored_count
-                );
-
-                // Exploration is rewarding
-                let curiosity_satisfaction = if newly_explored_count > 0 { 0.3 } else { 0.1 };
-
-                ActionResult::success()
-                    .with_drive_change(DriveType::Curiosity, -curiosity_satisfaction)
-                    .with_energy_cost(5.0) // Exploration takes energy
-                    .with_message(message)
+>>>>>>> fd2f62ab985de0d1f0c4138b7125138c9e252dae
             },
 
             // For other actions, use simplified success/failure
@@ -2671,19 +2156,16 @@ impl Simulation {
                     let satisfaction = match action {
                         Action::Craft { .. } => 0.2,
                         Action::Store { .. } => 0.1,
+                        Action::Explore { .. } => 0.15,
                         Action::Socialize { .. } => 0.2,
                         Action::ShareInformation { .. } => 0.15, // Handled separately above
-                        Action::Mate { .. } => 0.0, // Handled separately above
-                        Action::Mount { .. } => 0.0, // Handled separately above
-                        Action::Dismount => 0.0, // Handled separately above
-                        Action::Wait => 0.0, // Handled separately above
-                        Action::Explore { .. } => 0.0, // Handled separately above
                         Action::Hunt { .. } => 0.3,
                         Action::Tame { .. } => 0.25,
                         Action::CollectAnimalProduct { .. } => 0.15,
                         Action::HarvestPlant { .. } => 0.15,
                         Action::SeekShelter => 0.0, // Handled separately above
                         Action::Move { .. } => 0.05,
+                        Action::Wait => 0.0,
                         _ => 0.1,
                     };
 

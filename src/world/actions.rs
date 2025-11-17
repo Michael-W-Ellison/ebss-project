@@ -167,6 +167,15 @@ impl World {
             };
         }
 
+        // Check visibility - poor weather makes harvesting less efficient
+        let visibility_reduction = self.climate.weather.visibility_reduction();
+        let effective_amount = if visibility_reduction > 0.5 {
+            // Severe visibility reduction cuts harvest efficiency
+            ((amount as f32) * (1.0 - visibility_reduction * 0.5)) as u32
+        } else {
+            amount
+        };
+
         // Find and harvest resource
         if let Some(resource_node) = self.get_resource_at_mut(resource_position) {
             if resource_node.resource_type != resource_type {
@@ -175,7 +184,7 @@ impl World {
                 };
             }
 
-            let harvested = resource_node.harvest(amount);
+            let harvested = resource_node.harvest(effective_amount);
 
             if harvested > 0 {
                 // Convert resource to item type
@@ -298,6 +307,20 @@ impl World {
             };
         }
 
+        // Apply weather movement modifier (may prevent movement in severe weather)
+        let movement_modifier = self.climate.movement_modifier();
+
+        // Severe weather may completely prevent movement
+        if movement_modifier < 0.3 {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            if rng.gen::<f32>() > movement_modifier / 0.3 {
+                return ActionResult::Failure {
+                    reason: format!("Severe weather ({:?}) prevents movement", self.climate.weather.weather_type),
+                };
+            }
+        }
+
         // Try direct movement first (one step towards destination)
         let dx = (destination.x - agent_position.x).signum();
         let dy = (destination.y - agent_position.y).signum();
@@ -310,17 +333,23 @@ impl World {
         if !direct_blocked {
             // Direct path is clear, move there
             *agent_position = direct_pos;
-            return ActionResult::Success {
-                message: format!("Moved to ({}, {})", direct_pos.x, direct_pos.y),
+            let message = if movement_modifier < 0.8 {
+                format!("Moved to ({}, {}) (slowed by weather)", direct_pos.x, direct_pos.y)
+            } else {
+                format!("Moved to ({}, {})", direct_pos.x, direct_pos.y)
             };
+            return ActionResult::Success { message };
         }
 
         // Direct path blocked, use pathfinding to route around obstacles
         if let Some(next_pos) = self.grid.find_path_with_agents(agent_position, destination, occupied_positions) {
             *agent_position = next_pos;
-            return ActionResult::Success {
-                message: format!("Pathfinding: moved to ({}, {})", next_pos.x, next_pos.y),
+            let message = if movement_modifier < 0.8 {
+                format!("Pathfinding: moved to ({}, {}) (slowed by weather)", next_pos.x, next_pos.y)
+            } else {
+                format!("Pathfinding: moved to ({}, {})", next_pos.x, next_pos.y)
             };
+            return ActionResult::Success { message };
         }
 
         // No path found

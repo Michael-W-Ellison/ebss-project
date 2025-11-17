@@ -185,7 +185,7 @@ impl SimulationMetrics {
         for agent in &population.agents {
             well_being_sum += agent.emotions.well_being();
 
-            // Collect emotion values
+            // Collect negative emotion values (0.0 to 1.0 range)
             emotion_map
                 .entry(crate::core::EmotionType::Anger)
                 .or_insert_with(Vec::new)
@@ -198,16 +198,18 @@ impl SimulationMetrics {
                 .entry(crate::core::EmotionType::Sadness)
                 .or_insert_with(Vec::new)
                 .push(agent.emotions.sadness);
-            // TODO: Implement EmotionState::well_being()
-            // well_being_sum += agent.emotions.well_being();
 
-            // TODO: Fix EmotionState API
-            // for emotion in &agent.emotions.emotions {
-            //     emotion_map
-            //         .entry(emotion.emotion_type.clone())
-            //         .or_insert_with(Vec::new)
-            //         .push(emotion.value);
-            // }
+            // Collect happiness (calculated from negative emotions, -1.0 to 1.0 range)
+            emotion_map
+                .entry(crate::core::EmotionType::Happiness)
+                .or_insert_with(Vec::new)
+                .push(agent.emotions.happiness());
+
+            // Collect curiosity (default value for now, as it's not tracked in EmotionState)
+            emotion_map
+                .entry(crate::core::EmotionType::Curiosity)
+                .or_insert_with(Vec::new)
+                .push(0.5); // Neutral curiosity default
         }
 
         let average_well_being = if population.agents.is_empty() {

@@ -497,19 +497,17 @@ impl World {
 
     /// Get all animals of a specific species
     pub fn get_animals_by_species(&self, species_id: &str) -> Vec<&crate::environment::Animal> {
-        self.animals.all_animals()
+        self.animals.get_all()
             .iter()
             .filter(|a| a.species_id == species_id)
-            .copied()
             .collect()
     }
 
     /// Get all domesticated animals
     pub fn get_domesticated_animals(&self) -> Vec<&crate::environment::Animal> {
-        self.animals.all_animals()
+        self.animals.get_all()
             .iter()
             .filter(|a| a.is_domesticated)
-            .copied()
             .collect()
     }
 
@@ -947,12 +945,42 @@ impl World {
         // Update plants (growth, regrowth)
         self.plants.tick();
 
+        // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
+        if self.tick % 10 == 0 {
+            self.regenerate_resources();
+        }
+
         // Update crafting jobs (progress crafting)
         let _completed_crafts = self.crafting_manager.tick();
         // Note: Completed items should be added to crafter inventories by caller
 
         // Remove depleted resources
         self.remove_depleted_resources();
+    }
+
+    /// Regenerate renewable resources based on climate and weather conditions
+    fn regenerate_resources(&mut self) {
+        let current_season = self.climate.current_season();
+        let season_modifier = current_season.plant_growth_modifier();
+        let precipitation = self.climate.weather.wetness_per_tick() * 100.0; // Scale to 0-1 range
+
+        for resource in &mut self.resources {
+            // Get temperature at resource position
+            let terrain_type = self.grid.get_tile(&resource.position)
+                .map(|t| t.terrain.terrain_type)
+                .unwrap_or(TerrainType::Plains);
+
+            let temperature = self.climate.get_temperature(resource.position, terrain_type);
+
+            // Regenerate the resource
+            let _regen_amount = resource.regenerate(temperature, precipitation, season_modifier);
+
+            // Debug log significant regeneration
+            // if regen_amount > 0 {
+            //     debug!("Resource {:?} at ({}, {}) regenerated {} units",
+            //         resource.resource_type, resource.position.x, resource.position.y, regen_amount);
+            // }
+        }
     }
 
     /// Get statistics about the world

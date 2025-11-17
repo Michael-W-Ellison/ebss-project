@@ -170,7 +170,7 @@ impl MemoryManager {
         current_emotion: f32,
         current_location: Option<(i32, i32, i32)>,
         present_agents: &[Uuid],
-    ) -> Vec<&mut Episode> {
+    ) -> Vec<&Episode> {
         self.episodic.recall_by_context(
             current_emotion,
             current_location,

@@ -98,6 +98,7 @@ pub struct AnimalProduct {
 }
 
 /// Animal species database
+#[derive(Debug, Clone)]
 pub struct FaunaRegistry {
     species: HashMap<String, AnimalSpecies>,
 }
@@ -1431,6 +1432,11 @@ impl AnimalManager {
         self.animals.iter()
             .filter(|a| a.owner_id == Some(*owner_id) && a.is_alive())
             .collect()
+    }
+
+    /// Get species from registry
+    pub fn get_species(&self, species_id: &str) -> Option<&AnimalSpecies> {
+        self.registry.as_ref()?.get(species_id)
     }
 
     /// Remove dead animals

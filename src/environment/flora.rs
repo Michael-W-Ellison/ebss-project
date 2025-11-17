@@ -89,6 +89,7 @@ impl PlantDrop {
 }
 
 /// Plant species database
+#[derive(Debug, Clone)]
 pub struct FloraRegistry {
     species: HashMap<String, PlantSpecies>,
 }
@@ -1546,9 +1547,25 @@ impl PlantManager {
 
     /// Harvest a plant
     pub fn harvest_plant(&mut self, id: &Uuid) -> Option<Vec<PlantDrop>> {
+        // Get species ID first to avoid borrow checker issues
+        let species_id = self.get(id)?.species_id.clone();
+
+        // Clone species data to avoid borrow checker issues
+        let species = self.registry.as_ref()?.get(&species_id)?.clone();
+
+        // Now we can mutably borrow the plant
         let plant = self.get_mut(id)?;
-        let species = self.registry.as_ref()?.get(&plant.species_id)?;
-        Some(plant.harvest(species))
+        Some(plant.harvest(&species))
+    }
+
+    /// Get all plants
+    pub fn get_all(&self) -> &Vec<Plant> {
+        &self.plants
+    }
+
+    /// Get species from registry
+    pub fn get_species(&self, species_id: &str) -> Option<&PlantSpecies> {
+        self.registry.as_ref()?.get(species_id)
     }
 
     /// Tick all plants (growth, regrowth)

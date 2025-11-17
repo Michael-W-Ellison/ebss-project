@@ -184,6 +184,22 @@ pub enum Action {
     HarvestPlant {
         plant_id: uuid::Uuid,
     },
+    /// Share information/gossip with another agent
+    ShareInformation {
+        target_agent_id: uuid::Uuid,
+    },
+    /// Attempt to mate with another agent
+    Mate {
+        target_agent_id: uuid::Uuid,
+    },
+    /// Mount a transport (horse, camel, etc.)
+    Mount {
+        transport_id: uuid::Uuid,
+    },
+    /// Dismount from current mount
+    Dismount,
+    /// Seek shelter from dangerous weather
+    SeekShelter,
     /// Wait/idle
     Wait,
 }
@@ -201,11 +217,16 @@ impl Action {
             Action::Retrieve { .. } => Some(DriveType::Preparedness),
             Action::Explore { .. } => Some(DriveType::Curiosity),
             Action::Socialize { .. } => Some(DriveType::Social),
+            Action::ShareInformation { .. } => Some(DriveType::Social), // Information sharing is social
+            Action::Mate { .. } => Some(DriveType::Reproduction), // Mating satisfies reproduction drive
+            Action::Mount { .. } => Some(DriveType::Utility), // Mounting provides travel utility
+            Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
+            Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
             Action::Move { .. } => None,
             Action::Wait => None,
         }
@@ -235,7 +256,6 @@ impl ActionResult {
             experience: 0.0,
             energy_cost: 0.0,
             drive_satisfaction: 0.0,
-            message,
             message: Some(message),
         }
     }

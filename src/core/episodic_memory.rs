@@ -304,7 +304,7 @@ impl EpisodicMemory {
         current_location: Option<(i32, i32, i32)>,
         present_agents: &[Uuid],
         limit: usize,
-    ) -> Vec<&mut Episode> {
+    ) -> Vec<&Episode> {
         // Calculate retrieval probabilities
         let mut episodes_with_prob: Vec<(usize, f32)> = self.episodes
             .iter()
@@ -318,18 +318,25 @@ impl EpisodicMemory {
         // Sort by probability
         episodes_with_prob.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-        // Get top matches and mark as recalled
-        episodes_with_prob
+        // Capture current_time and indices before mutable borrow
+        let current_time = self.current_time;
+        let indices: Vec<usize> = episodes_with_prob
             .into_iter()
             .take(limit)
-            .filter_map(|(idx, _)| {
-                if let Some(episode) = self.episodes.get_mut(idx) {
-                    episode.recall(self.current_time);
-                    Some(episode)
-                } else {
-                    None
-                }
-            })
+            .map(|(idx, _)| idx)
+            .collect();
+
+        // Mark episodes as recalled (mutable borrow)
+        for idx in &indices {
+            if let Some(episode) = self.episodes.get_mut(*idx) {
+                episode.recall(current_time);
+            }
+        }
+
+        // Collect immutable references
+        indices
+            .iter()
+            .filter_map(|idx| self.episodes.get(*idx))
             .collect()
     }
 

@@ -247,9 +247,10 @@ impl WorkingMemory {
 
         // Mark focused task as active
         if let Some(id) = task_id {
+            let current_time = self.current_time;
             if let Some(task) = self.get_task_mut(id) {
                 if task.status == TaskStatus::Pending {
-                    task.start(self.current_time);
+                    task.start(current_time);
                 }
             }
         }
