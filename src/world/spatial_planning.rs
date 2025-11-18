@@ -212,7 +212,24 @@ impl<'a> SpatialPlanner<'a> {
         }
     }
 
-    /// Score a specific location for a building type and criteria
+    /// Score a specific location for a building type and criteria (including zones)
+    pub fn score_location_with_zones(
+        &self,
+        pos: Position,
+        building_type: BuildingType,
+        criteria: PlacementCriteria,
+    ) -> f32 {
+        // Get base score from placement criteria
+        let mut score = self.score_location(pos, building_type, criteria.clone());
+
+        // Add zone bonus
+        let zone_bonus = self.world.zone_manager.get_zone_bonus(pos, building_type);
+        score += zone_bonus;
+
+        score
+    }
+
+    /// Score a specific location for a building type and criteria (without zones)
     pub fn score_location(
         &self,
         pos: Position,
@@ -327,15 +344,20 @@ impl<'a> SpatialPlanner<'a> {
     ) -> f32 {
         let distance_to_agent = Self::distance(pos, agent_pos);
 
+        // Get zone bonus (applies to all strategies)
+        let zone_bonus = self.world.zone_manager.get_zone_bonus(pos, building_type);
+
         match strategy {
             PlacementStrategy::NearAgent => {
                 // Strongly prioritize being near agent
-                100.0 / (1.0 + distance_to_agent)
+                let base_score = 100.0 / (1.0 + distance_to_agent);
+                base_score + zone_bonus
             }
 
             PlacementStrategy::NearestAvailable => {
                 // Just find the nearest spot
-                100.0 / (1.0 + distance_to_agent)
+                let base_score = 100.0 / (1.0 + distance_to_agent);
+                base_score + zone_bonus
             }
 
             PlacementStrategy::NearResources => {
@@ -346,7 +368,7 @@ impl<'a> SpatialPlanner<'a> {
                     criteria.clone(),
                 );
                 let agent_penalty = distance_to_agent * 2.0;
-                resource_score - agent_penalty
+                resource_score - agent_penalty + zone_bonus
             }
 
             PlacementStrategy::BalancedProximity => {
@@ -357,7 +379,7 @@ impl<'a> SpatialPlanner<'a> {
                     criteria.clone(),
                 );
                 let agent_score = 50.0 / (1.0 + distance_to_agent);
-                resource_score * 0.6 + agent_score * 0.4
+                (resource_score * 0.6 + agent_score * 0.4) + zone_bonus
             }
         }
     }
