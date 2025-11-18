@@ -578,6 +578,7 @@ pub struct Agent {
     pub goals: GoalManager,
     pub preferences: Preferences,
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
+    pub satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker, // Tracks who/what satisfies which drives
 }
 
 impl Agent {
@@ -613,6 +614,7 @@ impl Agent {
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
+            satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker::new(),
         }
     }
 
@@ -636,6 +638,9 @@ impl Agent {
         self.body.tick();
         self.emotions.tick();
         self.memory.tick();
+
+        // Update emotions based on drive states (every tick)
+        self.update_emotions_from_drives();
         self.drives.tick();
 
         // Process sensory input into percepts and store them
@@ -1772,6 +1777,216 @@ impl Agent {
     /// Update life stage based on age
     pub fn update_life_stage(&mut self) {
         self.state.life_stage = LifeStage::from_age(self.state.age);
+    }
+
+    // ===== Drive-Emotion Feedback System =====
+
+    /// Update emotions based on current drive states
+    /// High unsatisfied drives trigger appropriate negative emotions
+    pub fn update_emotions_from_drives(&mut self) {
+        use super::EmotionSource;
+
+        // Survival drives (Hunger, Thirst, Rest) → Fear (threat to survival)
+        let survival_fear = self.calculate_survival_drive_emotion();
+        if survival_fear > 0.0 {
+            self.emotions.add_fear(EmotionSource::Event("unmet survival needs".to_string()), survival_fear);
+        }
+
+        // Social drives → Sadness (loneliness, isolation)
+        let social_sadness = self.calculate_social_drive_emotion();
+        if social_sadness > 0.0 {
+            self.emotions.add_sadness(EmotionSource::Event("social isolation".to_string()), social_sadness);
+        }
+
+        // Other unfulfilled drives → General frustration (mild sadness)
+        let general_frustration = self.calculate_general_drive_frustration();
+        if general_frustration > 0.0 {
+            self.emotions.add_sadness(EmotionSource::Event("unfulfilled needs".to_string()), general_frustration * 0.5);
+        }
+    }
+
+    /// Calculate fear from survival drive deprivation
+    fn calculate_survival_drive_emotion(&self) -> f32 {
+        let mut max_fear = 0.0f32;
+
+        // Check hunger
+        if let Some(hunger) = self.drives.get(DriveType::Hunger) {
+            if hunger.value > 0.7 {
+                // Fear scales with severity above threshold
+                let fear = (hunger.value - 0.7) / 0.3 * 0.6; // 0.0 to 0.6
+                max_fear = max_fear.max(fear);
+            }
+        }
+
+        // Check thirst (even more urgent)
+        if let Some(thirst) = self.drives.get(DriveType::Thirst) {
+            if thirst.value > 0.7 {
+                let fear = (thirst.value - 0.7) / 0.3 * 0.7; // 0.0 to 0.7
+                max_fear = max_fear.max(fear);
+            }
+        }
+
+        // Check rest
+        if let Some(rest) = self.drives.get(DriveType::Rest) {
+            if rest.value > 0.75 {
+                let fear = (rest.value - 0.75) / 0.25 * 0.4; // 0.0 to 0.4
+                max_fear = max_fear.max(fear);
+            }
+        }
+
+        max_fear
+    }
+
+    /// Calculate sadness from social drive deprivation
+    fn calculate_social_drive_emotion(&self) -> f32 {
+        if let Some(social) = self.drives.get(DriveType::Social) {
+            if social.value > 0.6 {
+                // Sadness scales with loneliness
+                return (social.value - 0.6) / 0.4 * 0.5; // 0.0 to 0.5
+            }
+        }
+        0.0
+    }
+
+    /// Calculate general frustration from other drives
+    fn calculate_general_drive_frustration(&self) -> f32 {
+        let mut total = 0.0;
+        let mut count = 0;
+
+        for drive in &self.drives.drives {
+            // Skip survival and social drives (handled separately)
+            if matches!(drive.drive_type, DriveType::Hunger | DriveType::Thirst | DriveType::Rest | DriveType::Social) {
+                continue;
+            }
+
+            if drive.value > 0.7 {
+                total += (drive.value - 0.7) / 0.3;
+                count += 1;
+            }
+        }
+
+        if count > 0 {
+            // Return average frustration (compounds when multiple drives are high)
+            total / count as f32 * 0.4
+        } else {
+            0.0
+        }
+    }
+
+    /// Record that a source satisfied a drive
+    pub fn record_drive_satisfaction(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32) {
+        let current_tick = 0; // TODO: Get actual tick from context
+        self.satisfaction_tracker.record(drive_type, source_id, amount, current_tick);
+    }
+
+    /// Get all sources that satisfy a specific drive
+    pub fn get_drive_satisfaction_sources(&self, drive_type: DriveType) -> Vec<Uuid> {
+        self.satisfaction_tracker.get_sources(drive_type)
+    }
+
+    /// Get the primary (most important) source for a drive
+    pub fn get_primary_satisfaction_source(&self, drive_type: DriveType) -> Option<Uuid> {
+        self.satisfaction_tracker.get_primary_source(drive_type)
+    }
+
+    /// Get importance of a source for a drive (0.0 to 1.0)
+    pub fn get_source_importance(&self, drive_type: DriveType, source_id: Uuid) -> f32 {
+        self.satisfaction_tracker.get_source_importance(drive_type, source_id)
+    }
+
+    /// Process the loss of a drive satisfaction source
+    /// Triggers sadness based on source importance and current drive level
+    pub fn process_drive_source_loss(&mut self, drive_type: DriveType, source_id: Uuid) {
+        self.process_drive_source_loss_with_cause(drive_type, source_id, None);
+    }
+
+    /// Process drive source loss with known cause
+    /// Can trigger anger at the cause in addition to sadness
+    pub fn process_drive_source_loss_with_cause(
+        &mut self,
+        drive_type: DriveType,
+        source_id: Uuid,
+        cause: Option<super::EmotionSource>,
+    ) {
+        use super::EmotionSource;
+
+        // Get source importance before removing
+        let importance = self.get_source_importance(drive_type, source_id);
+
+        if importance < 0.05 {
+            // Insignificant source, minimal emotional impact
+            return;
+        }
+
+        // Base sadness from losing the source
+        let mut sadness = importance * 0.5; // 0.0 to 0.5
+
+        // Amplify if drive is currently high (functional grief)
+        if let Some(drive) = self.drives.get(drive_type) {
+            if drive.value > 0.6 {
+                // "I was already lonely, now I'm even more alone"
+                let amplification = (drive.value - 0.6) / 0.4; // 0.0 to 1.0
+                sadness += importance * amplification * 0.4; // Add up to 0.4 more (stronger amplification)
+            }
+        }
+
+        // Add sadness
+        self.emotions.add_sadness(EmotionSource::Agent(source_id), sadness);
+
+        // If there's a cause and it's an agent, add anger
+        if let Some(cause_source) = cause {
+            match &cause_source {
+                EmotionSource::Agent(_) | EmotionSource::Creature(_) => {
+                    // Anger at whoever took away our satisfaction source
+                    let anger = importance * 0.5; // 0.0 to 0.5 (stronger anger response)
+                    self.emotions.add_anger(cause_source, anger);
+                }
+                EmotionSource::Event(event) => {
+                    // Natural causes - less anger, more sadness
+                    if !event.contains("old age") && !event.contains("natural") {
+                        // Accident or preventable - some anger
+                        self.emotions.add_anger(EmotionSource::Event(event.clone()), importance * 0.2);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Remove the source from tracking
+        self.satisfaction_tracker.remove_source(source_id);
+    }
+
+    /// Get a functional explanation of grief
+    /// Returns a message explaining why losing this agent matters
+    pub fn get_grief_reason(&self, deceased_id: Uuid) -> String {
+        let mut reasons = Vec::new();
+
+        // Check all drives
+        for drive_type in [DriveType::Social, DriveType::Reproduction, DriveType::Safety] {
+            let importance = self.get_source_importance(drive_type, deceased_id);
+            if importance > 0.3 {
+                let drive_name = match drive_type {
+                    DriveType::Social => "companionship",
+                    DriveType::Reproduction => "partnership",
+                    DriveType::Safety => "protection",
+                    _ => "support",
+                };
+                reasons.push(format!("They provided {}", drive_name));
+            }
+        }
+
+        // Check relationship
+        if let Some(relationship) = self.relationships.get_relationship(&deceased_id) {
+            if relationship.is_loved_one() {
+                reasons.push(format!("I deeply cared about them (bond: {:.1})", relationship.bond_strength));
+            }
+        }
+
+        if reasons.is_empty() {
+            "I miss them".to_string()
+        } else {
+            format!("I'm grieving because: {}. I feel lonely and lost without them.", reasons.join(", "))
+        }
     }
 }
 
