@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::world::{ItemType, ResourceType};
+use crate::world::ItemType;
 
 /// A trade offer posted by an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]

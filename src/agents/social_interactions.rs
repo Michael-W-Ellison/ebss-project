@@ -9,7 +9,6 @@
 //! - Social drive satisfaction
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use crate::world::ItemType;
 use super::relationships::{RelationshipLevel, TrustLevel};
 use crate::core::traits::Trait;
@@ -263,8 +262,8 @@ fn has_compatible_beliefs(traits1: &[Trait], traits2: &[Trait]) -> bool {
 /// Determine appropriate conversation topic based on relationship and traits
 pub fn select_conversation_topic(
     relationship: &RelationshipLevel,
-    initiator_traits: &[Trait],
-    recipient_traits: &[Trait],
+    _initiator_traits: &[Trait],
+    _recipient_traits: &[Trait],
 ) -> ConversationTopic {
     use rand::Rng;
     let mut rng = rand::thread_rng();

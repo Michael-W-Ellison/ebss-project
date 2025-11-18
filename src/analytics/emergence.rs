@@ -2,9 +2,7 @@
 //! Algorithms for detecting emergent patterns in simulation behavior.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
-use crate::agents::Population;
 use crate::analytics::metrics::SimulationMetrics;
 use crate::core::{Trait, DriveType, EmotionType};
 

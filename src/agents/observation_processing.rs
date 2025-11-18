@@ -8,7 +8,7 @@
 //! - Behavior application and imitation
 
 use uuid::Uuid;
-use super::{Agent, ActionType, ObservedAction, SkillType};
+use super::{Agent, ActionType, SkillType};
 
 /// Represents an action that can be observed by other agents
 #[derive(Debug, Clone)]

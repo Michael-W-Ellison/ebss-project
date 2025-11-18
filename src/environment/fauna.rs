@@ -1493,7 +1493,7 @@ impl AnimalManager {
             })
             .collect();
 
-        for (idx, species_id, behavior, is_wild) in animals_data {
+        for (idx, _species_id, behavior, is_wild) in animals_data {
             self.update_animal_behavior(idx, behavior, is_wild);
         }
     }

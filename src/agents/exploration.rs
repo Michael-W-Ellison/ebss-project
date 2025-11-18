@@ -9,7 +9,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, HashMap};
-use uuid::Uuid;
 use crate::world::{Position, TerrainType, ResourceType, BuildingType};
 
 /// Types of discoveries agents can make
@@ -31,6 +30,12 @@ pub enum DiscoveryType {
     AreaExplored {
         tiles_count: usize,
     },
+    /// Discovered a storage container or stockpile
+    Storage {
+        storage_type: String,
+        position: Position,
+        capacity: f32,
+    },
 }
 
 /// A single discovery event
@@ -50,6 +55,8 @@ pub struct ExplorationKnowledge {
     pub known_resources: HashMap<Position, ResourceType>,
     /// Discovered building positions (position -> building type)
     pub known_buildings: HashMap<Position, BuildingType>,
+    /// Discovered storage positions (position -> (storage type, capacity))
+    pub known_storage: HashMap<Position, (String, f32)>,
     /// Terrain types encountered
     pub encountered_terrains: HashSet<TerrainType>,
     /// History of discoveries
@@ -58,6 +65,10 @@ pub struct ExplorationKnowledge {
     pub total_tiles_explored: usize,
     /// Last exploration tick
     pub last_exploration_tick: u32,
+    /// Curiosity-driven exploration count
+    pub curiosity_driven_explorations: u32,
+    /// Total curiosity satisfaction gained from discoveries
+    pub total_curiosity_satisfaction: f32,
 }
 
 impl ExplorationKnowledge {
@@ -66,10 +77,13 @@ impl ExplorationKnowledge {
             explored_tiles: HashSet::new(),
             known_resources: HashMap::new(),
             known_buildings: HashMap::new(),
+            known_storage: HashMap::new(),
             encountered_terrains: HashSet::new(),
             discoveries: Vec::new(),
             total_tiles_explored: 0,
             last_exploration_tick: 0,
+            curiosity_driven_explorations: 0,
+            total_curiosity_satisfaction: 0.0,
         }
     }
 
@@ -125,6 +139,34 @@ impl ExplorationKnowledge {
                 discovery_type: DiscoveryType::Building {
                     building_type,
                     position,
+                },
+                tick: current_tick,
+                position,
+            });
+
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Discover a storage container at a position
+    pub fn discover_storage(
+        &mut self,
+        position: Position,
+        storage_type: String,
+        capacity: f32,
+        current_tick: u32,
+    ) -> bool {
+        if !self.known_storage.contains_key(&position) {
+            self.known_storage.insert(position, (storage_type.clone(), capacity));
+
+            // Record discovery
+            self.discoveries.push(Discovery {
+                discovery_type: DiscoveryType::Storage {
+                    storage_type,
+                    position,
+                    capacity,
                 },
                 tick: current_tick,
                 position,
@@ -229,6 +271,50 @@ impl ExplorationKnowledge {
 
         self.discoveries[start..].iter().collect()
     }
+
+    /// Record a curiosity-driven exploration action and return satisfaction gained
+    pub fn record_curiosity_exploration(&mut self, discovery_type: &DiscoveryType) -> f32 {
+        self.curiosity_driven_explorations += 1;
+        let satisfaction = calculate_exploration_reward(discovery_type);
+        self.total_curiosity_satisfaction += satisfaction;
+        satisfaction
+    }
+
+    /// Get the average curiosity satisfaction per discovery
+    pub fn average_curiosity_satisfaction(&self) -> f32 {
+        if self.discoveries.is_empty() {
+            0.0
+        } else {
+            self.total_curiosity_satisfaction / self.discoveries.len() as f32
+        }
+    }
+
+    /// Get exploration efficiency (satisfaction per exploration action)
+    pub fn exploration_efficiency(&self) -> f32 {
+        if self.curiosity_driven_explorations == 0 {
+            0.0
+        } else {
+            self.total_curiosity_satisfaction / self.curiosity_driven_explorations as f32
+        }
+    }
+
+    /// Get discoveries by type count
+    pub fn discoveries_by_type(&self) -> HashMap<String, usize> {
+        let mut counts: HashMap<String, usize> = HashMap::new();
+
+        for discovery in &self.discoveries {
+            let type_name = match &discovery.discovery_type {
+                DiscoveryType::Terrain(_) => "Terrain",
+                DiscoveryType::Resource { .. } => "Resource",
+                DiscoveryType::Building { .. } => "Building",
+                DiscoveryType::AreaExplored { .. } => "Area",
+                DiscoveryType::Storage { .. } => "Storage",
+            };
+            *counts.entry(type_name.to_string()).or_insert(0) += 1;
+        }
+
+        counts
+    }
 }
 
 impl Default for ExplorationKnowledge {
@@ -246,6 +332,11 @@ pub fn calculate_exploration_reward(discovery: &DiscoveryType) -> f32 {
         DiscoveryType::AreaExplored { tiles_count } => {
             // Scale reward with area size
             (*tiles_count as f32 * 0.01).min(0.5)
+        }
+        DiscoveryType::Storage { capacity, .. } => {
+            // Storage discovery reward scales with capacity
+            // Full storage is more interesting (0.2 base + 0.15 capacity bonus)
+            0.2 + (capacity * 0.15)
         }
     }
 }
@@ -388,5 +479,139 @@ mod tests {
 
         // Low curiosity, few unexplored, recent exploration
         assert!(!should_explore(0.1, 2, 50));
+    }
+
+    #[test]
+    fn test_discover_storage() {
+        let mut knowledge = ExplorationKnowledge::new();
+        let pos = Position::new(15, 15);
+
+        // First discovery should be new
+        assert!(knowledge.discover_storage(pos, "Chest".to_string(), 0.8, 100));
+        assert_eq!(knowledge.known_storage.len(), 1);
+        assert_eq!(knowledge.discoveries.len(), 1);
+
+        // Verify the storage was recorded correctly
+        let (storage_type, capacity) = knowledge.known_storage.get(&pos).unwrap();
+        assert_eq!(storage_type, "Chest");
+        assert_eq!(*capacity, 0.8);
+
+        // Second discovery at same position should not be new
+        assert!(!knowledge.discover_storage(pos, "Chest".to_string(), 0.8, 101));
+        assert_eq!(knowledge.known_storage.len(), 1);
+        assert_eq!(knowledge.discoveries.len(), 1);
+    }
+
+    #[test]
+    fn test_storage_exploration_reward() {
+        // Empty storage
+        let empty_storage = DiscoveryType::Storage {
+            storage_type: "Box".to_string(),
+            position: Position::new(0, 0),
+            capacity: 0.0,
+        };
+        let reward_empty = calculate_exploration_reward(&empty_storage);
+        assert_eq!(reward_empty, 0.2); // Base reward only
+
+        // Half-full storage
+        let half_storage = DiscoveryType::Storage {
+            storage_type: "Barrel".to_string(),
+            position: Position::new(0, 0),
+            capacity: 0.5,
+        };
+        let reward_half = calculate_exploration_reward(&half_storage);
+        assert!(reward_half > reward_empty);
+        assert_eq!(reward_half, 0.275); // 0.2 + 0.5 * 0.15
+
+        // Full storage
+        let full_storage = DiscoveryType::Storage {
+            storage_type: "Warehouse".to_string(),
+            position: Position::new(0, 0),
+            capacity: 1.0,
+        };
+        let reward_full = calculate_exploration_reward(&full_storage);
+        assert!(reward_full > reward_half);
+        assert!((reward_full - 0.35).abs() < 0.001); // 0.2 + 1.0 * 0.15
+    }
+
+    #[test]
+    fn test_curiosity_driven_exploration_tracking() {
+        let mut knowledge = ExplorationKnowledge::new();
+
+        // Make a resource discovery
+        let discovery = DiscoveryType::Resource {
+            resource_type: ResourceType::Wood,
+            position: Position::new(5, 5),
+        };
+
+        let satisfaction = knowledge.record_curiosity_exploration(&discovery);
+
+        assert_eq!(knowledge.curiosity_driven_explorations, 1);
+        assert_eq!(satisfaction, 0.3); // Resource reward
+        assert_eq!(knowledge.total_curiosity_satisfaction, 0.3);
+    }
+
+    #[test]
+    fn test_exploration_efficiency() {
+        let mut knowledge = ExplorationKnowledge::new();
+
+        // Record multiple explorations with varying rewards
+        let discovery1 = DiscoveryType::Terrain(TerrainType::Forest);
+        let discovery2 = DiscoveryType::Resource {
+            resource_type: ResourceType::Stone,
+            position: Position::new(3, 3),
+        };
+
+        knowledge.record_curiosity_exploration(&discovery1);
+        knowledge.record_curiosity_exploration(&discovery2);
+
+        // Efficiency should be total satisfaction / explorations
+        let expected_efficiency = (0.1 + 0.3) / 2.0;
+        assert_eq!(knowledge.exploration_efficiency(), expected_efficiency);
+    }
+
+    #[test]
+    fn test_discoveries_by_type() {
+        let mut knowledge = ExplorationKnowledge::new();
+
+        // Add various discoveries
+        knowledge.discover_resource(Position::new(1, 1), ResourceType::Wood, 0);
+        knowledge.discover_resource(Position::new(2, 2), ResourceType::Stone, 1);
+        knowledge.discover_building(Position::new(3, 3), BuildingType::SmallHouse, 2);
+        knowledge.discover_storage(Position::new(4, 4), "Chest".to_string(), 0.5, 3);
+        knowledge.encounter_terrain(TerrainType::Forest, Position::new(5, 5), 4);
+
+        let counts = knowledge.discoveries_by_type();
+
+        assert_eq!(*counts.get("Resource").unwrap(), 2);
+        assert_eq!(*counts.get("Building").unwrap(), 1);
+        assert_eq!(*counts.get("Storage").unwrap(), 1);
+        assert_eq!(*counts.get("Terrain").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_average_curiosity_satisfaction() {
+        let mut knowledge = ExplorationKnowledge::new();
+
+        // Use record_curiosity_exploration to properly track satisfaction
+        let discovery1 = DiscoveryType::Resource {
+            resource_type: ResourceType::Wood,
+            position: Position::new(1, 1),
+        };
+        let discovery2 = DiscoveryType::Building {
+            building_type: BuildingType::SmallHouse,
+            position: Position::new(2, 2),
+        };
+
+        knowledge.record_curiosity_exploration(&discovery1); // Adds 0.3 to total_curiosity_satisfaction
+        knowledge.record_curiosity_exploration(&discovery2); // Adds 0.2 to total_curiosity_satisfaction
+
+        // Record the actual discoveries (this adds to discoveries vec)
+        knowledge.discover_resource(Position::new(1, 1), ResourceType::Wood, 0);
+        knowledge.discover_building(Position::new(2, 2), BuildingType::SmallHouse, 1);
+
+        // Average is total_satisfaction (0.5) / discoveries.len() (2) = 0.25
+        let avg_satisfaction = knowledge.average_curiosity_satisfaction();
+        assert!((avg_satisfaction - 0.25).abs() < 0.001);
     }
 }

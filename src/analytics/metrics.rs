@@ -3,7 +3,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uuid::Uuid;
 
 use crate::agents::Population;
 use crate::core::{DriveType, EmotionType, Trait};
@@ -18,6 +17,7 @@ pub struct TickSnapshot {
     pub traits: HashMap<Trait, u32>, // Count of agents with each trait
     pub relationships: RelationshipSnapshot,
     pub goals: GoalSnapshot,
+    pub curiosity: CuriositySnapshot,
 }
 
 /// Population metrics at a specific tick
@@ -72,6 +72,19 @@ pub struct GoalSnapshot {
     pub average_progress: f32,
 }
 
+/// Curiosity and exploration statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CuriositySnapshot {
+    pub total_discoveries: usize,
+    pub discoveries_by_type: HashMap<String, usize>,
+    pub average_exploration_efficiency: f32,
+    pub total_curiosity_driven_explorations: u32,
+    pub average_curiosity_satisfaction: f32,
+    pub total_tiles_explored: usize,
+    pub exploration_percentage: f32,
+    pub agents_with_high_curiosity: usize, // Curiosity drive > 0.6
+}
+
 /// Complete time-series metrics for simulation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationMetrics {
@@ -117,6 +130,7 @@ impl SimulationMetrics {
             traits: self.snapshot_traits(population),
             relationships: self.snapshot_relationships(population),
             goals: self.snapshot_goals(population),
+            curiosity: self.snapshot_curiosity(population),
         }
     }
 
@@ -232,7 +246,7 @@ impl SimulationMetrics {
             .collect()
     }
 
-    fn snapshot_traits(&self, population: &Population) -> HashMap<Trait, u32> {
+    fn snapshot_traits(&self, _population: &Population) -> HashMap<Trait, u32> {
         // Note: Trait type mismatch between core::Trait and agents::Trait
         // Returning empty map for now - needs trait system reconciliation
         HashMap::new()
@@ -343,6 +357,72 @@ impl SimulationMetrics {
         }
     }
 
+    fn snapshot_curiosity(&self, population: &Population) -> CuriositySnapshot {
+        let mut total_discoveries = 0;
+        let mut combined_discoveries: HashMap<String, usize> = HashMap::new();
+        let mut total_efficiency = 0.0;
+        let mut total_explorations = 0u32;
+        let mut total_satisfaction = 0.0;
+        let mut total_tiles = 0;
+        let mut agents_with_high_curiosity = 0;
+
+        for agent in &population.agents {
+            // Access exploration knowledge directly (it's not an Option)
+            let exploration = &agent.exploration_knowledge;
+            total_discoveries += exploration.discoveries.len();
+            total_explorations += exploration.curiosity_driven_explorations;
+            total_satisfaction += exploration.total_curiosity_satisfaction;
+            total_tiles += exploration.total_tiles_explored;
+
+            // Combine discoveries by type
+            for (type_name, count) in exploration.discoveries_by_type() {
+                *combined_discoveries.entry(type_name).or_insert(0) += count;
+            }
+
+            // Add exploration efficiency
+            total_efficiency += exploration.exploration_efficiency();
+
+            // Check curiosity drive level
+            if let Some(curiosity_drive) = agent.drives.get(crate::core::DriveType::Curiosity) {
+                if curiosity_drive.value > 0.6 {
+                    agents_with_high_curiosity += 1;
+                }
+            }
+        }
+
+        let agent_count = population.agents.len();
+        let average_efficiency = if agent_count > 0 {
+            total_efficiency / agent_count as f32
+        } else {
+            0.0
+        };
+
+        let average_satisfaction = if total_discoveries > 0 {
+            total_satisfaction / total_discoveries as f32
+        } else {
+            0.0
+        };
+
+        // Estimate exploration percentage (assuming world size is tracked)
+        // For now, use a simple ratio
+        let exploration_percentage = if total_tiles > 0 {
+            (total_tiles as f32 / 10000.0) * 100.0  // Assuming 100x100 world
+        } else {
+            0.0
+        };
+
+        CuriositySnapshot {
+            total_discoveries,
+            discoveries_by_type: combined_discoveries,
+            average_exploration_efficiency: average_efficiency,
+            total_curiosity_driven_explorations: total_explorations,
+            average_curiosity_satisfaction: average_satisfaction,
+            total_tiles_explored: total_tiles,
+            exploration_percentage,
+            agents_with_high_curiosity,
+        }
+    }
+
     /// Get trend for population over time
     pub fn population_trend(&self) -> Vec<(u32, usize)> {
         self.snapshots
@@ -389,6 +469,38 @@ impl SimulationMetrics {
                 let count = s.traits.get(&trait_item).copied().unwrap_or(0);
                 (s.tick, count)
             })
+            .collect()
+    }
+
+    /// Get trend for total discoveries over time
+    pub fn discoveries_trend(&self) -> Vec<(u32, usize)> {
+        self.snapshots
+            .iter()
+            .map(|s| (s.tick, s.curiosity.total_discoveries))
+            .collect()
+    }
+
+    /// Get trend for curiosity-driven explorations over time
+    pub fn curiosity_explorations_trend(&self) -> Vec<(u32, u32)> {
+        self.snapshots
+            .iter()
+            .map(|s| (s.tick, s.curiosity.total_curiosity_driven_explorations))
+            .collect()
+    }
+
+    /// Get trend for exploration efficiency over time
+    pub fn exploration_efficiency_trend(&self) -> Vec<(u32, f32)> {
+        self.snapshots
+            .iter()
+            .map(|s| (s.tick, s.curiosity.average_exploration_efficiency))
+            .collect()
+    }
+
+    /// Get trend for agents with high curiosity over time
+    pub fn high_curiosity_agents_trend(&self) -> Vec<(u32, usize)> {
+        self.snapshots
+            .iter()
+            .map(|s| (s.tick, s.curiosity.agents_with_high_curiosity))
             .collect()
     }
 

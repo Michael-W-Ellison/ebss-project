@@ -5,7 +5,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use super::{
-    Material, Action, CraftingTemplate, ActionContext, ActionResult,
+    Material, Action, ActionContext, ActionResult,
     Position, EnvironmentResult, RecipeBook,
 };
 

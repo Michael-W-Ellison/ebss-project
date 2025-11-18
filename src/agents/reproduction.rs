@@ -1,7 +1,6 @@
 // src/agents/reproduction.rs
 //! Reproduction and genetic inheritance system.
 
-use uuid::Uuid;
 use rand::Rng;
 use crate::agents::{Agent, AgentConfig};
 use crate::core::{DriveState, DriveType, BehaviorTree};

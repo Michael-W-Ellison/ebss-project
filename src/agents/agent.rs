@@ -1117,6 +1117,7 @@ impl Agent {
     }
 
     /// Initialize default behavior trees for each drive type
+    #[allow(dead_code)]
     fn initialize_behavior_trees(&mut self) {
         for drive_type in DriveType::all() {
             let tree = Self::create_default_tree_for_drive(drive_type);
@@ -1225,6 +1226,7 @@ impl Agent {
     }
 
     /// Create a default behavior tree for a specific drive
+    #[allow(dead_code)]
     fn create_default_tree_for_drive(drive_type: DriveType) -> BehaviorTree {
         let root = match drive_type {
             DriveType::Hunger => {
@@ -1350,7 +1352,7 @@ impl Agent {
     }
 
     /// Process feedback from action execution
-    pub fn apply_feedback(&mut self, action_result: &ActionResult, drive_type: DriveType) {
+    pub fn apply_feedback(&mut self, action_result: &ActionResult, _drive_type: DriveType) {
         // Apply all drive changes from the action result
         for (affected_drive, change_amount) in &action_result.drive_changes {
             if let Some(drive) = self.drives.get_mut(*affected_drive) {
@@ -1629,7 +1631,7 @@ impl Agent {
         };
         use crate::agents::storage_management::decide_storage_action;
         use crate::environment::Action;
-        use crate::world::ItemType;
+        
         use log::debug;
 
         // Count what agent has
@@ -1824,7 +1826,7 @@ impl Agent {
 
     /// Refresh storage knowledge (called when agent inspects/accesses storage)
     /// Satisfies curiosity and grants happiness to Curious trait holders
-    pub fn refresh_storage_knowledge(&mut self, storage_position: (i32, i32, i32), current_tick: u32) {
+    pub fn refresh_storage_knowledge(&mut self, storage_position: (i32, i32, i32), _current_tick: u32) {
         use super::EmotionSource;
         use crate::core::memory::SpatialMemoryType;
 

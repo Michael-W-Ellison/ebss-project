@@ -8,7 +8,6 @@
 //! - Commercial: Markets, storehouses, trade facilities
 
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 
 /// Types of spatial zones for building placement
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

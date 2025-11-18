@@ -5,7 +5,7 @@
 
 use crate::world::Position;
 use crate::core::DriveType;
-use super::{Agent, ExplorationKnowledge};
+use super::Agent;
 
 /// Exploration decision result
 #[derive(Debug, Clone)]

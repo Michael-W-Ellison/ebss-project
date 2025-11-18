@@ -50,7 +50,7 @@ pub struct ClimateManager {
 impl ClimateManager {
     pub fn new(cold_climate: bool, wet_climate: bool) -> Self {
         let season = Season::Spring; // Start in spring
-        let mut weather_gen = WeatherGenerator::new(
+        let weather_gen = WeatherGenerator::new(
             season,
             wet_climate,
             cold_climate,
@@ -181,7 +181,7 @@ impl ClimateManager {
     }
 
     /// Check if shelter is available at a position
-    pub fn has_shelter_at(&self, pos: Position, terrain: TerrainType) -> bool {
+    pub fn has_shelter_at(&self, _pos: Position, terrain: TerrainType) -> bool {
         // For now, only buildings provide shelter
         // In future, this could check for caves, dense forest, etc.
         matches!(terrain, TerrainType::Forest) // Forest provides partial shelter

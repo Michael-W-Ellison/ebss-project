@@ -483,7 +483,7 @@ impl Simulation {
                 // Calculate storehouse contents
                 let (storehouse_food, storehouse_resources) = {
                     use crate::world::ItemType;
-                    use crate::agents::storage_integration::{count_in_agent_inventory};
+                    
 
                     let food_types = vec![
                         ItemType::Food, ItemType::Bread, ItemType::Cheese,
@@ -551,7 +551,7 @@ impl Simulation {
         agent_drives: &crate::core::DriveState,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        use crate::agents::sensory_processing::{Percept, calculate_salience, ThreatType};
+        use crate::agents::sensory_processing::{Percept, calculate_salience};
 
         if recent_percepts.is_empty() {
             return None;
@@ -571,7 +571,7 @@ impl Simulation {
             // Only override drive-based actions if salience is high (> 0.7)
             if salience > 0.7 {
                 match percept {
-                    Percept::DangerDetected { threat_type, position, severity } => {
+                    Percept::DangerDetected { threat_type: _, position, severity } => {
                         // High-priority: flee from danger
                         if let Some(danger_pos) = position {
                             // Move away from danger position
@@ -600,14 +600,14 @@ impl Simulation {
                             });
                         }
                     }
-                    Percept::ResourceDetected { resource_type, position, .. } => {
+                    Percept::ResourceDetected {  position, .. } => {
                         // High-salience resource (usually means high hunger/thirst)
                         // Move towards it
                         return Some(Action::Move {
                             target: *position,
                         });
                     }
-                    Percept::AgentDetected { agent_id, position, .. } => {
+                    Percept::AgentDetected { agent_id,  .. } => {
                         // High-salience agent (usually means high social drive)
                         // Attempt social interaction
                         return Some(Action::Socialize {
@@ -695,7 +695,6 @@ impl Simulation {
             },
             DriveType::Reproduction => Action::Mate { target_agent_id: uuid::Uuid::nil() },
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
-            DriveType::Thirst => Action::Eat { food_type: "water".to_string() },
         }
     }
 
@@ -703,7 +702,7 @@ impl Simulation {
     fn generate_action_for_goal(
         goal: &crate::core::goals::Goal,
         position: (i32, i32, i32),
-        fallback_drive: DriveType,
+        _fallback_drive: DriveType,
     ) -> Option<Action> {
         use crate::core::goals::{InternalGoal, ExternalGoal};
         use crate::core::EmotionType;
@@ -1027,7 +1026,7 @@ impl Simulation {
                 }
 
                 // Use spatial planning to find optimal build location
-                let (criteria, strategy) = determine_placement_approach(building_type);
+                let (_criteria, strategy) = determine_placement_approach(building_type);
                 let planner = SpatialPlanner::new(&self.world);
 
                 let optimal_pos = planner.find_optimal_location_for_agent(
@@ -1612,7 +1611,7 @@ impl Simulation {
 
             Action::Store { item_type, amount } => {
                 use crate::agents::storage_integration::{
-                    id_to_item_type, take_from_agent_inventory, add_to_agent_inventory,
+                    id_to_item_type, take_from_agent_inventory,
                     count_in_agent_inventory
                 };
 
@@ -1684,7 +1683,7 @@ impl Simulation {
 
             Action::Retrieve { item_type, amount } => {
                 use crate::agents::storage_integration::{
-                    id_to_item_type, add_to_agent_inventory, count_in_agent_inventory
+                    id_to_item_type, add_to_agent_inventory
                 };
 
                 let agent = &mut self.population.agents[agent_index];
@@ -1707,7 +1706,7 @@ impl Simulation {
                     let retrieve_amount = (*amount).min(storehouse_available);
 
                     // Try to add to agent inventory
-                    let (success, added) = add_to_agent_inventory(
+                    let (_success, added) = add_to_agent_inventory(
                         &mut agent.inventory,
                         item,
                         retrieve_amount,
@@ -2196,7 +2195,7 @@ impl Simulation {
 
             Action::Socialize { target_agent_id } => {
                 use crate::agents::social_interactions::{
-                    SocialInteractionType, ConversationTopic, HelpType,
+                    SocialInteractionType, HelpType,
                     calculate_relationship_change, calculate_social_satisfaction,
                     should_greet, select_conversation_topic, calculate_gift_value, would_accept_gift
                 };
@@ -2321,7 +2320,7 @@ impl Simulation {
 
                 // Handle gift giving specially (may fail if rejected)
                 let mut success = true;
-                let mut message = String::new();
+                let message;
 
                 match &interaction_type {
                     SocialInteractionType::GiveGift { item_type, quantity } => {
@@ -2483,7 +2482,7 @@ impl Simulation {
                 // Capture initiator data before mutable borrows
                 let (initiator_id, info_to_share) = {
                     let initiator = &self.population.agents[agent_index];
-                    let initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
+                    let _initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
                     let initiator_id = initiator.id;
 
                     // Select information to share from initiator's knowledge base
@@ -2539,16 +2538,16 @@ impl Simulation {
                         format!("Shared knowledge about {} at ({}, {}, {})",
                             resource, location.0, location.1, location.2)
                     }
-                    InformationType::Conflict { agent1, agent2 } => {
+                    InformationType::Conflict { agent1: _, agent2: _ } => {
                         format!("Gossiped about conflict between agents")
                     }
-                    InformationType::Death { agent, cause } => {
+                    InformationType::Death { agent: _, cause } => {
                         format!("Shared news of death: {}", cause)
                     }
                     InformationType::TechnologyDiscovered { tech } => {
                         format!("Shared discovery of {} technology", tech)
                     }
-                    InformationType::Accusation { accused, crime, .. } => {
+                    InformationType::Accusation {  crime, .. } => {
                         format!("Shared accusation of {}", crime)
                     }
                     _ => "Shared information".to_string(),
@@ -2825,7 +2824,7 @@ impl Simulation {
                     }
                 }
 
-                let agent = &mut self.population.agents[agent_index];
+                let _agent = &mut self.population.agents[agent_index];
 
                 // Construct message about exploration results
                 let mut message = format!(
@@ -2849,60 +2848,6 @@ impl Simulation {
                     .with_energy_cost(5.0) // Exploration takes energy
                     .with_message(message)
             },
-
-            // For other actions, use simplified success/failure
-            _ => {
-                // Base success probability
-                let mut success_probability = 0.7;
-
-                // Check if agent has learned this behavior through observation
-                // Learned behaviors boost success probability
-                if let Some(broadcast_type) = Self::map_action_to_broadcast_type(action) {
-                    let agent = &self.population.agents[agent_index];
-                    let adopted_behaviors = agent.observational_learning.get_adopted_behaviors();
-
-                    // Check if this action type has been adopted from anyone
-                    for (_, action_type, confidence) in adopted_behaviors {
-                        if action_type == broadcast_type {
-                            // Boost success probability based on confidence in learned behavior
-                            // Confidence ranges 0.0 to 1.0, provides up to +0.25 boost
-                            let learning_boost = confidence * 0.25;
-                            success_probability = (success_probability + learning_boost).min(0.95);
-                            debug!(
-                                "Agent {} has learned {:?} (confidence: {:.2}), success probability: {:.2}",
-                                agent.id, action_type, confidence, success_probability
-                            );
-                            break;
-                        }
-                    }
-                }
-
-                if rng.gen_bool(success_probability as f64) {
-                    let satisfaction = match action {
-                        Action::Craft { .. } => 0.2,
-                        Action::Store { .. } => 0.1,
-                        Action::Socialize { .. } => 0.2,
-                        Action::ShareInformation { .. } => 0.15, // Handled separately above
-                        Action::Mate { .. } => 0.0, // Handled separately above
-                        Action::Mount { .. } => 0.0, // Handled separately above
-                        Action::Dismount => 0.0, // Handled separately above
-                        Action::Wait => 0.0, // Handled separately above
-                        Action::Explore { .. } => 0.0, // Handled separately above
-                        Action::Hunt { .. } => 0.3,
-                        Action::Tame { .. } => 0.25,
-                        Action::CollectAnimalProduct { .. } => 0.15,
-                        Action::HarvestPlant { .. } => 0.15,
-                        Action::SeekShelter => 0.0, // Handled separately above
-                        Action::Move { .. } => 0.05,
-                        _ => 0.1,
-                    };
-
-                    ActionResult::success()
-                        .with_message(format!("{:?} succeeded", action))
-                } else {
-                    ActionResult::failure(format!("{:?} failed", action))
-                }
-            }
         }
     }
 
@@ -3017,7 +2962,7 @@ impl Simulation {
                     let parts: Vec<BodyPartType> = agent.body.parts.keys().cloned().collect();
                     if !parts.is_empty() {
                         let part = parts[rng.gen_range(0..parts.len())];
-                        let infection_damage = rng.gen_range(0.5..2.0);
+                        let _infection_damage = rng.gen_range(0.5..2.0);
 
                         if let Some(body_part) = agent.body.get_part_mut(part) {
                             body_part.add_condition(crate::agents::body::Condition {
@@ -3136,13 +3081,13 @@ impl Simulation {
             },
         };
 
-        // Serialize to JSON
-        let json = serde_json::to_string_pretty(&state)
+        // Serialize to MessagePack (supports complex HashMap keys like Position)
+        let bytes = rmp_serde::to_vec(&state)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         // Write to file
         let mut file = File::create(path)?;
-        file.write_all(json.as_bytes())?;
+        file.write_all(&bytes)?;
 
         info!("Simulation saved at tick {}", self.current_tick);
         Ok(())
@@ -3152,11 +3097,11 @@ impl Simulation {
     pub fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         // Read file
         let mut file = File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
 
-        // Deserialize from JSON
-        let state: SerializableSimulationState = serde_json::from_str(&contents)
+        // Deserialize from MessagePack
+        let state: SerializableSimulationState = rmp_serde::from_slice(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         // Reconstruct Population

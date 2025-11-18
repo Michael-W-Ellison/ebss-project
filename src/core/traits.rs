@@ -5,7 +5,6 @@
 //! Each trait provides specific modifiers to emotional responses and behaviors.
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 /// All personality traits that can modify agent behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -508,7 +507,7 @@ impl TraitSet {
         ];
 
         let mut rng = thread_rng();
-        let mut selected = all_traits.choose_multiple(&mut rng, count * 2).cloned().collect::<Vec<_>>();
+        let selected = all_traits.choose_multiple(&mut rng, count * 2).cloned().collect::<Vec<_>>();
 
         let mut trait_set = TraitSet::new();
         for trait_candidate in selected {
