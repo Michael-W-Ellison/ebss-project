@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::agents::Population;
-use crate::core::{DriveType, EmotionType, Trait, RelationshipStrength};
+use crate::core::{DriveType, EmotionType, Trait};
 
 /// Complete snapshot of simulation state at a specific tick
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -247,20 +247,34 @@ impl SimulationMetrics {
         let mut conflicts = 0;
 
         for agent in &population.agents {
-            for (_, relationship) in &agent.memory.social_relationships {
+            for (_, relationship) in agent.relationships.get_all() {
                 total_relationships += 1;
 
-                let strength = format!("{:?}", relationship.relationship_strength());
-                *by_strength.entry(strength).or_insert(0) += 1;
+                // Categorize by bond strength
+                let strength = if relationship.bond_strength >= 0.8 {
+                    "VeryStrong"
+                } else if relationship.bond_strength >= 0.6 {
+                    "Strong"
+                } else if relationship.bond_strength >= 0.3 {
+                    "Moderate"
+                } else if relationship.bond_strength >= 0.0 {
+                    "Weak"
+                } else if relationship.bond_strength >= -0.3 {
+                    "Negative"
+                } else {
+                    "Hostile"
+                };
+                *by_strength.entry(strength.to_string()).or_insert(0) += 1;
 
-                trust_sum += relationship.trust;
-                affection_sum += relationship.affection;
+                // Use bond_strength for both trust and affection (they're unified now)
+                trust_sum += relationship.bond_strength;
+                affection_sum += relationship.bond_strength;
 
-                if relationship.is_parent || relationship.is_child || relationship.is_mate {
+                if relationship.is_family() {
                     family_bonds += 1;
                 }
 
-                if relationship.trust < 0.0 || relationship.affection < 0.0 {
+                if relationship.bond_strength < 0.0 {
                     conflicts += 1;
                 }
             }

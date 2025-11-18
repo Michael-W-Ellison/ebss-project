@@ -566,7 +566,6 @@ pub struct Agent {
     pub skills: Skills,
     pub emotions: EmotionState,
     pub relationships: RelationshipMap,
-    pub social_network: super::relationships::SocialNetwork, // Social relationship and trust tracking
     pub traits: TraitSet,
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
@@ -602,7 +601,6 @@ impl Agent {
             skills: Skills::default(),
             emotions: EmotionState::default(),
             relationships: RelationshipMap::default(),
-            social_network: super::relationships::SocialNetwork::default(),
             traits: TraitSet::default(),
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
@@ -672,7 +670,8 @@ impl Agent {
                     }
                     Percept::AgentDetected { agent_id, .. } => {
                         // Update social relationship (neutral interaction for just seeing them)
-                        self.memory.record_interaction(*agent_id, true, 0.01);
+                        let rel = self.relationships.get_or_create_relationship(*agent_id, current_tick);
+                        rel.strengthen(0.01);
                     }
                     _ => {}
                 }

@@ -21,7 +21,7 @@ mod tests;
 pub use behavior_tree::{BehaviorTree, BehaviorNode, NodeType, ExecutionResult};
 pub use drives::{Drive, DriveType, DriveState};
 pub use learning::{ObservableEvent, ObservableEventType, LearningResult, observe_and_learn, process_population_learning};
-pub use memory::{Memory, SpatialMemoryType, SocialRelationship, RelationshipStrength, KnowledgeMemory};
+pub use memory::{Memory, SpatialMemoryType, KnowledgeMemory};
 pub use episodic_memory::{EpisodicMemory, Episode, EpisodeType, EpisodicMemoryStats};
 pub use working_memory::{WorkingMemory, WorkingTask, TaskPriority, TaskStatus, WorkingMemoryStats};
 pub use memory_manager::{MemoryManager, DecisionContext, MemoryManagerStats};

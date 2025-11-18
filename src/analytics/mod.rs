@@ -2223,11 +2223,11 @@ impl Simulation {
                 // Get or create relationship
                 let current_tick = self.current_tick;
                 let initiator_agent = &mut self.population.agents[agent_index];
-                let relationship = initiator_agent.social_network
+                let relationship = initiator_agent.relationships
                     .get_or_create_relationship(*target_agent_id, current_tick);
 
-                let current_relationship = relationship.relationship_level.clone();
-                let current_trust = relationship.trust_level.clone();
+                let current_relationship = relationship.relationship_level();
+                let current_trust = relationship.trust_level();
                 let last_interaction_tick = relationship.last_interaction_tick;
 
                 // Determine interaction type based on relationship and context
@@ -2376,7 +2376,7 @@ impl Simulation {
 
                 // Update initiator's relationship
                 let initiator = &mut self.population.agents[agent_index];
-                let relationship = initiator.social_network
+                let relationship = initiator.relationships
                     .get_or_create_relationship(*target_agent_id, current_tick);
 
                 if success && relationship_change != 0 {
@@ -2401,7 +2401,7 @@ impl Simulation {
                 let initiator_id = self.population.agents[agent_index].id;
 
                 let target = &mut self.population.agents[target_index];
-                let target_relationship = target.social_network
+                let target_relationship = target.relationships
                     .get_or_create_relationship(initiator_id, current_tick);
 
                 if success && target_relationship_change != 0 {
@@ -2618,8 +2618,8 @@ impl Simulation {
                 let mut success_probability = 0.5; // Base 50% chance
 
                 // Check relationship - better relationships increase success
-                if let Some(relationship) = initiator.social_network.get_relationship(target_id) {
-                    match &relationship.relationship_level {
+                if let Some(relationship) = initiator.relationships.get_relationship(&target_id) {
+                    match &relationship.relationship_level() {
                         crate::agents::relationships::RelationshipLevel::Loves(_) => {
                             success_probability = 0.9; // High success with loved ones
                         }

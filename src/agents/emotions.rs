@@ -258,10 +258,14 @@ pub struct Relationship {
     pub other_agent: Uuid,
     /// Type of relationship
     pub relationship_type: RelationshipType,
-    /// Strength of bond (0.0 to 1.0)
+    /// Strength of bond (-1.0 to 1.0)
     pub bond_strength: f32,
     /// Time together (in ticks)
     pub time_together: u64,
+    /// Last interaction tick (for determining if should greet)
+    pub last_interaction_tick: u32,
+    /// Total number of interactions
+    pub total_interactions: u32,
 }
 
 impl Relationship {
@@ -281,6 +285,20 @@ impl Relationship {
             relationship_type,
             bond_strength,
             time_together: 0,
+            last_interaction_tick: 0,
+            total_interactions: 0,
+        }
+    }
+
+    /// Create a new neutral relationship (for compatibility with social network system)
+    pub fn new_neutral(other_agent: Uuid, current_tick: u32) -> Self {
+        Self {
+            other_agent,
+            relationship_type: RelationshipType::Acquaintance,
+            bond_strength: 0.0,
+            time_together: 0,
+            last_interaction_tick: current_tick,
+            total_interactions: 0,
         }
     }
 
@@ -305,6 +323,76 @@ impl Relationship {
     /// Weaken bond
     pub fn weaken(&mut self, amount: f32) {
         self.bond_strength = (self.bond_strength - amount).max(-1.0);
+    }
+
+    /// Record a positive interaction (for compatibility with social network system)
+    /// Delta is converted to bond strength change (typically 0-10 -> 0.0-0.1)
+    pub fn positive_interaction(&mut self, delta: i8, current_tick: u32) {
+        let bond_change = (delta as f32) * 0.01; // Convert delta to 0.0-1.0 scale
+        self.strengthen(bond_change);
+        self.last_interaction_tick = current_tick;
+        self.total_interactions += 1;
+    }
+
+    /// Record a negative interaction (for compatibility with social network system)
+    /// Delta is converted to bond strength change (typically 0-10 -> 0.0-0.1)
+    pub fn negative_interaction(&mut self, delta: i8, current_tick: u32) {
+        let bond_change = (delta as f32) * 0.01; // Convert delta to 0.0-1.0 scale
+        self.weaken(bond_change);
+        self.last_interaction_tick = current_tick;
+        self.total_interactions += 1;
+    }
+
+    /// Get relationship level (for compatibility with social network system)
+    /// Converts bond_strength to RelationshipLevel enum
+    pub fn relationship_level(&self) -> super::relationships::RelationshipLevel {
+        use super::relationships::RelationshipLevel;
+
+        if self.bond_strength >= 0.8 {
+            RelationshipLevel::Loves(5)  // Very strong positive
+        } else if self.bond_strength >= 0.6 {
+            RelationshipLevel::Loves(1)  // Strong positive
+        } else if self.bond_strength >= 0.4 {
+            RelationshipLevel::Likes(5)  // Moderate positive
+        } else if self.bond_strength >= 0.2 {
+            RelationshipLevel::Likes(1)  // Mild positive
+        } else if self.bond_strength >= -0.2 {
+            RelationshipLevel::Neutral(0)  // Neutral
+        } else if self.bond_strength >= -0.4 {
+            RelationshipLevel::Dislikes(1)  // Mild negative
+        } else if self.bond_strength >= -0.6 {
+            RelationshipLevel::Dislikes(5)  // Moderate negative
+        } else if self.bond_strength >= -0.8 {
+            RelationshipLevel::Hates(1)  // Strong negative
+        } else {
+            RelationshipLevel::Hates(5)  // Very strong negative
+        }
+    }
+
+    /// Get trust level (for compatibility with social network system)
+    /// Converts bond_strength to TrustLevel enum
+    pub fn trust_level(&self) -> super::relationships::TrustLevel {
+        use super::relationships::TrustLevel;
+
+        if self.bond_strength >= 0.8 {
+            TrustLevel::TrustsCompletely(3)  // Very high trust
+        } else if self.bond_strength >= 0.6 {
+            TrustLevel::TrustsCompletely(1)  // High trust
+        } else if self.bond_strength >= 0.4 {
+            TrustLevel::MostlyTrusts(3)  // Moderate trust
+        } else if self.bond_strength >= 0.2 {
+            TrustLevel::SlightlyTrusts(1)  // Mild trust
+        } else if self.bond_strength >= -0.2 {
+            TrustLevel::Neutral  // Neutral trust
+        } else if self.bond_strength >= -0.4 {
+            TrustLevel::SlightlyDistrusts(1)  // Mild distrust
+        } else if self.bond_strength >= -0.6 {
+            TrustLevel::MostlyDistrusts(3)  // Moderate distrust
+        } else if self.bond_strength >= -0.8 {
+            TrustLevel::DistrustCompletely(1)  // High distrust
+        } else {
+            TrustLevel::DistrustCompletely(3)  // Very high distrust
+        }
     }
 
     /// Update relationship based on trait compatibility
@@ -557,6 +645,18 @@ impl RelationshipMap {
         }
 
         synergies > conflicts
+    }
+
+    /// Get or create a relationship (for compatibility with social network system)
+    /// If the relationship doesn't exist, creates a new neutral one
+    pub fn get_or_create_relationship(
+        &mut self,
+        other_agent_id: Uuid,
+        current_tick: u32,
+    ) -> &mut Relationship {
+        self.relationships
+            .entry(other_agent_id)
+            .or_insert_with(|| Relationship::new_neutral(other_agent_id, current_tick))
     }
 }
 
