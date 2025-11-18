@@ -336,7 +336,7 @@ impl Simulation {
                     // Collect current drive types and emotion values
                     let drive_types: Vec<crate::core::DriveType> = crate::core::DriveType::all().to_vec();
                     let emotion_values: Vec<(crate::core::EmotionType, f32)> = vec![
-                        (crate::core::EmotionType::Happiness, agent.emotions.happiness()),
+                        (crate::core::EmotionType::Happiness, agent.emotions.happiness),
                         (crate::core::EmotionType::Fear, agent.emotions.fear),
                         (crate::core::EmotionType::Anger, agent.emotions.anger),
                         (crate::core::EmotionType::Sadness, agent.emotions.sadness),
@@ -2432,9 +2432,17 @@ impl Simulation {
                     let initiator = &mut self.population.agents[agent_index];
                     initiator.record_drive_satisfaction(DriveType::Social, *target_agent_id, social_satisfaction);
 
+                    // Helper happiness for initiator (providing social satisfaction to target)
+                    let initiator = &mut self.population.agents[agent_index];
+                    initiator.process_helper_happiness(*target_agent_id, target_satisfaction);
+
                     // Also record for the target (reciprocal satisfaction)
                     let target = &mut self.population.agents[target_index];
                     target.record_drive_satisfaction(DriveType::Social, initiator_id, target_satisfaction);
+
+                    // Helper happiness for target (providing social satisfaction to initiator)
+                    let target = &mut self.population.agents[target_index];
+                    target.process_helper_happiness(initiator_id, social_satisfaction);
 
                     debug!(
                         "Agent {} socialized with agent {}: {} (relationship change: {:+}, satisfaction: {:.2})",

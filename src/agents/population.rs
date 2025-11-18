@@ -706,7 +706,7 @@ impl Population {
             }
 
             // Get agent's current happiness from emotions
-            let happiness = agent.emotions.happiness();
+            let happiness = agent.emotions.happiness;
 
             // Check if agent is unhappy
             if happiness < self.config.abandonment_happiness_threshold {
@@ -859,7 +859,7 @@ impl Population {
 
         // Calculate average happiness
         let total_happiness: f32 = alive_agents.iter()
-            .map(|a| a.emotions.happiness())
+            .map(|a| a.emotions.happiness)
             .sum();
         self.stats.average_happiness = total_happiness / alive_agents.len() as f32;
 

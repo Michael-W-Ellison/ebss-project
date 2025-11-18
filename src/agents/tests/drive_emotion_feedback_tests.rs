@@ -341,3 +341,128 @@ fn test_multiple_drive_frustration_compounds() {
     let total_negative = agent.emotions.fear + agent.emotions.sadness;
     assert!(total_negative > 0.65, "Multiple unmet drives should compound emotional distress");
 }
+
+// ===== Happiness System Tests =====
+
+#[test]
+fn test_satisfied_drives_create_happiness() {
+    let mut agent = Agent::new(AgentConfig::default());
+    
+    // All drives well-satisfied (low values = satisfied)
+    for drive in &mut agent.drives.drives {
+        drive.value = 0.1; // Well satisfied
+    }
+    
+    agent.update_emotions_from_drives();
+    
+    // Should have happiness from satisfied drives
+    assert!(agent.emotions.happiness > 0.3, "Well-satisfied drives should create happiness, got: {}", agent.emotions.happiness);
+}
+
+#[test]
+fn test_receiving_help_improves_bond() {
+    let mut agent = Agent::new(AgentConfig::default());
+    let helper = Uuid::new_v4();
+    
+    // Helper provides social satisfaction
+    let initial_bond = if let Some(rel) = agent.relationships.get_relationship(&helper) {
+        rel.bond_strength
+    } else {
+        0.0 // No relationship exists yet
+    };
+    
+    agent.record_drive_satisfaction(DriveType::Social, helper, 0.4);
+    
+    // Bond should improve
+    let new_bond = agent.relationships.get_relationship(&helper).unwrap().bond_strength;
+    assert!(new_bond > initial_bond, "Receiving help should improve bond");
+    assert!(new_bond >= 0.2, "New bond should be at least 0.2");
+}
+
+#[test]
+fn test_receiving_help_creates_happiness() {
+    let mut agent = Agent::new(AgentConfig::default());
+    let helper = Uuid::new_v4();
+    
+    // Helper provides help
+    agent.record_drive_satisfaction(DriveType::Hunger, helper, 0.5);
+    
+    // Should feel happiness (gratitude)
+    assert!(agent.emotions.happiness > 0.1, "Receiving help should create happiness");
+}
+
+#[test]
+fn test_helping_others_creates_happiness() {
+    let mut agent = Agent::new(AgentConfig::default());
+    let recipient = Uuid::new_v4();
+    
+    // Agent helps someone
+    agent.process_helper_happiness(recipient, 0.4);
+    
+    // Should feel happiness from helping
+    assert!(agent.emotions.happiness > 0.05, "Helping others should create happiness");
+}
+
+#[test]
+fn test_empathetic_trait_bonus_for_helping() {
+    use crate::agents::traits::{Trait, TraitSet};
+    
+    let mut regular_agent = Agent::new(AgentConfig::default());
+    let mut empathetic_agent = Agent::new(AgentConfig::default());
+    empathetic_agent.traits.add_trait(Trait::Empathetic);
+    
+    let recipient = Uuid::new_v4();
+    
+    // Both help someone
+    regular_agent.process_helper_happiness(recipient, 0.4);
+    empathetic_agent.process_helper_happiness(recipient, 0.4);
+    
+    // Empathetic agent should feel more happiness
+    assert!(empathetic_agent.emotions.happiness > regular_agent.emotions.happiness,
+            "Empathetic agents should get bonus happiness from helping: empathetic={}, regular={}",
+            empathetic_agent.emotions.happiness, regular_agent.emotions.happiness);
+    assert!(empathetic_agent.emotions.happiness - regular_agent.emotions.happiness > 0.1,
+            "Empathetic bonus should be significant");
+}
+
+#[test]
+fn test_happiness_decays_over_time() {
+    let mut agent = Agent::new(AgentConfig::default());
+    let helper = Uuid::new_v4();
+    
+    // Receive help, creating happiness
+    agent.record_drive_satisfaction(DriveType::Social, helper, 0.5);
+    let initial_happiness = agent.emotions.happiness;
+    
+    // Tick multiple times
+    for _ in 0..50 {
+        agent.emotions.tick();
+    }
+    
+    // Happiness should decay
+    assert!(agent.emotions.happiness < initial_happiness, 
+            "Happiness should decay over time: initial={}, after_ticks={}", 
+            initial_happiness, agent.emotions.happiness);
+}
+
+#[test]
+fn test_well_being_considers_both_happiness_and_sadness() {
+    let mut agent = Agent::new(AgentConfig::default());
+    
+    // High happiness
+    use crate::agents::EmotionSource;
+    agent.emotions.add_happiness(EmotionSource::Event("success".to_string()), 0.6);
+    let happy_wellbeing = agent.emotions.well_being();
+    
+    // Now add sadness
+    agent.emotions.add_sadness(EmotionSource::Event("loss".to_string()), 0.5);
+    let mixed_wellbeing = agent.emotions.well_being();
+    
+    // Well-being should be lower with sadness
+    assert!(mixed_wellbeing < happy_wellbeing, 
+            "Negative emotions should reduce well-being");
+    
+    // Well-being should still be positive if happiness > sadness
+    assert!(mixed_wellbeing > 0.0, 
+            "Well-being should be positive when happiness outweighs sadness");
+}

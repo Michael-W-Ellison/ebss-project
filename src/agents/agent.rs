@@ -1783,6 +1783,7 @@ impl Agent {
 
     /// Update emotions based on current drive states
     /// High unsatisfied drives trigger appropriate negative emotions
+    /// Well-satisfied drives trigger happiness
     /// Uses set_* methods to replace values rather than accumulate
     pub fn update_emotions_from_drives(&mut self) {
         use super::EmotionSource;
@@ -1798,6 +1799,10 @@ impl Agent {
         // Other unfulfilled drives → General frustration (mild sadness)
         let general_frustration = self.calculate_general_drive_frustration();
         self.emotions.set_sadness(EmotionSource::Event("unfulfilled needs".to_string()), general_frustration * 0.5);
+
+        // Well-satisfied drives → Happiness (contentment)
+        let contentment = self.calculate_drive_satisfaction_happiness();
+        self.emotions.set_happiness(EmotionSource::Event("needs satisfied".to_string()), contentment);
     }
 
     /// Calculate fear from survival drive deprivation
@@ -1881,10 +1886,80 @@ impl Agent {
         }
     }
 
+    /// Calculate happiness from satisfied drives
+    /// Returns 0.0 to 1.0 based on how well drives are met
+    fn calculate_drive_satisfaction_happiness(&self) -> f32 {
+        let mut total = 0.0;
+        let mut count = 0;
+
+        // Check all drives - well-satisfied drives contribute to happiness
+        for drive in &self.drives.drives {
+            // Drives below 0.3 are well-satisfied
+            if drive.value < 0.3 {
+                // Inverse scaling: lower drive = more happiness
+                let satisfaction = (0.3 - drive.value) / 0.3; // 0.0 to 1.0
+                total += satisfaction;
+                count += 1;
+            }
+        }
+
+        if count > 0 {
+            // Average satisfaction across all drives, capped at reasonable level
+            (total / count as f32 * 0.5).min(0.7)
+        } else {
+            0.0
+        }
+    }
+
     /// Record that a source satisfied a drive
+    /// Also triggers gratitude (happiness and bond improvement) if source is an agent
     pub fn record_drive_satisfaction(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32) {
         let current_tick = 0; // TODO: Get actual tick from context
         self.satisfaction_tracker.record(drive_type, source_id, amount, current_tick);
+
+        // Trigger gratitude response (happiness and bond improvement)
+        self.process_gratitude(source_id, amount);
+    }
+
+    /// Process gratitude when receiving help from another agent
+    /// Increases happiness and improves bond with the helper
+    fn process_gratitude(&mut self, helper_id: Uuid, help_amount: f32) {
+        use super::EmotionSource;
+
+        // Happiness from receiving help (scaled by amount)
+        let gratitude_happiness = (help_amount * 0.3).min(0.4);
+        self.emotions.add_happiness(EmotionSource::Agent(helper_id), gratitude_happiness);
+
+        // Improve bond with helper
+        if let Some(relationship) = self.relationships.get_relationship_mut(&helper_id) {
+            // Bond improvement scaled by help amount (0.01 to 0.05)
+            let bond_increase = (help_amount * 0.1).min(0.05);
+            relationship.bond_strength = (relationship.bond_strength + bond_increase).min(1.0);
+            relationship.time_together += 1;
+        } else {
+            // Create new positive relationship if none exists
+            use super::emotions::{Relationship, RelationshipType};
+            let mut new_relationship = Relationship::new(helper_id, RelationshipType::Acquaintance);
+            // Start with slightly higher bond due to the help
+            new_relationship.bond_strength = (0.2 + help_amount * 0.1).min(0.4);
+            self.relationships.add_relationship(new_relationship);
+        }
+    }
+
+    /// Process altruistic happiness when providing help to another agent
+    /// Empathetic agents get extra happiness from helping
+    pub fn process_helper_happiness(&mut self, recipient_id: Uuid, help_amount: f32) {
+        use super::EmotionSource;
+
+        // Base happiness from helping (scaled by amount)
+        let mut helper_happiness = (help_amount * 0.2).min(0.3);
+
+        // Empathetic trait bonus: extra happiness from helping others
+        if self.traits.has_trait(&super::traits::Trait::Empathetic) {
+            helper_happiness += 0.15; // Significant bonus for empathetic helpers
+        }
+
+        self.emotions.add_happiness(EmotionSource::Agent(recipient_id), helper_happiness);
     }
 
     /// Get all sources that satisfy a specific drive
