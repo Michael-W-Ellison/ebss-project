@@ -3,6 +3,7 @@
 
 use crate::world::World;
 use crate::agents::Population;
+use crate::world::spatial_planning::{SpatialPlanner, PlacementStrategy, PlacementCriteria};
 
 pub mod simulation_controller;
 pub mod inspector;
@@ -161,6 +162,53 @@ struct PopulationStatsSnapshot {
     total_births: u64,
     total_deaths: u64,
     total_abandonments: u64,
+}
+
+/// Determines the appropriate placement strategy and criteria for a building type
+fn determine_placement_approach(building_type: crate::world::BuildingType) -> (PlacementCriteria, PlacementStrategy) {
+    use crate::world::BuildingType;
+
+    match building_type {
+        // Residential buildings should cluster near existing settlement
+        BuildingType::SmallHouse | BuildingType::MediumHouse | BuildingType::LargeHouse => {
+            (PlacementCriteria::NearSettlement, PlacementStrategy::BalancedProximity)
+        },
+
+        // Storage buildings should be central to settlement
+        BuildingType::Storehouse => {
+            (PlacementCriteria::CentralToSettlement, PlacementStrategy::BalancedProximity)
+        },
+
+        // Production buildings with specific resource needs
+        BuildingType::Farm => {
+            (PlacementCriteria::NearSettlement, PlacementStrategy::BalancedProximity)
+        },
+        BuildingType::Mill => {
+            // Needs Farm as prerequisite
+            (PlacementCriteria::NearRelatedBuilding, PlacementStrategy::NearResources)
+        },
+        BuildingType::Bakery => {
+            // Needs Mill as prerequisite
+            (PlacementCriteria::NearRelatedBuilding, PlacementStrategy::NearResources)
+        },
+        BuildingType::Workshop => {
+            // Needs wood primarily
+            (PlacementCriteria::NearResource("wood".to_string()), PlacementStrategy::NearResources)
+        },
+        BuildingType::Forge => {
+            // Needs iron primarily - prioritize iron resources
+            (PlacementCriteria::NearResource("iron".to_string()), PlacementStrategy::NearResources)
+        },
+        BuildingType::Smithy => {
+            // Advanced metalworking - needs Forge and iron
+            (PlacementCriteria::NearResource("iron".to_string()), PlacementStrategy::NearResources)
+        },
+
+        // Default for any other building types
+        _ => {
+            (PlacementCriteria::NearSettlement, PlacementStrategy::NearestAvailable)
+        }
+    }
 }
 
 impl Simulation {
@@ -978,10 +1026,25 @@ impl Simulation {
                     ));
                 }
 
-                // Check if position is valid and not occupied
-                let build_pos = Position::new(position.0, position.1);
+                // Use spatial planning to find optimal build location
+                let (criteria, strategy) = determine_placement_approach(building_type);
+                let planner = SpatialPlanner::new(&self.world);
+
+                let optimal_pos = planner.find_optimal_location_for_agent(
+                    building_type,
+                    *position,  // agent's current position
+                    strategy
+                );
+
+                // Use optimal position if found, otherwise fall back to agent's position
+                let build_tuple_pos = optimal_pos.unwrap_or_else(|| {
+                    debug!("No optimal position found for {:?}, using agent position", building_type);
+                    *position
+                });
+
+                let build_pos = Position::new(build_tuple_pos.0, build_tuple_pos.1);
                 if self.world.is_position_occupied(&build_pos) {
-                    return ActionResult::failure("Position already occupied".to_string());
+                    return ActionResult::failure("No suitable building location found (all positions occupied)".to_string());
                 }
 
                 // Remove resources from agent inventory
@@ -3124,6 +3187,119 @@ impl Simulation {
     pub fn disable_autosave(&mut self) {
         self.autosave_config = None;
         info!("Auto-save disabled");
+    }
+
+    /// Execute a building action for an agent, using spatial planning to determine optimal location
+    ///
+    /// This is a test helper method that allows direct building action execution.
+    /// The building will be placed at an optimal location determined by the spatial planner.
+    ///
+    /// # Arguments
+    /// * `agent_index` - Index of the agent in the population
+    /// * `building_type` - Type of building to construct
+    ///
+    /// # Returns
+    /// * `Ok(Position)` - The position where the building was placed
+    /// * `Err(String)` - Error message if building failed
+    pub fn execute_building_action(
+        &mut self,
+        agent_index: usize,
+        building_type: crate::world::BuildingType,
+    ) -> Result<(i32, i32, i32), String> {
+        use crate::world::{Building, Position, ResourceType};
+
+        // Get resource requirements for this building
+        let requirements = building_type.requirements();
+
+        // Check if agent has required resources in inventory
+        let agent = &self.population.agents[agent_index];
+        let mut has_all_resources = true;
+        let mut missing_resources = Vec::new();
+
+        for req in &requirements {
+            let item_id = match req.resource_type {
+                ResourceType::Wood => "wood",
+                ResourceType::Stone => "stone",
+                ResourceType::Iron => "iron",
+                _ => continue,
+            };
+
+            if let Some(item) = agent.inventory.get_item(item_id) {
+                if item.quantity < req.amount {
+                    has_all_resources = false;
+                    missing_resources.push(format!("{} {} (have {})", req.amount - item.quantity, item_id, item.quantity));
+                }
+            } else {
+                has_all_resources = false;
+                missing_resources.push(format!("{} {}", req.amount, item_id));
+            }
+        }
+
+        if !has_all_resources {
+            return Err(format!(
+                "Missing resources for {:?}: {}",
+                building_type,
+                missing_resources.join(", ")
+            ));
+        }
+
+        // Get agent's position
+        let agent_pos = {
+            let agent = &self.population.agents[agent_index];
+            (agent.state.position.0, agent.state.position.1, agent.state.position.2)
+        };
+
+        // Use spatial planning to find optimal build location
+        let (criteria, strategy) = determine_placement_approach(building_type);
+        let planner = SpatialPlanner::new(&self.world);
+
+        debug!("Spatial planning for {:?}: criteria={:?}, strategy={:?}",
+               building_type, criteria, strategy);
+        debug!("World has {} resource node types", self.world.resource_nodes.len());
+
+        let optimal_pos = planner.find_optimal_location_for_agent(
+            building_type,
+            agent_pos,
+            strategy
+        );
+
+        debug!("Optimal position found: {:?}", optimal_pos);
+
+        // Use optimal position if found, otherwise fall back to agent's position
+        let build_tuple_pos = optimal_pos.ok_or_else(|| {
+            "No suitable building location found".to_string()
+        })?;
+
+        let build_pos = Position::new(build_tuple_pos.0, build_tuple_pos.1);
+        if self.world.is_position_occupied(&build_pos) {
+            return Err("No suitable building location found (all positions occupied)".to_string());
+        }
+
+        // Remove resources from agent inventory
+        let agent = &mut self.population.agents[agent_index];
+        for req in &requirements {
+            let item_id = match req.resource_type {
+                ResourceType::Wood => "wood",
+                ResourceType::Stone => "stone",
+                ResourceType::Iron => "iron",
+                _ => continue,
+            };
+
+            agent.inventory.remove_item(item_id, req.amount);
+        }
+
+        // Create new building (under construction)
+        let building = Building::new_under_construction(building_type, build_pos);
+
+        // Add building to world
+        self.world.add_building(building);
+
+        debug!(
+            "Agent {} started construction of {:?} at ({}, {}, {})",
+            agent_index, building_type, build_tuple_pos.0, build_tuple_pos.1, build_tuple_pos.2
+        );
+
+        Ok(build_tuple_pos)
     }
 
     /// Check if auto-save should trigger and perform it

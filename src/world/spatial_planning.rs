@@ -144,6 +144,20 @@ impl<'a> SpatialPlanner<'a> {
         agent_pos: Position,
         strategy: PlacementStrategy,
     ) -> Option<Position> {
+        // For NearResources strategy, we need to determine the appropriate criteria
+        // This is a workaround - ideally we'd pass criteria explicitly
+        let criteria = self.infer_criteria_from_building(building_type);
+        self.find_optimal_location_with_criteria(building_type, agent_pos, strategy, criteria)
+    }
+
+    /// Find optimal location with explicit criteria
+    pub fn find_optimal_location_with_criteria(
+        &self,
+        building_type: BuildingType,
+        agent_pos: Position,
+        strategy: PlacementStrategy,
+        criteria: PlacementCriteria,
+    ) -> Option<Position> {
         let mut best_pos: Option<Position> = None;
         let mut best_score = f32::MIN;
 
@@ -166,11 +180,12 @@ impl<'a> SpatialPlanner<'a> {
                         continue;
                     }
 
-                    let score = self.score_location_for_agent(
+                    let score = self.score_location_for_agent_with_criteria(
                         pos,
                         agent_pos,
                         building_type,
                         strategy,
+                        &criteria,
                     );
 
                     if score > best_score {
@@ -182,6 +197,19 @@ impl<'a> SpatialPlanner<'a> {
         }
 
         best_pos
+    }
+
+    /// Infer placement criteria from building type
+    fn infer_criteria_from_building(&self, building_type: BuildingType) -> PlacementCriteria {
+        use BuildingType::*;
+        match building_type {
+            Forge | Smithy => PlacementCriteria::NearResource("iron".to_string()),
+            Workshop => PlacementCriteria::NearResource("wood".to_string()),
+            Mill | Bakery => PlacementCriteria::NearRelatedBuilding,
+            SmallHouse | MediumHouse | LargeHouse => PlacementCriteria::NearSettlement,
+            Storehouse => PlacementCriteria::CentralToSettlement,
+            _ => PlacementCriteria::NearSettlement,
+        }
     }
 
     /// Score a specific location for a building type and criteria
@@ -285,6 +313,18 @@ impl<'a> SpatialPlanner<'a> {
         building_type: BuildingType,
         strategy: PlacementStrategy,
     ) -> f32 {
+        let criteria = self.infer_criteria_from_building(building_type);
+        self.score_location_for_agent_with_criteria(pos, agent_pos, building_type, strategy, &criteria)
+    }
+
+    fn score_location_for_agent_with_criteria(
+        &self,
+        pos: Position,
+        agent_pos: Position,
+        building_type: BuildingType,
+        strategy: PlacementStrategy,
+        criteria: &PlacementCriteria,
+    ) -> f32 {
         let distance_to_agent = Self::distance(pos, agent_pos);
 
         match strategy {
@@ -299,22 +339,22 @@ impl<'a> SpatialPlanner<'a> {
             }
 
             PlacementStrategy::NearResources => {
-                // Prioritize resource proximity
+                // Prioritize resource proximity using the actual criteria
                 let resource_score = self.score_location(
                     pos,
                     building_type,
-                    PlacementCriteria::NearRelatedBuilding,
+                    criteria.clone(),
                 );
                 let agent_penalty = distance_to_agent * 2.0;
                 resource_score - agent_penalty
             }
 
             PlacementStrategy::BalancedProximity => {
-                // Balance both factors
+                // Balance both factors using the actual criteria
                 let resource_score = self.score_location(
                     pos,
                     building_type,
-                    PlacementCriteria::NearRelatedBuilding,
+                    criteria.clone(),
                 );
                 let agent_score = 50.0 / (1.0 + distance_to_agent);
                 resource_score * 0.6 + agent_score * 0.4
