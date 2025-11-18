@@ -3136,13 +3136,13 @@ impl Simulation {
             },
         };
 
-        // Serialize to JSON
-        let json = serde_json::to_string_pretty(&state)
+        // Serialize to MessagePack (supports complex HashMap keys like Position)
+        let bytes = rmp_serde::to_vec(&state)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         // Write to file
         let mut file = File::create(path)?;
-        file.write_all(json.as_bytes())?;
+        file.write_all(&bytes)?;
 
         info!("Simulation saved at tick {}", self.current_tick);
         Ok(())
@@ -3152,11 +3152,11 @@ impl Simulation {
     pub fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         // Read file
         let mut file = File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
 
-        // Deserialize from JSON
-        let state: SerializableSimulationState = serde_json::from_str(&contents)
+        // Deserialize from MessagePack
+        let state: SerializableSimulationState = rmp_serde::from_slice(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         // Reconstruct Population

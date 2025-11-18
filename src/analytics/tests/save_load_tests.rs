@@ -12,7 +12,7 @@ use tempfile::TempDir;
 #[test]
 fn test_simulation_can_be_saved_to_file() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create a simple simulation
     let world = World::new(WorldConfig::default());
@@ -40,7 +40,7 @@ fn test_simulation_can_be_saved_to_file() {
 #[test]
 fn test_simulation_can_be_loaded_from_file() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create and save a simulation
     let world = World::new(WorldConfig::default());
@@ -68,7 +68,7 @@ fn test_simulation_can_be_loaded_from_file() {
 #[test]
 fn test_loaded_simulation_can_resume() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create, run, and save simulation
     let world = World::new(WorldConfig::default());
@@ -106,7 +106,7 @@ fn test_loaded_simulation_can_resume() {
 #[test]
 fn test_agent_state_preserved_across_save_load() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create simulation with specific agent state
     let world = World::new(WorldConfig::default());
@@ -141,7 +141,7 @@ fn test_agent_state_preserved_across_save_load() {
 #[test]
 fn test_world_state_preserved_across_save_load() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create simulation with world state
     let world = World::new(WorldConfig::default());
@@ -166,7 +166,7 @@ fn test_world_state_preserved_across_save_load() {
 #[test]
 fn test_drive_values_preserved_across_save_load() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create simulation
     let world = World::new(WorldConfig::default());
@@ -204,7 +204,7 @@ fn test_save_fails_gracefully_with_invalid_path() {
     let sim = Simulation::new(world, population);
 
     // Try to save to invalid path
-    let result = sim.save("/invalid/path/that/does/not/exist/simulation.json");
+    let result = sim.save("/invalid/path/that/does/not/exist/simulation.dat");
 
     assert!(result.is_err(), "Save should fail for invalid path");
 }
@@ -232,7 +232,7 @@ fn test_load_fails_gracefully_with_corrupted_file() {
 #[test]
 fn test_multiple_save_load_cycles() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create simulation
     let world = World::new(WorldConfig::default());
@@ -268,7 +268,7 @@ fn test_multiple_save_load_cycles() {
 #[test]
 fn test_inventory_preserved_across_save_load() {
     let temp_dir = TempDir::new().unwrap();
-    let save_path = temp_dir.path().join("simulation.json");
+    let save_path = temp_dir.path().join("simulation.dat");
 
     // Create simulation
     let world = World::new(WorldConfig::default());
