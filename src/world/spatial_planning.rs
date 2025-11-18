@@ -229,6 +229,30 @@ impl<'a> SpatialPlanner<'a> {
         score
     }
 
+    /// Score a specific location considering territory ownership
+    pub fn score_location_with_territory(
+        &self,
+        pos: Position,
+        building_type: BuildingType,
+        criteria: PlacementCriteria,
+        agent_id: Option<u32>,
+    ) -> f32 {
+        // Get base score from placement criteria
+        let mut score = self.score_location(pos, building_type, criteria.clone());
+
+        // Add zone bonus
+        let zone_bonus = self.world.zone_manager.get_zone_bonus(pos, building_type);
+        score += zone_bonus;
+
+        // Add territory bonus if agent specified
+        if let Some(agent) = agent_id {
+            let territory_bonus = self.world.territory_manager.get_territory_bonus(pos, agent);
+            score += territory_bonus;
+        }
+
+        score
+    }
+
     /// Score a specific location for a building type and criteria (without zones)
     pub fn score_location(
         &self,
