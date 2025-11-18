@@ -463,7 +463,7 @@ fn print_population_status(population: &Population, tick: u32) {
 
         // Calculate technology statistics
         use std::collections::HashSet;
-        use ebss::environment::technology::TechnologyState;
+        
 
         let mut all_known_techs: HashSet<String> = HashSet::new();
         let mut tech_discovery_counts: HashMap<String, usize> = HashMap::new();

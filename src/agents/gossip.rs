@@ -142,7 +142,7 @@ impl Information {
                     DistortionType::Exaggeration,
                 )
             }
-            InformationType::Conflict { agent1, agent2 } => {
+            InformationType::Conflict { agent1: _, agent2: _ } => {
                 // "argument" becomes "violent fight"
                 (self.info_type.clone(), DistortionType::Exaggeration)
             }
@@ -163,7 +163,7 @@ impl Information {
     /// Apply manipulative distortion (lying)
     fn apply_manipulative_distortion(&self) -> (InformationType, DistortionType) {
         match &self.info_type {
-            InformationType::Observation { observer, observed, location } => {
+            InformationType::Observation { observer: _, observed, location: _ } => {
                 // "rabbit eating crops" becomes accusation against neighbor
                 if observed.contains("rabbit") || observed.contains("animal") {
                     // Would need neighbor info, simplified here
@@ -172,7 +172,7 @@ impl Information {
                     (self.info_type.clone(), DistortionType::None)
                 }
             }
-            InformationType::Alibi { agent, witnesses, time_period } => {
+            InformationType::Alibi { agent: _, witnesses: _, time_period: _ } => {
                 // Manipulative person might claim false alibi
                 (self.info_type.clone(), DistortionType::Fabrication)
             }

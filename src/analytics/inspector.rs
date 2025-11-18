@@ -1,7 +1,7 @@
 // src/analytics/inspector.rs
 //! Inspector system for examining agents, terrain, and simulation state.
 
-use crate::agents::{Agent, BodyPartType, BodySummary, SkillType, SkillCategory, EmotionType, RelationshipType};
+use crate::agents::{Agent, BodySummary, SkillCategory, EmotionType, RelationshipType};
 use crate::core::{DriveType, Drive};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};

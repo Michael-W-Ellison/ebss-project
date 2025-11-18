@@ -9,7 +9,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, HashMap};
-use uuid::Uuid;
 use crate::world::{Position, TerrainType, ResourceType, BuildingType};
 
 /// Types of discoveries agents can make

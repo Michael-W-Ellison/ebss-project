@@ -142,7 +142,7 @@ impl TrustLevel {
     /// Create from numeric value
     pub fn from_value(value: i8) -> Self {
         match value {
-            v if v <= -10 => TrustLevel::DistrustCompletely(((v + 12).max(-3).min(-1))),
+            v if v <= -10 => TrustLevel::DistrustCompletely((v + 12).max(-3).min(-1)),
             v if v <= -7 => TrustLevel::MostlyDistrusts((v + 9).max(-3).min(-1)),
             v if v <= -4 => TrustLevel::GenerallyDistrusts((v + 6).max(-3).min(-1)),
             v if v <= -1 => TrustLevel::SlightlyDistrusts((v + 3).max(-3).min(-1)),

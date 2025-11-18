@@ -163,7 +163,7 @@ pub fn add_to_agent_inventory(
     } else {
         // Try to add as much as possible
         let mut added = 0;
-        for i in 1..=amount {
+        for _i in 1..=amount {
             let partial_item = InventoryItem::new_with_weight(
                 item_type_to_id(item_type),
                 1,

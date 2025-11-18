@@ -347,6 +347,7 @@ impl<'a> SpatialPlanner<'a> {
     }
 
     /// Score location considering agent position and strategy
+    #[allow(dead_code)]
     fn score_location_for_agent(
         &self,
         pos: Position,

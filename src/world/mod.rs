@@ -81,7 +81,6 @@ pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketSta
 pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
 pub use climate::{ClimateManager, terrain_to_biome};
 
-use crate::agents::Population;
 use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager};
 
 /// Status of a heat source for smelting
@@ -358,7 +357,7 @@ impl World {
         builder_id: Option<uuid::Uuid>,
     ) -> Result<uuid::Uuid, String> {
         // Check if position is valid
-        let (x, y, z) = position;
+        let (x, y, _z) = position;
         if x < 0 || y < 0 || x >= self.grid.width as i32 || y >= self.grid.height as i32 {
             return Err("Position out of bounds".to_string());
         }
@@ -1221,7 +1220,7 @@ impl World {
     }
 
     /// Mark an area as impassable (for testing terrain constraints)
-    pub fn set_terrain_impassable(&mut self, center: (i32, i32, i32), _radius: i32) {
+    pub fn set_terrain_impassable(&mut self, _center: (i32, i32, i32), _radius: i32) {
         // This would modify terrain in the grid
         // For now, we'll just note this as a placeholder
         // The actual implementation would mark tiles in self.grid

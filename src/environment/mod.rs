@@ -14,7 +14,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::any::Any;
 use crate::core::DriveType;
 
 mod material;

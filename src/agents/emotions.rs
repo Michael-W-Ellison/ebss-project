@@ -398,14 +398,11 @@ impl Relationship {
         other_traits: &TraitSet,
     ) -> bool {
         let mut total_change = 0.0;
-        let mut incompatibility_count = 0;
-        let mut compatibility_count = 0;
 
         // Check for incompatibilities
         for self_trait in self_traits.get_traits() {
             for other_trait in other_traits.get_traits() {
                 if self_trait.incompatible_with(other_trait) {
-                    incompatibility_count += 1;
 
                     // Different trait pairs have different conflict severity
                     let conflict_severity = match (self_trait, other_trait) {
@@ -438,7 +435,6 @@ impl Relationship {
         // Check for complementary traits (strengthen relationships)
         if self_traits.has_trait(&Trait::Empathetic) &&
            other_traits.has_trait(&Trait::Empathetic) {
-            compatibility_count += 1;
             total_change += 0.02; // Both empathetic
         }
 
@@ -449,7 +445,6 @@ impl Relationship {
 
         if self_traits.has_trait(&Trait::Sociable) &&
            other_traits.has_trait(&Trait::Sociable) {
-            compatibility_count += 1;
             total_change += 0.015; // Both sociable
         }
 

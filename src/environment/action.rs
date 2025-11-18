@@ -136,6 +136,7 @@ impl ActionEffects {
 }
 
 /// A complete action definition
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
     /// Unique identifier
@@ -156,6 +157,7 @@ pub struct Action {
     pub properties: HashMap<String, String>,
 }
 
+#[allow(dead_code)]
 impl Action {
     pub fn new(id: String, name: String, action_type: ActionType) -> Self {
         Self {

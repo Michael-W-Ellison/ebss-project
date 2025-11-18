@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use crate::world::ItemType;
-use crate::core::DriveType;
 
 /// Decision about what to do with storage
 #[derive(Debug, Clone)]

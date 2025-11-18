@@ -74,9 +74,9 @@ impl Grid {
 
     /// Generate procedural terrain
     pub fn generate_terrain(&mut self) {
-        use rand::Rng;
+
         use crate::world::TerrainType;
-        let mut rng = rand::thread_rng();
+        let _rng = rand::thread_rng();
 
         // Simple noise-based terrain generation
         for y in 0..self.height {

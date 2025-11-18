@@ -357,13 +357,13 @@ impl Planner {
         &self,
         goal: &ExternalGoal,
         current_position: (i32, i32, i32),
-        available_tools: &[String],
+        _available_tools: &[String],
         traits: &[Trait],
     ) -> Option<ActionPlan> {
         let mut plans = Vec::new();
 
         match goal {
-            ExternalGoal::GatherResource(resource, amount) => {
+            ExternalGoal::GatherResource(_resource, amount) => {
                 // Generate plans with different tools
                 for tool_option in &["iron_axe", "stone_axe", "wooden_axe", "none"] {
                     let tools = if *tool_option == "none" {

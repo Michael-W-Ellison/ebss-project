@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
-use crate::world::{ItemType, ResourceType};
+use crate::world::ItemType;
 
 /// Technological eras that define progression stages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]

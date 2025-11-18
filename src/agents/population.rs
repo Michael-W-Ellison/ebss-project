@@ -92,7 +92,7 @@ impl Population {
 
     /// Initialize basic Stone Age technologies
     fn initialize_basic_technologies(registry: &mut TechnologyRegistry) {
-        use crate::environment::technology::{Technology, DiscoveryMethod};
+        use crate::environment::technology::Technology;
 
         // Fire making - everyone starts with this
         let fire = Technology::new("fire".to_string(), "Fire Making".to_string())
@@ -142,7 +142,7 @@ impl Population {
         let mut agent = Agent::new(config);
 
         // Give new agents basic starting knowledge
-        use crate::environment::technology::DiscoveryMethod;
+        
         agent.technology_knowledge.add_initial_technology(
             "fire".to_string(),
             agent.id,
@@ -902,7 +902,7 @@ impl Population {
     /// Process social interactions between nearby agents
     pub fn process_social_interactions(&mut self) {
         use crate::agents::social_interactions::{
-            SocialInteractionType, ConversationTopic,
+            SocialInteractionType,
             calculate_relationship_change, calculate_social_satisfaction,
             should_greet, select_conversation_topic,
         };
@@ -921,7 +921,7 @@ impl Population {
                 continue;
             }
 
-            let agent1_id = self.agents[i].id;
+            let _agent1_id = self.agents[i].id;
             let agent1_pos = self.agents[i].state.position;
             let agent1_social_drive = self.agents[i].drives.get(DriveType::Social)
                 .map(|d| d.value)
@@ -937,7 +937,7 @@ impl Population {
                     continue;
                 }
 
-                let agent2_id = self.agents[j].id;
+                let _agent2_id = self.agents[j].id;
                 let agent2_pos = self.agents[j].state.position;
 
                 // Calculate distance

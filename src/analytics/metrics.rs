@@ -3,7 +3,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uuid::Uuid;
 
 use crate::agents::Population;
 use crate::core::{DriveType, EmotionType, Trait};
@@ -247,7 +246,7 @@ impl SimulationMetrics {
             .collect()
     }
 
-    fn snapshot_traits(&self, population: &Population) -> HashMap<Trait, u32> {
+    fn snapshot_traits(&self, _population: &Population) -> HashMap<Trait, u32> {
         // Note: Trait type mismatch between core::Trait and agents::Trait
         // Returning empty map for now - needs trait system reconciliation
         HashMap::new()

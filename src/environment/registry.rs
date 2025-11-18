@@ -145,6 +145,7 @@ static mut GLOBAL_REGISTRY: Option<PluginRegistry> = None;
 static REGISTRY_INIT: std::sync::Once = std::sync::Once::new();
 
 /// Get the global plugin registry
+#[allow(static_mut_refs)]
 pub fn global_registry() -> &'static mut PluginRegistry {
     unsafe {
         REGISTRY_INIT.call_once(|| {

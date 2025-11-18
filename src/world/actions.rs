@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::world::{World, Position, ResourceType, BuildingType, ItemType};
-use crate::agents::social_interactions::{SocialInteractionType, ConversationTopic, HelpType};
+use crate::agents::social_interactions::SocialInteractionType;
 use uuid::Uuid;
 
 /// Actions that agents can perform
