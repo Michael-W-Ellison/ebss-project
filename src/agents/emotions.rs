@@ -57,6 +57,26 @@ impl EmotionState {
         self.update_totals();
     }
 
+    /// Set sadness level for a source (replaces existing value)
+    pub fn set_sadness(&mut self, source: EmotionSource, amount: f32) {
+        if amount > 0.0 {
+            self.sadness_sources.insert(source, amount.min(1.0));
+        } else {
+            self.sadness_sources.remove(&source);
+        }
+        self.update_totals();
+    }
+
+    /// Set fear level for a source (replaces existing value)
+    pub fn set_fear(&mut self, source: EmotionSource, amount: f32) {
+        if amount > 0.0 {
+            self.fear_sources.insert(source, amount.min(1.0));
+        } else {
+            self.fear_sources.remove(&source);
+        }
+        self.update_totals();
+    }
+
     /// Update total emotion levels from sources
     fn update_totals(&mut self) {
         self.anger = self.anger_sources.values().sum::<f32>().min(1.0);

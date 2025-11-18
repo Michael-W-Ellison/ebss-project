@@ -1783,58 +1783,66 @@ impl Agent {
 
     /// Update emotions based on current drive states
     /// High unsatisfied drives trigger appropriate negative emotions
+    /// Uses set_* methods to replace values rather than accumulate
     pub fn update_emotions_from_drives(&mut self) {
         use super::EmotionSource;
 
         // Survival drives (Hunger, Thirst, Rest) → Fear (threat to survival)
         let survival_fear = self.calculate_survival_drive_emotion();
-        if survival_fear > 0.0 {
-            self.emotions.add_fear(EmotionSource::Event("unmet survival needs".to_string()), survival_fear);
-        }
+        self.emotions.set_fear(EmotionSource::Event("unmet survival needs".to_string()), survival_fear);
 
         // Social drives → Sadness (loneliness, isolation)
         let social_sadness = self.calculate_social_drive_emotion();
-        if social_sadness > 0.0 {
-            self.emotions.add_sadness(EmotionSource::Event("social isolation".to_string()), social_sadness);
-        }
+        self.emotions.set_sadness(EmotionSource::Event("social isolation".to_string()), social_sadness);
 
         // Other unfulfilled drives → General frustration (mild sadness)
         let general_frustration = self.calculate_general_drive_frustration();
-        if general_frustration > 0.0 {
-            self.emotions.add_sadness(EmotionSource::Event("unfulfilled needs".to_string()), general_frustration * 0.5);
-        }
+        self.emotions.set_sadness(EmotionSource::Event("unfulfilled needs".to_string()), general_frustration * 0.5);
     }
 
     /// Calculate fear from survival drive deprivation
+    /// Multiple survival threats compound (with diminishing returns)
     fn calculate_survival_drive_emotion(&self) -> f32 {
-        let mut max_fear = 0.0f32;
+        let mut total_fear = 0.0f32;
+        let mut count = 0;
 
         // Check hunger
         if let Some(hunger) = self.drives.get(DriveType::Hunger) {
             if hunger.value > 0.7 {
                 // Fear scales with severity above threshold
-                let fear = (hunger.value - 0.7) / 0.3 * 0.6; // 0.0 to 0.6
-                max_fear = max_fear.max(fear);
+                let fear = (hunger.value - 0.7) / 0.3 * 0.7; // 0.0 to 0.7 (increased from 0.6)
+                total_fear += fear;
+                count += 1;
             }
         }
 
         // Check thirst (even more urgent)
         if let Some(thirst) = self.drives.get(DriveType::Thirst) {
             if thirst.value > 0.7 {
-                let fear = (thirst.value - 0.7) / 0.3 * 0.7; // 0.0 to 0.7
-                max_fear = max_fear.max(fear);
+                let fear = (thirst.value - 0.7) / 0.3 * 0.8; // 0.0 to 0.8 (increased from 0.7)
+                total_fear += fear;
+                count += 1;
             }
         }
 
         // Check rest
         if let Some(rest) = self.drives.get(DriveType::Rest) {
-            if rest.value > 0.75 {
-                let fear = (rest.value - 0.75) / 0.25 * 0.4; // 0.0 to 0.4
-                max_fear = max_fear.max(fear);
+            if rest.value >= 0.75 {
+                let fear = (rest.value - 0.75) / 0.25 * 0.5; // 0.0 to 0.5 (increased from 0.4)
+                total_fear += fear;
+                count += 1;
             }
         }
 
-        max_fear
+        // If multiple drives, they compound but with diminishing returns
+        // Use average with bonus for multiple
+        if count > 1 {
+            let avg = total_fear / count as f32;
+            let compound_bonus = (count - 1) as f32 * 0.2; // +0.2 per additional drive (increased from 0.15)
+            (avg + compound_bonus).min(1.0)
+        } else {
+            total_fear.min(1.0)
+        }
     }
 
     /// Calculate sadness from social drive deprivation
@@ -1842,7 +1850,7 @@ impl Agent {
         if let Some(social) = self.drives.get(DriveType::Social) {
             if social.value > 0.6 {
                 // Sadness scales with loneliness
-                return (social.value - 0.6) / 0.4 * 0.5; // 0.0 to 0.5
+                return (social.value - 0.6) / 0.4 * 0.6; // 0.0 to 0.6 (increased from 0.5)
             }
         }
         0.0
@@ -1926,7 +1934,7 @@ impl Agent {
             if drive.value > 0.6 {
                 // "I was already lonely, now I'm even more alone"
                 let amplification = (drive.value - 0.6) / 0.4; // 0.0 to 1.0
-                sadness += importance * amplification * 0.4; // Add up to 0.4 more (stronger amplification)
+                sadness += importance * amplification * 0.6; // Add up to 0.6 more (stronger amplification)
             }
         }
 
@@ -1977,8 +1985,12 @@ impl Agent {
 
         // Check relationship
         if let Some(relationship) = self.relationships.get_relationship(&deceased_id) {
-            if relationship.is_loved_one() {
+            if relationship.bond_strength >= 0.6 {
+                // Loved one
                 reasons.push(format!("I deeply cared about them (bond: {:.1})", relationship.bond_strength));
+            } else if relationship.bond_strength > 0.3 {
+                // Meaningful positive relationship
+                reasons.push(format!("We had a bond"));
             }
         }
 
