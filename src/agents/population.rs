@@ -589,12 +589,106 @@ impl Population {
         }
     }
 
-    /// Remove dead agents from population
+    /// Remove dead agents from population and process grief for survivors
     fn process_deaths(&mut self) {
+        use crate::agents::EmotionSource;
+
+        // Identify dead agents before removing them
+        let dead_agents: Vec<(uuid::Uuid, String)> = self.agents
+            .iter()
+            .filter(|agent| !agent.state.is_alive)
+            .map(|agent| {
+                // Determine cause of death from health context
+                let cause = if agent.state.health <= 0.0 {
+                    "health depletion".to_string()
+                } else {
+                    "unknown cause".to_string()
+                };
+                (agent.id, cause)
+            })
+            .collect();
+
+        if dead_agents.is_empty() {
+            return; // No deaths to process
+        }
+
+        // Process grief for each death
+        for (deceased_id, cause_description) in &dead_agents {
+            let cause_source = EmotionSource::Event(cause_description.clone());
+
+            // Notify all surviving agents about the death
+            for agent in &mut self.agents {
+                if !agent.state.is_alive || agent.id == *deceased_id {
+                    continue; // Skip dead agents and self
+                }
+
+                // Check if they had a relationship with the deceased
+                let had_relationship = agent.relationships.get_relationship(deceased_id).is_some();
+
+                // Check if deceased was a drive satisfaction source (without removing yet)
+                let drive_dependencies: Vec<crate::core::DriveType> = [
+                    crate::core::DriveType::Social,
+                    crate::core::DriveType::Reproduction,
+                    crate::core::DriveType::Safety,
+                    crate::core::DriveType::Hunger,
+                    crate::core::DriveType::Shelter,
+                ]
+                .iter()
+                .copied()
+                .filter(|drive_type| {
+                    agent.get_source_importance(*drive_type, *deceased_id) > 0.05
+                })
+                .collect();
+
+                let had_drive_dependency = !drive_dependencies.is_empty();
+
+                if had_relationship || had_drive_dependency {
+                    // 1. Existing relationship grief (if they were loved ones)
+                    if let Some(relationship) = agent.relationships.get_relationship(deceased_id) {
+                        if relationship.is_loved_one() {
+                            agent.respond_to_loved_one_death(deceased_id, cause_source.clone());
+                        }
+                    }
+
+                    // 2. NEW: Functional grief from losing drive satisfaction sources
+                    // This will remove the source and trigger appropriate emotions
+                    for drive_type in drive_dependencies {
+                        agent.process_drive_source_loss_with_cause(
+                            drive_type,
+                            *deceased_id,
+                            Some(cause_source.clone())
+                        );
+                    }
+
+                    // 3. Share death information via gossip system
+                    if agent.knowledge.known_information.len() < 1000 {  // Don't overflow knowledge
+                        use crate::agents::gossip::{Information, InformationType};
+                        let death_info = Information::new(
+                            InformationType::Death {
+                                agent: *deceased_id,
+                                cause: cause_description.clone(),
+                            },
+                            *deceased_id, // Source is the deceased
+                            true, // Ground truth
+                            self.current_tick as u64,
+                        );
+                        agent.knowledge.known_information.insert(death_info.id, death_info);
+                    }
+                }
+            }
+        }
+
+        // Now remove the dead agents
         let before = self.agents.len();
         self.agents.retain(|agent| agent.state.is_alive);
         let deaths = before - self.agents.len();
         self.stats.total_deaths += deaths as u64;
+
+        // Clean up tracking for dead agents
+        for (deceased_id, _) in &dead_agents {
+            self.unhappiness_tracker.remove(deceased_id);
+            self.reproduction_cooldown.remove(deceased_id);
+        }
     }
 
     /// Process agent abandonments based on unhappiness

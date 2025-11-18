@@ -2428,9 +2428,17 @@ impl Simulation {
                 }
 
                 if success {
+                    // Record that this agent satisfied our social drive
+                    let initiator = &mut self.population.agents[agent_index];
+                    initiator.record_drive_satisfaction(DriveType::Social, *target_agent_id, social_satisfaction);
+
+                    // Also record for the target (reciprocal satisfaction)
+                    let target = &mut self.population.agents[target_index];
+                    target.record_drive_satisfaction(DriveType::Social, initiator_id, target_satisfaction);
+
                     debug!(
                         "Agent {} socialized with agent {}: {} (relationship change: {:+}, satisfaction: {:.2})",
-                        self.population.agents[agent_index].id,
+                        initiator_id,
                         target_agent_id,
                         message,
                         relationship_change,
