@@ -7,7 +7,6 @@ pub mod senses;
 pub mod body;
 pub mod skills;
 pub mod emotions;
-pub mod traits;
 pub mod gossip;
 pub mod equipment;
 pub mod temperature;
@@ -29,7 +28,7 @@ pub use emotions::{
     EmotionState, EmotionSource, EmotionType, Relationship, RelationshipType,
     RelationshipMap, ThreatAssessment,
 };
-pub use traits::{Trait, TraitSet};
+pub use crate::core::traits::{Trait, TraitSet};
 pub use gossip::{
     Information, InformationType, InformationDistortion, DistortionType,
     Belief, TrustRating, KnowledgeBase,

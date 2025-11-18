@@ -2200,7 +2200,7 @@ impl Simulation {
                     calculate_relationship_change, calculate_social_satisfaction,
                     should_greet, select_conversation_topic, calculate_gift_value, would_accept_gift
                 };
-                use crate::agents::traits::Trait;
+                use crate::core::traits::Trait;
 
                 // Find the target agent
                 let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
@@ -2464,7 +2464,7 @@ impl Simulation {
 
             Action::ShareInformation { target_agent_id } => {
                 use crate::agents::gossip::{Information, InformationType};
-                use crate::agents::traits::Trait;
+                use crate::core::traits::Trait;
 
                 // Find the target agent
                 let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);

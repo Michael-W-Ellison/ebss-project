@@ -4,9 +4,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use super::traits::{Trait, TraitSet};
+use crate::core::traits::{Trait, TraitSet};
 
-/// Emotional state tracking anger, fear, sadness, and happiness
+/// Emotional state tracking anger, fear, sadness, happiness, and curiosity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmotionState {
     /// Anger: response to overcomable threats (0.0 to 1.0)
@@ -17,6 +17,8 @@ pub struct EmotionState {
     pub sadness: f32,
     /// Happiness: positive emotion from satisfaction and social bonds (0.0 to 1.0)
     pub happiness: f32,
+    /// Curiosity: drive to explore and refresh knowledge (0.0 to 1.0)
+    pub curiosity: f32,
     /// Decay rate per tick for each emotion
     pub decay_rate: f32,
     /// Emotion sources: what/who triggered each emotion
@@ -24,6 +26,7 @@ pub struct EmotionState {
     pub fear_sources: HashMap<EmotionSource, f32>,
     pub sadness_sources: HashMap<EmotionSource, f32>,
     pub happiness_sources: HashMap<EmotionSource, f32>,
+    pub curiosity_sources: HashMap<EmotionSource, f32>,
 }
 
 impl EmotionState {
@@ -33,11 +36,13 @@ impl EmotionState {
             fear: 0.0,
             sadness: 0.0,
             happiness: 0.0,
+            curiosity: 0.0,
             decay_rate: 0.01, // 1% per tick
             anger_sources: HashMap::new(),
             fear_sources: HashMap::new(),
             sadness_sources: HashMap::new(),
             happiness_sources: HashMap::new(),
+            curiosity_sources: HashMap::new(),
         }
     }
 
@@ -99,12 +104,30 @@ impl EmotionState {
         self.update_totals();
     }
 
+    /// Add curiosity from a source
+    pub fn add_curiosity(&mut self, source: EmotionSource, amount: f32) {
+        let new_amount = self.curiosity_sources.get(&source).unwrap_or(&0.0) + amount;
+        self.curiosity_sources.insert(source, new_amount.min(1.0));
+        self.update_totals();
+    }
+
+    /// Set curiosity level for a source (replaces existing value)
+    pub fn set_curiosity(&mut self, source: EmotionSource, amount: f32) {
+        if amount > 0.0 {
+            self.curiosity_sources.insert(source, amount.min(1.0));
+        } else {
+            self.curiosity_sources.remove(&source);
+        }
+        self.update_totals();
+    }
+
     /// Update total emotion levels from sources
     fn update_totals(&mut self) {
         self.anger = self.anger_sources.values().sum::<f32>().min(1.0);
         self.fear = self.fear_sources.values().sum::<f32>().min(1.0);
         self.sadness = self.sadness_sources.values().sum::<f32>().min(1.0);
         self.happiness = self.happiness_sources.values().sum::<f32>().min(1.0);
+        self.curiosity = self.curiosity_sources.values().sum::<f32>().min(1.0);
     }
 
     /// Decay emotions over time
@@ -122,19 +145,23 @@ impl EmotionState {
         for amount in self.happiness_sources.values_mut() {
             *amount = (*amount - self.decay_rate).max(0.0);
         }
+        for amount in self.curiosity_sources.values_mut() {
+            *amount = (*amount - self.decay_rate * 0.5).max(0.0); // Curiosity decays slower
+        }
 
         // Remove sources at 0
         self.anger_sources.retain(|_, v| *v > 0.0);
         self.fear_sources.retain(|_, v| *v > 0.0);
         self.sadness_sources.retain(|_, v| *v > 0.0);
         self.happiness_sources.retain(|_, v| *v > 0.0);
+        self.curiosity_sources.retain(|_, v| *v > 0.0);
 
         self.update_totals();
     }
 
-    /// Get dominant emotion (including happiness)
+    /// Get dominant emotion (including happiness and curiosity)
     pub fn dominant_emotion(&self) -> Option<EmotionType> {
-        let max_value = self.anger.max(self.fear).max(self.sadness).max(self.happiness);
+        let max_value = self.anger.max(self.fear).max(self.sadness).max(self.happiness).max(self.curiosity);
 
         if max_value < 0.1 {
             return None; // No significant emotion
@@ -142,6 +169,8 @@ impl EmotionState {
 
         if self.happiness >= max_value {
             Some(EmotionType::Happiness)
+        } else if self.curiosity >= max_value {
+            Some(EmotionType::Curiosity)
         } else if self.anger >= max_value {
             Some(EmotionType::Anger)
         } else if self.fear >= max_value {
@@ -183,7 +212,7 @@ impl EmotionState {
             CoreEmotionType::Sadness => Some(EmotionValue { value: -self.sadness }),
             CoreEmotionType::Anger => Some(EmotionValue { value: -self.anger }),
             CoreEmotionType::Fear => Some(EmotionValue { value: -self.fear }),
-            _ => None,
+            CoreEmotionType::Curiosity => Some(EmotionValue { value: self.curiosity }),
         }
     }
 }
@@ -219,6 +248,7 @@ pub enum EmotionType {
     Fear,
     Sadness,
     Happiness,
+    Curiosity,
 }
 
 /// Relationship between agents

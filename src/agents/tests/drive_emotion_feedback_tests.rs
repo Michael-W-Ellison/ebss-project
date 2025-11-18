@@ -405,7 +405,7 @@ fn test_helping_others_creates_happiness() {
 
 #[test]
 fn test_empathetic_trait_bonus_for_helping() {
-    use crate::agents::traits::{Trait, TraitSet};
+    use crate::core::traits::{Trait, TraitSet};
     
     let mut regular_agent = Agent::new(AgentConfig::default());
     let mut empathetic_agent = Agent::new(AgentConfig::default());

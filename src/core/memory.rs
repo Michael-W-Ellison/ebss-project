@@ -232,14 +232,31 @@ pub enum RelationshipStrength {
     Enemy,
 }
 
+/// Type of relationship between agents
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RelationshipType {
+    Parent,
+    Child,
+    Sibling,
+    Partner,
+    Friend,
+    Acquaintance,
+    Rival,
+    Enemy,
+    Unknown, // For relationships that haven't been classified yet
+}
+
 /// Relationship with another agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SocialRelationship {
     pub agent_id: Uuid,
+    pub relationship_type: RelationshipType,
     pub familiarity: f32, // 0.0 to 1.0, how well they know each other
     pub trust: f32, // -1.0 to 1.0, negative = distrust
     pub affection: f32, // -1.0 to 1.0, negative = hostility
+    pub bond_strength: f32, // -1.0 to 1.0, overall relationship quality
     pub last_interaction: u32, // Tick of last interaction
+    pub time_together: u64, // Total time spent together in ticks
     pub positive_interactions: u32,
     pub negative_interactions: u32,
     pub is_parent: bool,
@@ -251,15 +268,59 @@ impl SocialRelationship {
     pub fn new(agent_id: Uuid, tick: u32) -> Self {
         Self {
             agent_id,
+            relationship_type: RelationshipType::Unknown,
             familiarity: 0.1,
             trust: 0.0,
             affection: 0.0,
+            bond_strength: 0.0,
             last_interaction: tick,
+            time_together: 0,
             positive_interactions: 0,
             negative_interactions: 0,
             is_parent: false,
             is_child: false,
             is_mate: false,
+        }
+    }
+
+    /// Create a new relationship with a specific type
+    pub fn new_with_type(agent_id: Uuid, tick: u32, relationship_type: RelationshipType) -> Self {
+        let bond_strength = match relationship_type {
+            RelationshipType::Parent | RelationshipType::Child => 0.9,
+            RelationshipType::Sibling => 0.7,
+            RelationshipType::Partner => 0.8,
+            RelationshipType::Friend => 0.5,
+            RelationshipType::Acquaintance => 0.2,
+            RelationshipType::Rival => -0.3,
+            RelationshipType::Enemy => -0.7,
+            RelationshipType::Unknown => 0.0,
+        };
+
+        let (trust, affection, familiarity) = match relationship_type {
+            RelationshipType::Parent | RelationshipType::Child => (1.0, 0.9, 1.0),
+            RelationshipType::Sibling => (0.7, 0.7, 0.8),
+            RelationshipType::Partner => (0.8, 0.8, 0.8),
+            RelationshipType::Friend => (0.5, 0.5, 0.5),
+            RelationshipType::Acquaintance => (0.2, 0.2, 0.3),
+            RelationshipType::Rival => (-0.3, -0.2, 0.4),
+            RelationshipType::Enemy => (-0.7, -0.7, 0.5),
+            RelationshipType::Unknown => (0.0, 0.0, 0.1),
+        };
+
+        Self {
+            agent_id,
+            relationship_type,
+            familiarity,
+            trust,
+            affection,
+            bond_strength,
+            last_interaction: tick,
+            time_together: 0,
+            positive_interactions: 0,
+            negative_interactions: 0,
+            is_parent: relationship_type == RelationshipType::Parent,
+            is_child: relationship_type == RelationshipType::Child,
+            is_mate: relationship_type == RelationshipType::Partner,
         }
     }
 
@@ -270,6 +331,8 @@ impl SocialRelationship {
         self.affection = (self.affection + strength * 0.1).min(1.0);
         self.familiarity = (self.familiarity + 0.05).min(1.0);
         self.last_interaction = tick;
+        self.time_together += 1;
+        self.update_bond_strength();
     }
 
     /// Record a negative interaction
@@ -279,6 +342,64 @@ impl SocialRelationship {
         self.affection = (self.affection - strength * 0.1).max(-1.0);
         self.familiarity = (self.familiarity + 0.02).min(1.0); // Still increases familiarity
         self.last_interaction = tick;
+        self.time_together += 1;
+        self.update_bond_strength();
+    }
+
+    /// Update bond strength based on trust and affection
+    fn update_bond_strength(&mut self) {
+        self.bond_strength = (self.trust + self.affection) / 2.0;
+    }
+
+    /// Strengthen bond
+    pub fn strengthen(&mut self, amount: f32) {
+        self.bond_strength = (self.bond_strength + amount).min(1.0);
+        // Also increase trust and affection proportionally
+        self.trust = (self.trust + amount * 0.5).min(1.0);
+        self.affection = (self.affection + amount * 0.5).min(1.0);
+    }
+
+    /// Weaken bond
+    pub fn weaken(&mut self, amount: f32) {
+        self.bond_strength = (self.bond_strength - amount).max(-1.0);
+        // Also decrease trust and affection proportionally
+        self.trust = (self.trust - amount * 0.5).max(-1.0);
+        self.affection = (self.affection - amount * 0.5).max(-1.0);
+    }
+
+    /// Check if this is a loved one (high bond strength)
+    pub fn is_loved_one(&self) -> bool {
+        self.bond_strength >= 0.6 || self.is_parent || self.is_child || self.is_mate
+    }
+
+    /// Check if this is family
+    pub fn is_family(&self) -> bool {
+        self.is_parent || self.is_child ||
+        matches!(self.relationship_type, RelationshipType::Parent | RelationshipType::Child | RelationshipType::Sibling)
+    }
+
+    /// Check if relationship is degrading (negative bond)
+    pub fn is_degrading(&self) -> bool {
+        self.bond_strength < 0.0
+    }
+
+    /// Check if relationship has become hostile
+    pub fn is_hostile(&self) -> bool {
+        self.bond_strength < -0.4
+    }
+
+    /// Get relationship quality descriptor
+    pub fn quality_descriptor(&self) -> &'static str {
+        match self.bond_strength {
+            x if x >= 0.8 => "Excellent",
+            x if x >= 0.6 => "Good",
+            x if x >= 0.4 => "Friendly",
+            x if x >= 0.2 => "Neutral",
+            x if x >= 0.0 => "Strained",
+            x if x >= -0.3 => "Poor",
+            x if x >= -0.6 => "Hostile",
+            _ => "Enemy",
+        }
     }
 
     /// Decay relationship over time without interaction
@@ -321,6 +442,9 @@ impl SocialRelationship {
 
             // Familiarity decays very slowly
             self.familiarity = (self.familiarity - decay_rate * 0.5).max(0.0);
+
+            // Update bond strength
+            self.update_bond_strength();
         }
     }
 
@@ -490,28 +614,34 @@ impl Memory {
     /// Mark another agent as family
     pub fn mark_as_parent(&mut self, parent_id: Uuid) {
         let relationship = self.get_relationship(parent_id);
+        relationship.relationship_type = RelationshipType::Parent;
         relationship.is_parent = true;
         relationship.trust = 1.0;
         relationship.affection = 0.8;
         relationship.familiarity = 1.0;
+        relationship.bond_strength = 0.9;
     }
 
     /// Mark another agent as offspring
     pub fn mark_as_child(&mut self, child_id: Uuid) {
         let relationship = self.get_relationship(child_id);
+        relationship.relationship_type = RelationshipType::Child;
         relationship.is_child = true;
         relationship.trust = 1.0;
         relationship.affection = 0.9;
         relationship.familiarity = 1.0;
+        relationship.bond_strength = 0.9;
     }
 
     /// Mark another agent as mate
     pub fn mark_as_mate(&mut self, mate_id: Uuid) {
         let relationship = self.get_relationship(mate_id);
+        relationship.relationship_type = RelationshipType::Partner;
         relationship.is_mate = true;
         relationship.trust = 0.8;
         relationship.affection = 0.8;
         relationship.familiarity = (relationship.familiarity + 0.5).min(1.0);
+        relationship.bond_strength = 0.8;
     }
 
     /// Get trusted agents

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::world::ItemType;
 use super::relationships::{RelationshipLevel, TrustLevel};
-use super::traits::Trait;
+use crate::core::traits::Trait;
 
 /// Types of social interactions
 #[derive(Debug, Clone, Serialize, Deserialize)]

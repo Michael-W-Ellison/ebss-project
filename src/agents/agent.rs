@@ -9,7 +9,7 @@ use super::senses::Senses;
 use super::body::Body;
 use super::skills::Skills;
 use super::emotions::{EmotionState, EmotionSource, RelationshipMap};
-use super::traits::TraitSet;
+use crate::core::traits::TraitSet;
 use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
@@ -1955,7 +1955,7 @@ impl Agent {
         let mut helper_happiness = (help_amount * 0.2).min(0.3);
 
         // Empathetic trait bonus: extra happiness from helping others
-        if self.traits.has_trait(&super::traits::Trait::Empathetic) {
+        if self.traits.has_trait(&crate::core::traits::Trait::Empathetic) {
             helper_happiness += 0.15; // Significant bonus for empathetic helpers
         }
 

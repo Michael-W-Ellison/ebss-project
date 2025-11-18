@@ -85,6 +85,8 @@ pub enum Trait {
     Forgiving,      // Anger decreases at twice speed
     Coward,         // Increased fear in danger, happiness escaping
     Protector,      // Happiness from killing dangerous creatures
+    Aggressive,     // Aggressive in conflicts, quick to fight
+    Peaceful,       // Avoids confrontation at all costs
 
     // Interaction with Environment Traits
     AnimalLover,    // Happiness near animals
@@ -92,6 +94,22 @@ pub enum Trait {
     Masochist,      // Happiness from damage until 50% health
     Explorer,       // Happiness from exploring new areas
     Caretaker,      // Happiness from helping sick/injured/elderly
+
+    // Trust and Honesty Traits
+    Trusting,       // Trusts others easily, believes information
+    Honest,         // Always tells the truth, others trust them
+    Dishonest,      // Frequently lies, manipulates information
+    Callous,        // Doesn't care about others' feelings
+
+    // Work Ethic (additional)
+    Diligent,       // Hard worker, gains satisfaction from labor
+
+    // Compatibility aliases for agents system
+    Hottempered,    // Alias for HotHeaded
+    Sociable,       // Alias for Extrovert
+    Introverted,    // Alias for Introvert
+    Empathetic,     // Alias for Empathic
+    Manipulative,   // Alias for Manipulator
 
     // Obsession Trait
     Obsessive,      // Gains/loses happiness based on proximity to obsession
@@ -166,8 +184,109 @@ impl Trait {
             Trait::Masochist => "Happiness from damage until 50% health",
             Trait::Explorer => "Happiness from exploring new areas",
             Trait::Caretaker => "Happiness from helping sick/injured/elderly",
+            Trait::Aggressive => "Aggressive in conflicts, quick to fight",
+            Trait::Peaceful => "Avoids confrontation at all costs",
+            Trait::Trusting => "Trusts others easily, believes information readily",
+            Trait::Honest => "Always tells the truth, others trust them",
+            Trait::Dishonest => "Frequently lies and manipulates information",
+            Trait::Callous => "Doesn't care about others' feelings",
+            Trait::Diligent => "Hard worker, gains satisfaction from labor",
+            Trait::Hottempered => "Quick to anger (alias for HotHeaded)",
+            Trait::Sociable => "Enjoys social interaction (alias for Extrovert)",
+            Trait::Introverted => "Prefers solitude (alias for Introvert)",
+            Trait::Empathetic => "Feels others' emotions strongly (alias for Empathic)",
+            Trait::Manipulative => "Lies and manipulates for personal gain (alias for Manipulator)",
             Trait::Obsessive => "Strong focus on specific obsession target",
         }
+    }
+
+    /// Get trait name as a string
+    pub fn name(&self) -> &'static str {
+        match self {
+            Trait::Anxious => "Anxious",
+            Trait::Brave => "Brave",
+            Trait::HotHeaded => "Hot-Headed",
+            Trait::Calm => "Calm",
+            Trait::Pacifist => "Pacifist",
+            Trait::Empathic => "Empathic",
+            Trait::ColdHearted => "Cold-Hearted",
+            Trait::Resilient => "Resilient",
+            Trait::Clown => "Clown",
+            Trait::Goth => "Goth",
+            Trait::Melancholic => "Melancholic",
+            Trait::Stoic => "Stoic",
+            Trait::Repressed => "Repressed",
+            Trait::Extrovert => "Extrovert",
+            Trait::Introvert => "Introvert",
+            Trait::KindHearted => "Kind-Hearted",
+            Trait::Cruel => "Cruel",
+            Trait::Charismatic => "Charismatic",
+            Trait::Mute => "Mute",
+            Trait::Gossip => "Gossip",
+            Trait::Intolerant => "Intolerant",
+            Trait::Mediator => "Mediator",
+            Trait::Romantic => "Romantic",
+            Trait::Insecure => "Insecure",
+            Trait::Manipulator => "Manipulator",
+            Trait::Copycat => "Copycat",
+            Trait::Imaginative => "Imaginative",
+            Trait::Handy => "Handy",
+            Trait::Lazy => "Lazy",
+            Trait::Proud => "Proud",
+            Trait::Ambitious => "Ambitious",
+            Trait::Pragmatist => "Pragmatist",
+            Trait::Stubborn => "Stubborn",
+            Trait::Traditionalist => "Traditionalist",
+            Trait::Rebel => "Rebel",
+            Trait::Builder => "Builder",
+            Trait::CraftObsessed => "Craft-Obsessed",
+            Trait::Archivist => "Archivist",
+            Trait::Greedy => "Greedy",
+            Trait::Ascetic => "Ascetic",
+            Trait::Envious => "Envious",
+            Trait::Frugal => "Frugal",
+            Trait::Survivalist => "Survivalist",
+            Trait::Altruist => "Altruist",
+            Trait::Glutton => "Glutton",
+            Trait::Believer => "Believer",
+            Trait::Atheist => "Atheist",
+            Trait::Ignorant => "Ignorant",
+            Trait::Zealot => "Zealot",
+            Trait::Skeptic => "Skeptic",
+            Trait::Bookworm => "Bookworm",
+            Trait::Curious => "Curious",
+            Trait::Suspicious => "Suspicious",
+            Trait::Deaf => "Deaf",
+            Trait::Uncaring => "Uncaring",
+            Trait::Paranoid => "Paranoid",
+            Trait::Vengeful => "Vengeful",
+            Trait::Forgiving => "Forgiving",
+            Trait::Coward => "Coward",
+            Trait::Protector => "Protector",
+            Trait::Aggressive => "Aggressive",
+            Trait::Peaceful => "Peaceful",
+            Trait::AnimalLover => "Animal Lover",
+            Trait::Allergic => "Allergic",
+            Trait::Masochist => "Masochist",
+            Trait::Explorer => "Explorer",
+            Trait::Caretaker => "Caretaker",
+            Trait::Trusting => "Trusting",
+            Trait::Honest => "Honest",
+            Trait::Dishonest => "Dishonest",
+            Trait::Callous => "Callous",
+            Trait::Diligent => "Diligent",
+            Trait::Hottempered => "Hottempered",
+            Trait::Sociable => "Sociable",
+            Trait::Introverted => "Introverted",
+            Trait::Empathetic => "Empathetic",
+            Trait::Manipulative => "Manipulative",
+            Trait::Obsessive => "Obsessive",
+        }
+    }
+
+    /// Check if two traits are incompatible (alias for is_incompatible_with)
+    pub fn incompatible_with(&self, other: &Trait) -> bool {
+        self.is_incompatible_with(other)
     }
 
     /// Check if two traits are incompatible
@@ -193,7 +312,24 @@ impl Trait {
             (Trait::Brave, Trait::Coward) | (Trait::Coward, Trait::Brave) |
             (Trait::Handy, Trait::Lazy) | (Trait::Lazy, Trait::Handy) |
             (Trait::Stoic, Trait::Repressed) | (Trait::Repressed, Trait::Stoic) |
-            (Trait::Charismatic, Trait::Mute) | (Trait::Mute, Trait::Charismatic)
+            (Trait::Charismatic, Trait::Mute) | (Trait::Mute, Trait::Charismatic) |
+            (Trait::Aggressive, Trait::Peaceful) | (Trait::Peaceful, Trait::Aggressive) |
+            (Trait::Trusting, Trait::Suspicious) | (Trait::Suspicious, Trait::Trusting) |
+            (Trait::Trusting, Trait::Paranoid) | (Trait::Paranoid, Trait::Trusting) |
+            (Trait::Honest, Trait::Dishonest) | (Trait::Dishonest, Trait::Honest) |
+            (Trait::Honest, Trait::Manipulator) | (Trait::Manipulator, Trait::Honest) |
+            (Trait::Honest, Trait::Manipulative) | (Trait::Manipulative, Trait::Honest) |
+            (Trait::Empathic, Trait::Callous) | (Trait::Callous, Trait::Empathic) |
+            (Trait::KindHearted, Trait::Callous) | (Trait::Callous, Trait::KindHearted) |
+            (Trait::Diligent, Trait::Lazy) | (Trait::Lazy, Trait::Diligent) |
+            // Compatibility aliases
+            (Trait::Hottempered, Trait::Calm) | (Trait::Calm, Trait::Hottempered) |
+            (Trait::Hottempered, Trait::Pacifist) | (Trait::Pacifist, Trait::Hottempered) |
+            (Trait::Sociable, Trait::Introvert) | (Trait::Introvert, Trait::Sociable) |
+            (Trait::Sociable, Trait::Introverted) | (Trait::Introverted, Trait::Sociable) |
+            (Trait::Extrovert, Trait::Introverted) | (Trait::Introverted, Trait::Extrovert) |
+            (Trait::Empathetic, Trait::ColdHearted) | (Trait::ColdHearted, Trait::Empathetic) |
+            (Trait::Empathetic, Trait::Callous) | (Trait::Callous, Trait::Empathetic)
         )
     }
 
@@ -221,7 +357,50 @@ impl Trait {
                 (EmotionType::Curiosity, 0.5, 0.5),
             ],
             Trait::Forgiving => vec![(EmotionType::Anger, 1.0, 2.0)],
+            // Compatibility aliases - map to same as their base traits
+            Trait::Hottempered => vec![(EmotionType::Anger, 2.0, 0.5)], // Same as HotHeaded
+            Trait::Empathetic => vec![(EmotionType::Sadness, 2.0, 2.0)], // Same as Empathic
             _ => vec![],
+        }
+    }
+
+    /// Get happiness gain from expressing this trait
+    pub fn happiness_gain(&self) -> f32 {
+        match self {
+            Trait::Imaginative => 5.0,    // From embellishing stories
+            Trait::Manipulator => 10.0,   // From successful manipulation
+            Trait::Manipulative => 10.0,  // From successful manipulation (alias)
+            Trait::Forgiving => 3.0,      // From forgiving others
+            Trait::Extrovert => 5.0,      // From social interaction
+            Trait::Diligent => 2.0,       // From hard work
+            Trait::Altruist => 5.0,       // From helping others
+            Trait::Handy => 5.0,          // From completing tasks
+            Trait::Proud => 4.0,          // From accomplishments
+            Trait::Builder => 6.0,        // From building
+            Trait::Explorer => 4.0,       // From exploring
+            Trait::Caretaker => 3.0,      // From helping others
+            // Compatibility aliases
+            Trait::Sociable => 5.0,       // From social interaction (same as Extrovert)
+            _ => 0.0,
+        }
+    }
+
+    /// Get trust modifier for evaluating or being evaluated by others
+    /// Positive values increase trust, negative values decrease trust
+    pub fn trust_modifier(&self) -> f32 {
+        match self {
+            Trait::Trusting => 0.3,        // +30% trust in others
+            Trait::Suspicious => -0.3,     // -30% trust in others
+            Trait::Paranoid => -0.5,       // -50% trust in others
+            Trait::Honest => 0.2,          // Others trust you +20%
+            Trait::Dishonest => -0.2,      // Others trust you -20%
+            Trait::Manipulator => -0.3,    // Others distrust you -30%
+            Trait::Manipulative => -0.3,   // Others distrust you -30% (alias)
+            Trait::KindHearted => 0.1,     // Others trust you slightly more
+            Trait::Cruel => -0.2,          // Others distrust you
+            Trait::Charismatic => 0.15,    // Others trust you more
+            Trait::Skeptic => -0.2,        // Distrusts most information
+            _ => 0.0,
         }
     }
 }
@@ -262,12 +441,46 @@ impl TraitSet {
         self.traits.contains(&trait_check)
     }
 
+    /// Check if agent has a specific trait (alias for has)
+    pub fn has_trait(&self, trait_check: &Trait) -> bool {
+        self.traits.contains(trait_check)
+    }
+
     /// Get all emotion modifiers from all traits
     pub fn get_combined_emotion_modifiers(&self) -> Vec<(crate::core::EmotionType, f32, f32)> {
         self.traits
             .iter()
             .flat_map(|t| t.emotion_modifiers())
             .collect()
+    }
+
+    /// Get all traits as a slice
+    pub fn get_traits(&self) -> &[Trait] {
+        &self.traits
+    }
+
+    /// Calculate combined trust modifier from all traits
+    pub fn combined_trust_modifier(&self) -> f32 {
+        self.traits
+            .iter()
+            .map(|t| t.trust_modifier())
+            .sum()
+    }
+
+    /// Check if agent would distort information (lie, exaggerate, manipulate)
+    /// Returns the trait that causes distortion if any
+    pub fn would_distort_info(&self) -> Option<Trait> {
+        if self.has(Trait::Manipulator) {
+            Some(Trait::Manipulator)
+        } else if self.has(Trait::Manipulative) {
+            Some(Trait::Manipulative)
+        } else if self.has(Trait::Dishonest) {
+            Some(Trait::Dishonest)
+        } else if self.has(Trait::Imaginative) {
+            Some(Trait::Imaginative)
+        } else {
+            None
+        }
     }
 
     /// Generate random traits for a new agent
@@ -289,7 +502,9 @@ impl TraitSet {
             Trait::Atheist, Trait::Zealot, Trait::Skeptic, Trait::Bookworm,
             Trait::Curious, Trait::Suspicious, Trait::Uncaring, Trait::Vengeful,
             Trait::Forgiving, Trait::Coward, Trait::Protector, Trait::AnimalLover,
-            Trait::Allergic, Trait::Explorer, Trait::Caretaker,
+            Trait::Allergic, Trait::Explorer, Trait::Caretaker, Trait::Aggressive,
+            Trait::Peaceful, Trait::Trusting, Trait::Honest, Trait::Dishonest,
+            Trait::Callous, Trait::Diligent, Trait::Manipulator, Trait::Imaginative,
         ];
 
         let mut rng = thread_rng();
