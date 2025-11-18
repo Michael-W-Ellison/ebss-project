@@ -4,9 +4,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use super::traits::{Trait, TraitSet};
+use crate::core::traits::{Trait, TraitSet};
 
-/// Emotional state tracking anger, fear, sadness, and happiness
+/// Emotional state tracking anger, fear, sadness, happiness, and curiosity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmotionState {
     /// Anger: response to overcomable threats (0.0 to 1.0)
@@ -17,6 +17,8 @@ pub struct EmotionState {
     pub sadness: f32,
     /// Happiness: positive emotion from satisfaction and social bonds (0.0 to 1.0)
     pub happiness: f32,
+    /// Curiosity: drive to explore and refresh knowledge (0.0 to 1.0)
+    pub curiosity: f32,
     /// Decay rate per tick for each emotion
     pub decay_rate: f32,
     /// Emotion sources: what/who triggered each emotion
@@ -24,6 +26,7 @@ pub struct EmotionState {
     pub fear_sources: HashMap<EmotionSource, f32>,
     pub sadness_sources: HashMap<EmotionSource, f32>,
     pub happiness_sources: HashMap<EmotionSource, f32>,
+    pub curiosity_sources: HashMap<EmotionSource, f32>,
 }
 
 impl EmotionState {
@@ -33,11 +36,13 @@ impl EmotionState {
             fear: 0.0,
             sadness: 0.0,
             happiness: 0.0,
+            curiosity: 0.0,
             decay_rate: 0.01, // 1% per tick
             anger_sources: HashMap::new(),
             fear_sources: HashMap::new(),
             sadness_sources: HashMap::new(),
             happiness_sources: HashMap::new(),
+            curiosity_sources: HashMap::new(),
         }
     }
 
@@ -99,12 +104,30 @@ impl EmotionState {
         self.update_totals();
     }
 
+    /// Add curiosity from a source
+    pub fn add_curiosity(&mut self, source: EmotionSource, amount: f32) {
+        let new_amount = self.curiosity_sources.get(&source).unwrap_or(&0.0) + amount;
+        self.curiosity_sources.insert(source, new_amount.min(1.0));
+        self.update_totals();
+    }
+
+    /// Set curiosity level for a source (replaces existing value)
+    pub fn set_curiosity(&mut self, source: EmotionSource, amount: f32) {
+        if amount > 0.0 {
+            self.curiosity_sources.insert(source, amount.min(1.0));
+        } else {
+            self.curiosity_sources.remove(&source);
+        }
+        self.update_totals();
+    }
+
     /// Update total emotion levels from sources
     fn update_totals(&mut self) {
         self.anger = self.anger_sources.values().sum::<f32>().min(1.0);
         self.fear = self.fear_sources.values().sum::<f32>().min(1.0);
         self.sadness = self.sadness_sources.values().sum::<f32>().min(1.0);
         self.happiness = self.happiness_sources.values().sum::<f32>().min(1.0);
+        self.curiosity = self.curiosity_sources.values().sum::<f32>().min(1.0);
     }
 
     /// Decay emotions over time
@@ -122,19 +145,25 @@ impl EmotionState {
         for amount in self.happiness_sources.values_mut() {
             *amount = (*amount - self.decay_rate).max(0.0);
         }
+        for amount in self.curiosity_sources.values_mut() {
+            *amount = (*amount - self.decay_rate * 0.5).max(0.0); // Curiosity decays slower
+        }
 
         // Remove sources at 0
         self.anger_sources.retain(|_, v| *v > 0.0);
         self.fear_sources.retain(|_, v| *v > 0.0);
         self.sadness_sources.retain(|_, v| *v > 0.0);
         self.happiness_sources.retain(|_, v| *v > 0.0);
+        self.curiosity_sources.retain(|_, v| *v > 0.0);
 
         self.update_totals();
     }
 
-    /// Get dominant emotion (including happiness)
-    pub fn dominant_emotion(&self) -> Option<EmotionType> {
-        let max_value = self.anger.max(self.fear).max(self.sadness).max(self.happiness);
+    /// Get dominant emotion (including happiness and curiosity)
+    pub fn dominant_emotion(&self) -> Option<crate::core::EmotionType> {
+        use crate::core::EmotionType;
+
+        let max_value = self.anger.max(self.fear).max(self.sadness).max(self.happiness).max(self.curiosity);
 
         if max_value < 0.1 {
             return None; // No significant emotion
@@ -142,6 +171,8 @@ impl EmotionState {
 
         if self.happiness >= max_value {
             Some(EmotionType::Happiness)
+        } else if self.curiosity >= max_value {
+            Some(EmotionType::Curiosity)
         } else if self.anger >= max_value {
             Some(EmotionType::Anger)
         } else if self.fear >= max_value {
@@ -176,14 +207,14 @@ impl EmotionState {
 
     /// Get emotion value by type (for API compatibility)
     pub fn get(&self, emotion_type: crate::core::EmotionType) -> Option<EmotionValue> {
-        use crate::core::EmotionType as CoreEmotionType;
+        use crate::core::EmotionType;
 
         match emotion_type {
-            CoreEmotionType::Happiness => Some(EmotionValue { value: self.happiness }),
-            CoreEmotionType::Sadness => Some(EmotionValue { value: -self.sadness }),
-            CoreEmotionType::Anger => Some(EmotionValue { value: -self.anger }),
-            CoreEmotionType::Fear => Some(EmotionValue { value: -self.fear }),
-            _ => None,
+            EmotionType::Happiness => Some(EmotionValue { value: self.happiness }),
+            EmotionType::Sadness => Some(EmotionValue { value: -self.sadness }),
+            EmotionType::Anger => Some(EmotionValue { value: -self.anger }),
+            EmotionType::Fear => Some(EmotionValue { value: -self.fear }),
+            EmotionType::Curiosity => Some(EmotionValue { value: self.curiosity }),
         }
     }
 }
@@ -212,14 +243,8 @@ pub enum EmotionSource {
     Location((i32, i32, i32)),
 }
 
-/// Type of emotion
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum EmotionType {
-    Anger,
-    Fear,
-    Sadness,
-    Happiness,
-}
+// Note: EmotionType is now unified in core::emotions
+// Use crate::core::EmotionType instead of a duplicate enum here
 
 /// Relationship between agents
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,10 +253,14 @@ pub struct Relationship {
     pub other_agent: Uuid,
     /// Type of relationship
     pub relationship_type: RelationshipType,
-    /// Strength of bond (0.0 to 1.0)
+    /// Strength of bond (-1.0 to 1.0)
     pub bond_strength: f32,
     /// Time together (in ticks)
     pub time_together: u64,
+    /// Last interaction tick (for determining if should greet)
+    pub last_interaction_tick: u32,
+    /// Total number of interactions
+    pub total_interactions: u32,
 }
 
 impl Relationship {
@@ -251,6 +280,20 @@ impl Relationship {
             relationship_type,
             bond_strength,
             time_together: 0,
+            last_interaction_tick: 0,
+            total_interactions: 0,
+        }
+    }
+
+    /// Create a new neutral relationship (for compatibility with social network system)
+    pub fn new_neutral(other_agent: Uuid, current_tick: u32) -> Self {
+        Self {
+            other_agent,
+            relationship_type: RelationshipType::Acquaintance,
+            bond_strength: 0.0,
+            time_together: 0,
+            last_interaction_tick: current_tick,
+            total_interactions: 0,
         }
     }
 
@@ -275,6 +318,76 @@ impl Relationship {
     /// Weaken bond
     pub fn weaken(&mut self, amount: f32) {
         self.bond_strength = (self.bond_strength - amount).max(-1.0);
+    }
+
+    /// Record a positive interaction (for compatibility with social network system)
+    /// Delta is converted to bond strength change (typically 0-10 -> 0.0-0.1)
+    pub fn positive_interaction(&mut self, delta: i8, current_tick: u32) {
+        let bond_change = (delta as f32) * 0.01; // Convert delta to 0.0-1.0 scale
+        self.strengthen(bond_change);
+        self.last_interaction_tick = current_tick;
+        self.total_interactions += 1;
+    }
+
+    /// Record a negative interaction (for compatibility with social network system)
+    /// Delta is converted to bond strength change (typically 0-10 -> 0.0-0.1)
+    pub fn negative_interaction(&mut self, delta: i8, current_tick: u32) {
+        let bond_change = (delta as f32) * 0.01; // Convert delta to 0.0-1.0 scale
+        self.weaken(bond_change);
+        self.last_interaction_tick = current_tick;
+        self.total_interactions += 1;
+    }
+
+    /// Get relationship level (for compatibility with social network system)
+    /// Converts bond_strength to RelationshipLevel enum
+    pub fn relationship_level(&self) -> super::relationships::RelationshipLevel {
+        use super::relationships::RelationshipLevel;
+
+        if self.bond_strength >= 0.8 {
+            RelationshipLevel::Loves(5)  // Very strong positive
+        } else if self.bond_strength >= 0.6 {
+            RelationshipLevel::Loves(1)  // Strong positive
+        } else if self.bond_strength >= 0.4 {
+            RelationshipLevel::Likes(5)  // Moderate positive
+        } else if self.bond_strength >= 0.2 {
+            RelationshipLevel::Likes(1)  // Mild positive
+        } else if self.bond_strength >= -0.2 {
+            RelationshipLevel::Neutral(0)  // Neutral
+        } else if self.bond_strength >= -0.4 {
+            RelationshipLevel::Dislikes(1)  // Mild negative
+        } else if self.bond_strength >= -0.6 {
+            RelationshipLevel::Dislikes(5)  // Moderate negative
+        } else if self.bond_strength >= -0.8 {
+            RelationshipLevel::Hates(1)  // Strong negative
+        } else {
+            RelationshipLevel::Hates(5)  // Very strong negative
+        }
+    }
+
+    /// Get trust level (for compatibility with social network system)
+    /// Converts bond_strength to TrustLevel enum
+    pub fn trust_level(&self) -> super::relationships::TrustLevel {
+        use super::relationships::TrustLevel;
+
+        if self.bond_strength >= 0.8 {
+            TrustLevel::TrustsCompletely(3)  // Very high trust
+        } else if self.bond_strength >= 0.6 {
+            TrustLevel::TrustsCompletely(1)  // High trust
+        } else if self.bond_strength >= 0.4 {
+            TrustLevel::MostlyTrusts(3)  // Moderate trust
+        } else if self.bond_strength >= 0.2 {
+            TrustLevel::SlightlyTrusts(1)  // Mild trust
+        } else if self.bond_strength >= -0.2 {
+            TrustLevel::Neutral  // Neutral trust
+        } else if self.bond_strength >= -0.4 {
+            TrustLevel::SlightlyDistrusts(1)  // Mild distrust
+        } else if self.bond_strength >= -0.6 {
+            TrustLevel::MostlyDistrusts(3)  // Moderate distrust
+        } else if self.bond_strength >= -0.8 {
+            TrustLevel::DistrustCompletely(1)  // High distrust
+        } else {
+            TrustLevel::DistrustCompletely(3)  // Very high distrust
+        }
     }
 
     /// Update relationship based on trait compatibility
@@ -528,6 +641,18 @@ impl RelationshipMap {
 
         synergies > conflicts
     }
+
+    /// Get or create a relationship (for compatibility with social network system)
+    /// If the relationship doesn't exist, creates a new neutral one
+    pub fn get_or_create_relationship(
+        &mut self,
+        other_agent_id: Uuid,
+        current_tick: u32,
+    ) -> &mut Relationship {
+        self.relationships
+            .entry(other_agent_id)
+            .or_insert_with(|| Relationship::new_neutral(other_agent_id, current_tick))
+    }
 }
 
 impl Default for RelationshipMap {
@@ -561,7 +686,9 @@ impl ThreatAssessment {
     }
 
     /// Get appropriate emotion for this threat
-    pub fn emotion_type(&self) -> EmotionType {
+    pub fn emotion_type(&self) -> crate::core::EmotionType {
+        use crate::core::EmotionType;
+
         if self.can_overcome {
             EmotionType::Anger
         } else {
@@ -584,6 +711,7 @@ impl ThreatAssessment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::EmotionType;
 
     #[test]
     fn test_emotion_state_creation() {

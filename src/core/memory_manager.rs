@@ -121,8 +121,8 @@ impl MemoryManager {
         strength: f32,
         description: String,
     ) {
-        // Add to long-term social memory
-        self.long_term.record_interaction(other_agent, positive, strength);
+        // Note: Social relationships are now tracked in Agent.relationships, not in Memory
+        // This method only records the episodic memory of the interaction
 
         // Add to episodic memory
         let valence = if positive { strength } else { -strength };
@@ -206,11 +206,10 @@ impl MemoryManager {
             0.0
         };
 
-        // Get trusted agents
-        let trusted_agents = self.long_term.trusted_agents();
-
-        // Get agents to avoid
-        let avoid_agents = self.long_term.agents_to_avoid();
+        // Note: Trusted/avoid agents are now tracked in Agent.relationships, not in Memory
+        // DecisionContext consumers should get this from agent.relationships instead
+        let trusted_agents = Vec::new();
+        let avoid_agents = Vec::new();
 
         // Current task focus
         let current_task = self.working.get_focus().map(|t| t.description.clone());
@@ -251,7 +250,7 @@ impl MemoryManager {
             episodic: self.episodic.stats(),
             working: self.working.stats(),
             spatial_locations: self.long_term.spatial_memories.len(),
-            social_relationships: self.long_term.social_relationships.len(),
+            social_relationships: 0, // Relationships now tracked in Agent.relationships
             knowledge_items: self.long_term.knowledge.len(),
         }
     }
@@ -390,8 +389,8 @@ mod tests {
             "Had a nice conversation".to_string(),
         );
 
-        // Should be in both social and episodic memory
-        assert!(manager.long_term.social_relationships.contains_key(&other_agent));
+        // Note: Social relationships are now tracked in Agent.relationships, not Memory
+        // This test now only verifies episodic memory
         assert_eq!(manager.episodic.episode_count(), 1);
     }
 

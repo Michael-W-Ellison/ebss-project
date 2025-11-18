@@ -87,11 +87,10 @@ pub fn observe_and_learn(
     // Check if observer is related to observed (family learns better)
     let relationship_bonus = if observer.parent_ids.contains(&observed.id) {
         1.5 // 50% bonus for learning from parents
-    } else if observer.memory.social_relationships.contains_key(&observed.id) {
-        let relationship = &observer.memory.social_relationships[&observed.id];
-        if relationship.is_parent || relationship.is_child {
-            1.5
-        } else if relationship.trust > 0.5 {
+    } else if let Some(relationship) = observer.relationships.get_relationship(&observed.id) {
+        if relationship.is_family() {
+            1.5  // 50% bonus for learning from family
+        } else if relationship.bond_strength > 0.5 {
             1.2 // 20% bonus for trusted agents
         } else {
             1.0

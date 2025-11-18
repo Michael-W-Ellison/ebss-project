@@ -221,149 +221,8 @@ impl SpatialMemory {
     }
 }
 
-/// Relationship strength categories
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RelationshipStrength {
-    CloseFriend,
-    Friend,
-    Acquaintance,
-    Neutral,
-    Disliked,
-    Enemy,
-}
-
-/// Relationship with another agent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SocialRelationship {
-    pub agent_id: Uuid,
-    pub familiarity: f32, // 0.0 to 1.0, how well they know each other
-    pub trust: f32, // -1.0 to 1.0, negative = distrust
-    pub affection: f32, // -1.0 to 1.0, negative = hostility
-    pub last_interaction: u32, // Tick of last interaction
-    pub positive_interactions: u32,
-    pub negative_interactions: u32,
-    pub is_parent: bool,
-    pub is_child: bool,
-    pub is_mate: bool,
-}
-
-impl SocialRelationship {
-    pub fn new(agent_id: Uuid, tick: u32) -> Self {
-        Self {
-            agent_id,
-            familiarity: 0.1,
-            trust: 0.0,
-            affection: 0.0,
-            last_interaction: tick,
-            positive_interactions: 0,
-            negative_interactions: 0,
-            is_parent: false,
-            is_child: false,
-            is_mate: false,
-        }
-    }
-
-    /// Record a positive interaction
-    pub fn positive_interaction(&mut self, tick: u32, strength: f32) {
-        self.positive_interactions += 1;
-        self.trust = (self.trust + strength * 0.1).min(1.0);
-        self.affection = (self.affection + strength * 0.1).min(1.0);
-        self.familiarity = (self.familiarity + 0.05).min(1.0);
-        self.last_interaction = tick;
-    }
-
-    /// Record a negative interaction
-    pub fn negative_interaction(&mut self, tick: u32, strength: f32) {
-        self.negative_interactions += 1;
-        self.trust = (self.trust - strength * 0.1).max(-1.0);
-        self.affection = (self.affection - strength * 0.1).max(-1.0);
-        self.familiarity = (self.familiarity + 0.02).min(1.0); // Still increases familiarity
-        self.last_interaction = tick;
-    }
-
-    /// Decay relationship over time without interaction
-    pub fn decay(&mut self, current_tick: u32) {
-        let ticks_elapsed = current_tick.saturating_sub(self.last_interaction);
-
-        // Different decay rates based on relationship type
-        let decay_threshold = if self.is_parent || self.is_child || self.is_mate {
-            5000 // Family bonds persist 5x longer
-        } else {
-            1000
-        };
-
-        if ticks_elapsed > decay_threshold {
-            // Base decay rate
-            let mut decay_rate = 0.001;
-
-            // Family relationships decay slower
-            if self.is_parent || self.is_child || self.is_mate {
-                decay_rate *= 0.2;
-            }
-
-            // Negative relationships decay slower (grudges last longer)
-            if self.trust < 0.0 || self.affection < 0.0 {
-                decay_rate *= 0.5;
-            }
-
-            // Decay trust and affection towards 0
-            if self.trust > 0.0 {
-                self.trust = (self.trust - decay_rate).max(0.0);
-            } else if self.trust < 0.0 {
-                self.trust = (self.trust + decay_rate).min(0.0);
-            }
-
-            if self.affection > 0.0 {
-                self.affection = (self.affection - decay_rate).max(0.0);
-            } else if self.affection < 0.0 {
-                self.affection = (self.affection + decay_rate).min(0.0);
-            }
-
-            // Familiarity decays very slowly
-            self.familiarity = (self.familiarity - decay_rate * 0.5).max(0.0);
-        }
-    }
-
-    /// Get relationship strength category
-    pub fn relationship_strength(&self) -> RelationshipStrength {
-        let combined = self.trust + self.affection;
-
-        if combined >= 1.5 {
-            RelationshipStrength::CloseFriend
-        } else if combined >= 0.8 {
-            RelationshipStrength::Friend
-        } else if combined >= 0.3 {
-            RelationshipStrength::Acquaintance
-        } else if combined >= -0.3 {
-            RelationshipStrength::Neutral
-        } else if combined >= -0.8 {
-            RelationshipStrength::Disliked
-        } else {
-            RelationshipStrength::Enemy
-        }
-    }
-
-    /// Should this agent be avoided?
-    pub fn should_avoid(&self) -> bool {
-        self.trust < -0.3 || self.affection < -0.3
-    }
-
-    /// Is this a strong positive relationship?
-    pub fn is_strong_bond(&self) -> bool {
-        (self.trust > 0.6 && self.affection > 0.6) || self.is_parent || self.is_child || self.is_mate
-    }
-
-    /// Get interaction frequency (interactions per 1000 ticks)
-    pub fn interaction_frequency(&self, current_tick: u32) -> f32 {
-        let total_interactions = self.positive_interactions + self.negative_interactions;
-        if total_interactions == 0 {
-            return 0.0;
-        }
-
-        let ticks_elapsed = current_tick.saturating_sub(self.last_interaction).max(1);
-        (total_interactions as f32 / ticks_elapsed as f32) * 1000.0
-    }
-}
+// Note: Relationship tracking has been consolidated into agents/emotions.rs
+// All relationship functionality now uses RelationshipMap and Relationship from that module
 
 /// Knowledge or recipe memory
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -411,10 +270,10 @@ impl KnowledgeMemory {
 }
 
 /// Complete memory system for an agent
+/// Note: Social relationships are tracked in agents::emotions::RelationshipMap
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
     pub spatial_memories: Vec<SpatialMemory>,
-    pub social_relationships: HashMap<Uuid, SocialRelationship>,
     pub knowledge: Vec<KnowledgeMemory>,
     pub current_tick: u32,
 }
@@ -423,7 +282,6 @@ impl Memory {
     pub fn new() -> Self {
         Self {
             spatial_memories: Vec::new(),
-            social_relationships: HashMap::new(),
             knowledge: Vec::new(),
             current_tick: 0,
         }
@@ -440,11 +298,6 @@ impl Memory {
 
         // Remove very old, low-confidence memories
         self.spatial_memories.retain(|m| m.confidence > 0.1);
-
-        // Decay social relationships
-        for relationship in self.social_relationships.values_mut() {
-            relationship.decay(self.current_tick);
-        }
     }
 
     /// Add or update spatial memory
@@ -469,118 +322,6 @@ impl Memory {
             .collect()
     }
 
-    /// Get or create relationship with another agent
-    pub fn get_relationship(&mut self, agent_id: Uuid) -> &mut SocialRelationship {
-        self.social_relationships
-            .entry(agent_id)
-            .or_insert_with(|| SocialRelationship::new(agent_id, self.current_tick))
-    }
-
-    /// Record interaction with another agent
-    pub fn record_interaction(&mut self, agent_id: Uuid, positive: bool, strength: f32) {
-        let current_tick = self.current_tick;
-        let relationship = self.get_relationship(agent_id);
-        if positive {
-            relationship.positive_interaction(current_tick, strength);
-        } else {
-            relationship.negative_interaction(current_tick, strength);
-        }
-    }
-
-    /// Mark another agent as family
-    pub fn mark_as_parent(&mut self, parent_id: Uuid) {
-        let relationship = self.get_relationship(parent_id);
-        relationship.is_parent = true;
-        relationship.trust = 1.0;
-        relationship.affection = 0.8;
-        relationship.familiarity = 1.0;
-    }
-
-    /// Mark another agent as offspring
-    pub fn mark_as_child(&mut self, child_id: Uuid) {
-        let relationship = self.get_relationship(child_id);
-        relationship.is_child = true;
-        relationship.trust = 1.0;
-        relationship.affection = 0.9;
-        relationship.familiarity = 1.0;
-    }
-
-    /// Mark another agent as mate
-    pub fn mark_as_mate(&mut self, mate_id: Uuid) {
-        let relationship = self.get_relationship(mate_id);
-        relationship.is_mate = true;
-        relationship.trust = 0.8;
-        relationship.affection = 0.8;
-        relationship.familiarity = (relationship.familiarity + 0.5).min(1.0);
-    }
-
-    /// Get trusted agents
-    pub fn trusted_agents(&self) -> Vec<Uuid> {
-        self.social_relationships
-            .iter()
-            .filter(|(_, r)| r.trust > 0.5)
-            .map(|(id, _)| *id)
-            .collect()
-    }
-
-    /// Get agents to avoid (disliked or distrusted)
-    pub fn agents_to_avoid(&self) -> Vec<Uuid> {
-        self.social_relationships
-            .iter()
-            .filter(|(_, r)| r.should_avoid())
-            .map(|(id, _)| *id)
-            .collect()
-    }
-
-    /// Get strong bonds (close friends and family)
-    pub fn strong_bonds(&self) -> Vec<Uuid> {
-        self.social_relationships
-            .iter()
-            .filter(|(_, r)| r.is_strong_bond())
-            .map(|(id, _)| *id)
-            .collect()
-    }
-
-    /// Get agents by relationship strength
-    pub fn agents_by_strength(&self, strength: RelationshipStrength) -> Vec<Uuid> {
-        self.social_relationships
-            .iter()
-            .filter(|(_, r)| r.relationship_strength() == strength)
-            .map(|(id, _)| *id)
-            .collect()
-    }
-
-    /// Check if agent should be avoided
-    pub fn should_avoid_agent(&self, agent_id: Uuid) -> bool {
-        self.social_relationships
-            .get(&agent_id)
-            .map(|r| r.should_avoid())
-            .unwrap_or(false)
-    }
-
-    /// Get most liked agent
-    pub fn most_liked_agent(&self) -> Option<Uuid> {
-        self.social_relationships
-            .iter()
-            .max_by(|(_, a), (_, b)| {
-                let a_score = a.trust + a.affection;
-                let b_score = b.trust + b.affection;
-                a_score.partial_cmp(&b_score).unwrap()
-            })
-            .map(|(id, _)| *id)
-    }
-
-    /// Get most disliked agent
-    pub fn most_disliked_agent(&self) -> Option<Uuid> {
-        self.social_relationships
-            .iter()
-            .min_by(|(_, a), (_, b)| {
-                let a_score = a.trust + a.affection;
-                let b_score = b.trust + b.affection;
-                a_score.partial_cmp(&b_score).unwrap()
-            })
-            .map(|(id, _)| *id)
-    }
 
     /// Learn new knowledge
     pub fn learn(&mut self, name: String, description: String) {
@@ -645,31 +386,6 @@ mod tests {
     }
 
     #[test]
-    fn test_social_relationship() {
-        let mut memory = Memory::new();
-        let other_id = Uuid::new_v4();
-
-        memory.record_interaction(other_id, true, 1.0);
-
-        let relationship = memory.social_relationships.get(&other_id).unwrap();
-        assert!(relationship.trust > 0.0);
-        assert!(relationship.affection > 0.0);
-        assert_eq!(relationship.positive_interactions, 1);
-    }
-
-    #[test]
-    fn test_family_marking() {
-        let mut memory = Memory::new();
-        let parent_id = Uuid::new_v4();
-
-        memory.mark_as_parent(parent_id);
-
-        let relationship = memory.social_relationships.get(&parent_id).unwrap();
-        assert!(relationship.is_parent);
-        assert_eq!(relationship.trust, 1.0);
-    }
-
-    #[test]
     fn test_knowledge_learning() {
         let mut memory = Memory::new();
         memory.learn("Farming".to_string(), "How to grow crops".to_string());
@@ -692,142 +408,4 @@ mod tests {
         assert_eq!(knowledge.success_count, 2);
     }
 
-    #[test]
-    fn test_relationship_strength_categories() {
-        let mut relationship = SocialRelationship::new(Uuid::new_v4(), 0);
-
-        // Start as neutral
-        assert_eq!(relationship.relationship_strength(), RelationshipStrength::Neutral);
-
-        // Become friends
-        relationship.trust = 0.5;
-        relationship.affection = 0.4;
-        assert_eq!(relationship.relationship_strength(), RelationshipStrength::Friend);
-
-        // Become close friends
-        relationship.trust = 0.8;
-        relationship.affection = 0.8;
-        assert_eq!(relationship.relationship_strength(), RelationshipStrength::CloseFriend);
-
-        // Become disliked
-        relationship.trust = -0.5;
-        relationship.affection = -0.3;
-        assert_eq!(relationship.relationship_strength(), RelationshipStrength::Disliked);
-    }
-
-    #[test]
-    fn test_should_avoid() {
-        let mut relationship = SocialRelationship::new(Uuid::new_v4(), 0);
-
-        // Neutral relationship should not be avoided
-        assert!(!relationship.should_avoid());
-
-        // Negative trust triggers avoidance
-        relationship.trust = -0.4;
-        assert!(relationship.should_avoid());
-
-        // Negative affection triggers avoidance
-        relationship.trust = 0.0;
-        relationship.affection = -0.4;
-        assert!(relationship.should_avoid());
-    }
-
-    #[test]
-    fn test_family_bonds_decay_slower() {
-        let mut parent_rel = SocialRelationship::new(Uuid::new_v4(), 0);
-        parent_rel.is_parent = true;
-        parent_rel.trust = 1.0;
-        parent_rel.affection = 0.8;
-
-        let mut friend_rel = SocialRelationship::new(Uuid::new_v4(), 0);
-        friend_rel.trust = 1.0;
-        friend_rel.affection = 0.8;
-
-        // Fast forward 3000 ticks
-        for tick in 1..3001 {
-            parent_rel.decay(tick);
-            friend_rel.decay(tick);
-        }
-
-        // Family bond should decay much less than friend
-        assert!(parent_rel.trust > friend_rel.trust);
-        assert!(parent_rel.affection > friend_rel.affection);
-    }
-
-    #[test]
-    fn test_negative_relationships_persist() {
-        let mut enemy_rel = SocialRelationship::new(Uuid::new_v4(), 0);
-        enemy_rel.trust = -0.8;
-        enemy_rel.affection = -0.8;
-
-        let initial_trust = enemy_rel.trust;
-
-        // Fast forward 2000 ticks
-        for tick in 1..2001 {
-            enemy_rel.decay(tick);
-        }
-
-        // Negative relationship should decay slower (still somewhat negative)
-        // With 0.5x decay rate on negative relationships, it should still be negative
-        assert!(enemy_rel.trust < -0.2); // Still negative after 2000 ticks
-        assert!(enemy_rel.affection < -0.2);
-    }
-
-    #[test]
-    fn test_agents_to_avoid() {
-        let mut memory = Memory::new();
-        let friend_id = Uuid::new_v4();
-        let enemy_id = Uuid::new_v4();
-
-        // Create positive relationship
-        memory.record_interaction(friend_id, true, 1.0);
-
-        // Create strong negative relationship (needs multiple strong interactions to reach -0.3)
-        for _ in 0..5 {
-            memory.record_interaction(enemy_id, false, 1.0);
-        }
-
-        let avoid_list = memory.agents_to_avoid();
-        assert!(avoid_list.contains(&enemy_id));
-        assert!(!avoid_list.contains(&friend_id));
-    }
-
-    #[test]
-    fn test_most_liked_disliked() {
-        let mut memory = Memory::new();
-        let friend_id = Uuid::new_v4();
-        let neutral_id = Uuid::new_v4();
-        let enemy_id = Uuid::new_v4();
-
-        // Create varied relationships
-        memory.record_interaction(friend_id, true, 1.0);
-        memory.record_interaction(friend_id, true, 1.0);
-        memory.record_interaction(neutral_id, true, 0.1);
-        memory.record_interaction(enemy_id, false, 1.0);
-        memory.record_interaction(enemy_id, false, 1.0);
-
-        assert_eq!(memory.most_liked_agent(), Some(friend_id));
-        assert_eq!(memory.most_disliked_agent(), Some(enemy_id));
-    }
-
-    #[test]
-    fn test_strong_bonds() {
-        let mut memory = Memory::new();
-        let parent_id = Uuid::new_v4();
-        let friend_id = Uuid::new_v4();
-        let acquaintance_id = Uuid::new_v4();
-
-        memory.mark_as_parent(parent_id);
-
-        // Need many interactions to reach 0.6 trust AND affection (each interaction adds 0.1 * strength)
-        for _ in 0..8 {
-            memory.record_interaction(friend_id, true, 1.0);
-        }
-        memory.record_interaction(acquaintance_id, true, 0.3);
-
-        let bonds = memory.strong_bonds();
-        assert!(bonds.contains(&parent_id)); // Family always strong
-        assert!(bonds.contains(&friend_id)); // High trust/affection from many interactions
-        assert!(!bonds.contains(&acquaintance_id)); // Weak relationship
-    }
 }

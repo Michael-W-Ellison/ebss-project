@@ -91,9 +91,14 @@ pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
     // Place offspring near parents
     offspring.state.position = offspring_position(parent1.state.position, parent2.state.position);
 
-    // Establish family relationships in memory
-    offspring.memory.mark_as_parent(parent1.id);
-    offspring.memory.mark_as_parent(parent2.id);
+    // Establish family relationships
+    use crate::agents::emotions::{Relationship, RelationshipType};
+    offspring.relationships.add_relationship(
+        Relationship::new(parent1.id, RelationshipType::Parent)
+    );
+    offspring.relationships.add_relationship(
+        Relationship::new(parent2.id, RelationshipType::Parent)
+    );
 
     offspring
 }

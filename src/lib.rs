@@ -43,7 +43,7 @@ pub mod prelude {
         behavior_tree::{BehaviorTree, BehaviorNode, NodeType},
         drives::{Drive, DriveType, DriveState},
         learning::{ObservableEvent, ObservableEventType, observe_and_learn, process_population_learning},
-        memory::{Memory, SpatialMemoryType, SocialRelationship},
+        memory::{Memory, SpatialMemoryType},
         emotions::{Emotion, EmotionType, EmotionalState},
         traits::{Trait, TraitSet},
         goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager},

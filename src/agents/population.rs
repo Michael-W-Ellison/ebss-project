@@ -809,10 +809,13 @@ impl Population {
                     drive.satisfy();
                 }
 
-                // Mark children in parent's memory
+                // Mark children in parent's relationships
                 for (offspring_id, parent_ids) in &offspring_ids {
                     if parent_ids.contains(&agent.id) {
-                        agent.memory.mark_as_child(*offspring_id);
+                        use crate::agents::emotions::{Relationship, RelationshipType};
+                        agent.relationships.add_relationship(
+                            Relationship::new(*offspring_id, RelationshipType::Child)
+                        );
                     }
                 }
             }
@@ -965,12 +968,12 @@ impl Population {
 
             // Get relationship info (or create new relationship)
             let relationship_1_to_2 = self.agents[i]
-                .social_network
+                .relationships
                 .get_or_create_relationship(agent2_id, current_tick)
                 .clone();
 
             let relationship_2_to_1 = self.agents[j]
-                .social_network
+                .relationships
                 .get_or_create_relationship(agent1_id, current_tick)
                 .clone();
 
@@ -982,14 +985,14 @@ impl Population {
             let interaction_type = if should_greet(
                 relationship_1_to_2.last_interaction_tick,
                 current_tick,
-                &relationship_1_to_2.relationship_level,
+                &relationship_1_to_2.relationship_level(),
             ) {
                 // Greet if haven't interacted recently
                 SocialInteractionType::Greet
             } else {
                 // Otherwise, have a conversation
                 let topic = select_conversation_topic(
-                    &relationship_1_to_2.relationship_level,
+                    &relationship_1_to_2.relationship_level(),
                     &agent1_traits,
                     &agent2_traits,
                 );
@@ -1001,31 +1004,31 @@ impl Population {
                 &interaction_type,
                 &agent1_traits,
                 &agent2_traits,
-                &relationship_1_to_2.relationship_level,
+                &relationship_1_to_2.relationship_level(),
             );
 
             let rel_change_2 = calculate_relationship_change(
                 &interaction_type,
                 &agent2_traits,
                 &agent1_traits,
-                &relationship_2_to_1.relationship_level,
+                &relationship_2_to_1.relationship_level(),
             );
 
             // Calculate social satisfaction for both agents
             let satisfaction_1 = calculate_social_satisfaction(
                 &interaction_type,
                 &agent1_traits,
-                &relationship_1_to_2.relationship_level,
+                &relationship_1_to_2.relationship_level(),
             );
 
             let satisfaction_2 = calculate_social_satisfaction(
                 &interaction_type,
                 &agent2_traits,
-                &relationship_2_to_1.relationship_level,
+                &relationship_2_to_1.relationship_level(),
             );
 
             // Apply changes to agent 1
-            if let Some(rel) = self.agents[i].social_network.get_relationship_mut(agent2_id) {
+            if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&agent2_id) {
                 rel.positive_interaction(rel_change_1, current_tick);
             }
             if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Social) {
@@ -1033,7 +1036,7 @@ impl Population {
             }
 
             // Apply changes to agent 2
-            if let Some(rel) = self.agents[j].social_network.get_relationship_mut(agent1_id) {
+            if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&agent1_id) {
                 rel.positive_interaction(rel_change_2, current_tick);
             }
             if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Social) {

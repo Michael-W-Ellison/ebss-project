@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::collections::HashMap;
-use super::traits::Trait;
+use crate::core::traits::Trait;
 
 /// Type of information being shared
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

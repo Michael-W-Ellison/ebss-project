@@ -9,7 +9,7 @@ use super::senses::Senses;
 use super::body::Body;
 use super::skills::Skills;
 use super::emotions::{EmotionState, EmotionSource, RelationshipMap};
-use super::traits::TraitSet;
+use crate::core::traits::TraitSet;
 use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
@@ -566,7 +566,6 @@ pub struct Agent {
     pub skills: Skills,
     pub emotions: EmotionState,
     pub relationships: RelationshipMap,
-    pub social_network: super::relationships::SocialNetwork, // Social relationship and trust tracking
     pub traits: TraitSet,
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
@@ -602,7 +601,6 @@ impl Agent {
             skills: Skills::default(),
             emotions: EmotionState::default(),
             relationships: RelationshipMap::default(),
-            social_network: super::relationships::SocialNetwork::default(),
             traits: TraitSet::default(),
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
@@ -639,6 +637,9 @@ impl Agent {
         self.emotions.tick();
         self.memory.tick();
 
+        // Check for stale storage knowledge and trigger curiosity
+        self.update_storage_curiosity(current_tick);
+
         // Update emotions based on drive states (every tick)
         self.update_emotions_from_drives();
         self.drives.tick();
@@ -672,7 +673,8 @@ impl Agent {
                     }
                     Percept::AgentDetected { agent_id, .. } => {
                         // Update social relationship (neutral interaction for just seeing them)
-                        self.memory.record_interaction(*agent_id, true, 0.01);
+                        let rel = self.relationships.get_or_create_relationship(*agent_id, current_tick);
+                        rel.strengthen(0.01);
                     }
                     _ => {}
                 }
@@ -1781,6 +1783,66 @@ impl Agent {
 
     // ===== Drive-Emotion Feedback System =====
 
+    /// Check for stale storage knowledge and trigger curiosity
+    /// Agents become curious about storage containers they haven't checked recently
+    fn update_storage_curiosity(&mut self, current_tick: u32) {
+        use super::EmotionSource;
+        use crate::core::memory::SpatialMemoryType;
+
+        // Threshold for "stale" knowledge (ticks since last seen)
+        const STALE_THRESHOLD: u32 = 1000;
+
+        // Check all storage memories
+        let storage_memories = self.memory.recall_locations(SpatialMemoryType::Storage);
+
+        for storage_memory in storage_memories {
+            let time_since_seen = current_tick.saturating_sub(storage_memory.last_seen);
+
+            // If knowledge is stale, generate curiosity
+            if time_since_seen > STALE_THRESHOLD {
+                // Base curiosity scales with staleness (0.1 to 0.4)
+                let staleness_factor = ((time_since_seen - STALE_THRESHOLD) as f32 / 2000.0).min(1.0);
+                let base_curiosity = 0.1 + (staleness_factor * 0.3);
+
+                // Curious trait holders get 50% more curiosity
+                let curiosity_bonus = if self.traits.has(crate::core::Trait::Curious) {
+                    1.5
+                } else {
+                    1.0
+                };
+
+                let curiosity_amount = base_curiosity * curiosity_bonus;
+
+                // Add curiosity about this specific storage location
+                self.emotions.add_curiosity(
+                    EmotionSource::Location(storage_memory.position),
+                    curiosity_amount
+                );
+            }
+        }
+    }
+
+    /// Refresh storage knowledge (called when agent inspects/accesses storage)
+    /// Satisfies curiosity and grants happiness to Curious trait holders
+    pub fn refresh_storage_knowledge(&mut self, storage_position: (i32, i32, i32), current_tick: u32) {
+        use super::EmotionSource;
+        use crate::core::memory::SpatialMemoryType;
+
+        // Update the memory
+        self.memory.remember_location(SpatialMemoryType::Storage, storage_position);
+
+        // Satisfy curiosity about this location
+        self.emotions.set_curiosity(EmotionSource::Location(storage_position), 0.0);
+
+        // Curious trait holders gain happiness from learning/discovering
+        if self.traits.has(crate::core::Trait::Curious) {
+            self.emotions.add_happiness(
+                EmotionSource::Event("satisfied curiosity".to_string()),
+                0.15 // Moderate happiness boost
+            );
+        }
+    }
+
     /// Update emotions based on current drive states
     /// High unsatisfied drives trigger appropriate negative emotions
     /// Well-satisfied drives trigger happiness
@@ -1955,7 +2017,7 @@ impl Agent {
         let mut helper_happiness = (help_amount * 0.2).min(0.3);
 
         // Empathetic trait bonus: extra happiness from helping others
-        if self.traits.has_trait(&super::traits::Trait::Empathetic) {
+        if self.traits.has_trait(&crate::core::traits::Trait::Empathetic) {
             helper_happiness += 0.15; // Significant bonus for empathetic helpers
         }
 
