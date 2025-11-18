@@ -203,7 +203,7 @@ impl SimulationMetrics {
             emotion_map
                 .entry(crate::core::EmotionType::Happiness)
                 .or_insert_with(Vec::new)
-                .push(agent.emotions.happiness());
+                .push(agent.emotions.happiness);
 
             // Collect curiosity (default value for now, as it's not tracked in EmotionState)
             emotion_map

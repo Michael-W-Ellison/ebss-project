@@ -104,6 +104,16 @@ impl ClimateManager {
             biome.season = self.calendar.day_of_year as f32 / 365.0;
             biome.update_climate(0.0); // Initial update
 
+            // Apply climate modifiers AFTER update_climate (which overwrites temperature)
+            if self.cold_climate {
+                // Reduce temperature by 15°C for cold climates
+                biome.current_climate.temperature -= 15.0;
+            }
+            if self.wet_climate {
+                // Increase humidity for wet climates
+                biome.current_climate.humidity = (biome.current_climate.humidity + 0.3).min(1.0);
+            }
+
             self.biome_cache.insert(pos, biome);
         }
 

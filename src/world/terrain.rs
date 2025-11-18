@@ -119,6 +119,11 @@ mod tests {
     fn test_tile_creation() {
         let tile = Tile::new(TerrainType::Forest);
         assert_eq!(tile.terrain.terrain_type, TerrainType::Forest);
+        assert!(!tile.explored); // Tiles start unexplored (fog of war)
+
+        // Test marking as explored
+        let mut tile = tile;
+        tile.mark_explored();
         assert!(tile.explored);
     }
 }

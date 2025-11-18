@@ -193,6 +193,11 @@ impl Drive {
     pub fn partial_satisfy(&mut self, amount: f32) {
         self.decrease(amount);
     }
+
+    /// Get priority score (alias for urgency, used in TDD tests)
+    pub fn priority(&self) -> f32 {
+        self.urgency()
+    }
 }
 
 /// Complete drive state for an agent
@@ -261,6 +266,11 @@ impl DriveState {
             .max_by(|a, b| a.urgency().partial_cmp(&b.urgency()).unwrap())
     }
 
+    /// Alias for most_urgent (used in TDD tests)
+    pub fn get_most_urgent(&self) -> Option<&Drive> {
+        self.most_urgent()
+    }
+
     /// Update all drives for one tick
     pub fn tick(&mut self) {
         for drive in &mut self.drives {
@@ -274,7 +284,7 @@ impl DriveState {
             .iter()
             .filter(|d| d.is_active())
             .collect();
-        
+
         active.sort_by(|a, b| b.urgency().partial_cmp(&a.urgency()).unwrap());
         active
     }

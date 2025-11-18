@@ -63,6 +63,10 @@ pub mod technology;
 pub mod climate;
 pub mod combat;
 pub mod crafting;
+pub mod spatial_planning;
+pub mod zoning;
+pub mod path_planning;
+pub mod territory;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -108,6 +112,11 @@ pub struct World {
     #[serde(skip)]
     pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
     pub tick: u32,
+    pub config: WorldConfig, // Store configuration for spatial planning
+    pub resource_nodes: std::collections::HashMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
+    pub zone_manager: zoning::ZoneManager, // Spatial zoning for settlement planning
+    pub road_network: path_planning::RoadNetwork, // Road and path network
+    pub territory_manager: territory::TerritoryManager, // Territory claiming and ownership
 }
 
 /// World configuration
@@ -139,6 +148,61 @@ impl Default for WorldConfig {
     }
 }
 
+impl WorldConfig {
+    /// Set world size
+    pub fn with_size(mut self, width: usize, height: usize) -> Self {
+        self.size = (width, height);
+        self
+    }
+
+    /// Set resource configuration
+    pub fn with_resources(mut self, resources: ResourceConfig) -> Self {
+        self.initial_resources = resources;
+        self
+    }
+
+    /// Validate configuration values
+    pub fn validate(&self) -> Result<(), String> {
+        let (width, height) = self.size;
+
+        // Check for zero dimensions
+        if width == 0 {
+            return Err("World width must be greater than 0".to_string());
+        }
+        if height == 0 {
+            return Err("World height must be greater than 0".to_string());
+        }
+
+        // Check minimum size (must be large enough for agents to move)
+        const MIN_SIZE: usize = 10;
+        if width < MIN_SIZE || height < MIN_SIZE {
+            return Err(format!("World dimensions must be at least {}x{} (minimum playable size)", MIN_SIZE, MIN_SIZE));
+        }
+
+        // Check maximum size (prevent memory issues)
+        const MAX_SIZE: usize = 2000;
+        if width > MAX_SIZE || height > MAX_SIZE {
+            return Err(format!("World dimensions must not exceed {}x{} (maximum supported size)", MAX_SIZE, MAX_SIZE));
+        }
+
+        // Validate resource counts don't exceed world tiles
+        let total_tiles = width * height;
+        let total_resources = self.initial_resources.wood_nodes
+            + self.initial_resources.stone_nodes
+            + self.initial_resources.iron_nodes
+            + self.initial_resources.food_nodes;
+
+        if total_resources > total_tiles {
+            return Err(format!(
+                "Total resource nodes ({}) exceeds world tiles ({})",
+                total_resources, total_tiles
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 impl World {
     pub fn new(config: WorldConfig) -> Self {
         let mut grid = Grid::new(config.size.0, config.size.1);
@@ -158,6 +222,11 @@ impl World {
             combat_manager: combat::CombatManager::new(),
             crafting_manager: crafting::CraftingManager::new(),
             tick: 0,
+            config: config.clone(),
+            resource_nodes: std::collections::HashMap::new(),
+            zone_manager: zoning::ZoneManager::new(),
+            road_network: path_planning::RoadNetwork::new(),
+            territory_manager: territory::TerritoryManager::new(),
         };
 
         // Place initial resources
@@ -1117,6 +1186,47 @@ impl World {
     pub fn total_tiles(&self) -> usize {
         self.grid.width * self.grid.height
     }
+
+    // ===== Helper Methods for Spatial Planning and Testing =====
+
+    /// Place a resource node at a specific position (for testing and spatial planning)
+    pub fn place_resource_node(&mut self, resource_type: &str, position: (i32, i32, i32)) {
+        self.resource_nodes
+            .entry(resource_type.to_string())
+            .or_insert_with(Vec::new)
+            .push(position);
+    }
+
+    /// Add a building at a specific position (for testing and spatial planning)
+    pub fn add_building_at(&mut self, building_type: BuildingType, position: (i32, i32, i32)) {
+        use crate::world::buildings::Building;
+        let pos = Position::new(position.0, position.1);
+        let building = Building::new(building_type, pos);
+        self.buildings.push(building);
+    }
+
+    /// Check if terrain at position is passable
+    pub fn is_terrain_passable(&self, position: (i32, i32, i32)) -> bool {
+        // Check bounds
+        if position.0 < 0 || position.1 < 0 {
+            return false;
+        }
+        if position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return false;
+        }
+
+        // For now, all in-bounds terrain is passable
+        // In the future, check for water, mountains, etc.
+        true
+    }
+
+    /// Mark an area as impassable (for testing terrain constraints)
+    pub fn set_terrain_impassable(&mut self, center: (i32, i32, i32), _radius: i32) {
+        // This would modify terrain in the grid
+        // For now, we'll just note this as a placeholder
+        // The actual implementation would mark tiles in self.grid
+        // as impassable terrain types
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1305,3 +1415,7 @@ mod tests {
         assert!(tiny.estimated_memory_mb() < 50.0); // Tiny should be small
     }
 }
+
+// External TDD test modules
+#[cfg(test)]
+mod tdd_tests;

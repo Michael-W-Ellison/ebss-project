@@ -578,6 +578,7 @@ pub struct Agent {
     pub goals: GoalManager,
     pub preferences: Preferences,
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
+    pub satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker, // Tracks who/what satisfies which drives
 }
 
 impl Agent {
@@ -613,6 +614,7 @@ impl Agent {
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
+            satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker::new(),
         }
     }
 
@@ -636,6 +638,9 @@ impl Agent {
         self.body.tick();
         self.emotions.tick();
         self.memory.tick();
+
+        // Update emotions based on drive states (every tick)
+        self.update_emotions_from_drives();
         self.drives.tick();
 
         // Process sensory input into percepts and store them
@@ -1302,12 +1307,7 @@ impl Agent {
                 selector.add_child(BehaviorNode::new(NodeType::Action("decorate".to_string())));
                 selector
             }
-            DriveType::Thirst => {
-                let mut selector = BehaviorNode::new(NodeType::Selector);
-                selector.add_child(BehaviorNode::new(NodeType::Action("drink_water".to_string())));
-                selector.add_child(BehaviorNode::new(NodeType::Action("find_water".to_string())));
-                selector
-            }
+            // Thirst is already handled at line 1230 above
         };
 
         BehaviorTree::new(format!("{:?}_tree", drive_type), root)
@@ -1668,6 +1668,411 @@ impl Agent {
                 })
             }
             StorageDecision::NoAction { .. } => None,
+        }
+    }
+
+    // ========== Survival API Methods (for TDD tests) ==========
+
+    /// Eat food from inventory and satisfy hunger drive
+    /// Returns true if food was consumed
+    pub fn eat_food(&mut self, amount: u32) -> bool {
+        // Try to get food from inventory
+        if let Some(food_item) = self.inventory.get_item_mut("food") {
+            if food_item.quantity >= amount {
+                food_item.quantity -= amount;
+
+                // Restore energy (each food unit restores 20 energy)
+                let energy_restored = (amount as f32) * 20.0;
+                self.state.energy = (self.state.energy + energy_restored).min(100.0);
+
+                // Reset starvation (use current age as approximation of tick)
+                self.state.last_ate_tick = self.state.age;
+                self.state.ticks_without_food = 0;
+
+                // Satisfy hunger drive
+                let hunger_reduction = (amount as f32) * 0.2; // Each food reduces hunger by 0.2
+                if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+                    hunger.decrease(hunger_reduction);
+                }
+
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Drink water from inventory and satisfy thirst drive
+    /// Returns true if water was consumed
+    pub fn drink_water(&mut self, amount: f32) -> bool {
+        let drunk = self.inventory.drink_water(amount);
+
+        if drunk > 0.0 {
+            // Satisfy thirst drive
+            let thirst_reduction = drunk * 0.2; // Each liter reduces thirst by 0.2
+            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                thirst.decrease(thirst_reduction);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Rest and restore energy, satisfy rest drive
+    pub fn rest(&mut self, amount: f32) {
+        self.state.energy = (self.state.energy + amount).min(100.0);
+
+        // Satisfy rest drive
+        let rest_reduction = amount * 0.01; // Resting reduces the rest drive
+        if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
+            rest_drive.decrease(rest_reduction);
+        }
+    }
+
+    /// Consume energy from activity
+    pub fn consume_energy(&mut self, amount: f32) {
+        self.state.energy = (self.state.energy - amount).max(0.0);
+
+        // When energy is depleted, health starts decreasing
+        if self.state.energy <= 0.0 {
+            self.state.health = (self.state.health - 0.05).max(0.0);
+        }
+    }
+
+    /// Take damage (wrapper for AgentState method)
+    pub fn take_damage(&mut self, amount: f32) {
+        self.state.take_damage(amount);
+    }
+
+    /// Check if agent is dead
+    pub fn is_dead(&self) -> bool {
+        !self.state.is_alive || self.state.health <= 0.0
+    }
+
+    /// Age the agent by one tick
+    pub fn age_tick(&mut self) {
+        // Use age as an approximation of tick for the basic test API
+        self.state.age_tick(self.state.age);
+    }
+
+    /// Update starvation counter (called each tick)
+    pub fn update_starvation(&mut self) {
+        self.state.ticks_without_food += 1;
+    }
+
+    /// Apply damage from starvation
+    pub fn apply_starvation_damage(&mut self) {
+        // Damage is already applied in age_tick, but this is for explicit calls
+        if self.state.is_starving() {
+            let days_starving = self.state.ticks_without_food / 1440;
+            let damage = (days_starving as f32) * 0.5;
+            self.state.health = (self.state.health - damage).max(0.0);
+
+            if self.state.health <= 0.0 {
+                self.state.is_alive = false;
+            }
+        }
+    }
+
+    /// Update life stage based on age
+    pub fn update_life_stage(&mut self) {
+        self.state.life_stage = LifeStage::from_age(self.state.age);
+    }
+
+    // ===== Drive-Emotion Feedback System =====
+
+    /// Update emotions based on current drive states
+    /// High unsatisfied drives trigger appropriate negative emotions
+    /// Well-satisfied drives trigger happiness
+    /// Uses set_* methods to replace values rather than accumulate
+    pub fn update_emotions_from_drives(&mut self) {
+        use super::EmotionSource;
+
+        // Survival drives (Hunger, Thirst, Rest) → Fear (threat to survival)
+        let survival_fear = self.calculate_survival_drive_emotion();
+        self.emotions.set_fear(EmotionSource::Event("unmet survival needs".to_string()), survival_fear);
+
+        // Social drives → Sadness (loneliness, isolation)
+        let social_sadness = self.calculate_social_drive_emotion();
+        self.emotions.set_sadness(EmotionSource::Event("social isolation".to_string()), social_sadness);
+
+        // Other unfulfilled drives → General frustration (mild sadness)
+        let general_frustration = self.calculate_general_drive_frustration();
+        self.emotions.set_sadness(EmotionSource::Event("unfulfilled needs".to_string()), general_frustration * 0.5);
+
+        // Well-satisfied drives → Happiness (contentment)
+        let contentment = self.calculate_drive_satisfaction_happiness();
+        self.emotions.set_happiness(EmotionSource::Event("needs satisfied".to_string()), contentment);
+    }
+
+    /// Calculate fear from survival drive deprivation
+    /// Multiple survival threats compound (with diminishing returns)
+    fn calculate_survival_drive_emotion(&self) -> f32 {
+        let mut total_fear = 0.0f32;
+        let mut count = 0;
+
+        // Check hunger
+        if let Some(hunger) = self.drives.get(DriveType::Hunger) {
+            if hunger.value > 0.7 {
+                // Fear scales with severity above threshold
+                let fear = (hunger.value - 0.7) / 0.3 * 0.7; // 0.0 to 0.7 (increased from 0.6)
+                total_fear += fear;
+                count += 1;
+            }
+        }
+
+        // Check thirst (even more urgent)
+        if let Some(thirst) = self.drives.get(DriveType::Thirst) {
+            if thirst.value > 0.7 {
+                let fear = (thirst.value - 0.7) / 0.3 * 0.8; // 0.0 to 0.8 (increased from 0.7)
+                total_fear += fear;
+                count += 1;
+            }
+        }
+
+        // Check rest
+        if let Some(rest) = self.drives.get(DriveType::Rest) {
+            if rest.value >= 0.75 {
+                let fear = (rest.value - 0.75) / 0.25 * 0.5; // 0.0 to 0.5 (increased from 0.4)
+                total_fear += fear;
+                count += 1;
+            }
+        }
+
+        // If multiple drives, they compound but with diminishing returns
+        // Use average with bonus for multiple
+        if count > 1 {
+            let avg = total_fear / count as f32;
+            let compound_bonus = (count - 1) as f32 * 0.2; // +0.2 per additional drive (increased from 0.15)
+            (avg + compound_bonus).min(1.0)
+        } else {
+            total_fear.min(1.0)
+        }
+    }
+
+    /// Calculate sadness from social drive deprivation
+    fn calculate_social_drive_emotion(&self) -> f32 {
+        if let Some(social) = self.drives.get(DriveType::Social) {
+            if social.value > 0.6 {
+                // Sadness scales with loneliness
+                return (social.value - 0.6) / 0.4 * 0.6; // 0.0 to 0.6 (increased from 0.5)
+            }
+        }
+        0.0
+    }
+
+    /// Calculate general frustration from other drives
+    fn calculate_general_drive_frustration(&self) -> f32 {
+        let mut total = 0.0;
+        let mut count = 0;
+
+        for drive in &self.drives.drives {
+            // Skip survival and social drives (handled separately)
+            if matches!(drive.drive_type, DriveType::Hunger | DriveType::Thirst | DriveType::Rest | DriveType::Social) {
+                continue;
+            }
+
+            if drive.value > 0.7 {
+                total += (drive.value - 0.7) / 0.3;
+                count += 1;
+            }
+        }
+
+        if count > 0 {
+            // Return average frustration (compounds when multiple drives are high)
+            total / count as f32 * 0.4
+        } else {
+            0.0
+        }
+    }
+
+    /// Calculate happiness from satisfied drives
+    /// Returns 0.0 to 1.0 based on how well drives are met
+    fn calculate_drive_satisfaction_happiness(&self) -> f32 {
+        let mut total = 0.0;
+        let mut count = 0;
+
+        // Check all drives - well-satisfied drives contribute to happiness
+        for drive in &self.drives.drives {
+            // Drives below 0.3 are well-satisfied
+            if drive.value < 0.3 {
+                // Inverse scaling: lower drive = more happiness
+                let satisfaction = (0.3 - drive.value) / 0.3; // 0.0 to 1.0
+                total += satisfaction;
+                count += 1;
+            }
+        }
+
+        if count > 0 {
+            // Average satisfaction across all drives, capped at reasonable level
+            (total / count as f32 * 0.5).min(0.7)
+        } else {
+            0.0
+        }
+    }
+
+    /// Record that a source satisfied a drive
+    /// Also triggers gratitude (happiness and bond improvement) if source is an agent
+    pub fn record_drive_satisfaction(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32) {
+        let current_tick = 0; // TODO: Get actual tick from context
+        self.satisfaction_tracker.record(drive_type, source_id, amount, current_tick);
+
+        // Trigger gratitude response (happiness and bond improvement)
+        self.process_gratitude(source_id, amount);
+    }
+
+    /// Process gratitude when receiving help from another agent
+    /// Increases happiness and improves bond with the helper
+    fn process_gratitude(&mut self, helper_id: Uuid, help_amount: f32) {
+        use super::EmotionSource;
+
+        // Happiness from receiving help (scaled by amount)
+        let gratitude_happiness = (help_amount * 0.3).min(0.4);
+        self.emotions.add_happiness(EmotionSource::Agent(helper_id), gratitude_happiness);
+
+        // Improve bond with helper
+        if let Some(relationship) = self.relationships.get_relationship_mut(&helper_id) {
+            // Bond improvement scaled by help amount (0.01 to 0.05)
+            let bond_increase = (help_amount * 0.1).min(0.05);
+            relationship.bond_strength = (relationship.bond_strength + bond_increase).min(1.0);
+            relationship.time_together += 1;
+        } else {
+            // Create new positive relationship if none exists
+            use super::emotions::{Relationship, RelationshipType};
+            let mut new_relationship = Relationship::new(helper_id, RelationshipType::Acquaintance);
+            // Start with slightly higher bond due to the help
+            new_relationship.bond_strength = (0.2 + help_amount * 0.1).min(0.4);
+            self.relationships.add_relationship(new_relationship);
+        }
+    }
+
+    /// Process altruistic happiness when providing help to another agent
+    /// Empathetic agents get extra happiness from helping
+    pub fn process_helper_happiness(&mut self, recipient_id: Uuid, help_amount: f32) {
+        use super::EmotionSource;
+
+        // Base happiness from helping (scaled by amount)
+        let mut helper_happiness = (help_amount * 0.2).min(0.3);
+
+        // Empathetic trait bonus: extra happiness from helping others
+        if self.traits.has_trait(&super::traits::Trait::Empathetic) {
+            helper_happiness += 0.15; // Significant bonus for empathetic helpers
+        }
+
+        self.emotions.add_happiness(EmotionSource::Agent(recipient_id), helper_happiness);
+    }
+
+    /// Get all sources that satisfy a specific drive
+    pub fn get_drive_satisfaction_sources(&self, drive_type: DriveType) -> Vec<Uuid> {
+        self.satisfaction_tracker.get_sources(drive_type)
+    }
+
+    /// Get the primary (most important) source for a drive
+    pub fn get_primary_satisfaction_source(&self, drive_type: DriveType) -> Option<Uuid> {
+        self.satisfaction_tracker.get_primary_source(drive_type)
+    }
+
+    /// Get importance of a source for a drive (0.0 to 1.0)
+    pub fn get_source_importance(&self, drive_type: DriveType, source_id: Uuid) -> f32 {
+        self.satisfaction_tracker.get_source_importance(drive_type, source_id)
+    }
+
+    /// Process the loss of a drive satisfaction source
+    /// Triggers sadness based on source importance and current drive level
+    pub fn process_drive_source_loss(&mut self, drive_type: DriveType, source_id: Uuid) {
+        self.process_drive_source_loss_with_cause(drive_type, source_id, None);
+    }
+
+    /// Process drive source loss with known cause
+    /// Can trigger anger at the cause in addition to sadness
+    pub fn process_drive_source_loss_with_cause(
+        &mut self,
+        drive_type: DriveType,
+        source_id: Uuid,
+        cause: Option<super::EmotionSource>,
+    ) {
+        use super::EmotionSource;
+
+        // Get source importance before removing
+        let importance = self.get_source_importance(drive_type, source_id);
+
+        if importance < 0.05 {
+            // Insignificant source, minimal emotional impact
+            return;
+        }
+
+        // Base sadness from losing the source
+        let mut sadness = importance * 0.5; // 0.0 to 0.5
+
+        // Amplify if drive is currently high (functional grief)
+        if let Some(drive) = self.drives.get(drive_type) {
+            if drive.value > 0.6 {
+                // "I was already lonely, now I'm even more alone"
+                let amplification = (drive.value - 0.6) / 0.4; // 0.0 to 1.0
+                sadness += importance * amplification * 0.6; // Add up to 0.6 more (stronger amplification)
+            }
+        }
+
+        // Add sadness
+        self.emotions.add_sadness(EmotionSource::Agent(source_id), sadness);
+
+        // If there's a cause and it's an agent, add anger
+        if let Some(cause_source) = cause {
+            match &cause_source {
+                EmotionSource::Agent(_) | EmotionSource::Creature(_) => {
+                    // Anger at whoever took away our satisfaction source
+                    let anger = importance * 0.5; // 0.0 to 0.5 (stronger anger response)
+                    self.emotions.add_anger(cause_source, anger);
+                }
+                EmotionSource::Event(event) => {
+                    // Natural causes - less anger, more sadness
+                    if !event.contains("old age") && !event.contains("natural") {
+                        // Accident or preventable - some anger
+                        self.emotions.add_anger(EmotionSource::Event(event.clone()), importance * 0.2);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Remove the source from tracking
+        self.satisfaction_tracker.remove_source(source_id);
+    }
+
+    /// Get a functional explanation of grief
+    /// Returns a message explaining why losing this agent matters
+    pub fn get_grief_reason(&self, deceased_id: Uuid) -> String {
+        let mut reasons = Vec::new();
+
+        // Check all drives
+        for drive_type in [DriveType::Social, DriveType::Reproduction, DriveType::Safety] {
+            let importance = self.get_source_importance(drive_type, deceased_id);
+            if importance > 0.3 {
+                let drive_name = match drive_type {
+                    DriveType::Social => "companionship",
+                    DriveType::Reproduction => "partnership",
+                    DriveType::Safety => "protection",
+                    _ => "support",
+                };
+                reasons.push(format!("They provided {}", drive_name));
+            }
+        }
+
+        // Check relationship
+        if let Some(relationship) = self.relationships.get_relationship(&deceased_id) {
+            if relationship.bond_strength >= 0.6 {
+                // Loved one
+                reasons.push(format!("I deeply cared about them (bond: {:.1})", relationship.bond_strength));
+            } else if relationship.bond_strength > 0.3 {
+                // Meaningful positive relationship
+                reasons.push(format!("We had a bond"));
+            }
+        }
+
+        if reasons.is_empty() {
+            "I miss them".to_string()
+        } else {
+            format!("I'm grieving because: {}. I feel lonely and lost without them.", reasons.join(", "))
         }
     }
 }

@@ -13,6 +13,7 @@ pub mod equipment;
 pub mod temperature;
 pub mod observational_learning;
 pub mod transport;
+pub mod drive_satisfaction;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};
@@ -47,6 +48,9 @@ pub use observational_learning::{
 };
 pub use transport::{
     Transport, TransportType, TransportSystem,
+};
+pub use drive_satisfaction::{
+    SatisfactionTracker, DriveSatisfactionTracker, SatisfactionRecord,
 };
 
 #[cfg(test)]

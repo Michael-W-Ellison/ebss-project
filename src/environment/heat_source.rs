@@ -529,7 +529,8 @@ mod tests {
         let initial_temp = heat_source.current_temperature;
 
         // Tick to heat up
-        heat_source.tick();
+        let smelting_registry = crate::environment::smelting::SmeltingRegistry::new();
+        heat_source.tick(&smelting_registry);
 
         assert!(heat_source.current_temperature > initial_temp);
     }
@@ -580,10 +581,11 @@ mod tests {
         heat_source.light();
 
         let consumption_rate = HeatSourceType::Campfire.fuel_consumption_rate();
+        let smelting_registry = crate::environment::smelting::SmeltingRegistry::new();
 
         // Tick several times
         for _ in 0..5 {
-            heat_source.tick();
+            heat_source.tick(&smelting_registry);
         }
 
         // Fuel should be consumed

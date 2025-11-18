@@ -368,7 +368,7 @@ mod tests {
         let mut manager = MemoryManager::new();
 
         manager.remember_location(
-            super::SpatialMemoryType::Food,
+            crate::core::SpatialMemoryType::Food,
             (5, 5, 0),
             "Found berry bush".to_string(),
         );
@@ -419,14 +419,18 @@ mod tests {
         let mut manager = MemoryManager::new();
         manager.current_time = 0;
 
-        // Add some positive experiences
-        manager.record_event(
-            EpisodeType::SocialInteraction,
-            "Good talk".to_string(),
-            0.8,
-            Some((0, 0, 0)),
-            vec![],
-        );
+        // Add multiple positive experiences at the same location to establish familiarity
+        // (location_familiarity = count / 10.0, need > 0.5, so need at least 6 episodes)
+        for i in 0..6 {
+            manager.record_event(
+                EpisodeType::SocialInteraction,
+                format!("Good talk {}", i),
+                0.8,
+                Some((0, 0, 0)),
+                vec![],
+            );
+            manager.current_time += 10;
+        }
 
         manager.current_time = 100;
 

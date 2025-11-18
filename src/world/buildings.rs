@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::world::{Position, Resource, ResourceType};
 
 /// Types of buildings
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BuildingType {
     // Shelter progression
     Longhouse,         // Basic: Shared housing (10 capacity)
@@ -894,12 +894,19 @@ mod tests {
 
         assert!(!building.is_completed());
 
-        // Add progress
-        let completed = building.add_construction_progress(100);
-        assert!(!completed); // Not enough progress
+        // Deliver required resources (SmallHouse needs 50 Wood + 30 Stone)
+        building.deliver_resource(Resource::new(ResourceType::Wood, 50));
+        building.deliver_resource(Resource::new(ResourceType::Stone, 30));
+        assert!(building.has_all_resources());
+
+        // Add progress (work_amount, worker_skill)
+        // Skill 5 gives 1.5x multiplier, so 100 work = 150 effective
+        let completed = building.add_construction_progress(100, 5);
+        assert!(!completed); // 150 < 300 required, not enough progress
 
         // Complete construction
-        let completed = building.add_construction_progress(300);
+        // 300 work * 1.5 = 450 effective, total = 150 + 450 = 600 >= 300
+        let completed = building.add_construction_progress(300, 5);
         assert!(completed);
         assert!(building.is_completed());
     }
