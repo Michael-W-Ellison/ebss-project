@@ -160,7 +160,9 @@ impl EmotionState {
     }
 
     /// Get dominant emotion (including happiness and curiosity)
-    pub fn dominant_emotion(&self) -> Option<EmotionType> {
+    pub fn dominant_emotion(&self) -> Option<crate::core::EmotionType> {
+        use crate::core::EmotionType;
+
         let max_value = self.anger.max(self.fear).max(self.sadness).max(self.happiness).max(self.curiosity);
 
         if max_value < 0.1 {
@@ -205,14 +207,14 @@ impl EmotionState {
 
     /// Get emotion value by type (for API compatibility)
     pub fn get(&self, emotion_type: crate::core::EmotionType) -> Option<EmotionValue> {
-        use crate::core::EmotionType as CoreEmotionType;
+        use crate::core::EmotionType;
 
         match emotion_type {
-            CoreEmotionType::Happiness => Some(EmotionValue { value: self.happiness }),
-            CoreEmotionType::Sadness => Some(EmotionValue { value: -self.sadness }),
-            CoreEmotionType::Anger => Some(EmotionValue { value: -self.anger }),
-            CoreEmotionType::Fear => Some(EmotionValue { value: -self.fear }),
-            CoreEmotionType::Curiosity => Some(EmotionValue { value: self.curiosity }),
+            EmotionType::Happiness => Some(EmotionValue { value: self.happiness }),
+            EmotionType::Sadness => Some(EmotionValue { value: -self.sadness }),
+            EmotionType::Anger => Some(EmotionValue { value: -self.anger }),
+            EmotionType::Fear => Some(EmotionValue { value: -self.fear }),
+            EmotionType::Curiosity => Some(EmotionValue { value: self.curiosity }),
         }
     }
 }
@@ -241,15 +243,8 @@ pub enum EmotionSource {
     Location((i32, i32, i32)),
 }
 
-/// Type of emotion
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum EmotionType {
-    Anger,
-    Fear,
-    Sadness,
-    Happiness,
-    Curiosity,
-}
+// Note: EmotionType is now unified in core::emotions
+// Use crate::core::EmotionType instead of a duplicate enum here
 
 /// Relationship between agents
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -691,7 +686,9 @@ impl ThreatAssessment {
     }
 
     /// Get appropriate emotion for this threat
-    pub fn emotion_type(&self) -> EmotionType {
+    pub fn emotion_type(&self) -> crate::core::EmotionType {
+        use crate::core::EmotionType;
+
         if self.can_overcome {
             EmotionType::Anger
         } else {
@@ -714,6 +711,7 @@ impl ThreatAssessment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::EmotionType;
 
     #[test]
     fn test_emotion_state_creation() {

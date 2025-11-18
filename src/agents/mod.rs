@@ -25,10 +25,11 @@ pub use skills::{
     RepairResult, RecycledMaterial, RecycleResult,
 };
 pub use emotions::{
-    EmotionState, EmotionSource, EmotionType, Relationship, RelationshipType,
+    EmotionState, EmotionSource, Relationship, RelationshipType,
     RelationshipMap, ThreatAssessment,
 };
 pub use crate::core::traits::{Trait, TraitSet};
+pub use crate::core::EmotionType; // EmotionType now unified in core
 pub use gossip::{
     Information, InformationType, InformationDistortion, DistortionType,
     Belief, TrustRating, KnowledgeBase,
