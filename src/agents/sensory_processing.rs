@@ -39,6 +39,13 @@ pub enum Percept {
         condition_type: EnvironmentType,
         severity: f32,
     },
+    /// Detected a storage container or stockpile
+    StorageDetected {
+        storage_type: String,
+        position: (i32, i32, i32),
+        capacity: f32, // 0.0 to 1.0 (how full it is)
+        detection_method: DetectionMethod,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,6 +259,30 @@ pub fn calculate_salience(percept: &Percept, agent_drives: &crate::core::DriveSt
             // Environmental conditions have moderate salience
             0.3 + (severity * 0.3)
         }
+        Percept::StorageDetected { capacity, detection_method, .. } => {
+            // Storage detection salience depends on curiosity and preparedness drives
+            let curiosity = agent_drives.get(DriveType::Curiosity)
+                .map(|d| d.value)
+                .unwrap_or(0.0);
+            let preparedness = agent_drives.get(DriveType::Preparedness)
+                .map(|d| d.value)
+                .unwrap_or(0.0);
+
+            // Base salience from drives
+            let base_salience = (curiosity * 0.4 + preparedness * 0.6).min(0.8);
+
+            // Empty storage is less interesting
+            let capacity_bonus = capacity * 0.2;
+
+            // Multiple detection methods increase salience
+            let detection_bonus = if *detection_method == DetectionMethod::Multiple {
+                0.1
+            } else {
+                0.0
+            };
+
+            (base_salience + capacity_bonus + detection_bonus).min(1.0)
+        }
     }
 }
 
@@ -409,5 +440,100 @@ mod tests {
         let most_salient = most_salient_percept(&percepts, &drives);
         assert!(most_salient.is_some());
         assert!(matches!(most_salient.unwrap(), Percept::DangerDetected { .. }));
+    }
+
+    #[test]
+    fn test_storage_detected_percept() {
+        use crate::core::DriveState;
+
+        let percept = Percept::StorageDetected {
+            storage_type: "Chest".to_string(),
+            position: (10, 10, 0),
+            capacity: 0.8,
+            detection_method: DetectionMethod::Visual,
+        };
+
+        let drives = DriveState::new();
+        let salience = calculate_salience(&percept, &drives);
+
+        // Storage should have moderate salience with default drives
+        assert!(salience > 0.0);
+        assert!(salience < 1.0);
+    }
+
+    #[test]
+    fn test_storage_salience_with_high_curiosity() {
+        use crate::core::{DriveState, DriveType};
+
+        let mut drives = DriveState::new();
+
+        // Set high curiosity
+        if let Some(curiosity) = drives.get_mut(DriveType::Curiosity) {
+            curiosity.value = 0.9;
+        }
+
+        let percept = Percept::StorageDetected {
+            storage_type: "Barrel".to_string(),
+            position: (5, 5, 0),
+            capacity: 1.0,
+            detection_method: DetectionMethod::Visual,
+        };
+
+        let salience = calculate_salience(&percept, &drives);
+
+        // Should have higher salience with high curiosity
+        assert!(salience > 0.4);
+    }
+
+    #[test]
+    fn test_storage_salience_with_preparedness() {
+        use crate::core::{DriveState, DriveType};
+
+        let mut drives = DriveState::new();
+
+        // Set high preparedness drive
+        if let Some(preparedness) = drives.get_mut(DriveType::Preparedness) {
+            preparedness.value = 0.8;
+        }
+
+        let percept = Percept::StorageDetected {
+            storage_type: "Storage Pit".to_string(),
+            position: (3, 3, 0),
+            capacity: 0.5,
+            detection_method: DetectionMethod::Visual,
+        };
+
+        let salience = calculate_salience(&percept, &drives);
+
+        // Should have high salience with preparedness drive
+        assert!(salience > 0.4);
+    }
+
+    #[test]
+    fn test_storage_multiple_detection() {
+        use crate::core::DriveState;
+
+        let drives = DriveState::new();
+
+        let percept = Percept::StorageDetected {
+            storage_type: "Cache".to_string(),
+            position: (7, 7, 0),
+            capacity: 0.9,
+            detection_method: DetectionMethod::Multiple,
+        };
+
+        let salience = calculate_salience(&percept, &drives);
+
+        // Multiple detection should give bonus salience
+        let percept_single = Percept::StorageDetected {
+            storage_type: "Cache".to_string(),
+            position: (7, 7, 0),
+            capacity: 0.9,
+            detection_method: DetectionMethod::Visual,
+        };
+
+        let salience_single = calculate_salience(&percept_single, &drives);
+
+        assert!(salience > salience_single);
     }
 }
