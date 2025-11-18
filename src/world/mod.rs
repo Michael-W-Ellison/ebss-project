@@ -65,6 +65,7 @@ pub mod combat;
 pub mod crafting;
 pub mod spatial_planning;
 pub mod zoning;
+pub mod path_planning;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -113,6 +114,7 @@ pub struct World {
     pub config: WorldConfig, // Store configuration for spatial planning
     pub resource_nodes: std::collections::HashMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
     pub zone_manager: zoning::ZoneManager, // Spatial zoning for settlement planning
+    pub road_network: path_planning::RoadNetwork, // Road and path network
 }
 
 /// World configuration
@@ -221,6 +223,7 @@ impl World {
             config: config.clone(),
             resource_nodes: std::collections::HashMap::new(),
             zone_manager: zoning::ZoneManager::new(),
+            road_network: path_planning::RoadNetwork::new(),
         };
 
         // Place initial resources

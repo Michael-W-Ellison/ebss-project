@@ -6,3 +6,4 @@ mod combat_tests;
 mod config_validation_tests;
 mod spatial_planning_tests;
 mod zoning_tests;
+mod path_planning_tests;

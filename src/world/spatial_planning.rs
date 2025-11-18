@@ -347,17 +347,20 @@ impl<'a> SpatialPlanner<'a> {
         // Get zone bonus (applies to all strategies)
         let zone_bonus = self.world.zone_manager.get_zone_bonus(pos, building_type);
 
+        // Get road accessibility bonus
+        let road_bonus = self.calculate_road_accessibility_bonus(pos);
+
         match strategy {
             PlacementStrategy::NearAgent => {
                 // Strongly prioritize being near agent
                 let base_score = 100.0 / (1.0 + distance_to_agent);
-                base_score + zone_bonus
+                base_score + zone_bonus + road_bonus
             }
 
             PlacementStrategy::NearestAvailable => {
                 // Just find the nearest spot
                 let base_score = 100.0 / (1.0 + distance_to_agent);
-                base_score + zone_bonus
+                base_score + zone_bonus + road_bonus
             }
 
             PlacementStrategy::NearResources => {
@@ -368,7 +371,7 @@ impl<'a> SpatialPlanner<'a> {
                     criteria.clone(),
                 );
                 let agent_penalty = distance_to_agent * 2.0;
-                resource_score - agent_penalty + zone_bonus
+                resource_score - agent_penalty + zone_bonus + road_bonus
             }
 
             PlacementStrategy::BalancedProximity => {
@@ -379,8 +382,36 @@ impl<'a> SpatialPlanner<'a> {
                     criteria.clone(),
                 );
                 let agent_score = 50.0 / (1.0 + distance_to_agent);
-                (resource_score * 0.6 + agent_score * 0.4) + zone_bonus
+                (resource_score * 0.6 + agent_score * 0.4) + zone_bonus + road_bonus
             }
+        }
+    }
+
+    /// Calculate bonus for being near roads (good accessibility)
+    fn calculate_road_accessibility_bonus(&self, pos: Position) -> f32 {
+        // Direct road access
+        if self.world.road_network.has_road_at(pos) {
+            return 30.0; // Strong bonus for being directly on a road
+        }
+
+        // Find nearest road
+        let mut min_distance = f32::MAX;
+        for road in self.world.road_network.get_roads() {
+            for node in road.nodes() {
+                let dist = Self::distance(pos, node.position);
+                if dist < min_distance {
+                    min_distance = dist;
+                }
+            }
+        }
+
+        // Bonus decreases with distance from nearest road
+        if min_distance < 5.0 {
+            20.0 / (1.0 + min_distance) // Nearby road gives good bonus
+        } else if min_distance < 10.0 {
+            10.0 / (1.0 + min_distance) // Moderate bonus
+        } else {
+            0.0 // Too far from roads
         }
     }
 
