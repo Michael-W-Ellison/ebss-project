@@ -9,14 +9,13 @@
 //! - Display detailed agent information
 
 use ebss::prelude::*;
-use ebss::analytics::{SimulationController, Inspector, Selection};
-use std::io::{self, Write};
+use ebss::analytics::{SimulationController, Inspector, AgentInspectorData};
 
 fn main() {
     println!("=== EBSS Inspector & Simulation Control Demo ===\n");
 
     // Create a world and population
-    let world = World::new(GridConfig::default());
+    let world = World::new(WorldConfig::default());
     let mut population = Population::new();
 
     // Spawn some agents with different personalities

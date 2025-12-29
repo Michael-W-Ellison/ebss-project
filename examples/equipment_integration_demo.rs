@@ -11,10 +11,10 @@
 //! - Combat stats calculation
 //! - Environmental protection from clothing
 
-use ebss::agents::{Agent, AgentConfig, InventoryItem};
+use ebss::agents::{Agent, AgentConfig, InventoryItem, Quality};
 use ebss::agents::equipment::{
-    EquipmentSlot, EquipmentItem, EquipmentType,
-    MetalMaterial, ClothingMaterial, WoodMaterial,
+    EquipmentSlot, EquipmentItem, EquipmentType, EquipmentMaterial,
+    MetalMaterial, ClothingMaterial, WoodMaterial, StoneMaterial,
 };
 
 fn main() {
@@ -39,9 +39,8 @@ fn main() {
     // Add various equipment items to inventory
     agent.inventory.add_item(InventoryItem::new("iron_sword".to_string(), 1));
     agent.inventory.add_item(InventoryItem::new("iron_pickaxe".to_string(), 1));
-    agent.inventory.add_item(InventoryItem::new("leather_helmet".to_string(), 1));
-    agent.inventory.add_item(InventoryItem::new("leather_chestplate".to_string(), 1));
-    agent.inventory.add_item(InventoryItem::new("iron_boots".to_string(), 1));
+    agent.inventory.add_item(InventoryItem::new("leather_armor".to_string(), 1));
+    agent.inventory.add_item(InventoryItem::new("iron_armor".to_string(), 1));
     agent.inventory.add_item(InventoryItem::new("wooden_shield".to_string(), 1));
     agent.inventory.add_item(InventoryItem::new("stone_hatchet".to_string(), 1));
 
@@ -54,12 +53,15 @@ fn main() {
     // ===== Part 3: Equipping Items =====
     println!("--- Part 3: Equipping Items from Inventory ---");
 
-    // Create and equip items
+    // Create and equip items using the current 5-argument constructor
     println!("\nEquipping iron sword...");
-    let sword = EquipmentItem::new("iron_sword".to_string(), EquipmentSlot::MainHand)
-        .with_material_metal(MetalMaterial::Iron)
-        .with_type(EquipmentType::Sword)
-        .with_quality(1.2);
+    let sword = EquipmentItem::new(
+        "iron_sword".to_string(),
+        EquipmentType::Sword,
+        EquipmentSlot::MainHand,
+        EquipmentMaterial::Metal(MetalMaterial::Iron),
+        Quality::Advanced,
+    );
 
     match agent.equipment.equip(sword) {
         Ok(_) => println!("  ✓ Equipped iron sword to main hand"),
@@ -67,10 +69,13 @@ fn main() {
     }
 
     println!("\nEquipping wooden shield...");
-    let shield = EquipmentItem::new("wooden_shield".to_string(), EquipmentSlot::OffHand)
-        .with_material_wood(WoodMaterial::Oak)
-        .with_type(EquipmentType::Shield)
-        .with_quality(0.8);
+    let shield = EquipmentItem::new(
+        "wooden_shield".to_string(),
+        EquipmentType::Shield,
+        EquipmentSlot::OffHand,
+        EquipmentMaterial::Wood(WoodMaterial::Oak),
+        Quality::Moderate,
+    );
 
     match agent.equipment.equip(shield) {
         Ok(_) => println!("  ✓ Equipped wooden shield to off hand"),
@@ -78,29 +83,38 @@ fn main() {
     }
 
     println!("\nEquipping armor pieces...");
-    let helmet = EquipmentItem::new("leather_helmet".to_string(), EquipmentSlot::Head)
-        .with_material_clothing(ClothingMaterial::Leather)
-        .with_type(EquipmentType::Helmet)
-        .with_quality(1.0);
+    let head_armor = EquipmentItem::new(
+        "leather_cap".to_string(),
+        EquipmentType::LightArmor,
+        EquipmentSlot::Head,
+        EquipmentMaterial::Cloth(ClothingMaterial::Leather),
+        Quality::Basic,
+    );
 
-    agent.equipment.equip(helmet).ok();
-    println!("  ✓ Equipped leather helmet");
+    agent.equipment.equip(head_armor).ok();
+    println!("  ✓ Equipped leather cap (head)");
 
-    let chestplate = EquipmentItem::new("leather_chestplate".to_string(), EquipmentSlot::Torso)
-        .with_material_clothing(ClothingMaterial::Leather)
-        .with_type(EquipmentType::Chestplate)
-        .with_quality(1.0);
+    let torso_armor = EquipmentItem::new(
+        "leather_vest".to_string(),
+        EquipmentType::LightArmor,
+        EquipmentSlot::Torso,
+        EquipmentMaterial::Cloth(ClothingMaterial::Leather),
+        Quality::Basic,
+    );
 
-    agent.equipment.equip(chestplate).ok();
-    println!("  ✓ Equipped leather chestplate");
+    agent.equipment.equip(torso_armor).ok();
+    println!("  ✓ Equipped leather vest (torso)");
 
-    let boots = EquipmentItem::new("iron_boots".to_string(), EquipmentSlot::Feet)
-        .with_material_metal(MetalMaterial::Iron)
-        .with_type(EquipmentType::Boots)
-        .with_quality(1.1);
+    let boots = EquipmentItem::new(
+        "iron_boots".to_string(),
+        EquipmentType::MediumArmor,
+        EquipmentSlot::Feet,
+        EquipmentMaterial::Metal(MetalMaterial::Iron),
+        Quality::Advanced,
+    );
 
     agent.equipment.equip(boots).ok();
-    println!("  ✓ Equipped iron boots");
+    println!("  ✓ Equipped iron boots (feet)");
 
     println!();
 
@@ -114,9 +128,9 @@ fn main() {
     for item in &equipped {
         println!("  {:?}: {}", item.slot, item.name);
         println!("    Type: {:?}", item.equipment_type);
-        println!("    Quality: {:.1}x", item.quality);
+        println!("    Quality: {:?}", item.quality);
         println!("    Weight: {:.1} kg", item.weight);
-        println!("    Durability: {:.0}/{:.0}", item.current_durability, item.max_durability);
+        println!("    Durability: {:.0}/{:.0}", item.durability, item.max_durability);
     }
     println!();
 
@@ -163,10 +177,13 @@ fn main() {
     println!("--- Part 7: Tool Efficiency Bonuses ---");
 
     println!("Equipping iron pickaxe for mining...");
-    let pickaxe = EquipmentItem::new("iron_pickaxe".to_string(), EquipmentSlot::MainHand)
-        .with_material_metal(MetalMaterial::Iron)
-        .with_type(EquipmentType::Pickaxe)
-        .with_quality(1.3);
+    let pickaxe = EquipmentItem::new(
+        "iron_pickaxe".to_string(),
+        EquipmentType::Pickaxe,
+        EquipmentSlot::MainHand,
+        EquipmentMaterial::Metal(MetalMaterial::Iron),
+        Quality::Advanced,
+    );
 
     // Unequip sword first
     agent.equipment.unequip(EquipmentSlot::MainHand);
@@ -182,10 +199,13 @@ fn main() {
 
     // Switch to hatchet
     println!("Switching to stone hatchet for woodcutting...");
-    let hatchet = EquipmentItem::new("stone_hatchet".to_string(), EquipmentSlot::MainHand)
-        .with_material_metal(MetalMaterial::Stone)
-        .with_type(EquipmentType::Hatchet)
-        .with_quality(0.9);
+    let hatchet = EquipmentItem::new(
+        "stone_hatchet".to_string(),
+        EquipmentType::Hatchet,
+        EquipmentSlot::MainHand,
+        EquipmentMaterial::Stone(StoneMaterial::Flint),
+        Quality::Moderate,
+    );
 
     agent.equipment.unequip(EquipmentSlot::MainHand);
     agent.equipment.equip(hatchet).ok();
@@ -193,7 +213,6 @@ fn main() {
     println!("  ✓ Equipped stone hatchet");
     println!();
 
-    // Note: harvesting speed bonus method exists in the equipment manager
     let harvesting_speed = agent.get_harvesting_speed_bonus();
     println!("Harvesting speed bonus: {:.1}x", harvesting_speed);
     println!();
@@ -204,9 +223,9 @@ fn main() {
     if let Some(tool) = agent.get_equipped(EquipmentSlot::MainHand) {
         println!("Stone hatchet condition before use:");
         println!("  Durability: {:.0}/{:.0} ({:.0}%)",
-            tool.current_durability,
+            tool.durability,
             tool.max_durability,
-            (tool.current_durability / tool.max_durability) * 100.0);
+            (tool.durability / tool.max_durability) * 100.0);
     }
     println!();
 
@@ -221,7 +240,7 @@ fn main() {
                     if let Some(tool) = agent.get_equipped(EquipmentSlot::MainHand) {
                         println!("  Tree {}: Durability {:.0}/{:.0}",
                             i,
-                            tool.current_durability,
+                            tool.durability,
                             tool.max_durability);
                     }
                 }
@@ -234,15 +253,15 @@ fn main() {
     if let Some(tool) = agent.get_equipped(EquipmentSlot::MainHand) {
         println!("Stone hatchet condition after use:");
         println!("  Durability: {:.0}/{:.0} ({:.0}%)",
-            tool.current_durability,
+            tool.durability,
             tool.max_durability,
-            (tool.current_durability / tool.max_durability) * 100.0);
+            (tool.durability / tool.max_durability) * 100.0);
 
         if tool.is_broken() {
             println!("  Status: BROKEN - cannot be used");
-        } else if tool.current_durability < tool.max_durability * 0.25 {
+        } else if tool.durability < tool.max_durability * 0.25 {
             println!("  Status: HEAVILY WORN - repair recommended");
-        } else if tool.current_durability < tool.max_durability * 0.5 {
+        } else if tool.durability < tool.max_durability * 0.5 {
             println!("  Status: WORN - consider repairing");
         }
     } else {
@@ -259,7 +278,7 @@ fn main() {
             Ok(_) => {
                 if let Some(tool) = agent.get_equipped(EquipmentSlot::MainHand) {
                     println!("  ✓ Repaired! Durability: {:.0}/{:.0}",
-                        tool.current_durability,
+                        tool.durability,
                         tool.max_durability);
                 }
             }
@@ -275,11 +294,13 @@ fn main() {
 
     println!("Adding heavy armor...");
 
-    let heavy_chestplate = EquipmentItem::new("steel_chestplate".to_string(), EquipmentSlot::Torso)
-        .with_material_metal(MetalMaterial::Steel)
-        .with_type(EquipmentType::Chestplate)
-        .with_quality(1.5)
-        .with_weight(25.0);
+    let heavy_chestplate = EquipmentItem::new(
+        "steel_chestplate".to_string(),
+        EquipmentType::HeavyArmor,
+        EquipmentSlot::Torso,
+        EquipmentMaterial::Metal(MetalMaterial::Steel),
+        Quality::Expert,
+    );
 
     // Unequip leather first
     agent.equipment.unequip(EquipmentSlot::Torso);
@@ -357,7 +378,7 @@ fn main() {
         println!("  {:?}: {} ({:.0}% durability)",
             item.slot,
             item.name,
-            (item.current_durability / item.max_durability) * 100.0);
+            (item.durability / item.max_durability) * 100.0);
     }
     println!();
 
