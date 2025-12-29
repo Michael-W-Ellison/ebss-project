@@ -743,14 +743,19 @@ impl Population {
     }
 
     /// Process reproduction attempts
+    ///
+    /// Agents will only reproduce when survival needs are met (not hungry/thirsty).
+    /// This naturally limits population growth based on resource availability.
     pub fn process_reproduction(&mut self) {
         let mut new_offspring = Vec::new();
 
         // Find potential mating pairs
+        // Use should_attempt_reproduction() which checks both capability AND survival state
+        // Agents with active hunger/thirst drives are excluded - they must secure food first
         let alive_agents: Vec<usize> = self.agents
             .iter()
             .enumerate()
-            .filter(|(_, a)| a.state.is_alive && a.can_reproduce())
+            .filter(|(_, a)| a.should_attempt_reproduction())
             .filter(|(_, a)| !self.is_on_cooldown(a.id))
             .map(|(i, _)| i)
             .collect();

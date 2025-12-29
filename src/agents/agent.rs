@@ -1200,9 +1200,34 @@ impl Agent {
         self.inventory.max_weight
     }
 
-    /// Check if agent can reproduce
+    /// Check if agent can reproduce (basic capability check)
     pub fn can_reproduce(&self) -> bool {
         self.state.is_alive && self.state.life_stage.can_reproduce()
+    }
+
+    /// Check if agent should attempt reproduction given current survival state
+    ///
+    /// Returns false if critical survival drives (hunger, thirst) are active,
+    /// as the agent should prioritize immediate survival over reproduction.
+    /// Agents will not reproduce when starving - they must be well-fed first.
+    pub fn should_attempt_reproduction(&self) -> bool {
+        if !self.can_reproduce() {
+            return false;
+        }
+
+        // Check if critical survival drives are threatening the agent
+        // If any of these are active (above threshold), reproduction is suppressed
+        let hunger_active = self.drives.get(DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        let thirst_active = self.drives.get(DriveType::Thirst)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        // Agent must not be hungry or thirsty to reproduce
+        // This ensures offspring are only created when resources are sufficient
+        !hunger_active && !thirst_active
     }
 
     /// Get fertility level (0.0 to 1.0)

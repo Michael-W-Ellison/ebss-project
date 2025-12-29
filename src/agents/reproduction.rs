@@ -27,9 +27,12 @@ impl Default for MateSelectionCriteria {
 }
 
 /// Check if two agents can mate
+///
+/// Both agents must be capable of reproduction AND have their survival needs met.
+/// Agents that are hungry or thirsty will not attempt reproduction.
 pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria) -> bool {
-    // Both must be alive and able to reproduce
-    if !agent1.can_reproduce() || !agent2.can_reproduce() {
+    // Both must be alive, able to reproduce, AND have survival needs met
+    if !agent1.should_attempt_reproduction() || !agent2.should_attempt_reproduction() {
         return false;
     }
 
@@ -281,5 +284,122 @@ mod tests {
         let pos2 = (3, 4, 0);
         let distance = calculate_distance(pos1, pos2);
         assert!((distance - 5.0).abs() < 0.001); // 3-4-5 triangle
+    }
+
+    #[test]
+    fn test_cannot_mate_when_hungry() {
+        use crate::core::DriveType;
+
+        let mut agent1 = Agent::new(AgentConfig::default());
+        let mut agent2 = Agent::new(AgentConfig::default());
+
+        // Set to adult stage
+        agent1.state.age = 3000;
+        agent1.state.life_stage = crate::agents::LifeStage::Adult;
+        agent2.state.age = 3000;
+        agent2.state.life_stage = crate::agents::LifeStage::Adult;
+
+        // Set positions close together
+        agent1.state.position = (0, 0, 0);
+        agent2.state.position = (10, 10, 0);
+
+        // Set agent1 as hungry (drive active)
+        if let Some(hunger) = agent1.drives.get_mut(DriveType::Hunger) {
+            hunger.value = 0.9; // Above threshold (0.7)
+        }
+
+        let criteria = MateSelectionCriteria::default();
+        // Should NOT be able to mate - agent1 is hungry
+        assert!(!can_mate(&agent1, &agent2, &criteria));
+    }
+
+    #[test]
+    fn test_cannot_mate_when_thirsty() {
+        use crate::core::DriveType;
+
+        let mut agent1 = Agent::new(AgentConfig::default());
+        let mut agent2 = Agent::new(AgentConfig::default());
+
+        // Set to adult stage
+        agent1.state.age = 3000;
+        agent1.state.life_stage = crate::agents::LifeStage::Adult;
+        agent2.state.age = 3000;
+        agent2.state.life_stage = crate::agents::LifeStage::Adult;
+
+        // Set positions close together
+        agent1.state.position = (0, 0, 0);
+        agent2.state.position = (10, 10, 0);
+
+        // Set agent2 as thirsty (drive active)
+        if let Some(thirst) = agent2.drives.get_mut(DriveType::Thirst) {
+            thirst.value = 0.9; // Above threshold (0.75)
+        }
+
+        let criteria = MateSelectionCriteria::default();
+        // Should NOT be able to mate - agent2 is thirsty
+        assert!(!can_mate(&agent1, &agent2, &criteria));
+    }
+
+    #[test]
+    fn test_can_mate_when_well_fed() {
+        use crate::core::DriveType;
+
+        let mut agent1 = Agent::new(AgentConfig::default());
+        let mut agent2 = Agent::new(AgentConfig::default());
+
+        // Set to adult stage
+        agent1.state.age = 3000;
+        agent1.state.life_stage = crate::agents::LifeStage::Adult;
+        agent2.state.age = 3000;
+        agent2.state.life_stage = crate::agents::LifeStage::Adult;
+
+        // Set positions close together
+        agent1.state.position = (0, 0, 0);
+        agent2.state.position = (10, 10, 0);
+
+        // Ensure both are well-fed (low hunger/thirst)
+        if let Some(hunger) = agent1.drives.get_mut(DriveType::Hunger) {
+            hunger.value = 0.2; // Well below threshold
+        }
+        if let Some(thirst) = agent1.drives.get_mut(DriveType::Thirst) {
+            thirst.value = 0.2;
+        }
+        if let Some(hunger) = agent2.drives.get_mut(DriveType::Hunger) {
+            hunger.value = 0.2;
+        }
+        if let Some(thirst) = agent2.drives.get_mut(DriveType::Thirst) {
+            thirst.value = 0.2;
+        }
+
+        let criteria = MateSelectionCriteria::default();
+        // Should be able to mate - both are well-fed
+        assert!(can_mate(&agent1, &agent2, &criteria));
+    }
+
+    #[test]
+    fn test_should_attempt_reproduction_respects_survival_drives() {
+        use crate::core::DriveType;
+
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.age = 3000;
+        agent.state.life_stage = crate::agents::LifeStage::Adult;
+
+        // Well-fed agent should attempt reproduction
+        assert!(agent.should_attempt_reproduction());
+
+        // Hungry agent should NOT attempt reproduction
+        if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
+            hunger.value = 0.8; // Above threshold
+        }
+        assert!(!agent.should_attempt_reproduction());
+
+        // Reset hunger, make thirsty
+        if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
+            hunger.value = 0.1;
+        }
+        if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
+            thirst.value = 0.9; // Above threshold
+        }
+        assert!(!agent.should_attempt_reproduction());
     }
 }
