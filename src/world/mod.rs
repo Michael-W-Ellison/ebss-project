@@ -1220,11 +1220,20 @@ impl World {
     }
 
     /// Mark an area as impassable (for testing terrain constraints)
-    pub fn set_terrain_impassable(&mut self, _center: (i32, i32, i32), _radius: i32) {
-        // This would modify terrain in the grid
-        // For now, we'll just note this as a placeholder
-        // The actual implementation would mark tiles in self.grid
-        // as impassable terrain types
+    /// Sets tiles within the radius to Water terrain (which is not walkable)
+    pub fn set_terrain_impassable(&mut self, center: (i32, i32, i32), radius: i32) {
+        let (cx, cy, _) = center;
+
+        // Mark all tiles within radius as impassable (Water terrain)
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                let pos = Position::new(cx + dx, cy + dy);
+
+                if let Some(tile) = self.grid.get_tile_mut(&pos) {
+                    tile.terrain = Terrain::new(TerrainType::Water);
+                }
+            }
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 //! Action execution system for agent interactions with the world.
 
 use serde::{Deserialize, Serialize};
-use crate::world::{World, Position, ResourceType, BuildingType, ItemType};
+use crate::world::{World, Position, ResourceType, BuildingType, ItemType, Building};
 use crate::agents::social_interactions::SocialInteractionType;
 use uuid::Uuid;
 
@@ -147,9 +147,153 @@ impl World {
                 message: format!("Rested for {} ticks", duration),
             },
 
-            _ => ActionResult::Failure {
-                reason: "Action not yet implemented".to_string(),
+            Action::ConstructBuilding {
+                building_type,
+                position,
+            } => self.execute_construct_building(*building_type, position),
+
+            Action::CraftItem { item_type, quantity } => {
+                self.execute_craft_item(agent_id, *item_type, *quantity)
+            }
+
+            Action::SocialInteraction {
+                target_agent_id,
+                interaction_type,
+            } => self.execute_social_interaction(agent_id, *target_agent_id, interaction_type),
+
+            Action::SeekSocialInteraction { target_agent_id: _ } => {
+                // SeekSocialInteraction is handled by the agent's decision system
+                // which will issue MoveTo actions. This is a placeholder for when
+                // the action is incorrectly issued directly.
+                ActionResult::Failure {
+                    reason: "SeekSocialInteraction should be handled by agent decision system".to_string(),
+                }
+            }
+        }
+    }
+
+    fn execute_construct_building(
+        &mut self,
+        building_type: BuildingType,
+        position: &Position,
+    ) -> ActionResult {
+        // Check if terrain is valid for building
+        if let Some(tile) = self.grid.get_tile(position) {
+            if !tile.terrain.is_walkable() {
+                return ActionResult::Failure {
+                    reason: format!("Cannot build on {:?} terrain", tile.terrain.terrain_type),
+                };
+            }
+        } else {
+            return ActionResult::Failure {
+                reason: "Position out of bounds".to_string(),
+            };
+        }
+
+        // Check if there's already a building at this position
+        if self.buildings.iter().any(|b| b.position == *position) {
+            return ActionResult::Failure {
+                reason: "A building already exists at this location".to_string(),
+            };
+        }
+
+        // Check prerequisites
+        let prerequisites = building_type.prerequisites();
+        for prereq in &prerequisites {
+            let has_prereq = self.buildings.iter().any(|b| {
+                b.building_type == *prereq && b.is_completed()
+            });
+            if !has_prereq {
+                return ActionResult::Failure {
+                    reason: format!("Missing prerequisite building: {:?}", prereq),
+                };
+            }
+        }
+
+        // Create the building under construction
+        let building = Building::new_under_construction(building_type, *position);
+        self.buildings.push(building);
+
+        ActionResult::Success {
+            message: format!(
+                "Started construction of {:?} at ({}, {})",
+                building_type, position.x, position.y
+            ),
+        }
+    }
+
+    fn execute_craft_item(
+        &mut self,
+        agent_id: Uuid,
+        item_type: ItemType,
+        quantity: u32,
+    ) -> ActionResult {
+        // Map ItemType to recipe ID
+        let recipe_id = match item_type {
+            ItemType::WoodenAxe => "stone_axe",
+            ItemType::StoneAxe => "stone_axe",
+            ItemType::IronAxe => "iron_axe",
+            ItemType::WoodenSpear => "stone_spear",
+            ItemType::Leather => "leather",
+            ItemType::Cloth => "simple_tunic",
+            ItemType::Furniture => "wooden_chest",
+            _ => {
+                return ActionResult::Failure {
+                    reason: format!("No recipe found for {:?}", item_type),
+                };
+            }
+        };
+
+        // Start crafting job
+        if let Some(job_id) = self.crafting_manager.start_crafting(recipe_id.to_string(), agent_id) {
+            ActionResult::Success {
+                message: format!(
+                    "Started crafting {} x{} (job {})",
+                    recipe_id, quantity, job_id
+                ),
+            }
+        } else {
+            ActionResult::Failure {
+                reason: format!("Failed to start crafting {}", recipe_id),
+            }
+        }
+    }
+
+    fn execute_social_interaction(
+        &self,
+        initiator_id: Uuid,
+        target_id: Uuid,
+        interaction_type: &SocialInteractionType,
+    ) -> ActionResult {
+        // Calculate base relationship change based on interaction type
+        let (relationship_change, trust_change, social_satisfaction) = match interaction_type {
+            SocialInteractionType::Greet => (1, 0, 0.05),
+            SocialInteractionType::Converse { topic } => match topic {
+                crate::agents::social_interactions::ConversationTopic::SmallTalk => (1, 0, 0.10),
+                crate::agents::social_interactions::ConversationTopic::Work => (1, 1, 0.08),
+                crate::agents::social_interactions::ConversationTopic::Stories => (2, 1, 0.15),
+                crate::agents::social_interactions::ConversationTopic::Family => (3, 2, 0.20),
+                crate::agents::social_interactions::ConversationTopic::Technology => (2, 1, 0.12),
+                crate::agents::social_interactions::ConversationTopic::Beliefs => (1, 0, 0.10),
             },
+            SocialInteractionType::GiveGift { quantity, .. } => {
+                let gift_bonus = ((*quantity as f32 / 10.0).min(5.0) as i8).max(1);
+                (gift_bonus, gift_bonus / 2, 0.15)
+            }
+            SocialInteractionType::OfferHelp { .. } => (2, 2, 0.10),
+            SocialInteractionType::ThankYou => (1, 1, 0.05),
+            SocialInteractionType::Compliment => (2, 0, 0.08),
+            SocialInteractionType::ShareMeal => (3, 2, 0.25),
+        };
+
+        ActionResult::SocialSuccess {
+            message: format!(
+                "Agent {} performed {:?} with agent {}",
+                initiator_id, interaction_type, target_id
+            ),
+            relationship_change,
+            trust_change,
+            social_satisfaction,
         }
     }
 
@@ -468,5 +612,150 @@ mod tests {
         let result = world.execute_action(agent_id, &mut agent_pos, &retrieve_action, &occupied);
         assert!(result.is_success());
         assert_eq!(world.storehouse_inventory.count_item(&ItemType::Wood), 30);
+    }
+
+    #[test]
+    fn test_construct_building_action() {
+        let mut world = World::new(WorldConfig::default());
+        let agent_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let build_pos = Position::new(15, 15);
+
+        let occupied = vec![];
+
+        // Construct a building (basic buildings have no prerequisites)
+        let action = Action::ConstructBuilding {
+            building_type: BuildingType::SmallHouse,
+            position: build_pos,
+        };
+
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
+        assert!(result.is_success());
+
+        // Verify building was created
+        assert!(world.buildings.iter().any(|b|
+            b.position == build_pos &&
+            b.building_type == BuildingType::SmallHouse &&
+            !b.is_completed()
+        ));
+    }
+
+    #[test]
+    fn test_construct_building_duplicate_position() {
+        let mut world = World::new(WorldConfig::default());
+        let agent_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let build_pos = Position::new(15, 15);
+
+        let occupied = vec![];
+
+        // First construction should succeed
+        let action = Action::ConstructBuilding {
+            building_type: BuildingType::SmallHouse,
+            position: build_pos,
+        };
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
+        assert!(result.is_success());
+
+        // Second construction at same position should fail
+        let action2 = Action::ConstructBuilding {
+            building_type: BuildingType::Workshop,
+            position: build_pos,
+        };
+        let result = world.execute_action(agent_id, &mut agent_pos, &action2, &occupied);
+        assert!(!result.is_success());
+    }
+
+    #[test]
+    fn test_craft_item_action() {
+        let mut world = World::new(WorldConfig::default());
+        let agent_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+
+        let occupied = vec![];
+
+        let action = Action::CraftItem {
+            item_type: ItemType::StoneAxe,
+            quantity: 1,
+        };
+
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
+        assert!(result.is_success());
+    }
+
+    #[test]
+    fn test_social_interaction_greet() {
+        let world = World::new(WorldConfig::default());
+        let initiator_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        let interaction_type = SocialInteractionType::Greet;
+        let result = world.execute_social_interaction(initiator_id, target_id, &interaction_type);
+
+        match result {
+            ActionResult::SocialSuccess { relationship_change, social_satisfaction, .. } => {
+                assert_eq!(relationship_change, 1);
+                assert!(social_satisfaction > 0.0);
+            }
+            _ => panic!("Expected SocialSuccess result"),
+        }
+    }
+
+    #[test]
+    fn test_social_interaction_share_meal() {
+        let world = World::new(WorldConfig::default());
+        let initiator_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        let interaction_type = SocialInteractionType::ShareMeal;
+        let result = world.execute_social_interaction(initiator_id, target_id, &interaction_type);
+
+        match result {
+            ActionResult::SocialSuccess { relationship_change, trust_change, social_satisfaction, .. } => {
+                assert_eq!(relationship_change, 3);
+                assert_eq!(trust_change, 2);
+                assert!(social_satisfaction >= 0.25);
+            }
+            _ => panic!("Expected SocialSuccess result"),
+        }
+    }
+
+    #[test]
+    fn test_social_interaction_give_gift() {
+        let world = World::new(WorldConfig::default());
+        let initiator_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        let interaction_type = SocialInteractionType::GiveGift {
+            item_type: ItemType::Jewelry,
+            quantity: 30,
+        };
+        let result = world.execute_social_interaction(initiator_id, target_id, &interaction_type);
+
+        match result {
+            ActionResult::SocialSuccess { relationship_change, .. } => {
+                // quantity 30 / 10 = 3, min(3, 5) = 3, max(3, 1) = 3
+                assert_eq!(relationship_change, 3);
+            }
+            _ => panic!("Expected SocialSuccess result"),
+        }
+    }
+
+    #[test]
+    fn test_seek_social_interaction_fails() {
+        let mut world = World::new(WorldConfig::default());
+        let agent_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+
+        let occupied = vec![];
+
+        // SeekSocialInteraction should fail when executed directly
+        let action = Action::SeekSocialInteraction {
+            target_agent_id: target_id,
+        };
+
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
+        assert!(!result.is_success());
     }
 }

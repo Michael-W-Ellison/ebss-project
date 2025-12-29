@@ -1101,11 +1101,79 @@ impl Population {
     }
 
     /// Process exploration without world (for standalone population updates)
-    /// This is called from tick() and just tracks that agents are exploring
+    /// This is called from tick() and handles exploration-related drive updates
+    /// and knowledge sharing between nearby agents
     fn process_exploration(&mut self) {
-        // This method is a placeholder for when we don't have world access
-        // In a full simulation, this would call process_exploration_with_world
-        // For now, it does nothing - exploration happens when world is available
+        use crate::core::DriveType;
+
+        const EXPLORATION_SHARE_RANGE_SQ: f32 = 25.0; // 5 tiles
+
+        // First pass: identify agent positions for knowledge sharing
+        let agent_positions: Vec<(usize, (i32, i32, i32), bool)> = self.agents
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (i, a.state.position, a.state.is_alive))
+            .collect();
+
+        // Second pass: process exploration drives and knowledge sharing
+        for i in 0..self.agents.len() {
+            let agent = &mut self.agents[i];
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Slowly increase curiosity drive when not actively discovering
+            // This makes agents want to explore over time
+            if let Some(curiosity_drive) = agent.drives.get_mut(DriveType::Curiosity) {
+                // Curiosity increases by 0.002 per tick if below 0.7
+                if curiosity_drive.value < 0.7 {
+                    curiosity_drive.value = (curiosity_drive.value + 0.002).min(0.7);
+                }
+            }
+        }
+
+        // Knowledge sharing between nearby agents (simplified gossip about discoveries)
+        // Share random discoveries with nearby agents
+        for i in 0..self.agents.len() {
+            let (_, pos_i, alive_i) = agent_positions[i];
+            if !alive_i {
+                continue;
+            }
+
+            for j in (i + 1)..self.agents.len() {
+                let (_, pos_j, alive_j) = agent_positions[j];
+                if !alive_j {
+                    continue;
+                }
+
+                // Check if within sharing range
+                let dx = (pos_i.0 - pos_j.0) as f32;
+                let dy = (pos_i.1 - pos_j.1) as f32;
+                let dist_sq = dx * dx + dy * dy;
+
+                if dist_sq <= EXPLORATION_SHARE_RANGE_SQ {
+                    // Share a random discovery from i to j and vice versa
+                    // This simulates agents telling each other about places they've been
+                    let current_tick = self.current_tick;
+
+                    // Agent i shares with agent j
+                    if let Some((pos, building_type)) = self.agents[i].exploration_knowledge
+                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
+                    {
+                        self.agents[j].exploration_knowledge
+                            .discover_building(pos, building_type, current_tick);
+                    }
+
+                    // Agent j shares with agent i
+                    if let Some((pos, building_type)) = self.agents[j].exploration_knowledge
+                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
+                    {
+                        self.agents[i].exploration_knowledge
+                            .discover_building(pos, building_type, current_tick);
+                    }
+                }
+            }
+        }
     }
 
     /// Process observational learning between agents

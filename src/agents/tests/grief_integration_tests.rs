@@ -23,7 +23,7 @@ fn test_death_triggers_both_relationship_and_functional_grief() {
 
     // Establish drive dependency (agent 1 depends on agent 2 for social satisfaction)
     for _ in 0..5 {
-        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.3);
+        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.3, 0);
     }
 
     // Verify agent 2 is a primary source
@@ -133,9 +133,9 @@ fn test_multiple_dependencies_compound_grief() {
 
     // Agent 2 satisfies multiple drives for agent 1
     for _ in 0..5 {
-        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.3);
-        pop.agents[0].record_drive_satisfaction(DriveType::Reproduction, agent2_id, 0.2);
-        pop.agents[0].record_drive_satisfaction(DriveType::Safety, agent2_id, 0.15);
+        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.3, 0);
+        pop.agents[0].record_drive_satisfaction(DriveType::Reproduction, agent2_id, 0.2, 0);
+        pop.agents[0].record_drive_satisfaction(DriveType::Safety, agent2_id, 0.15, 0);
     }
 
     // Establish strong relationship
@@ -173,7 +173,7 @@ fn test_lonely_agent_experiences_amplified_grief() {
 
     // Agent 1 depends on agent 2 for social
     for _ in 0..3 {
-        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.3);
+        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.3, 0);
     }
 
     // Agent 1 is ALREADY lonely (high social drive)
@@ -206,7 +206,7 @@ fn test_grief_explanation_mentions_functional_loss() {
 
     // Establish drive dependency
     for _ in 0..5 {
-        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.4);
+        pop.agents[0].record_drive_satisfaction(DriveType::Social, agent2_id, 0.4, 0);
     }
 
     // Relationship
