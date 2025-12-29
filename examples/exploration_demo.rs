@@ -141,6 +141,10 @@ fn main() {
                         println!("    - Explored {} tiles at ({}, {}) on tick {}",
                             tiles_count, discovery.position.x, discovery.position.y, discovery.tick);
                     }
+                    ebss::agents::DiscoveryType::Storage { storage_type, position, capacity } => {
+                        println!("    - Storage: {} at ({}, {}) capacity {:.0}% on tick {}",
+                            storage_type, position.x, position.y, capacity * 100.0, discovery.tick);
+                    }
                 }
             }
         }

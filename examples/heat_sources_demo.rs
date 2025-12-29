@@ -90,9 +90,10 @@ fn main() {
     let config = WorldConfig {
         size: (50, 50),
         initial_resources: ResourceConfig {
-            stones: 100,
-            trees: 50,
-            ..Default::default()
+            stone_nodes: 100,
+            wood_nodes: 50,
+            iron_nodes: 10,
+            food_nodes: 20,
         },
     };
 

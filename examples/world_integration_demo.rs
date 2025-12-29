@@ -34,7 +34,7 @@ fn main() {
 
     println!("Created world: {} x {}", world.grid.width, world.grid.height);
     println!("Initial state:");
-    println!("  Animals: {}", world.animals.total_count());
+    println!("  Animals: {}", world.animals.population_count());
     println!("  Plants: {}", world.plants.total_count());
     println!("  Heat sources: {}", world.heat_sources.all().len());
     println!();
@@ -60,7 +60,7 @@ fn main() {
     let bear_id = world.spawn_animal("bear".to_string(), (60, 60)).unwrap();
     println!("  Spawned bear at (60, 60) - ID: {}", bear_id);
 
-    println!("\nTotal animals: {}", world.animals.total_count());
+    println!("\nTotal animals: {}", world.animals.population_count());
     println!();
 
     // ===== Part 3: Spawning Wild Plants =====
@@ -151,8 +151,10 @@ fn main() {
     println!();
 
     // Check cultivated plants
-    let cultivated = world.get_cultivated_plants();
-    println!("Total cultivated plants: {}", cultivated.len());
+    {
+        let cultivated = world.get_cultivated_plants();
+        println!("Total cultivated plants: {}", cultivated.len());
+    }
     println!();
 
     // ===== Part 6: Domesticating Animals =====
@@ -187,10 +189,12 @@ fn main() {
     println!();
 
     // Check domesticated animals
-    let domesticated = world.get_domesticated_animals();
-    println!("Domesticated animals: {}", domesticated.len());
-    for animal in &domesticated {
-        println!("  {} - tame level: {:.0}%", animal.species_id, animal.tame_level * 100.0);
+    {
+        let domesticated = world.get_domesticated_animals();
+        println!("Domesticated animals: {}", domesticated.len());
+        for animal in &domesticated {
+            println!("  {} - tame level: {:.0}%", animal.species_id, animal.tame_level * 100.0);
+        }
     }
     println!();
 
@@ -203,7 +207,7 @@ fn main() {
 
         if tick % 25 == 0 {
             println!("\n  Tick {}:", tick);
-            println!("    Animals: {}", world.animals.total_count());
+            println!("    Animals: {}", world.animals.population_count());
             println!("    Plants: {}", world.plants.total_count());
 
             // Check plant growth
@@ -211,7 +215,7 @@ fn main() {
             println!("    Harvestable plants near farm: {}", harvestable.len());
 
             // Sample some animals
-            let all_animals = world.animals.all_animals();
+            let all_animals = world.animals.get_all();
             if let Some(sample) = all_animals.first() {
                 println!("    Sample animal: {} - age: {} ticks, state: {:?}",
                     sample.species_id,
@@ -233,17 +237,20 @@ fn main() {
     // ===== Part 8: Harvesting Crops =====
     println!("--- Part 8: Harvesting Mature Crops ---");
 
-    let harvestable = world.get_harvestable_plants((50, 10), 25.0);
-    println!("Harvestable plants near farm: {}", harvestable.len());
+    // Get plant IDs and names first to avoid borrow issues
+    let harvestable_info: Vec<_> = world.get_harvestable_plants((50, 10), 25.0)
+        .iter()
+        .take(5)
+        .map(|p| (p.id, p.species_id.clone()))
+        .collect();
+    println!("Harvestable plants near farm: {}", harvestable_info.len());
 
-    if !harvestable.is_empty() {
+    if !harvestable_info.is_empty() {
         println!("\nHarvesting first 5 plants...");
-        for plant in harvestable.iter().take(5) {
-            let plant_id = plant.id;
-
-            match world.harvest_plant(&plant_id) {
+        for (plant_id, species) in &harvestable_info {
+            match world.harvest_plant(plant_id) {
                 Ok(drops) => {
-                    println!("  Harvested {}:", plant.species_id);
+                    println!("  Harvested {}:", species);
                     for drop in drops {
                         println!("    - {} x{}-{}",
                             drop.material_id,
@@ -262,9 +269,14 @@ fn main() {
 
     // Feed domesticated animals
     println!("Feeding livestock...");
-    for animal in domesticated.iter() {
-        world.feed_animal(&animal.id, 10.0).ok();
-        println!("  Fed {} (stamina boost)", animal.species_id);
+    // Get IDs first, then feed (to avoid borrow issues)
+    let domesticated_ids: Vec<_> = world.get_domesticated_animals()
+        .iter()
+        .map(|a| (a.id, a.species_id.clone()))
+        .collect();
+    for (animal_id, species) in &domesticated_ids {
+        world.feed_animal(animal_id, 10.0).ok();
+        println!("  Fed {} (stamina boost)", species);
     }
     println!();
 
@@ -292,14 +304,16 @@ fn main() {
     println!();
 
     println!("Domestication Status:");
-    println!("  Wild animals: {}", world.animals.all_animals().len() - domesticated.len());
-    println!("  Domesticated animals: {}", domesticated.len());
+    let domesticated_count = world.get_domesticated_animals().len();
+    println!("  Wild animals: {}", world.animals.get_all().len() - domesticated_count);
+    println!("  Domesticated animals: {}", domesticated_count);
     println!();
 
     println!("Agriculture Status:");
-    let wild_plants = world.plants.total_count() - cultivated.len();
+    let cultivated_count = world.get_cultivated_plants().len();
+    let wild_plants = world.plants.total_count() - cultivated_count;
     println!("  Wild plants: {}", wild_plants);
-    println!("  Cultivated plants: {}", cultivated.len());
+    println!("  Cultivated plants: {}", cultivated_count);
     println!();
 
     // ===== Part 11: Advanced Spatial Queries =====
@@ -328,9 +342,10 @@ fn main() {
 
     // ===== Summary =====
     println!("=== Final World State ===");
-    println!("Total Animals: {}", world.animals.total_count());
-    println!("  - Wild: {}", world.animals.total_count() - domesticated.len());
-    println!("  - Domesticated: {}", world.get_domesticated_animals().len());
+    let final_domesticated = world.get_domesticated_animals().len();
+    println!("Total Animals: {}", world.animals.population_count());
+    println!("  - Wild: {}", world.animals.population_count() - final_domesticated);
+    println!("  - Domesticated: {}", final_domesticated);
     println!();
     println!("Total Plants: {}", world.plants.total_count());
     println!("  - Wild: {}", world.plants.total_count() - world.get_cultivated_plants().len());

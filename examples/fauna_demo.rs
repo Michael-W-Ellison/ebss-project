@@ -127,7 +127,7 @@ fn main() {
         let examples: Vec<_> = all_species.iter()
             .filter(|s| s.size == size)
             .take(3)
-            .map(|s| &s.name)
+            .map(|s| s.name.as_str())
             .collect();
         println!("  Examples: {}", examples.join(", "));
         println!();
@@ -160,7 +160,7 @@ fn main() {
         if !animal.living_products.is_empty() {
             println!("  Products: {}",
                 animal.living_products.iter()
-                    .map(|p| &p.material_id)
+                    .map(|p| p.material_id.as_str())
                     .collect::<Vec<_>>()
                     .join(", "));
         }
@@ -353,7 +353,7 @@ fn main() {
     let mut predators = Vec::new();
     let mut prey = Vec::new();
 
-    for species in all_species {
+    for species in &all_species {
         match species.diet {
             DietType::Carnivore => {
                 if species.size == AnimalSize::Small || species.size == AnimalSize::Large {
