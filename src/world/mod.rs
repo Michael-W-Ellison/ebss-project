@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use rand::Rng;
 
 /// World size presets for common use cases
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +68,7 @@ pub mod spatial_planning;
 pub mod zoning;
 pub mod path_planning;
 pub mod territory;
+pub mod resource_spawning;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -80,6 +82,10 @@ pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput};
 pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketStatistics};
 pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
 pub use climate::{ClimateManager, terrain_to_biome};
+pub use resource_spawning::{
+    NaturalisticResourceConfig, NaturalisticSpawner, TerrainResourceMapper,
+    AnimalResourceConfig, AnimalResourceMapper, TerrainGenerator,
+};
 
 use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager};
 
@@ -127,22 +133,66 @@ pub struct WorldConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceConfig {
+    // Basic resources
     pub wood_nodes: usize,
     pub stone_nodes: usize,
     pub iron_nodes: usize,
     pub food_nodes: usize,
+
+    // Mineral resources (for technology progression)
+    pub clay_clusters: usize,
+    pub sand_clusters: usize,
+    pub coal_clusters: usize,
+
+    // Agricultural resources
+    pub grain_patches: usize,
+    pub flax_patches: usize,
+    pub herb_patches: usize,
+    pub cotton_patches: usize,
+
+    // Gatherable resources
+    pub honey_locations: usize,
+    pub fish_areas: usize,
+
+    // Whether to use naturalistic spawning (terrain-appropriate, clustered)
+    pub use_naturalistic_spawning: bool,
+}
+
+impl Default for ResourceConfig {
+    fn default() -> Self {
+        Self {
+            // Basic resources
+            wood_nodes: 20,
+            stone_nodes: 15,
+            iron_nodes: 8,
+            food_nodes: 25,
+
+            // Minerals
+            clay_clusters: 4,
+            sand_clusters: 3,
+            coal_clusters: 3,
+
+            // Agricultural
+            grain_patches: 5,
+            flax_patches: 3,
+            herb_patches: 6,
+            cotton_patches: 2,
+
+            // Gatherable
+            honey_locations: 4,
+            fish_areas: 5,
+
+            // Use naturalistic spawning by default
+            use_naturalistic_spawning: true,
+        }
+    }
 }
 
 impl Default for WorldConfig {
     fn default() -> Self {
         Self {
             size: (50, 50),
-            initial_resources: ResourceConfig {
-                wood_nodes: 20,
-                stone_nodes: 15,
-                iron_nodes: 8,
-                food_nodes: 25,
-            },
+            initial_resources: ResourceConfig::default(),
         }
     }
 }
@@ -242,9 +292,22 @@ impl World {
     }
 
     fn generate_resources(&mut self, config: &ResourceConfig) {
-        use rand::Rng;
         let mut rng = rand::thread_rng();
 
+        // Generate basic resources (legacy method for backward compatibility)
+        self.generate_basic_resources(config, &mut rng);
+
+        // Generate additional resources using naturalistic spawning
+        if config.use_naturalistic_spawning {
+            self.generate_naturalistic_resources(config);
+        }
+
+        // Update resource_nodes map for spatial queries
+        self.update_resource_node_map();
+    }
+
+    /// Generate basic resources (wood, stone, iron, food)
+    fn generate_basic_resources(&mut self, config: &ResourceConfig, rng: &mut impl Rng) {
         // Generate wood nodes (in forest areas)
         for _ in 0..config.wood_nodes {
             let pos = self.find_random_terrain_position(TerrainType::Forest);
@@ -255,9 +318,14 @@ impl World {
             ));
         }
 
-        // Generate stone nodes (in mountain areas)
+        // Generate stone nodes (in mountain and hills areas)
         for _ in 0..config.stone_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Mountain);
+            let terrain = if rng.gen::<f32>() < 0.7 {
+                TerrainType::Mountain
+            } else {
+                TerrainType::Hills
+            };
+            let pos = self.find_random_terrain_position(terrain);
             self.resources.push(ResourceNode::new(
                 ResourceType::Stone,
                 pos,
@@ -275,14 +343,67 @@ impl World {
             ));
         }
 
-        // Generate food nodes (in plains)
+        // Generate food nodes (in plains and meadows)
         for _ in 0..config.food_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Plains);
+            let terrain = if rng.gen::<f32>() < 0.6 {
+                TerrainType::Plains
+            } else {
+                TerrainType::Meadow
+            };
+            let pos = self.find_random_terrain_position(terrain);
             self.resources.push(ResourceNode::new(
                 ResourceType::Food,
                 pos,
                 rng.gen_range(20..60),
             ));
+        }
+    }
+
+    /// Generate naturalistic resources for technology progression
+    fn generate_naturalistic_resources(&mut self, config: &ResourceConfig) {
+        use resource_spawning::{NaturalisticResourceConfig, NaturalisticSpawner};
+
+        // Convert ResourceConfig to NaturalisticResourceConfig
+        let nat_config = NaturalisticResourceConfig {
+            clay_clusters: config.clay_clusters,
+            sand_clusters: config.sand_clusters,
+            coal_clusters: config.coal_clusters,
+            grain_patches: config.grain_patches,
+            flax_patches: config.flax_patches,
+            herb_patches: config.herb_patches,
+            cotton_patches: config.cotton_patches,
+            honey_locations: config.honey_locations,
+            fish_areas: config.fish_areas,
+            nodes_per_cluster: 3,
+            cluster_radius: 5,
+        };
+
+        // Use naturalistic spawner
+        let mut spawner = NaturalisticSpawner::new(&self.grid);
+        let new_resources = spawner.spawn_all(&nat_config);
+
+        // Add spawned resources
+        self.resources.extend(new_resources);
+
+        log::info!(
+            "Generated naturalistic resources: {} clay, {} sand, {} coal, {} grain, {} flax, {} herbs clusters",
+            config.clay_clusters, config.sand_clusters, config.coal_clusters,
+            config.grain_patches, config.flax_patches, config.herb_patches
+        );
+    }
+
+    /// Update the resource_nodes map for efficient spatial queries
+    fn update_resource_node_map(&mut self) {
+        self.resource_nodes.clear();
+
+        for resource in &self.resources {
+            let type_name = format!("{:?}", resource.resource_type);
+            let pos_tuple = (resource.position.x, resource.position.y, 0);
+
+            self.resource_nodes
+                .entry(type_name)
+                .or_insert_with(Vec::new)
+                .push(pos_tuple);
         }
     }
 

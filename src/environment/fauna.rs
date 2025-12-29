@@ -1444,6 +1444,109 @@ impl AnimalManager {
         self.animals.retain(|a| a.is_alive());
     }
 
+    /// Kill an animal and generate drops based on its species
+    /// Returns a list of (material_id, quantity) tuples representing the drops
+    pub fn kill_animal(&mut self, animal_id: &Uuid) -> Vec<(String, u32)> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut drops = Vec::new();
+
+        // Find the animal and get its species
+        let species_id = {
+            if let Some(animal) = self.animals.iter_mut().find(|a| a.id == *animal_id) {
+                if !animal.is_alive() {
+                    return drops; // Already dead
+                }
+                animal.state = AnimalState::Dead;
+                animal.current_health = 0.0;
+                animal.species_id.clone()
+            } else {
+                return drops;
+            }
+        };
+
+        // Get the species drops
+        if let Some(registry) = &self.registry {
+            if let Some(species) = registry.get(&species_id) {
+                for drop in &species.drops {
+                    // Check drop chance
+                    if rng.gen::<f32>() <= drop.drop_chance {
+                        let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                        drops.push((drop.material_id.clone(), quantity));
+                    }
+                }
+            }
+        }
+
+        drops
+    }
+
+    /// Get the drops that would result from hunting a specific animal
+    /// Does not actually kill the animal, just calculates expected drops
+    pub fn get_potential_drops(&self, animal_id: &Uuid) -> Vec<(String, u32, u32)> {
+        let mut potential_drops = Vec::new();
+
+        if let Some(animal) = self.animals.iter().find(|a| a.id == *animal_id) {
+            if let Some(registry) = &self.registry {
+                if let Some(species) = registry.get(&animal.species_id) {
+                    for drop in &species.drops {
+                        potential_drops.push((
+                            drop.material_id.clone(),
+                            drop.min_quantity,
+                            drop.max_quantity,
+                        ));
+                    }
+                }
+            }
+        }
+
+        potential_drops
+    }
+
+    /// Harvest living products from domesticated animals
+    /// Returns a map of animal_id -> list of (material_id, quantity) produced
+    pub fn harvest_living_products(&mut self) -> HashMap<Uuid, Vec<(String, u32)>> {
+        let mut products = HashMap::new();
+
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return products,
+        };
+
+        for animal in &mut self.animals {
+            if !animal.is_alive() || !animal.is_mature() {
+                continue;
+            }
+
+            // Only domesticated animals produce regular products
+            if !animal.is_domesticated {
+                continue;
+            }
+
+            if let Some(species) = registry.get(&animal.species_id) {
+                let produced = animal.tick_products();
+
+                // Match product names with species living_products to get correct quantities
+                let mut animal_products = Vec::new();
+                for (material_id, _) in produced {
+                    if let Some(product_info) = species.living_products.iter()
+                        .find(|p| p.material_id == material_id)
+                    {
+                        animal_products.push((material_id, product_info.quantity));
+                    } else {
+                        animal_products.push((material_id, 1)); // Default quantity
+                    }
+                }
+
+                if !animal_products.is_empty() {
+                    products.insert(animal.id, animal_products);
+                }
+            }
+        }
+
+        products
+    }
+
     /// Tick all animals (age, products, natural healing, AI behaviors)
     pub fn tick(&mut self) {
         let registry = match &self.registry {

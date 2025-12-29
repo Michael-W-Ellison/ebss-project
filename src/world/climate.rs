@@ -18,6 +18,12 @@ pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
         TerrainType::Forest => BiomeType::TemperateForest,
         TerrainType::Mountain => BiomeType::Alpine,
         TerrainType::Water => BiomeType::Coast,
+        TerrainType::Desert => BiomeType::Desert,
+        TerrainType::Wetland => BiomeType::Wetland,
+        TerrainType::Meadow => BiomeType::Grassland,
+        TerrainType::Hills => BiomeType::Grassland,
+        TerrainType::Beach => BiomeType::Coast,
+        TerrainType::Riverbank => BiomeType::Wetland,
     }
 }
 
