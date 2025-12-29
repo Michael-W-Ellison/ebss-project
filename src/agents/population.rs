@@ -301,6 +301,9 @@ impl Population {
     fn update_relationships(&mut self) {
         use super::{Relationship, RelationshipType};
 
+        // Pre-compute squared interaction distance threshold (avoids sqrt)
+        const INTERACTION_RANGE_SQUARED: f32 = 100.0; // 10.0 * 10.0
+
         // Process all pairs of agents
         for i in 0..self.agents.len() {
             for j in (i + 1)..self.agents.len() {
@@ -309,14 +312,17 @@ impl Population {
                 let agent1_pos = self.agents[i].state.position;
                 let agent2_pos = self.agents[j].state.position;
 
-                // Calculate distance between agents
+                // Calculate squared distance (avoid expensive sqrt)
                 let dx = (agent1_pos.0 - agent2_pos.0) as f32;
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
-                let distance = (dx * dx + dy * dy).sqrt();
+                let distance_squared = dx * dx + dy * dy;
 
                 // Agents must be within interaction range (10 tiles)
-                if distance <= 10.0 {
-                    // Get traits for compatibility check
+                if distance_squared <= INTERACTION_RANGE_SQUARED {
+                    // Only compute actual distance when needed for proximity bonus
+                    let distance = distance_squared.sqrt();
+
+                    // Get traits for compatibility check (clone needed due to borrow rules)
                     let agent1_traits = self.agents[i].traits.clone();
                     let agent2_traits = self.agents[j].traits.clone();
 
@@ -423,6 +429,9 @@ impl Population {
     fn share_technologies(&mut self) {
         use crate::environment::technology::DiscoveryMethod;
 
+        // Pre-compute squared distance threshold (avoids sqrt)
+        const SHARE_RANGE_SQUARED: f32 = 25.0; // 5.0 * 5.0
+
         // Process all pairs of nearby agents
         for i in 0..self.agents.len() {
             for j in (i + 1)..self.agents.len() {
@@ -431,13 +440,13 @@ impl Population {
                 let agent1_pos = self.agents[i].state.position;
                 let agent2_pos = self.agents[j].state.position;
 
-                // Calculate distance
+                // Calculate squared distance (avoid expensive sqrt)
                 let dx = (agent1_pos.0 - agent2_pos.0) as f32;
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
-                let distance = (dx * dx + dy * dy).sqrt();
+                let distance_squared = dx * dx + dy * dy;
 
                 // Only share when very close (within 5 tiles)
-                if distance <= 5.0 {
+                if distance_squared <= SHARE_RANGE_SQUARED {
                     // Get technologies each agent knows
                     let agent1_techs: Vec<_> = self.agents[i]
                         .technology_knowledge
@@ -909,6 +918,9 @@ impl Population {
         use crate::core::DriveType;
         use rand::Rng;
 
+        // Pre-compute squared distance threshold (avoids sqrt)
+        const SOCIAL_RANGE_SQUARED: f32 = 25.0; // 5.0 * 5.0
+
         let mut rng = rand::thread_rng();
         let current_tick = self.current_tick;
 
@@ -940,13 +952,13 @@ impl Population {
                 let _agent2_id = self.agents[j].id;
                 let agent2_pos = self.agents[j].state.position;
 
-                // Calculate distance
+                // Calculate squared distance (avoid expensive sqrt)
                 let dx = (agent1_pos.0 - agent2_pos.0) as f32;
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
-                let distance = (dx * dx + dy * dy).sqrt();
+                let distance_squared = dx * dx + dy * dy;
 
                 // Must be within social interaction range (5 tiles)
-                if distance > 5.0 {
+                if distance_squared > SOCIAL_RANGE_SQUARED {
                     continue;
                 }
 
