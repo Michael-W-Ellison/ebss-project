@@ -10,11 +10,11 @@
 //!
 //! Run with: cargo run --example ascii_simulation
 
-use ebss::agents::{Population, PopulationConfig, AgentConfig};
+use ebss::agents::{Population, PopulationConfig, AgentConfig, InventoryItem};
 use ebss::world::{World, WorldConfig, ResourceConfig, AsciiRenderer, Position, Action, ResourceType, ItemType};
 use ebss::world::render::ViewPort;
 use ebss::analytics::{SimulationMetrics, EmergenceDetector, PerformanceMonitor};
-use ebss::core::{DriveType, EmotionType};
+use ebss::core::DriveType;
 use std::thread;
 use std::time::Duration;
 
@@ -152,150 +152,20 @@ fn main() {
     }
 }
 
-/// Personal observation: agent discovers nearby resources (vision range of 10 tiles)
-fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
-    const VISION_RANGE: u32 = 10;
-    let agent_pos = agent.position();
-
-    for resource in &world.resources {
-        if agent_pos.distance_to(&resource.position) <= VISION_RANGE && resource.amount > 0 {
-            // Agent personally observes this resource
-            agent.observe_resource(resource.position, resource.resource_type, resource.amount);
-        }
-    }
+/// Helper to count items in agent inventory
+fn count_inventory_item(agent: &ebss::agents::Agent, item_id: &str) -> u32 {
+    agent.inventory.get_item(item_id)
+        .map(|item| item.quantity)
+        .unwrap_or(0)
 }
 
-/// Verify information when agent reaches a resource location they learned about from others
-fn verify_information(
-    world: &World,
-    agent: &mut ebss::agents::Agent,
-    resource_position: &Position,
-    resource_type: ResourceType,
-    current_tick: u32,
-) {
-    use ebss::agents::KnowledgeSource;
-
-    // Check if agent has knowledge about this resource
-    if let Some(knowledge) = agent.knowledge.get_resource_knowledge(resource_position) {
-        // Only verify if learned from another agent (not personal observation)
-        let (should_verify, source_id) = match &knowledge.source {
-            KnowledgeSource::DirectCommunication(id) | KnowledgeSource::Overheard(id) => {
-                (true, *id)
-            }
-            KnowledgeSource::PersonalObservation => (false, uuid::Uuid::nil()),
-        };
-
-        if should_verify {
-            // Calculate how long ago they were told this info
-            let info_age = current_tick.saturating_sub(knowledge.learned_tick);
-
-            // Check if the resource actually exists at this location
-            let resource_exists = world.resources.iter().any(|r| {
-                r.position == *resource_position
-                    && r.resource_type == resource_type
-                    && r.amount > 0
-            });
-
-            if resource_exists {
-                // Information was correct! Increase trust in source
-                agent.verify_information_from(source_id, info_age, current_tick);
-            } else {
-                // Information was wrong or resource depleted. Decrease trust
-                agent.information_was_wrong_from(source_id, info_age, current_tick);
-
-                // Forget this incorrect information
-                agent.knowledge.forget_resource(resource_position);
-            }
-        }
-    }
-}
-
-/// Social communication: agents ask nearby agents for information
-fn agents_communicate(population: &mut Population) {
-    const COMMUNICATION_RANGE: u32 = 5; // Can talk to agents within 5 tiles
-    const LISTENING_RANGE: u32 = 3;     // Can overhear conversations within 3 tiles
-
-    // Collect agent data to avoid borrow issues
-    let agent_data: Vec<_> = population.agents.iter()
-        .map(|a| (a.id, a.position(), a.most_desired_resource()))
-        .collect();
-
-    // For each agent, try to communicate with nearby agents
-    for i in 0..agent_data.len() {
-        let (requester_id, requester_pos, desired_resource) = &agent_data[i];
-
-        // Skip if agent doesn't want anything
-        let resource_type = match desired_resource {
-            Some(rt) => *rt,
-            None => continue,
-        };
-
-        // Find nearby agents who might have information
-        for j in 0..agent_data.len() {
-            if i == j {
-                continue; // Can't talk to self
-            }
-
-            let (responder_id, responder_pos, _) = &agent_data[j];
-
-            // Check if agents are close enough to communicate
-            if requester_pos.distance_to(responder_pos) > COMMUNICATION_RANGE {
-                continue;
-            }
-
-            // Request information (need to do this carefully to avoid borrow conflicts)
-            let requester_idx = population.agents.iter().position(|a| a.id == *requester_id).unwrap();
-            let responder_idx = population.agents.iter().position(|a| a.id == *responder_id).unwrap();
-
-            // Split borrow: get both agents
-            let (req_agent, resp_agent) = if requester_idx < responder_idx {
-                let (left, right) = population.agents.split_at_mut(responder_idx);
-                (&mut left[requester_idx], &mut right[0])
-            } else {
-                let (left, right) = population.agents.split_at_mut(requester_idx);
-                (&mut right[0], &mut left[responder_idx])
-            };
-
-            // Requester asks responder for information
-            if let Some((pos, res_type, amount, learned_tick)) = req_agent.request_info_from(resp_agent, resource_type) {
-                // Responder has information and shares it!
-                req_agent.knowledge.learn_from_agent(pos, res_type, amount, *responder_id);
-
-                // Record positive social interaction (successful information sharing)
-                let current_tick = population.current_tick;
-                req_agent.positive_interaction_with(*responder_id, 1, current_tick);
-
-                // Calculate age of information at time of sharing
-                let info_age = current_tick.saturating_sub(learned_tick);
-
-                // Store metadata for later verification (we'll use a simple approach:
-                // the ResourceKnowledge already tracks the source, so when we verify later,
-                // we can calculate the age from learned_tick)
-
-                // Other agents nearby can overhear this conversation
-                for k in 0..agent_data.len() {
-                    if k == i || k == j {
-                        continue; // Not the speaker or listener
-                    }
-
-                    let (listener_id, listener_pos, _) = &agent_data[k];
-
-                    // Check if within listening range of the conversation
-                    let avg_pos = Position::new(
-                        (requester_pos.x + responder_pos.x) / 2,
-                        (requester_pos.y + responder_pos.y) / 2,
-                    );
-
-                    if listener_pos.distance_to(&avg_pos) <= LISTENING_RANGE {
-                        // Overhear the conversation
-                        if let Some(listener) = population.agents.iter_mut().find(|a| a.id == *listener_id) {
-                            listener.overhear_conversation(*responder_id, pos, res_type, amount);
-                        }
-                    }
-                }
-            }
-        }
-    }
+/// Find the closest resource of a given type
+fn find_closest_resource(world: &World, from: &Position, resource_type: ResourceType) -> Option<Position> {
+    world.resources
+        .iter()
+        .filter(|r| r.resource_type == resource_type && r.amount > 0)
+        .min_by_key(|r| from.distance_to(&r.position))
+        .map(|r| r.position)
 }
 
 /// Process agent actions (simplified autonomous behavior with survival-first priority)
@@ -308,51 +178,48 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
         .map(|a| (a.id, Position::new(a.state.position.0, a.state.position.1)))
         .collect();
 
-    for (agent_id, agent_starting_pos) in &agent_data {
+    for (agent_id, _agent_starting_pos) in &agent_data {
         // Find agent and process actions
-        if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
-            // Personal observation: agent discovers nearby resources
-            observe_nearby_resources(world, agent);
-
-            // Always try to eat if we have food and are hungry
-            agent.try_eat(tick);
-
+        if let Some(agent) = population.agents.iter_mut().find(|a| a.id == *agent_id) {
             let mut agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
 
             // SURVIVAL-FIRST AI: Check if agent is in survival-critical state
             let is_critical = agent.state.is_survival_critical();
-            let needs_food = agent.needs_food();
+            let hunger_value = agent.drives.get(DriveType::Hunger).map(|d| d.value).unwrap_or(0.0);
+            let needs_food = hunger_value > 0.6 || agent.state.energy < 30.0;
+            let has_food = count_inventory_item(agent, "food") > 0;
+
+            // Try to eat if we have food and are hungry
+            if has_food && (needs_food || is_critical) {
+                if agent.inventory.remove_item("food", 1).is_some() {
+                    agent.state.eat(tick, 25.0); // Restore 25 energy
+                    if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
+                        hunger_drive.partial_satisfy(0.3);
+                    }
+                }
+            }
 
             // Debug logging
             if tick % 50 == 0 && tick < 150 {
-                let hunger_val = agent.drives.get(DriveType::Hunger).map(|d| d.value).unwrap_or(0.0);
                 eprintln!("[DEBUG Tick {}] Agent: critical={}, needs_food={}, hunger={:.2}, energy={:.1}, food_inv={}",
-                    tick, is_critical, needs_food, hunger_val, agent.state.energy,
-                    agent.inventory.count_item(&ItemType::Food));
+                    tick, is_critical, needs_food, hunger_value, agent.state.energy,
+                    count_inventory_item(agent, "food"));
             }
 
             // Simple AI: Check most urgent drive
             let most_urgent = agent.drives.most_urgent();
 
-            // Use PERSONAL KNOWLEDGE to find resources
-            let known_food = agent.knowledge
-                .find_closest_resource(&agent_pos, ResourceType::Food)
-                .map(|r| r.position);
-
-            let known_wood = agent.knowledge
-                .find_closest_resource(&agent_pos, ResourceType::Wood)
-                .map(|r| r.position);
+            // Find nearby resources
+            let known_food = find_closest_resource(world, &agent_pos, ResourceType::Food);
+            let known_wood = find_closest_resource(world, &agent_pos, ResourceType::Wood);
 
             let action = if is_critical || needs_food {
                 // CRITICAL: Survival needs override everything
-                // Try to find and gather food IMMEDIATELY using personal knowledge
+                // Try to find and gather food IMMEDIATELY
                 if let Some(food_pos) = known_food {
                     if agent_pos.distance_to(&food_pos) > 1 {
                         Some(Action::MoveTo { destination: food_pos })
                     } else {
-                        // Before harvesting, verify information if learned from others
-                        verify_information(world, agent, &food_pos, ResourceType::Food, tick);
-
                         Some(Action::HarvestResource {
                             resource_position: food_pos,
                             resource_type: ResourceType::Food,
@@ -382,9 +249,6 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                             if agent_pos.distance_to(&food_pos) > 1 {
                                 Some(Action::MoveTo { destination: food_pos })
                             } else {
-                                // Before harvesting, verify information if learned from others
-                                verify_information(world, agent, &food_pos, ResourceType::Food, tick);
-
                                 Some(Action::HarvestResource {
                                     resource_position: food_pos,
                                     resource_type: ResourceType::Food,
@@ -401,9 +265,6 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                             if agent_pos.distance_to(&wood_pos) > 1 {
                                 Some(Action::MoveTo { destination: wood_pos })
                             } else {
-                                // Before harvesting, verify information if learned from others
-                                verify_information(world, agent, &wood_pos, ResourceType::Wood, tick);
-
                                 Some(Action::HarvestResource {
                                     resource_position: wood_pos,
                                     resource_type: ResourceType::Wood,
@@ -456,13 +317,22 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                 }
 
                 // Update agent position and inventory
-                if let Some(agent) = population.agents.iter_mut().find(|a| a.id == agent_id) {
+                if let Some(agent) = population.agents.iter_mut().find(|a| a.id == *agent_id) {
                     agent.state.position = (agent_pos.x, agent_pos.y, 0);
 
                     // If harvest was successful, add items to agent inventory
                     if let Some((item_type, quantity)) = result.take_items() {
                         if quantity > 0 {
-                            agent.inventory.add_item(item_type, quantity);
+                            // Convert ItemType to string ID for agent inventory
+                            let item_id = match item_type {
+                                ItemType::Food => "food",
+                                ItemType::Wood => "wood",
+                                ItemType::Stone => "stone",
+                                ItemType::Iron => "iron",
+                                _ => "misc",
+                            };
+                            let item = InventoryItem::new(item_id.to_string(), quantity);
+                            agent.inventory.add_item(item);
                             if matches!(item_type, ItemType::Food) && tick % 100 < 5 {
                                 eprintln!("[DEBUG Tick {}] Added {} food to inventory", tick, quantity);
                             }
@@ -472,9 +342,6 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             }
         }
     }
-
-    // Social communication: agents ask each other for information
-    agents_communicate(population);
 }
 
 /// Render a complete frame
@@ -483,7 +350,7 @@ fn render_frame(
     world: &World,
     population: &Population,
     tick: u32,
-    metrics: &SimulationMetrics,
+    _metrics: &SimulationMetrics,
     emergence: &EmergenceDetector,
     performance: &PerformanceMonitor,
 ) {
@@ -512,16 +379,16 @@ fn render_frame(
             agent.drives.get(DriveType::Safety).map(|d| d.value).unwrap_or(0.0),
             agent.drives.get(DriveType::Construction).map(|d| d.value).unwrap_or(0.0),
         );
-        println!("║   Emotions: Happiness: {:.2}  │  Well-being: {:.2}  │  Energy: {:.1}%          ║",
-            agent.emotions.get(EmotionType::Happiness).map(|e| e.value).unwrap_or(0.0),
-            agent.emotions.well_being(),
+        println!("║   Emotions: Happiness: {:.2}  │  Energy: {:.1}%  │  Health: {:.1}%               ║",
+            agent.emotions.happiness,
             agent.state.energy,
+            agent.state.health,
         );
-        println!("║   Inventory: Food: {}  │  Wood: {}  │  Stone: {}  │  Iron: {}            ║",
-            agent.inventory.count_item(&ItemType::Food),
-            agent.inventory.count_item(&ItemType::Wood),
-            agent.inventory.count_item(&ItemType::Stone),
-            agent.inventory.count_item(&ItemType::Iron),
+        println!("║   Inventory: Food: {}  │  Wood: {}  │  Stone: {}  │  Iron: {}              ║",
+            count_inventory_item(agent, "food"),
+            count_inventory_item(agent, "wood"),
+            count_inventory_item(agent, "stone"),
+            count_inventory_item(agent, "iron"),
         );
     }
 
