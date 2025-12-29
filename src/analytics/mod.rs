@@ -356,14 +356,14 @@ impl Simulation {
                     }
                 }
 
-                // Generate action based on priority: shelter needs > percepts > goals > drives
-                let action = {
+                // Generate action based on priority: shelter > percepts > plan > goals > drives
+                let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
 
                     // PRIORITY 1: Check if agent needs shelter due to exposure
                     if agent.needs_shelter() && agent.shelter_priority() > 0.7 {
                         // Critical shelter need - override all other actions
-                        crate::environment::Action::SeekShelter
+                        (crate::environment::Action::SeekShelter, false)
                     } else {
                         // PRIORITY 2: Check for high-salience percepts that should override drive-based actions
                         let percept_action = Self::generate_action_from_percepts(
@@ -373,19 +373,34 @@ impl Simulation {
                         );
 
                         if percept_action.is_some() {
-                            percept_action.unwrap()
+                            (percept_action.unwrap(), false)
+                        } else if agent.should_execute_plan() {
+                            // PRIORITY 3: Execute current plan step if agent has an active plan
+                            if let Some(plan_action) = agent.get_plan_action() {
+                                debug!(
+                                    "Agent {} executing plan step: {:?}",
+                                    agent_id,
+                                    agent.current_plan_step_description()
+                                );
+                                (plan_action, true)
+                            } else {
+                                // Plan step can't be converted to action (e.g., EquipItem)
+                                // Advance plan and use goal-based action instead
+                                (Self::generate_action_for_drive(drive_type, agent_position), false)
+                            }
                         } else {
-                            // PRIORITY 3: Check if we have active goals and generate goal-aligned action
+                            // PRIORITY 4: Check if we have active goals and generate goal-aligned action
+                            // Also try to create a plan for the goal if we don't have one
                             if let Some(active_goal) = agent.goals.highest_priority_goal() {
                                 let goal_action = Self::generate_action_for_goal(active_goal, agent_position, drive_type);
 
                                 // Use goal-aligned action if available, otherwise fall back to drive-based
-                                goal_action.unwrap_or_else(|| {
+                                (goal_action.unwrap_or_else(|| {
                                     Self::generate_action_for_drive(drive_type, agent_position)
-                                })
+                                }), false)
                             } else {
-                                // PRIORITY 4: Use drive-based action
-                                Self::generate_action_for_drive(drive_type, agent_position)
+                                // PRIORITY 5: Use drive-based action
+                                (Self::generate_action_for_drive(drive_type, agent_position), false)
                             }
                         }
                     }
@@ -422,6 +437,46 @@ impl Simulation {
                 // Apply feedback to agent (drive satisfaction)
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
+
+                // Update plan execution state if this was a plan action
+                if is_plan_action {
+                    if action_result.success {
+                        // Successful action - advance to next plan step
+                        agent.advance_plan_step(true, 1); // TODO: Track actual ticks
+                        debug!(
+                            "Agent {} completed plan step, progress: {:?}",
+                            agent_id,
+                            agent.plan_progress()
+                        );
+                    } else {
+                        // Failed action - increment step ticks and potentially abandon plan
+                        agent.tick_plan_step();
+                        if !agent.should_execute_plan() {
+                            // Plan has timed out or is no longer viable
+                            debug!("Agent {} abandoning plan due to failure/timeout", agent_id);
+                            agent.abandon_plan();
+                        }
+                    }
+                } else {
+                    // Not a plan action - tick the plan step counter anyway
+                    // This allows plans to timeout if agent keeps getting interrupted
+                    agent.tick_plan_step();
+                }
+
+                // Try to create a plan for goals if agent doesn't have one
+                // Only do this periodically to avoid constant replanning
+                if !agent.has_active_plan() && self.current_tick % 50 == 0 {
+                    // Use a default resource/return location (should be enhanced with real world data)
+                    let resource_loc = (50, 50, 0);
+                    let return_loc = (0, 0, 0);
+                    if agent.create_plan_for_goal(resource_loc, return_loc, self.current_tick) {
+                        debug!(
+                            "Agent {} created new plan: {:?}",
+                            agent_id,
+                            agent.current_plan_step_description()
+                        );
+                    }
+                }
 
                 // Update behavior tree weights based on action success
                 if let Some(tree) = agent.select_behavior_tree() {
