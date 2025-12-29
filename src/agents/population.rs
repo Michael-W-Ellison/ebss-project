@@ -905,6 +905,9 @@ impl Population {
     }
 
     /// Process social interactions between nearby agents
+    ///
+    /// Agents with active survival drives (hunger/thirst) will not engage in social
+    /// interactions - they must prioritize finding food and water over socializing.
     pub fn process_social_interactions(&mut self) {
         use crate::agents::social_interactions::{
             SocialInteractionType,
@@ -926,6 +929,17 @@ impl Population {
                 continue;
             }
 
+            // Skip agents with active survival drives - they must focus on survival
+            let hunger_active = self.agents[i].drives.get(DriveType::Hunger)
+                .map(|d| d.is_active())
+                .unwrap_or(false);
+            let thirst_active = self.agents[i].drives.get(DriveType::Thirst)
+                .map(|d| d.is_active())
+                .unwrap_or(false);
+            if hunger_active || thirst_active {
+                continue;
+            }
+
             let _agent1_id = self.agents[i].id;
             let agent1_pos = self.agents[i].state.position;
             let agent1_social_drive = self.agents[i].drives.get(DriveType::Social)
@@ -939,6 +953,17 @@ impl Population {
 
             for j in (i + 1)..self.agents.len() {
                 if !self.agents[j].state.is_alive {
+                    continue;
+                }
+
+                // Skip agents with active survival drives
+                let hunger_active_2 = self.agents[j].drives.get(DriveType::Hunger)
+                    .map(|d| d.is_active())
+                    .unwrap_or(false);
+                let thirst_active_2 = self.agents[j].drives.get(DriveType::Thirst)
+                    .map(|d| d.is_active())
+                    .unwrap_or(false);
+                if hunger_active_2 || thirst_active_2 {
                     continue;
                 }
 

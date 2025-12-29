@@ -1644,6 +1644,9 @@ impl Agent {
     }
 
     /// Decide what storage action to take (if any) based on inventory and storage preferences
+    ///
+    /// When survival drives (hunger/thirst) are active, agents will only retrieve food
+    /// from storage - they will NOT deposit resources when their survival is threatened.
     /// Returns Some(Action) if agent should interact with storehouse, None otherwise
     pub fn decide_storage_action(
         &self,
@@ -1656,8 +1659,17 @@ impl Agent {
         };
         use crate::agents::storage_management::decide_storage_action;
         use crate::environment::Action;
-        
+
         use log::debug;
+
+        // Check if survival drives are active - if so, only allow food retrieval
+        let hunger_active = self.drives.get(DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+        let thirst_active = self.drives.get(DriveType::Thirst)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+        let survival_threatened = hunger_active || thirst_active;
 
         // Count what agent has
         let agent_food = count_food_in_inventory(&self.inventory);
@@ -1683,6 +1695,12 @@ impl Agent {
         use crate::agents::storage_management::StorageDecision;
         match decision {
             StorageDecision::Deposit { item_type, quantity, reason } => {
+                // When survival is threatened, do NOT deposit anything
+                // The agent should focus on their own survival, not community contribution
+                if survival_threatened {
+                    debug!("Agent {} skipping deposit (survival threatened): {}", self.id, reason);
+                    return None;
+                }
                 debug!("Agent {} storing: {}", self.id, reason);
                 Some(Action::Store {
                     item_type: item_type_to_id(item_type),
