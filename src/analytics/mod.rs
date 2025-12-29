@@ -20,7 +20,11 @@ pub mod export;
 pub mod performance;
 
 pub use metrics::{SimulationMetrics, TickSnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
-pub use emergence::{EmergenceDetector, EmergentPattern, PatternType};
+pub use emergence::{
+    EmergenceDetector, EmergentPattern, PatternType,
+    DetectionThresholds, TrainingSample, CalibrationResult,
+    TrendDirection, PatternPrediction,
+};
 pub use export::{DataExporter, ExportFormat};
 pub use performance::{PerformanceMonitor, PerformanceSnapshot};
 
