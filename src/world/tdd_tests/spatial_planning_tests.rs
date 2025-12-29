@@ -284,7 +284,6 @@ fn test_storehouse_central_placement() {
 }
 
 #[test]
-#[ignore] // TODO: Fix this test - needs better setup with prerequisite buildings
 fn test_placement_strategies_differ() {
     let mut world = World::new(WorldConfig::default());
     world.place_resource_node("wood", (10, 10, 0));

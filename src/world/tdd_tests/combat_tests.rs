@@ -9,7 +9,6 @@
 // module is properly organized
 
 #[test]
-#[ignore]
 fn placeholder_combat_test() {
     // Placeholder - combat tests to be implemented
     // as integration tests
