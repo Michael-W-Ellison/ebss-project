@@ -210,6 +210,8 @@ impl Marketplace {
 
             // Minerals
             ItemType::Clay | ItemType::Sand | ItemType::Coal => 3,
+            ItemType::Copper => 8,  // Copper age material
+            ItemType::Tin => 6,     // Bronze alloy ingredient
             ItemType::Iron => 10,
 
             // Processed materials

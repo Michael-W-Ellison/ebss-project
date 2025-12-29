@@ -31,6 +31,8 @@ pub enum ItemType {
     Clay,
     Sand,
     Coal,
+    Copper,  // Native copper for cold-working and smelting
+    Tin,     // For bronze alloy
 
     // === Processed Materials ===
     Flour,

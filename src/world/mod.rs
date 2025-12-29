@@ -1060,20 +1060,45 @@ impl World {
 
         for resource in &self.resources {
             match resource.resource_type {
+                // Basic resources
                 ResourceType::Wood => stats.wood_available += resource.amount,
                 ResourceType::Stone => stats.stone_available += resource.amount,
                 ResourceType::Iron => stats.iron_available += resource.amount,
                 ResourceType::Food => stats.food_available += resource.amount,
-                // New resource types - not yet tracked in stats
+                // Agricultural resources
+                ResourceType::Grain => stats.grain_available += resource.amount,
+                ResourceType::Flax => stats.flax_available += resource.amount,
+                ResourceType::Herbs => stats.herbs_available += resource.amount,
+                // Animal resources
+                ResourceType::Hides => stats.hides_available += resource.amount,
+                ResourceType::Wool => stats.wool_available += resource.amount,
+                ResourceType::Meat => stats.meat_available += resource.amount,
+                ResourceType::Fish => stats.fish_available += resource.amount,
+                // Mineral resources
+                ResourceType::Clay => stats.clay_available += resource.amount,
+                ResourceType::Coal => stats.coal_available += resource.amount,
+                // Other types not individually tracked
                 _ => {}
             }
         }
 
-        // Count storehouse inventory
+        // Count storehouse inventory - basic resources
         stats.wood_stored = self.storehouse_inventory.count_item(&ItemType::Wood);
         stats.stone_stored = self.storehouse_inventory.count_item(&ItemType::Stone);
         stats.iron_stored = self.storehouse_inventory.count_item(&ItemType::Iron);
         stats.food_stored = self.storehouse_inventory.count_item(&ItemType::Food);
+        // Agricultural
+        stats.grain_stored = self.storehouse_inventory.count_item(&ItemType::Grain);
+        // Processed materials
+        stats.flour_stored = self.storehouse_inventory.count_item(&ItemType::Flour);
+        stats.leather_stored = self.storehouse_inventory.count_item(&ItemType::Leather);
+        stats.cloth_stored = self.storehouse_inventory.count_item(&ItemType::Cloth);
+        // Finished goods
+        stats.bread_stored = self.storehouse_inventory.count_item(&ItemType::Bread);
+        // Count tools (any tool type)
+        stats.tools_stored = self.storehouse_inventory.count_item(&ItemType::WoodenAxe)
+            + self.storehouse_inventory.count_item(&ItemType::StoneAxe)
+            + self.storehouse_inventory.count_item(&ItemType::IronAxe);
 
         // Count buildings by type
         for building in &self.buildings {
@@ -1241,6 +1266,7 @@ impl World {
 pub struct WorldStats {
     pub total_resources: usize,
     pub total_buildings: usize,
+    // Basic resources
     pub wood_available: u32,
     pub stone_available: u32,
     pub iron_available: u32,
@@ -1249,6 +1275,27 @@ pub struct WorldStats {
     pub stone_stored: u32,
     pub iron_stored: u32,
     pub food_stored: u32,
+    // Agricultural resources
+    pub grain_available: u32,
+    pub grain_stored: u32,
+    pub flax_available: u32,
+    pub herbs_available: u32,
+    // Animal resources
+    pub hides_available: u32,
+    pub wool_available: u32,
+    pub meat_available: u32,
+    pub fish_available: u32,
+    // Mineral resources
+    pub clay_available: u32,
+    pub coal_available: u32,
+    // Processed materials
+    pub flour_stored: u32,
+    pub leather_stored: u32,
+    pub cloth_stored: u32,
+    // Finished goods
+    pub bread_stored: u32,
+    pub tools_stored: u32,
+    // Buildings
     pub longhouses: usize,
     pub small_houses: usize,
     pub medium_houses: usize,
@@ -1374,34 +1421,57 @@ mod tests {
         assert_eq!(config.volume(), 640000);
     }
 
-    // TODO: Rewrite these tests for the current 2D World API
-    // The World struct was refactored from 3D to 2D
-    // #[test]
-    // fn test_world_creation() {
-    //     let world = World::new(WorldConfig::default());
-    //     // Update assertions for 2D grid
-    // }
+    #[test]
+    fn test_world_creation() {
+        let world = World::new(WorldConfig::default());
+        // Verify grid dimensions match config
+        assert_eq!(world.grid.width, 50);
+        assert_eq!(world.grid.height, 50);
+        // Verify resources were generated
+        assert!(!world.resources.is_empty());
+    }
 
-    // #[test]
-    // fn test_world_position_validation() {
-    //     let world = World::new(WorldConfig::default());
-    //     // Update assertions for 2D positions
-    // }
+    #[test]
+    fn test_world_position_validation() {
+        let world = World::new(WorldConfig::default());
+        // Valid position
+        assert!(world.grid.is_valid_position(&Position::new(25, 25)));
+        // Out of bounds positions
+        assert!(!world.grid.is_valid_position(&Position::new(-1, 0)));
+        assert!(!world.grid.is_valid_position(&Position::new(50, 25)));
+        assert!(!world.grid.is_valid_position(&Position::new(25, 50)));
+    }
 
-    // #[test]
-    // fn test_world_config() {
-    //     let config = WorldConfig::default();
-    //     assert_eq!(config.size, (50, 50));
-    // }
+    #[test]
+    fn test_world_config() {
+        let config = WorldConfig::default();
+        assert_eq!(config.size, (50, 50));
+        // Verify default resource counts
+        assert_eq!(config.initial_resources.wood_nodes, 20);
+        assert_eq!(config.initial_resources.stone_nodes, 15);
+        assert_eq!(config.initial_resources.iron_nodes, 8);
+        assert_eq!(config.initial_resources.food_nodes, 25);
+    }
 
-    // #[test]
-    // fn test_custom_world_config() {
-    //     let config = WorldConfig {
-    //         size: (300, 400),
-    //         initial_resources: ResourceConfig::default(),
-    //     };
-    //     assert_eq!(config.size, (300, 400));
-    // }
+    #[test]
+    fn test_custom_world_config() {
+        let config = WorldConfig {
+            size: (100, 80),
+            initial_resources: ResourceConfig {
+                wood_nodes: 30,
+                stone_nodes: 20,
+                iron_nodes: 10,
+                food_nodes: 40,
+            },
+        };
+        assert_eq!(config.size, (100, 80));
+        assert_eq!(config.initial_resources.wood_nodes, 30);
+
+        // Create world with custom config and verify
+        let world = World::new(config);
+        assert_eq!(world.grid.width, 100);
+        assert_eq!(world.grid.height, 80);
+    }
 
     #[test]
     fn test_position_distance() {

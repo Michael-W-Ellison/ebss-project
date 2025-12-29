@@ -146,7 +146,7 @@ impl TechnologyTree {
             era: TechEra::CopperAge,
             prerequisites: vec!["stone_tools"],
             discovery_difficulty: 40,
-            required_items: vec![ItemType::Iron], // Using Iron as copper placeholder
+            required_items: vec![ItemType::Copper],
             unlocks_recipes: vec![],
         });
 
@@ -168,7 +168,7 @@ impl TechnologyTree {
             era: TechEra::CopperAge,
             prerequisites: vec!["fire", "pottery"],
             discovery_difficulty: 50,
-            required_items: vec![ItemType::Coal, ItemType::Iron],
+            required_items: vec![ItemType::Coal, ItemType::Copper],
             unlocks_recipes: vec![],
         });
 
@@ -181,7 +181,7 @@ impl TechnologyTree {
             era: TechEra::BronzeAge,
             prerequisites: vec!["basic_smelting"],
             discovery_difficulty: 60,
-            required_items: vec![ItemType::Iron], // Copper + tin
+            required_items: vec![ItemType::Copper, ItemType::Tin],
             unlocks_recipes: vec![],
         });
 
