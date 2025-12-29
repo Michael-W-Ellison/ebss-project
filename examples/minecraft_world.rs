@@ -1,215 +1,222 @@
 // examples/minecraft_world.rs
 //! Example demonstrating the Minecraft-style survival environment plugin.
+//!
+//! This example shows:
+//! - Plugin creation and initialization
+//! - Material and recipe queries
+//! - Action execution
+//! - World state management
 
 use ebss::environment::*;
 use ebss::core::DriveType;
 
-// Import the Minecraft survival plugin
-// Note: In a real scenario, this would be loaded dynamically
-// For this example, we'll show how the plugin API would be used
-
 fn main() {
     println!("=== EBSS Minecraft Survival Plugin Demo ===\n");
 
-    // Create and configure the plugin registry
-    let mut registry = PluginRegistry::new();
+    // Create the plugin
+    let mut plugin = MinecraftSurvivalPlugin::new();
 
-    println!("📦 Plugin Registry initialized");
+    println!("📦 Plugin Created:");
+    println!("   ID: {}", plugin.metadata().id);
+    println!("   Name: {}", plugin.metadata().name);
+    println!("   Version: {}", plugin.metadata().version);
+    println!("   Author: {}", plugin.metadata().author);
 
-    // In a real scenario, you would load the plugin like this:
-    // let plugin = Box::new(MinecraftSurvivalPlugin::new());
+    // Initialize with configuration
+    let config = PluginConfig::new(12345);
+    plugin.initialize(config).expect("Failed to initialize plugin");
 
-    // For demonstration, we'll show the expected workflow:
-    println!("\n1. Loading Minecraft Survival Plugin...");
-    println!("   - Plugin ID: minecraft_survival");
-    println!("   - Version: 0.1.0");
-    println!("   - Author: EBSS Team");
-
-    // Configure the world
-    let mut config = PluginConfig::new(12345);
-    config.world_size = (256, 256, 128);
-    config.difficulty = 0.5;
-
-    println!("\n2. World Configuration:");
-    println!("   - Seed: {}", config.seed);
-    println!("   - Size: {:?}", config.world_size);
-    println!("   - Difficulty: {}", config.difficulty);
+    println!("\n✓ Plugin initialized with seed: {}", plugin.get_world_state().seed);
+    println!("  World size: {:?}", (256, 256, 128));
 
     // Show available materials
-    println!("\n3. Available Materials:");
-    println!("   Natural Resources:");
-    println!("     - Wood (Hardness: 2.0, Tool: Axe)");
-    println!("     - Stone (Hardness: 3.0, Tool: Pickaxe, Tier: Wooden)");
-    println!("     - Iron Ore (Hardness: 5.0, Tool: Pickaxe, Tier: Stone)");
-    println!("     - Coal (Hardness: 3.0, Tool: Pickaxe, Tier: Wooden)");
-    println!("     - Dirt (Hardness: 0.5, Tool: Shovel)");
-    println!("     - Grass (Hardness: 0.6, Tool: Shovel)");
-    println!("     - Sand (Hardness: 0.5, Tool: Shovel)");
+    println!("\n--- Available Materials ({}) ---", plugin.get_materials().len());
 
-    println!("\n   Water (Critical for Life):");
-    println!("     - Water (Liquid) - Forms lakes, rivers, and oceans");
-    println!("     - Essential for agent survival");
-    println!("     - Naturally generated below sea level (y=64)");
+    // Group materials by category
+    let materials = plugin.get_materials();
+    let mut natural: Vec<_> = materials.iter()
+        .filter(|m| matches!(m.category, MaterialCategory::Natural))
+        .collect();
+    natural.sort_by(|a, b| a.name.cmp(&b.name));
 
-    println!("\n   Processed Materials:");
-    println!("     - Wooden Planks");
-    println!("     - Sticks");
-    println!("     - Iron Ingot");
+    println!("\nNatural Resources:");
+    for mat in &natural {
+        println!("  {} - Hardness: {:.1}, Tool: {:?} ({:?})",
+            mat.name, mat.hardness, mat.required_tool, mat.required_tier);
+    }
 
-    println!("\n   Tools:");
-    println!("     - Wooden Pickaxe (Durability: 60)");
-    println!("     - Stone Pickaxe (Durability: 132)");
-    println!("     - Iron Pickaxe (Durability: 251)");
-    println!("     - Wooden Axe (Durability: 60)");
+    let tools: Vec<_> = materials.iter()
+        .filter(|m| m.durability > 0)
+        .collect();
 
-    // Show available actions
-    println!("\n4. Available Actions:");
-    println!("   - Chop Tree: Harvest wood from trees");
-    println!("     Energy Cost: 5.0, Time: 100 ticks");
-    println!("     Satisfies: Industry drive");
+    println!("\nTools (with durability):");
+    for mat in &tools {
+        println!("  {} - Durability: {}", mat.name, mat.durability);
+    }
 
-    println!("\n   - Mine Stone: Extract stone with pickaxe");
-    println!("     Energy Cost: 8.0, Time: 150 ticks");
-    println!("     Requires: Wooden Pickaxe or better");
+    let food: Vec<_> = materials.iter()
+        .filter(|m| m.is_edible)
+        .collect();
 
-    println!("\n   - Craft: Create items from materials");
-    println!("     Energy Cost: 2.0, Time: 20 ticks");
-    println!("     Satisfies: Utility drive");
-
-    println!("\n   - Eat: Consume food to restore hunger");
-    println!("     Time: 10 ticks");
-    println!("     Satisfies: Hunger drive");
+    println!("\nFood:");
+    for mat in &food {
+        println!("  {} - Food Value: {:.1}", mat.name, mat.food_value);
+    }
 
     // Show crafting recipes
-    println!("\n5. Crafting Recipes:");
-    println!("   Basic:");
-    println!("     - 1 Wood → 4 Planks");
-    println!("     - 2 Planks → 4 Sticks");
+    let recipe_book = plugin.get_recipe_book();
+    println!("\n--- Crafting Recipes ---");
 
-    println!("\n   Tools (Workbench required):");
-    println!("     - 3 Planks + 2 Sticks → Wooden Pickaxe");
-    println!("     - 3 Stone + 2 Sticks → Stone Pickaxe");
-    println!("     - 3 Iron Ingots + 2 Sticks → Iron Pickaxe");
-    println!("     - 3 Planks + 2 Sticks → Wooden Axe");
+    if let Some(planks) = recipe_book.get_recipe("planks") {
+        println!("\nPlanks Recipe:");
+        for input in &planks.inputs {
+            println!("  Input: {} x{}", input.material_id, input.quantity);
+        }
+        for output in &planks.outputs {
+            println!("  Output: {} x{}", output.material_id, output.quantity);
+        }
+    }
 
-    println!("\n   Smelting (Furnace required):");
-    println!("     - 1 Iron Ore + 1 Coal → 1 Iron Ingot");
+    if let Some(pickaxe) = recipe_book.get_recipe("wooden_pickaxe") {
+        println!("\nWooden Pickaxe Recipe:");
+        for input in &pickaxe.inputs {
+            println!("  Input: {} x{}", input.material_id, input.quantity);
+        }
+        for output in &pickaxe.outputs {
+            println!("  Output: {} x{}", output.material_id, output.quantity);
+        }
+    }
 
-    // Simulate agent progression
-    println!("\n6. Agent Progression Simulation:");
-    println!("\n   Step 1: Agent spawns in world");
-    println!("   - Position: (0, 64, 0)");
-    println!("   - Health: 100.0");
-    println!("   - Initial drives activated: Hunger, Shelter, Safety");
+    // Execute some actions
+    println!("\n--- Action Execution ---");
 
-    println!("\n   Step 2: Agent finds nearby tree");
-    println!("   - Scanning radius 50 blocks...");
-    println!("   - Found wood at position (12, 64, 8)");
-    println!("   - Moving to tree...");
+    // Gather wood
+    let gather_action = Action::Gather { resource_type: "wood".to_string() };
+    let context = ActionContext::new("demo_agent".to_string(), Position::new(5, 70, 5));
 
-    println!("\n   Step 3: Agent chops tree");
-    println!("   - Action: Chop Tree");
-    println!("   - Time: 100 ticks");
-    println!("   - Result: Gained 2x Wood");
-    println!("   - Industry drive: 0.65 → 0.55 ✓");
+    match plugin.execute_action(&gather_action, context) {
+        Ok(result) => {
+            println!("\n✓ Gathered wood:");
+            println!("  Success: {}", result.success);
+            for item in &result.items_gained {
+                println!("  + {} x{}", item.material_id, item.quantity);
+            }
+            println!("  Energy cost: {:.1}", result.energy_cost);
+            println!("  Experience: {:.1}", result.experience);
+        }
+        Err(e) => println!("✗ Gather failed: {}", e),
+    }
 
-    println!("\n   Step 4: Agent crafts planks");
-    println!("   - Recipe: Wood → Planks");
-    println!("   - Consumed: 1x Wood");
-    println!("   - Gained: 4x Planks");
-    println!("   - Crafting XP: +2");
+    // Craft planks
+    let craft_action = Action::Craft { item_type: "planks".to_string() };
+    let context = ActionContext::new("demo_agent".to_string(), Position::new(5, 70, 5));
 
-    println!("\n   Step 5: Agent crafts sticks");
-    println!("   - Recipe: Planks → Sticks");
-    println!("   - Consumed: 2x Planks");
-    println!("   - Gained: 4x Sticks");
-    println!("   - Crafting XP: +2");
+    match plugin.execute_action(&craft_action, context) {
+        Ok(result) => {
+            println!("\n✓ Crafted planks:");
+            println!("  Success: {}", result.success);
+            for item in &result.items_consumed {
+                println!("  - {} x{}", item.material_id, item.quantity);
+            }
+            for item in &result.items_gained {
+                println!("  + {} x{}", item.material_id, item.quantity);
+            }
+            if let Some(drive_change) = result.drive_changes.get(&DriveType::Utility) {
+                println!("  Utility drive: {:+.2}", drive_change);
+            }
+        }
+        Err(e) => println!("✗ Craft failed: {}", e),
+    }
 
-    println!("\n   Step 6: Agent crafts wooden pickaxe");
-    println!("   - Recipe: Planks + Sticks → Wooden Pickaxe");
-    println!("   - Consumed: 3x Planks, 2x Sticks");
-    println!("   - Gained: 1x Wooden Pickaxe");
-    println!("   - Utility drive: 0.4 → 0.2 ✓");
-    println!("   - Crafting XP: +10");
+    // Eat food
+    let eat_action = Action::Eat { food_type: "apple".to_string() };
+    let context = ActionContext::new("demo_agent".to_string(), Position::new(5, 70, 5));
 
-    println!("\n   Step 7: Agent finds stone");
-    println!("   - Scanning for stone...");
-    println!("   - Found stone at position (5, 32, 3)");
-    println!("   - Moving to stone deposit...");
+    match plugin.execute_action(&eat_action, context) {
+        Ok(result) => {
+            println!("\n✓ Ate apple:");
+            println!("  Success: {}", result.success);
+            if let Some(drive_change) = result.drive_changes.get(&DriveType::Hunger) {
+                println!("  Hunger drive: {:+.2}", drive_change);
+            }
+        }
+        Err(e) => println!("✗ Eat failed: {}", e),
+    }
 
-    println!("\n   Step 8: Agent mines stone");
-    println!("   - Action: Mine Stone");
-    println!("   - Tool: Wooden Pickaxe (59/60 durability remaining)");
-    println!("   - Time: 120 ticks (reduced by tool tier)");
-    println!("   - Result: Gained 1x Stone");
-    println!("   - Mining XP: +15");
+    // Simulate world ticks
+    println!("\n--- World Simulation ---");
+    println!("Initial tick: {}", plugin.get_world_state().tick);
+    println!("Initial time of day: {:.3}", plugin.get_world_state().time_of_day);
 
-    println!("\n   Step 9: Tool progression continues...");
-    println!("   - Agent can now craft Stone Pickaxe");
-    println!("   - Stone Pickaxe enables Iron Ore mining");
-    println!("   - Iron tools are 5x more efficient");
+    for _ in 0..100 {
+        plugin.tick();
+    }
 
-    // Show drive integration
-    println!("\n7. Drive System Integration:");
-    println!("   Actions satisfy specific drives:");
-    println!("   - Chopping/Mining → Industry drive");
-    println!("   - Crafting tools → Utility drive");
-    println!("   - Building shelter → Construction drive");
-    println!("   - Gathering food → Sustenance drive");
-    println!("   - Eating → Hunger drive");
-    println!("   - Exploring → Curiosity drive");
+    println!("\nAfter 100 ticks:");
+    println!("  Current tick: {}", plugin.get_world_state().tick);
+    println!("  Time of day: {:.3}", plugin.get_world_state().time_of_day);
 
-    // Show world features
-    println!("\n8. Natural World Generation:");
-    println!("   Terrain System:");
-    println!("     - Perlin noise-based heightmaps for realistic terrain");
-    println!("     - Height variation: y=20 to y=90");
-    println!("     - Sea level at y=64 with water below");
-    println!("     - Natural cave systems (3D noise)");
-    println!("     - Smooth, rolling hills and valleys");
+    // Demonstrate material lookup at position
+    println!("\n--- Spatial Queries ---");
 
-    println!("\n   Biome-like Features:");
-    println!("     - Wet biomes: Dense tree coverage (8%)");
-    println!("     - Dry biomes: Sparse trees (3%)");
-    println!("     - Beaches: Sandy areas near water (y=64-66)");
-    println!("     - Moisture-based vegetation distribution");
+    // Check some positions
+    let positions = [
+        Position::new(0, 0, 0),   // Bedrock
+        Position::new(0, 50, 0),  // Deep stone
+        Position::new(0, 70, 0),  // Surface
+    ];
 
-    println!("\n   Terrain Layers:");
-    println!("     - Surface: Grass (on land) or Sand (beaches)");
-    println!("     - Subsurface: Dirt/Sand (3-4 blocks deep)");
-    println!("     - Underground: Stone with embedded ores");
-    println!("     - Deep underground: Coal (y<50), Iron (y<40)");
-    println!("     - Bedrock: Solid stone at y=0");
+    for pos in &positions {
+        let mat = plugin.get_material_at(*pos);
+        let walkable = plugin.is_walkable(*pos);
+        println!("  Position {:?}:", (pos.x, pos.y, pos.z));
+        if let Some(m) = mat {
+            println!("    Material: {}", m.name);
+        } else {
+            println!("    Material: Air");
+        }
+        println!("    Walkable: {}", walkable);
+    }
 
-    println!("\n   Water System:");
-    println!("     - Lakes, rivers, and oceans below sea level");
-    println!("     - Critical resource for agent survival");
-    println!("     - Natural barriers and navigation challenges");
-    println!("     - Connects low-lying terrain areas");
+    // Find nearby resources
+    let search_pos = Position::new(5, 50, 5);
+    let nearby_coal = plugin.find_nearby_materials(search_pos, "coal", 10.0);
+    println!("\n  Coal deposits within 10 blocks of {:?}: {}",
+        (search_pos.x, search_pos.y, search_pos.z), nearby_coal.len());
 
-    println!("\n   Dynamic Systems:");
-    println!("     - Day/night cycle: 0.001 per tick");
-    println!("     - Weather system: Dynamic");
-    println!("     - Seed-based reproducible worlds");
+    // Plugin registry demonstration
+    println!("\n--- Plugin Registry ---");
 
-    println!("\n9. Plugin Extension Points:");
-    println!("   Plugins can customize:");
-    println!("   - Material properties and behavior");
-    println!("   - Crafting recipes and stations");
-    println!("   - Action effects on drives");
-    println!("   - World generation algorithms");
-    println!("   - Custom game mechanics");
+    let mut registry = PluginRegistry::new();
+
+    // Create a new plugin instance for the registry
+    let plugin_for_registry = Box::new(MinecraftSurvivalPlugin::new());
+    let config = PluginConfig::new(54321);
+
+    match registry.register_and_activate(plugin_for_registry, config) {
+        Ok(_) => {
+            println!("✓ Plugin registered and activated");
+            println!("  Active plugin: {:?}", registry.get_active_id());
+            println!("  Total plugins: {}", registry.count());
+        }
+        Err(e) => println!("✗ Registration failed: {}", e),
+    }
+
+    // Summary
+    println!("\n=== Summary ===");
+    println!("Materials defined: {}", plugin.get_materials().len());
+    println!("Actions available: {}", plugin.get_actions().len());
+    println!("Recipes in book: {} (approximate)", 8); // We know we added 8 recipes
+
+    println!("\n=== Key Features Demonstrated ===");
+    println!("✓ Plugin creation and initialization");
+    println!("✓ Material system with tool requirements");
+    println!("✓ Crafting recipes with inputs/outputs");
+    println!("✓ Action execution with results");
+    println!("✓ Drive system integration");
+    println!("✓ World state and tick simulation");
+    println!("✓ Spatial queries (material at position)");
+    println!("✓ Plugin registry for management");
 
     println!("\n=== Demo Complete ===");
-    println!("\nThe plugin architecture enables:");
-    println!("✓ Easy creation of new environment types");
-    println!("✓ Modular world rules and mechanics");
-    println!("✓ Independent development of plugins");
-    println!("✓ Hot-swapping between different environments");
-    println!("✓ Custom materials, actions, and recipes");
-    println!("\nNext steps:");
-    println!("- Create custom environment plugins");
-    println!("- Experiment with different material properties");
-    println!("- Design unique crafting progression trees");
-    println!("- Test agent behavior across environments");
 }

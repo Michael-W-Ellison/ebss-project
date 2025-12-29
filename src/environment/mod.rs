@@ -32,8 +32,10 @@ pub mod biome;
 pub mod weather;
 pub mod exposure;
 pub mod seasons;
+mod minecraft_survival;
 
 pub use material::*;
+pub use minecraft_survival::MinecraftSurvivalPlugin;
 pub use action::*;
 pub use crafting::*;
 pub use plugin::*;

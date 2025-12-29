@@ -209,6 +209,11 @@ impl Material {
         self
     }
 
+    pub fn with_state(mut self, state: MaterialState) -> Self {
+        self.state = state;
+        self
+    }
+
     pub fn with_hardness(mut self, hardness: f32) -> Self {
         self.hardness = hardness;
         self
