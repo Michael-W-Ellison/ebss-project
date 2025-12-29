@@ -125,6 +125,69 @@ impl Goal {
     pub fn age(&self, current_tick: u32) -> u32 {
         current_tick.saturating_sub(self.created_at)
     }
+
+    /// Check if this goal is already satisfied given current world state
+    ///
+    /// Used to interrupt plans when new information indicates the goal is complete.
+    /// For example, if another agent already restocked the storehouse, this goal
+    /// should be marked as satisfied so the agent can stop pursuing it.
+    pub fn is_satisfied(&self, world_state: &GoalWorldState) -> bool {
+        if self.completed {
+            return true;
+        }
+
+        match &self.external {
+            Some(ExternalGoal::ContributeFoodToStorehouse(target)) => {
+                // Goal satisfied if storehouse already has enough food
+                world_state.storehouse_food >= *target
+            }
+            Some(ExternalGoal::ContributeMaterialsToStorehouse(target)) => {
+                // Goal satisfied if storehouse already has enough materials
+                world_state.storehouse_materials >= *target
+            }
+            Some(ExternalGoal::StockHouseFood(target)) => {
+                // Goal satisfied if agent already has enough personal food
+                world_state.personal_food >= *target
+            }
+            Some(ExternalGoal::GatherResource(_resource, target)) => {
+                // Goal satisfied if agent has gathered enough
+                // Using personal_food as proxy for gathered resources
+                world_state.gathered_resources >= *target
+            }
+            Some(ExternalGoal::EnsureToolsAvailable(target)) => {
+                world_state.storehouse_tools >= *target
+            }
+            Some(ExternalGoal::OwnHouse) => {
+                world_state.owns_house
+            }
+            Some(ExternalGoal::ObtainProtection) => {
+                world_state.has_protection
+            }
+            _ => false, // Other goals require explicit completion
+        }
+    }
+}
+
+/// World state information for checking goal satisfaction
+///
+/// This allows goals to be re-evaluated when new information arrives,
+/// enabling agents to abandon plans that are no longer necessary.
+#[derive(Debug, Clone, Default)]
+pub struct GoalWorldState {
+    /// Current food in the communal storehouse
+    pub storehouse_food: u32,
+    /// Current materials in the communal storehouse
+    pub storehouse_materials: u32,
+    /// Current tools in the communal storehouse
+    pub storehouse_tools: u32,
+    /// Food in agent's personal inventory
+    pub personal_food: u32,
+    /// Resources gathered by agent
+    pub gathered_resources: u32,
+    /// Whether agent owns a house
+    pub owns_house: bool,
+    /// Whether agent has protection equipment
+    pub has_protection: bool,
 }
 
 /// Agent's goal manager

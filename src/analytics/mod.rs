@@ -356,6 +356,83 @@ impl Simulation {
                     }
                 }
 
+                // Check if current plan is still relevant given updated world state
+                // This allows agents to abandon plans when goals are already satisfied
+                // (e.g., another agent restocked the storehouse)
+                {
+                    use crate::world::ItemType;
+                    use crate::core::GoalWorldState;
+
+                    // Calculate storehouse contents
+                    let food_types = vec![
+                        ItemType::Food, ItemType::Bread, ItemType::Cheese,
+                        ItemType::Meat, ItemType::Fish, ItemType::Honey, ItemType::Ale,
+                    ];
+                    let resource_types = vec![
+                        ItemType::Wood, ItemType::Stone, ItemType::Iron,
+                        ItemType::Clay, ItemType::Sand, ItemType::Coal,
+                    ];
+                    let tool_types = vec![
+                        ItemType::WoodenAxe, ItemType::StoneAxe, ItemType::IronAxe,
+                        ItemType::WoodenPickaxe, ItemType::StonePickaxe, ItemType::IronPickaxe,
+                        ItemType::WoodenHammer, ItemType::StoneHammer, ItemType::IronHammer,
+                    ];
+
+                    let storehouse_food: u32 = food_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    let storehouse_materials: u32 = resource_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    let storehouse_tools: u32 = tool_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    // Get agent's personal inventory state
+                    let agent = &self.population.agents[agent_index];
+                    let personal_food = agent.inventory.get_item("food")
+                        .map(|i| i.quantity)
+                        .unwrap_or(0);
+                    let gathered_resources = agent.inventory.get_item("wood")
+                        .map(|i| i.quantity)
+                        .unwrap_or(0)
+                        + agent.inventory.get_item("stone")
+                            .map(|i| i.quantity)
+                            .unwrap_or(0);
+
+                    // Check if agent has protection equipment (check for any armor items)
+                    let has_protection = agent.inventory.get_all_items().iter()
+                        .any(|(item_id, _)| {
+                            item_id.contains("armor") ||
+                            item_id.contains("Armor") ||
+                            item_id.contains("shield")
+                        });
+
+                    // Check if agent owns a house (based on memory or state)
+                    // For now, we estimate based on whether agent has built structures
+                    let owns_house = agent.memory.knowledge.iter()
+                        .any(|k| k.description.contains("house") || k.description.contains("shelter"));
+
+                    let world_state = GoalWorldState {
+                        storehouse_food,
+                        storehouse_materials,
+                        storehouse_tools,
+                        personal_food,
+                        gathered_resources,
+                        owns_house,
+                        has_protection,
+                    };
+
+                    // Update plan relevance - this will abandon the plan if goal is satisfied
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.update_plan_relevance(&world_state);
+                }
+
                 // Generate action based on priority: shelter > percepts > plan > goals > drives
                 let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
@@ -388,6 +465,10 @@ impl Simulation {
                                 // Advance plan and use goal-based action instead
                                 (Self::generate_action_for_drive(drive_type, agent_position), false)
                             }
+                        } else if agent.has_active_plan() {
+                            // Agent has a plan but shouldn't execute it (survival override)
+                            // Still use drive-based action
+                            (Self::generate_action_for_drive(drive_type, agent_position), false)
                         } else {
                             // PRIORITY 4: Check if we have active goals and generate goal-aligned action
                             // Also try to create a plan for the goal if we don't have one

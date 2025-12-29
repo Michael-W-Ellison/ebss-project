@@ -4,6 +4,7 @@
 use crate::agents::{Agent, AgentConfig};
 use crate::core::DriveType;
 use crate::core::planning::{ActionPlan, ActionType as PlanActionType, PlanStep};
+use crate::core::{Goal, GoalWorldState, ExternalGoal};
 
 #[test]
 fn test_agent_has_no_plan_by_default() {
@@ -226,4 +227,224 @@ fn test_planner_records_outcomes() {
 
     // Should have recorded the outcome
     assert!(!agent.planner.action_history.is_empty());
+}
+
+// === Tests for plan interruption when goals are satisfied by external changes ===
+
+#[test]
+fn test_plan_abandoned_when_storehouse_already_stocked() {
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.position = (10, 10, 0);
+
+    // Create a goal to contribute materials to storehouse
+    let goal = Goal::new_external(
+        ExternalGoal::ContributeMaterialsToStorehouse(50),
+        0.8,
+        100,
+    );
+    agent.goals.add_goal(goal);
+
+    // Create a plan to gather wood for the storehouse
+    let steps = vec![
+        PlanStep {
+            action: PlanActionType::MoveTo { location: (50, 50, 0) },
+            estimated_ticks: 10,
+            required_tool: None,
+            required_resources: vec![],
+            target_location: Some((50, 50, 0)),
+            confidence: 0.9,
+        },
+        PlanStep {
+            action: PlanActionType::GatherResource {
+                resource: "wood".to_string(),
+                amount: 50,
+            },
+            estimated_ticks: 20,
+            required_tool: None,
+            required_resources: vec![],
+            target_location: Some((50, 50, 0)),
+            confidence: 0.8,
+        },
+    ];
+
+    let plan = ActionPlan::new(
+        "Gather wood for storehouse".to_string(),
+        steps,
+        100,
+        "testing".to_string(),
+    );
+    agent.current_plan = Some(plan);
+
+    assert!(agent.has_active_plan());
+
+    // Now simulate storehouse being restocked by someone else
+    let world_state = GoalWorldState {
+        storehouse_food: 0,
+        storehouse_materials: 100, // Exceeds the goal target of 50
+        storehouse_tools: 0,
+        personal_food: 0,
+        gathered_resources: 0,
+        owns_house: false,
+        has_protection: false,
+    };
+
+    // Check plan relevance - should return false (goal already satisfied)
+    assert!(!agent.is_plan_still_relevant(&world_state));
+
+    // Update plan relevance should abandon the plan
+    agent.update_plan_relevance(&world_state);
+
+    // Plan should be abandoned
+    assert!(!agent.has_active_plan());
+}
+
+#[test]
+fn test_goal_marked_complete_when_satisfied_by_world_state() {
+    let mut agent = Agent::new(AgentConfig::default());
+
+    // Create a goal to contribute food to storehouse
+    let goal = Goal::new_external(
+        ExternalGoal::ContributeFoodToStorehouse(30),
+        0.9,
+        100,
+    );
+    agent.goals.add_goal(goal);
+
+    // Verify goal is not yet complete
+    assert!(!agent.goals.goals[0].completed);
+    assert_eq!(agent.goals.goals[0].progress, 0.0);
+
+    // Simulate storehouse having enough food
+    let world_state = GoalWorldState {
+        storehouse_food: 50, // Exceeds the goal target of 30
+        storehouse_materials: 0,
+        storehouse_tools: 0,
+        personal_food: 0,
+        gathered_resources: 0,
+        owns_house: false,
+        has_protection: false,
+    };
+
+    // Update plan relevance (which also marks satisfied goals as complete)
+    agent.update_plan_relevance(&world_state);
+
+    // Goal should now be marked as complete
+    assert!(agent.goals.goals[0].completed);
+    assert_eq!(agent.goals.goals[0].progress, 1.0);
+}
+
+#[test]
+fn test_plan_continues_when_goal_not_satisfied() {
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.position = (10, 10, 0);
+
+    // Create a goal to contribute materials to storehouse
+    let goal = Goal::new_external(
+        ExternalGoal::ContributeMaterialsToStorehouse(100),
+        0.8,
+        100,
+    );
+    agent.goals.add_goal(goal);
+
+    // Create a plan for this goal
+    let steps = vec![
+        PlanStep {
+            action: PlanActionType::GatherResource {
+                resource: "wood".to_string(),
+                amount: 50,
+            },
+            estimated_ticks: 20,
+            required_tool: None,
+            required_resources: vec![],
+            target_location: Some((50, 50, 0)),
+            confidence: 0.8,
+        },
+    ];
+
+    let plan = ActionPlan::new(
+        "Gather wood for storehouse".to_string(),
+        steps,
+        100,
+        "testing".to_string(),
+    );
+    agent.current_plan = Some(plan);
+
+    // World state still short of goal (only 30 materials, need 100)
+    let world_state = GoalWorldState {
+        storehouse_food: 0,
+        storehouse_materials: 30, // Below the goal target of 100
+        storehouse_tools: 0,
+        personal_food: 0,
+        gathered_resources: 0,
+        owns_house: false,
+        has_protection: false,
+    };
+
+    // Plan should still be relevant
+    assert!(agent.is_plan_still_relevant(&world_state));
+
+    // Update plan relevance should NOT abandon the plan
+    agent.update_plan_relevance(&world_state);
+
+    // Plan should still be active
+    assert!(agent.has_active_plan());
+}
+
+#[test]
+fn test_personal_food_goal_satisfied() {
+    let mut agent = Agent::new(AgentConfig::default());
+
+    // Create a goal to stock house with food
+    let goal = Goal::new_external(
+        ExternalGoal::StockHouseFood(20),
+        0.7,
+        100,
+    );
+    agent.goals.add_goal(goal);
+
+    // Simulate having enough personal food
+    let world_state = GoalWorldState {
+        storehouse_food: 0,
+        storehouse_materials: 0,
+        storehouse_tools: 0,
+        personal_food: 25, // Exceeds the goal target of 20
+        gathered_resources: 0,
+        owns_house: false,
+        has_protection: false,
+    };
+
+    // Goal should be satisfied
+    assert!(agent.goals.goals[0].is_satisfied(&world_state));
+
+    // Update plan relevance marks goal as complete
+    agent.update_plan_relevance(&world_state);
+
+    assert!(agent.goals.goals[0].completed);
+}
+
+#[test]
+fn test_tools_goal_satisfied() {
+    let mut agent = Agent::new(AgentConfig::default());
+
+    // Create a goal to ensure tools are available
+    let goal = Goal::new_external(
+        ExternalGoal::EnsureToolsAvailable(5),
+        0.6,
+        100,
+    );
+    agent.goals.add_goal(goal);
+
+    // Simulate storehouse having enough tools
+    let world_state = GoalWorldState {
+        storehouse_food: 0,
+        storehouse_materials: 0,
+        storehouse_tools: 10, // Exceeds the goal target of 5
+        personal_food: 0,
+        gathered_resources: 0,
+        owns_house: false,
+        has_protection: false,
+    };
+
+    // Goal should be satisfied
+    assert!(agent.goals.goals[0].is_satisfied(&world_state));
 }

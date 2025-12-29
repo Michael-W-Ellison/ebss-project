@@ -27,7 +27,7 @@ pub use working_memory::{WorkingMemory, WorkingTask, TaskPriority, TaskStatus, W
 pub use memory_manager::{MemoryManager, DecisionContext, MemoryManagerStats};
 pub use emotions::{Emotion, EmotionType, EmotionalState};
 pub use traits::{Trait, TraitSet};
-pub use goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager};
+pub use goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager, GoalWorldState};
 pub use preferences::{Preferences, Obsession, ObsessionType};
 pub use drive_progression::{DriveProgression, DriveTier, DriveTierRequirement, Requirement};
 pub use planning::{Planner, ActionPlan, PlanStep, ActionType, ActionOutcome};

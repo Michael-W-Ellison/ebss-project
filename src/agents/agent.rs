@@ -1,7 +1,7 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences};
+use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
 use crate::core::planning::{ActionPlan, ActionType as PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
 use std::collections::HashMap;
@@ -2238,6 +2238,88 @@ impl Agent {
         true
     }
 
+    /// Check if the current plan is still relevant given updated world state
+    ///
+    /// Returns true if the plan should continue, false if it should be abandoned
+    /// because the underlying goal is already satisfied (e.g., someone else restocked
+    /// the storehouse while this agent was gathering resources).
+    ///
+    /// This enables agents to respond to new information and avoid wasted effort.
+    pub fn is_plan_still_relevant(&self, world_state: &GoalWorldState) -> bool {
+        // No plan = not relevant
+        if !self.has_active_plan() {
+            return false;
+        }
+
+        // Find the goal this plan was created for
+        // Check if any active goal matches the plan description and is now satisfied
+        if let Some(plan) = &self.current_plan {
+            for goal in &self.goals.goals {
+                if goal.completed {
+                    continue;
+                }
+
+                // Check if this goal is now satisfied by world state
+                if goal.is_satisfied(world_state) {
+                    // Check if plan was for this goal (rough match by description)
+                    let goal_matches = match &goal.external {
+                        Some(crate::core::ExternalGoal::ContributeFoodToStorehouse(_)) => {
+                            plan.goal_description.contains("food") ||
+                            plan.goal_description.contains("Food")
+                        }
+                        Some(crate::core::ExternalGoal::ContributeMaterialsToStorehouse(_)) => {
+                            plan.goal_description.contains("wood") ||
+                            plan.goal_description.contains("material") ||
+                            plan.goal_description.contains("Gather")
+                        }
+                        Some(crate::core::ExternalGoal::StockHouseFood(_)) => {
+                            plan.goal_description.contains("food") ||
+                            plan.goal_description.contains("stock")
+                        }
+                        Some(crate::core::ExternalGoal::GatherResource(resource, _)) => {
+                            plan.goal_description.to_lowercase().contains(&resource.to_lowercase())
+                        }
+                        _ => false,
+                    };
+
+                    if goal_matches {
+                        log::debug!(
+                            "Plan '{}' no longer relevant - goal already satisfied by world state",
+                            plan.goal_description
+                        );
+                        return false;
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Update plan relevance and abandon if goal is already satisfied
+    ///
+    /// Call this when the agent receives new information about the world
+    /// (e.g., learning that the storehouse was restocked via gossip).
+    pub fn update_plan_relevance(&mut self, world_state: &GoalWorldState) {
+        if !self.is_plan_still_relevant(world_state) {
+            if let Some(plan) = &self.current_plan {
+                log::info!(
+                    "Agent {} abandoning plan '{}' - goal already satisfied",
+                    self.id, plan.goal_description
+                );
+            }
+            self.abandon_plan();
+
+            // Also mark the satisfied goal as complete
+            for goal in &mut self.goals.goals {
+                if !goal.completed && goal.is_satisfied(world_state) {
+                    goal.completed = true;
+                    goal.progress = 1.0;
+                }
+            }
+        }
+    }
+
     /// Get the next action from the current plan
     ///
     /// Converts the current PlanStep to an environment Action.
@@ -2340,7 +2422,7 @@ impl Agent {
     /// Create a plan for gathering resources
     pub fn create_gather_plan(
         &mut self,
-        resource: &str,
+        _resource: &str,
         amount: u32,
         resource_location: (i32, i32, i32),
         return_location: (i32, i32, i32),
