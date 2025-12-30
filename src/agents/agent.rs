@@ -1407,9 +1407,42 @@ impl Agent {
 
 
     // Helper methods
+
+    /// Find the nearest known shelter (housing building) from the agent's exploration knowledge.
+    /// Returns the position of the nearest shelter, or the agent's current position if no shelter is known.
     fn find_nearest_shelter(&self) -> (i32, i32, i32) {
-        // Placeholder: return a position near the agent
-        (self.state.position.0, self.state.position.1, self.state.position.2)
+        use crate::world::{BuildingType, Position};
+
+        let agent_pos = Position::new(self.state.position.0, self.state.position.1);
+
+        // Housing building types that provide shelter
+        let is_shelter = |building_type: &BuildingType| {
+            matches!(
+                building_type,
+                BuildingType::Longhouse
+                    | BuildingType::UpgradedLonghouse
+                    | BuildingType::SmallHouse
+                    | BuildingType::MediumHouse
+                    | BuildingType::LargeHouse
+                    | BuildingType::Manor
+            )
+        };
+
+        // Find the nearest known shelter building
+        let nearest = self
+            .exploration_knowledge
+            .known_buildings
+            .iter()
+            .filter(|(_, building_type)| is_shelter(building_type))
+            .min_by_key(|(pos, _)| agent_pos.distance_to(pos));
+
+        match nearest {
+            Some((pos, _)) => (pos.x, pos.y, 0),
+            None => {
+                // No known shelter - return current position as fallback
+                self.state.position
+            }
+        }
     }
 
     fn random_direction(&self) -> (i32, i32, i32) {
