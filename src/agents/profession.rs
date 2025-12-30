@@ -3,6 +3,39 @@
 //!
 //! This module defines the profession system that allows agents to specialize in
 //! specific roles, develop skills, and be assigned to workplaces.
+//!
+//! # Integration Status
+//!
+//! **IMPORTANT**: This profession system is currently **NOT INTEGRATED** with the Agent struct.
+//! The 52 job types defined here are available for future use, but agents do not currently
+//! have a `profession` field. The crafting/production system uses skill-based mechanics
+//! in `src/world/crafting.rs` instead.
+//!
+//! ## Usage Status
+//!
+//! - `JobType` enum: Defined but not actively used outside this module
+//! - `Profession` struct: Complete but not attached to agents
+//! - `workplace()` method: Ready for building assignment integration
+//! - `tick_production()`: Deprecated, replaced by skill-based crafting
+//!
+//! ## Implementation Priority Guide
+//!
+//! Jobs are classified by implementation priority for future integration:
+//!
+//! | Priority | Category | Jobs |
+//! |----------|----------|------|
+//! | 1 (Core) | Essential survival | Farmer, Woodcutter, Miner, Hunter, Fisher, Blacksmith, Carpenter, Baker, Healer, Laborer |
+//! | 2 (Important) | Secondary production | Miller, Butcher, Tanner, Tailor, Stonemason, Merchant, Cook, Herder, Brewer |
+//! | 3 (Advanced) | Specialized crafts | Armorer, Potter, Weaver, Cobbler, Bowyer, Fletcher, Apothecary, Watchman |
+//! | 4 (Luxury) | Non-essential | Goldsmith, Painter, Candlemaker, Birdcatcher, Glassblower, Dyer, etc. |
+//!
+//! ## Path to Integration
+//!
+//! To integrate professions with agents:
+//! 1. Add `profession: Option<Profession>` field to Agent struct
+//! 2. Update agent spawn logic to assign professions based on settlement needs
+//! 3. Connect `workplace()` with building assignment system
+//! 4. Integrate profession skills with existing crafting system
 
 use serde::{Deserialize, Serialize};
 use crate::world::{Position, BuildingType};
@@ -137,6 +170,34 @@ pub enum JobType {
     /// Not yet assigned a job
     Unemployed,
 }
+
+/// Array of all job types for iteration and filtering.
+pub const ALL_JOB_TYPES: [JobType; 52] = [
+    // Primary Production
+    JobType::Woodcutter, JobType::Miner, JobType::Farmer, JobType::Fisher,
+    JobType::Hunter, JobType::Herder, JobType::Herbalist,
+    // Food Processing
+    JobType::Miller, JobType::Butcher, JobType::Baker, JobType::Brewer, JobType::Cheesemaker,
+    // Material Processing
+    JobType::Tanner, JobType::Potter, JobType::Weaver, JobType::Spinner,
+    JobType::Glassblower, JobType::Dyer, JobType::Ropemaker, JobType::Brickmaker, JobType::CharcoalMaker,
+    // Crafting (Wood & Stone)
+    JobType::Carpenter, JobType::Stonemason, JobType::Sawyer, JobType::Turner,
+    // Metalworking
+    JobType::Blacksmith, JobType::Armorer, JobType::Goldsmith, JobType::Tinsmith,
+    // Textile & Leather Goods
+    JobType::Tailor, JobType::Cobbler, JobType::Leatherworker,
+    // Weapons & Tools
+    JobType::Bowyer, JobType::Fletcher, JobType::Wheelwright,
+    // Services
+    JobType::Healer, JobType::Apothecary, JobType::Barber, JobType::Scribe, JobType::Printer, JobType::Papermaker,
+    // Commerce & Administration
+    JobType::Merchant, JobType::Watchman, JobType::TownCrier,
+    // Specialized
+    JobType::Cook, JobType::Beekeeper, JobType::Birdcatcher, JobType::Painter, JobType::Candlemaker, JobType::Carter,
+    // General
+    JobType::Laborer, JobType::Unemployed,
+];
 
 impl JobType {
     /// Get the building type where this job is performed (if any)
@@ -296,6 +357,75 @@ impl JobType {
             JobType::Laborer => "Performs general manual labor as needed.",
             JobType::Unemployed => "Currently without a profession.",
         }
+    }
+
+    /// Get the implementation priority for this job type.
+    ///
+    /// Returns a priority level from 1-4:
+    /// - 1 (Core): Essential for basic settlement survival
+    /// - 2 (Important): Secondary production and services
+    /// - 3 (Advanced): Specialized crafts and trades
+    /// - 4 (Luxury): Non-essential, quality of life jobs
+    ///
+    /// This helps guide which jobs should be implemented first when
+    /// integrating the profession system.
+    pub fn implementation_priority(&self) -> u8 {
+        match self {
+            // Priority 1: Core survival jobs
+            JobType::Farmer | JobType::Woodcutter | JobType::Miner |
+            JobType::Hunter | JobType::Fisher | JobType::Blacksmith |
+            JobType::Carpenter | JobType::Baker | JobType::Healer |
+            JobType::Laborer => 1,
+
+            // Priority 2: Important secondary production
+            JobType::Miller | JobType::Butcher | JobType::Tanner |
+            JobType::Tailor | JobType::Stonemason | JobType::Merchant |
+            JobType::Cook | JobType::Herder | JobType::Brewer |
+            JobType::Sawyer | JobType::Herbalist => 2,
+
+            // Priority 3: Specialized crafts
+            JobType::Armorer | JobType::Potter | JobType::Weaver |
+            JobType::Cobbler | JobType::Bowyer | JobType::Fletcher |
+            JobType::Apothecary | JobType::Watchman | JobType::Spinner |
+            JobType::Leatherworker | JobType::Wheelwright |
+            JobType::Cheesemaker | JobType::Carter => 3,
+
+            // Priority 4: Luxury/non-essential
+            JobType::Goldsmith | JobType::Painter | JobType::Candlemaker |
+            JobType::Birdcatcher | JobType::Glassblower | JobType::Dyer |
+            JobType::Ropemaker | JobType::Brickmaker | JobType::CharcoalMaker |
+            JobType::Turner | JobType::Tinsmith | JobType::Barber |
+            JobType::Scribe | JobType::Printer | JobType::Papermaker |
+            JobType::TownCrier | JobType::Beekeeper => 4,
+
+            // Unemployed has no priority
+            JobType::Unemployed => 0,
+        }
+    }
+
+    /// Check if this is a core job essential for settlement survival.
+    ///
+    /// Core jobs (priority 1) should be implemented first and are required
+    /// for a settlement to function at a basic level.
+    pub fn is_core_job(&self) -> bool {
+        self.implementation_priority() == 1
+    }
+
+    /// Check if this job is actively used in the simulation.
+    ///
+    /// Currently returns `false` for all jobs as the profession system
+    /// is not yet integrated with the Agent struct.
+    pub fn is_actively_used(&self) -> bool {
+        // TODO: Update this when profession system is integrated
+        false
+    }
+
+    /// Get all job types at a specific implementation priority level.
+    pub fn jobs_at_priority(priority: u8) -> Vec<JobType> {
+        ALL_JOB_TYPES.iter()
+            .filter(|job| job.implementation_priority() == priority)
+            .copied()
+            .collect()
     }
 }
 
@@ -580,5 +710,80 @@ mod tests {
 
         let farmer = Profession::new(JobType::Farmer);
         assert!(!farmer.requires_workplace());
+    }
+
+    #[test]
+    fn test_implementation_priority() {
+        // Core jobs should be priority 1
+        assert_eq!(JobType::Farmer.implementation_priority(), 1);
+        assert_eq!(JobType::Blacksmith.implementation_priority(), 1);
+        assert_eq!(JobType::Healer.implementation_priority(), 1);
+
+        // Important jobs should be priority 2
+        assert_eq!(JobType::Miller.implementation_priority(), 2);
+        assert_eq!(JobType::Tanner.implementation_priority(), 2);
+
+        // Specialized jobs should be priority 3
+        assert_eq!(JobType::Armorer.implementation_priority(), 3);
+        assert_eq!(JobType::Potter.implementation_priority(), 3);
+
+        // Luxury jobs should be priority 4
+        assert_eq!(JobType::Goldsmith.implementation_priority(), 4);
+        assert_eq!(JobType::Painter.implementation_priority(), 4);
+
+        // Unemployed has no priority
+        assert_eq!(JobType::Unemployed.implementation_priority(), 0);
+    }
+
+    #[test]
+    fn test_is_core_job() {
+        assert!(JobType::Farmer.is_core_job());
+        assert!(JobType::Woodcutter.is_core_job());
+        assert!(JobType::Blacksmith.is_core_job());
+        assert!(JobType::Laborer.is_core_job());
+
+        assert!(!JobType::Goldsmith.is_core_job());
+        assert!(!JobType::Painter.is_core_job());
+        assert!(!JobType::Unemployed.is_core_job());
+    }
+
+    #[test]
+    fn test_is_actively_used() {
+        // Currently no jobs are actively used (system not integrated)
+        assert!(!JobType::Farmer.is_actively_used());
+        assert!(!JobType::Blacksmith.is_actively_used());
+    }
+
+    #[test]
+    fn test_jobs_at_priority() {
+        let core_jobs = JobType::jobs_at_priority(1);
+        assert!(core_jobs.contains(&JobType::Farmer));
+        assert!(core_jobs.contains(&JobType::Blacksmith));
+        assert!(!core_jobs.contains(&JobType::Goldsmith));
+
+        let luxury_jobs = JobType::jobs_at_priority(4);
+        assert!(luxury_jobs.contains(&JobType::Goldsmith));
+        assert!(luxury_jobs.contains(&JobType::Painter));
+        assert!(!luxury_jobs.contains(&JobType::Farmer));
+    }
+
+    #[test]
+    fn test_all_job_types_coverage() {
+        // Verify ALL_JOB_TYPES contains exactly 52 jobs
+        assert_eq!(ALL_JOB_TYPES.len(), 52);
+
+        // Verify all priorities from 0-4 are covered
+        let mut priority_counts = [0u32; 5];
+        for job in ALL_JOB_TYPES.iter() {
+            let priority = job.implementation_priority() as usize;
+            priority_counts[priority] += 1;
+        }
+
+        // Check we have jobs at each priority level
+        assert!(priority_counts[0] > 0, "Should have unemployed (priority 0)");
+        assert!(priority_counts[1] > 0, "Should have core jobs (priority 1)");
+        assert!(priority_counts[2] > 0, "Should have important jobs (priority 2)");
+        assert!(priority_counts[3] > 0, "Should have specialized jobs (priority 3)");
+        assert!(priority_counts[4] > 0, "Should have luxury jobs (priority 4)");
     }
 }
