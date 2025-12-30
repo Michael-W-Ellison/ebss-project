@@ -1339,17 +1339,68 @@ impl World {
             return false;
         }
 
-        // For now, all in-bounds terrain is passable
-        // In the future, check for water, mountains, etc.
-        true
+        // Check actual terrain walkability
+        let pos = Position::new(position.0, position.1);
+        if let Some(tile) = self.grid.get_tile(&pos) {
+            tile.terrain.is_walkable()
+        } else {
+            false
+        }
     }
 
     /// Mark an area as impassable (for testing terrain constraints)
-    pub fn set_terrain_impassable(&mut self, _center: (i32, i32, i32), _radius: i32) {
-        // This would modify terrain in the grid
-        // For now, we'll just note this as a placeholder
-        // The actual implementation would mark tiles in self.grid
-        // as impassable terrain types
+    pub fn set_terrain_impassable(&mut self, center: (i32, i32, i32), radius: i32) {
+        // Mark tiles within radius as Water (impassable terrain)
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                let x = center.0 + dx;
+                let y = center.1 + dy;
+
+                // Check bounds
+                if x < 0 || y < 0 {
+                    continue;
+                }
+                if x >= self.grid.width as i32 || y >= self.grid.height as i32 {
+                    continue;
+                }
+
+                // Check if within circular radius
+                if dx * dx + dy * dy <= radius * radius {
+                    let pos = Position::new(x, y);
+                    if let Some(tile) = self.grid.get_tile_mut(&pos) {
+                        tile.terrain.terrain_type = TerrainType::Water;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Mark a specific tile with a terrain type
+    pub fn set_terrain_at(&mut self, position: (i32, i32, i32), terrain_type: TerrainType) {
+        if position.0 < 0 || position.1 < 0 {
+            return;
+        }
+        if position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return;
+        }
+
+        let pos = Position::new(position.0, position.1);
+        if let Some(tile) = self.grid.get_tile_mut(&pos) {
+            tile.terrain.terrain_type = terrain_type;
+        }
+    }
+
+    /// Get the terrain type at a position
+    pub fn get_terrain_at(&self, position: (i32, i32, i32)) -> Option<TerrainType> {
+        if position.0 < 0 || position.1 < 0 {
+            return None;
+        }
+        if position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return None;
+        }
+
+        let pos = Position::new(position.0, position.1);
+        self.grid.get_tile(&pos).map(|tile| tile.terrain.terrain_type)
     }
 }
 
