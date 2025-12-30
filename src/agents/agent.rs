@@ -585,6 +585,8 @@ pub struct Agent {
     pub planner: Planner,
     /// Ticks spent on current plan step (for timeout detection)
     pub plan_step_ticks: u32,
+    /// Accumulated learning exposure for various knowledge/skills
+    pub learning_exposure: crate::core::learning::LearningExposure,
 }
 
 impl Agent {
@@ -623,6 +625,7 @@ impl Agent {
             current_plan: None,
             planner: Planner::new(),
             plan_step_ticks: 0,
+            learning_exposure: crate::core::learning::LearningExposure::new(),
         }
     }
 
