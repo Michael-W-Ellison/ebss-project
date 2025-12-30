@@ -87,7 +87,7 @@ pub use resource_spawning::{
     AnimalResourceConfig, AnimalResourceMapper, TerrainGenerator,
 };
 
-use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager};
+use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager, AnimalSpawnConfig};
 
 /// Status of a heat source for smelting
 #[derive(Debug, Clone)]
@@ -287,6 +287,10 @@ impl World {
             BuildingType::Longhouse,
             Position::new(center.0 as i32, center.1 as i32),
         ));
+
+        // Spawn initial wildlife based on terrain
+        let spawn_config = AnimalSpawnConfig::default();
+        world.animals.spawn_naturalistic(&world.grid, &spawn_config);
 
         world
     }

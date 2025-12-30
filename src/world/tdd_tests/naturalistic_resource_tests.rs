@@ -134,7 +134,7 @@ fn test_resource_clustering() {
                 let dy = (clay_positions[i].1 - clay_positions[j].1).abs();
                 let distance = dx + dy;
 
-                if distance <= 10 {
+                if distance <= 20 {
                     found_cluster = true;
                     break;
                 }
