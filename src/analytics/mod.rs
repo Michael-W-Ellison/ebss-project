@@ -3152,10 +3152,36 @@ impl Simulation {
         let weather = self.world.climate.weather.clone();
         let time_of_day = self.world.climate.calendar.time_of_day;
 
+        // Collect position data first to avoid borrow issues with climate.get_climate
+        let agent_data: Vec<_> = self.population.agents.iter()
+            .filter(|a| a.state.is_alive)
+            .map(|a| {
+                let pos = crate::world::Position::new(a.state.position.0, a.state.position.1);
+                let terrain = self.world.grid.get_tile(&pos)
+                    .map(|t| t.terrain.terrain_type)
+                    .unwrap_or(crate::world::TerrainType::Plains);
+                (a.id, pos, terrain)
+            })
+            .collect();
+
+        // Get climate data for each agent position
+        let climate_data: std::collections::HashMap<_, _> = agent_data.iter()
+            .map(|(id, pos, terrain)| {
+                let climate = self.world.climate.get_climate(*pos, *terrain);
+                (*id, climate)
+            })
+            .collect();
+
         for agent in &mut self.population.agents {
             if !agent.state.is_alive {
                 continue;
             }
+
+            // Get the climate for this agent
+            let climate = match climate_data.get(&agent.id) {
+                Some(c) => c.clone(),
+                None => continue,
+            };
 
             // Get environmental temperature at agent's position
             let agent_pos = crate::world::Position::new(agent.state.position.0, agent.state.position.1);
@@ -3163,7 +3189,10 @@ impl Simulation {
                 .map(|t| t.terrain.terrain_type)
                 .unwrap_or(crate::world::TerrainType::Plains);
 
-            let environmental_temp = self.world.climate.get_temperature(agent_pos, terrain_type);
+            let environmental_temp = climate.temperature;
+
+            // Update agent's body temperature based on climate
+            agent.update_temperature(&climate);
 
             // Check if agent has shelter
             // Agent has shelter if they're in a completed building
@@ -3190,6 +3219,19 @@ impl Simulation {
                 debug!(
                     "Agent {} taking exposure damage: {:.3} (exposures: {:?})",
                     agent.id, damage, agent.exposure_status.active_exposures
+                );
+            }
+
+            // Log body temperature issues
+            if agent.body_temperature.is_hypothermic() {
+                debug!(
+                    "Agent {} is hypothermic! Body temp: {:.1}°C",
+                    agent.id, agent.body_temperature.current
+                );
+            } else if agent.body_temperature.is_hyperthermic() {
+                debug!(
+                    "Agent {} is hyperthermic! Body temp: {:.1}°C",
+                    agent.id, agent.body_temperature.current
                 );
             }
 

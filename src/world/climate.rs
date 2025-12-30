@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::environment::{
-    Biome, BiomeType, Weather, WeatherGenerator, Season, SeasonalCalendar,
+    Biome, BiomeType, Weather, WeatherGenerator, WeatherType, Season, SeasonalCalendar,
 };
 use crate::agents::temperature::{Climate, Temperature};
 use crate::world::{Position, TerrainType};
@@ -24,6 +24,88 @@ pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
         TerrainType::Hills => BiomeType::Grassland,
         TerrainType::Beach => BiomeType::Coast,
         TerrainType::Riverbank => BiomeType::Wetland,
+    }
+}
+
+/// Lightning strike event
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LightningStrike {
+    pub position: Position,
+    pub tick: u32,
+    pub caused_fire: bool,
+}
+
+/// Precipitation accumulation at a position
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PrecipitationAccumulation {
+    /// Snow depth in cm
+    pub snow_depth: f32,
+    /// Water accumulation (rain pooling)
+    pub water_level: f32,
+    /// Ground wetness (0.0-1.0)
+    pub ground_wetness: f32,
+}
+
+impl PrecipitationAccumulation {
+    /// Tick precipitation accumulation based on weather
+    pub fn tick(&mut self, weather: &Weather, temperature: f32) {
+        let intensity = weather.weather_type.precipitation_intensity();
+
+        match weather.weather_type {
+            WeatherType::LightSnow | WeatherType::Snow | WeatherType::Blizzard => {
+                // Snow accumulates if cold enough
+                if temperature < 0.0 {
+                    self.snow_depth += intensity * 0.5;
+                } else {
+                    // Snow melts
+                    self.snow_depth = (self.snow_depth - 0.1).max(0.0);
+                    self.water_level += self.snow_depth.min(0.1) * 0.5;
+                }
+            }
+            WeatherType::LightRain | WeatherType::Rain | WeatherType::HeavyRain
+            | WeatherType::Thunderstorm | WeatherType::Sleet => {
+                // Rain increases water and wetness
+                self.water_level += intensity * 0.2;
+                self.ground_wetness = (self.ground_wetness + intensity * 0.1).min(1.0);
+
+                // Rain melts snow faster
+                if self.snow_depth > 0.0 {
+                    self.snow_depth = (self.snow_depth - intensity * 0.3).max(0.0);
+                }
+            }
+            WeatherType::Hail => {
+                // Hail adds water but less than rain
+                self.water_level += intensity * 0.1;
+            }
+            _ => {
+                // Non-precipitation weather: evaporation and drying
+                self.water_level = (self.water_level - 0.02).max(0.0);
+                self.ground_wetness = (self.ground_wetness - 0.01).max(0.0);
+
+                // Snow sublimation in dry conditions
+                if temperature > 5.0 {
+                    self.snow_depth = (self.snow_depth - 0.05).max(0.0);
+                }
+            }
+        }
+
+        // Cap accumulation
+        self.snow_depth = self.snow_depth.min(200.0); // 2 meters max
+        self.water_level = self.water_level.min(50.0); // Prevent infinite flooding
+    }
+
+    /// Check if area is flooded
+    pub fn is_flooded(&self) -> bool {
+        self.water_level > 10.0
+    }
+
+    /// Get movement penalty from accumulation
+    pub fn movement_penalty(&self) -> f32 {
+        let snow_penalty = (self.snow_depth / 50.0).min(0.3);
+        let water_penalty = (self.water_level / 20.0).min(0.2);
+        let mud_penalty = self.ground_wetness * 0.1;
+
+        (1.0 - snow_penalty - water_penalty - mud_penalty).max(0.3)
     }
 }
 
@@ -46,17 +128,30 @@ pub struct ClimateManager {
     #[serde(skip)]
     biome_cache: HashMap<Position, Biome>,
 
+    /// Precipitation accumulation per region (chunked for performance)
+    #[serde(skip)]
+    precipitation_map: HashMap<(i32, i32), PrecipitationAccumulation>,
+
+    /// Recent lightning strikes
+    pub lightning_strikes: Vec<LightningStrike>,
+
+    /// Current tick for lightning tracking
+    pub current_tick: u32,
+
     /// Whether world is in cold climate overall
     cold_climate: bool,
 
     /// Whether world is in wet climate overall
     wet_climate: bool,
+
+    /// Dominant biome for weather generation
+    dominant_biome: Option<BiomeType>,
 }
 
 impl ClimateManager {
     pub fn new(cold_climate: bool, wet_climate: bool) -> Self {
         let season = Season::Spring; // Start in spring
-        let weather_gen = WeatherGenerator::new(
+        let mut weather_gen = WeatherGenerator::new(
             season,
             wet_climate,
             cold_climate,
@@ -70,18 +165,61 @@ impl ClimateManager {
             weather_gen,
             base_climate: Climate::temperate(), // Default temperate
             biome_cache: HashMap::new(),
+            precipitation_map: HashMap::new(),
+            lightning_strikes: Vec::new(),
+            current_tick: 0,
             cold_climate,
             wet_climate,
+            dominant_biome: None,
         }
+    }
+
+    /// Create with a specific dominant biome
+    pub fn with_biome(cold_climate: bool, wet_climate: bool, biome: BiomeType) -> Self {
+        let season = Season::Spring;
+        let mut weather_gen = WeatherGenerator::with_biome(
+            season,
+            wet_climate,
+            cold_climate,
+            biome,
+        );
+
+        let weather = weather_gen.generate_weather();
+
+        Self {
+            calendar: SeasonalCalendar::new(100),
+            weather,
+            weather_gen,
+            base_climate: Climate::temperate(),
+            biome_cache: HashMap::new(),
+            precipitation_map: HashMap::new(),
+            lightning_strikes: Vec::new(),
+            current_tick: 0,
+            cold_climate,
+            wet_climate,
+            dominant_biome: Some(biome),
+        }
+    }
+
+    /// Set dominant biome for weather generation
+    pub fn set_dominant_biome(&mut self, biome: BiomeType) {
+        self.dominant_biome = Some(biome);
+        self.weather_gen.set_biome(biome);
     }
 
     /// Tick the climate system
     pub fn tick(&mut self) {
+        self.current_tick += 1;
+
         // Update calendar
         self.calendar.tick();
 
-        // Update weather generator with current season
+        // Update weather generator with current season and humidity
         self.weather_gen.season = self.calendar.current_season();
+        self.weather_gen.set_humidity(self.base_climate.humidity);
+        if let Some(biome) = self.dominant_biome {
+            self.weather_gen.set_biome(biome);
+        }
 
         // Update weather
         self.weather.tick();
@@ -97,6 +235,77 @@ impl ClimateManager {
         let time_mod = self.calendar.time_of_day_temperature_modifier();
 
         self.base_climate.temperature = base_temp * season_mod * time_mod;
+
+        // Update humidity based on weather
+        if self.weather.weather_type.precipitation_intensity() > 0.0 {
+            self.base_climate.humidity = (self.base_climate.humidity + 0.01).min(1.0);
+        } else {
+            self.base_climate.humidity = (self.base_climate.humidity - 0.005).max(0.2);
+        }
+
+        // Process lightning during thunderstorms
+        self.process_lightning();
+
+        // Clean up old lightning strikes (older than 100 ticks)
+        self.lightning_strikes.retain(|strike| {
+            self.current_tick.saturating_sub(strike.tick) < 100
+        });
+    }
+
+    /// Process potential lightning strikes during thunderstorms
+    fn process_lightning(&mut self) {
+        use rand::Rng;
+
+        if !self.weather.weather_type.can_cause_lightning() {
+            return;
+        }
+
+        let mut rng = rand::thread_rng();
+        let chance = self.weather.weather_type.lightning_chance_per_tick();
+
+        if rng.gen::<f32>() < chance {
+            // Generate a lightning strike at a random position
+            // In a real implementation, this would use world size
+            let x = rng.gen_range(-100..100);
+            let y = rng.gen_range(-100..100);
+
+            // Fire chance depends on ground wetness (wet = less fire)
+            let fire_chance = 0.15; // 15% base chance
+            let caused_fire = rng.gen::<f32>() < fire_chance;
+
+            self.lightning_strikes.push(LightningStrike {
+                position: Position::new(x, y),
+                tick: self.current_tick,
+                caused_fire,
+            });
+        }
+    }
+
+    /// Get precipitation accumulation at a position (chunked by 10x10 regions)
+    pub fn get_precipitation_at(&mut self, pos: Position) -> &PrecipitationAccumulation {
+        let chunk = (pos.x / 10, pos.y / 10);
+        self.precipitation_map.entry(chunk).or_default()
+    }
+
+    /// Update precipitation accumulation at a position
+    pub fn update_precipitation_at(&mut self, pos: Position, temperature: f32) {
+        let chunk = (pos.x / 10, pos.y / 10);
+        let accumulation = self.precipitation_map.entry(chunk).or_default();
+        accumulation.tick(&self.weather, temperature);
+    }
+
+    /// Get weather forecast
+    pub fn get_forecast(&self, hours_ahead: u32) -> (WeatherType, f32) {
+        self.weather_gen.forecast(hours_ahead)
+    }
+
+    /// Check if there was a recent lightning strike near a position
+    pub fn recent_lightning_near(&self, pos: Position, radius: i32) -> Option<&LightningStrike> {
+        self.lightning_strikes.iter().find(|strike| {
+            let dx = (strike.position.x - pos.x).abs();
+            let dy = (strike.position.y - pos.y).abs();
+            dx <= radius && dy <= radius
+        })
     }
 
     /// Get biome for a specific position

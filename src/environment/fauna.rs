@@ -127,6 +127,12 @@ pub struct AnimalSpecies {
     pub food_value: f32,
     /// Prey species IDs this carnivore/omnivore can hunt
     pub prey_species: Vec<String>,
+
+    // === MIGRATION FIELDS ===
+    /// Whether this species migrates seasonally
+    pub is_migratory: bool,
+    /// Preferred migration direction (dx, dy) per season change
+    pub migration_direction: (i32, i32),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -297,6 +303,8 @@ fn rabbit() -> AnimalSpecies {
         max_hunger: 100.0,
         food_value: 15.0,              // Small prey
         prey_species: vec![],          // Herbivore
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -330,6 +338,8 @@ fn squirrel() -> AnimalSpecies {
         max_hunger: 80.0,
         food_value: 10.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -369,6 +379,8 @@ fn chicken() -> AnimalSpecies {
         max_hunger: 80.0,
         food_value: 12.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -407,6 +419,8 @@ fn fox() -> AnimalSpecies {
         max_hunger: 150.0,
         food_value: 30.0,
         prey_species: vec!["rabbit".to_string(), "squirrel".to_string(), "chicken".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -442,6 +456,8 @@ fn wolf() -> AnimalSpecies {
         max_hunger: 200.0,
         food_value: 45.0,
         prey_species: vec!["rabbit".to_string(), "deer".to_string(), "sheep".to_string(), "goat".to_string()],
+        is_migratory: true, // Wolves follow prey herds
+        migration_direction: (0, -20), // Move south in winter
     }
 }
 
@@ -480,6 +496,8 @@ fn deer() -> AnimalSpecies {
         max_hunger: 200.0,
         food_value: 60.0,
         prey_species: vec![],
+        is_migratory: true, // Deer migrate seasonally
+        migration_direction: (0, -15), // Move south in winter
     }
 }
 
@@ -520,6 +538,8 @@ fn sheep() -> AnimalSpecies {
         max_hunger: 180.0,
         food_value: 50.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -560,6 +580,8 @@ fn goat() -> AnimalSpecies {
         max_hunger: 170.0,
         food_value: 55.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -599,6 +621,8 @@ fn boar() -> AnimalSpecies {
         max_hunger: 220.0,
         food_value: 80.0,
         prey_species: vec!["rabbit".to_string(), "squirrel".to_string()], // Omnivore
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -639,6 +663,8 @@ fn cow() -> AnimalSpecies {
         max_hunger: 300.0,
         food_value: 100.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -679,6 +705,8 @@ fn bear() -> AnimalSpecies {
         max_hunger: 400.0,
         food_value: 200.0,
         prey_species: vec!["deer".to_string(), "sheep".to_string(), "boar".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -714,6 +742,8 @@ fn lion() -> AnimalSpecies {
         max_hunger: 350.0,
         food_value: 180.0,
         prey_species: vec!["deer".to_string(), "goat".to_string(), "camel".to_string(), "boar".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -752,6 +782,8 @@ fn arctic_fox() -> AnimalSpecies {
         max_hunger: 140.0,
         food_value: 35.0,
         prey_species: vec!["rabbit".to_string(), "squirrel".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -793,6 +825,8 @@ fn camel() -> AnimalSpecies {
         max_hunger: 400.0,
         food_value: 120.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -829,6 +863,8 @@ fn mammoth() -> AnimalSpecies {
         max_hunger: 600.0,
         food_value: 300.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -872,6 +908,8 @@ fn duck() -> AnimalSpecies {
         max_hunger: 70.0,
         food_value: 10.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -911,6 +949,8 @@ fn goose() -> AnimalSpecies {
         max_hunger: 90.0,
         food_value: 15.0,
         prey_species: vec![],
+        is_migratory: true, // Geese are classic migratory birds
+        migration_direction: (0, -30), // Fly far south in winter
     }
 }
 
@@ -944,6 +984,8 @@ fn pig() -> AnimalSpecies {
         max_hunger: 200.0,
         food_value: 60.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -981,6 +1023,8 @@ fn crow() -> AnimalSpecies {
         max_hunger: 60.0,
         food_value: 8.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1015,6 +1059,8 @@ fn eagle() -> AnimalSpecies {
         max_hunger: 120.0,
         food_value: 25.0,
         prey_species: vec!["rabbit".to_string(), "squirrel".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1048,6 +1094,8 @@ fn hawk() -> AnimalSpecies {
         max_hunger: 100.0,
         food_value: 20.0,
         prey_species: vec!["rabbit".to_string(), "squirrel".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1081,6 +1129,8 @@ fn owl() -> AnimalSpecies {
         max_hunger: 90.0,
         food_value: 18.0,
         prey_species: vec!["rabbit".to_string(), "squirrel".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1114,6 +1164,8 @@ fn parrot() -> AnimalSpecies {
         max_hunger: 80.0,
         food_value: 12.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1152,6 +1204,8 @@ fn snake() -> AnimalSpecies {
         max_hunger: 200.0,
         food_value: 20.0,
         prey_species: vec!["rabbit".to_string(), "squirrel".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1187,6 +1241,8 @@ fn tiger() -> AnimalSpecies {
         max_hunger: 380.0,
         food_value: 190.0,
         prey_species: vec!["deer".to_string(), "boar".to_string(), "goat".to_string(), "monkey".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1222,6 +1278,8 @@ fn crocodile() -> AnimalSpecies {
         max_hunger: 500.0,
         food_value: 150.0,
         prey_species: vec!["deer".to_string(), "goat".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1257,6 +1315,8 @@ fn polar_bear() -> AnimalSpecies {
         max_hunger: 450.0,
         food_value: 220.0,
         prey_species: vec!["seal".to_string(), "fish".to_string(), "reindeer".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1295,6 +1355,8 @@ fn elk_animal() -> AnimalSpecies {
         max_hunger: 250.0,
         food_value: 90.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1330,6 +1392,8 @@ fn reindeer_animal() -> AnimalSpecies {
         max_hunger: 200.0,
         food_value: 70.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1367,6 +1431,8 @@ fn monkey() -> AnimalSpecies {
         max_hunger: 120.0,
         food_value: 25.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1403,6 +1469,8 @@ fn fish() -> AnimalSpecies {
         max_hunger: 50.0,
         food_value: 5.0,
         prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1436,6 +1504,8 @@ fn otter() -> AnimalSpecies {
         max_hunger: 130.0,
         food_value: 30.0,
         prey_species: vec!["fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1471,6 +1541,8 @@ fn seal() -> AnimalSpecies {
         max_hunger: 250.0,
         food_value: 80.0,
         prey_species: vec!["fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -2622,6 +2694,67 @@ impl AnimalManager {
             }
         }
         summary
+    }
+
+    /// Process seasonal migration for migratory species
+    ///
+    /// Called when the season changes. Migratory animals will move in their
+    /// migration direction, simulating seasonal movement patterns like
+    /// birds flying south or herds following food sources.
+    pub fn process_migration(&mut self, season: crate::environment::Season, world_size: (usize, usize)) {
+        use crate::environment::Season;
+
+        let registry = match &self.registry {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        // Only migrate at season changes - check which direction to go
+        let migration_multiplier = match season {
+            Season::Fall | Season::Winter => 1.0,   // Move in migration direction
+            Season::Spring | Season::Summer => -1.0, // Return migration
+        };
+
+        for animal in &mut self.animals {
+            if !animal.is_alive() {
+                continue;
+            }
+
+            // Get species to check if migratory
+            let species = match registry.get(&animal.species_id) {
+                Some(s) => s,
+                None => continue,
+            };
+
+            if !species.is_migratory {
+                continue;
+            }
+
+            // Calculate new position based on migration direction
+            let (dx, dy) = species.migration_direction;
+            let new_x = animal.position.0 + (dx as f32 * migration_multiplier) as i32;
+            let new_y = animal.position.1 + (dy as f32 * migration_multiplier) as i32;
+
+            // Clamp to world bounds
+            let new_x = new_x.clamp(0, world_size.0 as i32 - 1);
+            let new_y = new_y.clamp(0, world_size.1 as i32 - 1);
+
+            animal.position = (new_x, new_y);
+        }
+    }
+
+    /// Check if any species are currently migrating
+    pub fn get_migrating_species(&self) -> Vec<String> {
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return vec![],
+        };
+
+        registry.all_species()
+            .into_iter()
+            .filter(|s| s.is_migratory)
+            .map(|s| s.id.clone())
+            .collect()
     }
 }
 
