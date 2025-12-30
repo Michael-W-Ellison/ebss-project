@@ -156,6 +156,99 @@ pub struct ActionOutcome {
     pub tick: u32,
 }
 
+/// Context for planning that provides location information.
+///
+/// This struct bridges the gap between the Planner (which handles action sequencing
+/// and time estimation) and the agent's knowledge of the world (exploration knowledge).
+#[derive(Debug, Clone, Default)]
+pub struct PlanningContext {
+    /// Known resource locations: (position, resource_type_name)
+    pub known_resources: Vec<((i32, i32, i32), String)>,
+    /// Known storage/storehouse locations
+    pub known_storage: Vec<(i32, i32, i32)>,
+}
+
+impl PlanningContext {
+    /// Create an empty planning context
+    pub fn new() -> Self {
+        Self {
+            known_resources: Vec::new(),
+            known_storage: Vec::new(),
+        }
+    }
+
+    /// Create a planning context from exploration knowledge
+    ///
+    /// This converts the agent's exploration knowledge into a format
+    /// usable by the planning system.
+    pub fn from_exploration_knowledge(
+        known_resources: &std::collections::HashMap<crate::world::Position, crate::world::ResourceType>,
+        known_buildings: &std::collections::HashMap<crate::world::Position, crate::world::BuildingType>,
+    ) -> Self {
+        use crate::world::BuildingType;
+
+        // Convert resources to planning format
+        let resources: Vec<((i32, i32, i32), String)> = known_resources
+            .iter()
+            .map(|(pos, res_type)| ((pos.x, pos.y, 0), format!("{:?}", res_type).to_lowercase()))
+            .collect();
+
+        // Find storage buildings (Storehouse, TownStorage)
+        let storage: Vec<(i32, i32, i32)> = known_buildings
+            .iter()
+            .filter(|(_, building_type)| {
+                matches!(building_type, BuildingType::Storehouse | BuildingType::TownStorage)
+            })
+            .map(|(pos, _)| (pos.x, pos.y, 0))
+            .collect();
+
+        Self {
+            known_resources: resources,
+            known_storage: storage,
+        }
+    }
+
+    /// Find the nearest resource location of a given type from a position.
+    ///
+    /// Returns None if no resource of that type is known.
+    pub fn find_nearest_resource(
+        &self,
+        from: (i32, i32, i32),
+        resource_type: &str,
+    ) -> Option<(i32, i32, i32)> {
+        let resource_lower = resource_type.to_lowercase();
+
+        self.known_resources
+            .iter()
+            .filter(|(_, res_type)| res_type.contains(&resource_lower))
+            .min_by_key(|(pos, _)| {
+                let dx = (pos.0 - from.0).abs();
+                let dy = (pos.1 - from.1).abs();
+                dx + dy // Manhattan distance for simplicity
+            })
+            .map(|(pos, _)| *pos)
+    }
+
+    /// Find the nearest storage location from a position.
+    ///
+    /// Returns None if no storage is known.
+    pub fn find_nearest_storage(&self, from: (i32, i32, i32)) -> Option<(i32, i32, i32)> {
+        self.known_storage
+            .iter()
+            .min_by_key(|pos| {
+                let dx = (pos.0 - from.0).abs();
+                let dy = (pos.1 - from.1).abs();
+                dx + dy
+            })
+            .copied()
+    }
+
+    /// Check if context has any useful location information
+    pub fn has_locations(&self) -> bool {
+        !self.known_resources.is_empty() || !self.known_storage.is_empty()
+    }
+}
+
 impl Planner {
     pub fn new() -> Self {
         Self {
@@ -352,18 +445,39 @@ impl Planner {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 
-    /// Generate multiple plan alternatives and choose the best one
+    /// Generate multiple plan alternatives and choose the best one.
+    ///
+    /// Uses the provided `PlanningContext` to find actual resource and storage
+    /// locations based on the agent's exploration knowledge. If no suitable
+    /// locations are known, returns None.
+    ///
+    /// # Arguments
+    /// * `goal` - The external goal to plan for
+    /// * `current_position` - Agent's current position
+    /// * `context` - Planning context with known locations from exploration
+    /// * `_available_tools` - Tools available to the agent
+    /// * `traits` - Agent traits that affect plan complexity limits
     pub fn generate_best_plan(
         &self,
         goal: &ExternalGoal,
         current_position: (i32, i32, i32),
+        context: &PlanningContext,
         _available_tools: &[String],
         traits: &[Trait],
     ) -> Option<ActionPlan> {
         let mut plans = Vec::new();
 
         match goal {
-            ExternalGoal::GatherResource(_resource, amount) => {
+            ExternalGoal::GatherResource(resource, amount) => {
+                // Find resource location from context using the resource type
+                let resource_location = context.find_nearest_resource(current_position, resource)?;
+
+                // Find storage location from context
+                // If no storage is known, use a position near the agent as fallback
+                let storehouse = context
+                    .find_nearest_storage(current_position)
+                    .unwrap_or(current_position);
+
                 // Generate plans with different tools
                 for tool_option in &["iron_axe", "stone_axe", "wooden_axe", "none"] {
                     let tools = if *tool_option == "none" {
@@ -371,10 +485,6 @@ impl Planner {
                     } else {
                         vec![tool_option.to_string()]
                     };
-
-                    // Dummy positions for example
-                    let resource_location = (50, 50, 0);
-                    let storehouse = (0, 0, 0);
 
                     let plan = self.plan_gather_wood(
                         current_position,
