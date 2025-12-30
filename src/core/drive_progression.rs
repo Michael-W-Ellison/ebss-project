@@ -64,11 +64,19 @@ impl DriveProgression {
     pub fn new(drive_type: DriveType) -> Self {
         let tiers = match drive_type {
             DriveType::Hunger => Self::hunger_tiers(),
+            DriveType::Thirst => Self::thirst_tiers(),
+            DriveType::Rest => Self::rest_tiers(),
             DriveType::Shelter => Self::shelter_tiers(),
             DriveType::Safety => Self::safety_tiers(),
             DriveType::Preparedness => Self::preparedness_tiers(),
+            DriveType::Industry => Self::industry_tiers(),
+            DriveType::Sustenance => Self::sustenance_tiers(),
+            DriveType::Curiosity => Self::curiosity_tiers(),
+            DriveType::Social => Self::social_tiers(),
+            DriveType::Reproduction => Self::reproduction_tiers(),
+            DriveType::Luxury => Self::luxury_tiers(),
+            DriveType::Utility => Self::utility_tiers(),
             DriveType::Construction => Self::construction_tiers(),
-            _ => vec![], // Other drives use basic tier only
         };
 
         Self {
@@ -307,6 +315,507 @@ impl DriveProgression {
         ]
     }
 
+    /// Thirst drive progression
+    fn thirst_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Access to water source".to_string(),
+                requirements: vec![
+                    Requirement::TownInfrastructure {
+                        infrastructure: "water_source".to_string(),
+                    },
+                ],
+                weight: 1.0,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Well or cistern for reliable water".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "well".to_string(),
+                    },
+                ],
+                weight: 0.8,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Personal water storage at home".to_string(),
+                requirements: vec![
+                    Requirement::PersonalResource {
+                        resource: "water".to_string(),
+                        amount: 20,
+                    },
+                ],
+                weight: 0.6,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Abundant clean water supply".to_string(),
+                requirements: vec![
+                    Requirement::PersonalResource {
+                        resource: "water".to_string(),
+                        amount: 50,
+                    },
+                    Requirement::TownInfrastructure {
+                        infrastructure: "aqueduct".to_string(),
+                    },
+                ],
+                weight: 0.4,
+            },
+        ]
+    }
+
+    /// Rest drive progression
+    fn rest_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Place to sleep exists".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "longhouse".to_string(),
+                    },
+                ],
+                weight: 1.0,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Personal bed in shared dwelling".to_string(),
+                requirements: vec![
+                    Requirement::OwnsItem {
+                        item: "bed".to_string(),
+                    },
+                ],
+                weight: 0.8,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Private sleeping quarters".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "small_house".to_string(),
+                    },
+                    Requirement::OwnsItem {
+                        item: "bed".to_string(),
+                    },
+                ],
+                weight: 0.6,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Comfortable bedroom with quality furnishings".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "medium_house".to_string(),
+                    },
+                    Requirement::OwnsItem {
+                        item: "quality_bed".to_string(),
+                    },
+                ],
+                weight: 0.4,
+            },
+        ]
+    }
+
+    /// Industry drive progression
+    fn industry_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Basic gathering tools available".to_string(),
+                requirements: vec![
+                    Requirement::StorehouseResource {
+                        resource: "tools".to_string(),
+                        amount: 5,
+                    },
+                ],
+                weight: 0.7,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Workshop for processing materials".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "workshop".to_string(),
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "tools".to_string(),
+                        amount: 10,
+                    },
+                ],
+                weight: 0.5,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Smithy for metalworking".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "smithy".to_string(),
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "iron".to_string(),
+                        amount: 50,
+                    },
+                ],
+                weight: 0.4,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Advanced crafting infrastructure".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "smithy".to_string(),
+                    },
+                    Requirement::BuildingExists {
+                        building_type: "workshop".to_string(),
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "iron".to_string(),
+                        amount: 200,
+                    },
+                ],
+                weight: 0.3,
+            },
+        ]
+    }
+
+    /// Sustenance drive progression (food production)
+    fn sustenance_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Hunting and foraging grounds accessible".to_string(),
+                requirements: vec![
+                    Requirement::TownInfrastructure {
+                        infrastructure: "hunting_grounds".to_string(),
+                    },
+                ],
+                weight: 0.8,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Basic agriculture established".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "farm".to_string(),
+                    },
+                ],
+                weight: 0.6,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Multiple farms and livestock".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "farm".to_string(),
+                    },
+                    Requirement::BuildingExists {
+                        building_type: "animal_pen".to_string(),
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "grain".to_string(),
+                        amount: 100,
+                    },
+                ],
+                weight: 0.4,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Food surplus with variety".to_string(),
+                requirements: vec![
+                    Requirement::StorehouseResource {
+                        resource: "food".to_string(),
+                        amount: 500,
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "grain".to_string(),
+                        amount: 300,
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "meat".to_string(),
+                        amount: 100,
+                    },
+                ],
+                weight: 0.3,
+            },
+        ]
+    }
+
+    /// Curiosity drive progression (exploration and learning)
+    fn curiosity_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Explored immediate surroundings".to_string(),
+                requirements: vec![
+                    Requirement::TownInfrastructure {
+                        infrastructure: "explored_area".to_string(),
+                    },
+                ],
+                weight: 0.5,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Discovered useful resources".to_string(),
+                requirements: vec![
+                    Requirement::StorehouseResource {
+                        resource: "stone".to_string(),
+                        amount: 100,
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "iron".to_string(),
+                        amount: 20,
+                    },
+                ],
+                weight: 0.4,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Knowledge archive established".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "library".to_string(),
+                    },
+                ],
+                weight: 0.3,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Research and scholarly pursuits".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "library".to_string(),
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "books".to_string(),
+                        amount: 20,
+                    },
+                ],
+                weight: 0.2,
+            },
+        ]
+    }
+
+    /// Social drive progression (community bonds)
+    fn social_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Part of a community".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "longhouse".to_string(),
+                    },
+                ],
+                weight: 0.7,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Community gathering space".to_string(),
+                requirements: vec![
+                    Requirement::BuildingExists {
+                        building_type: "town_center".to_string(),
+                    },
+                ],
+                weight: 0.5,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Strong family and friend bonds".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "small_house".to_string(),
+                    },
+                    Requirement::TownInfrastructure {
+                        infrastructure: "meeting_hall".to_string(),
+                    },
+                ],
+                weight: 0.4,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Leadership role in community".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "manor".to_string(),
+                    },
+                    Requirement::TownInfrastructure {
+                        infrastructure: "council_hall".to_string(),
+                    },
+                ],
+                weight: 0.3,
+            },
+        ]
+    }
+
+    /// Reproduction drive progression (family and offspring)
+    fn reproduction_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Eligible for partnership".to_string(),
+                requirements: vec![
+                    Requirement::TownInfrastructure {
+                        infrastructure: "community".to_string(),
+                    },
+                ],
+                weight: 0.6,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Stable partnership formed".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "small_house".to_string(),
+                    },
+                ],
+                weight: 0.5,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Family home with resources for children".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "medium_house".to_string(),
+                    },
+                    Requirement::PersonalResource {
+                        resource: "food".to_string(),
+                        amount: 50,
+                    },
+                ],
+                weight: 0.4,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Multi-generational family estate".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "large_house".to_string(),
+                    },
+                    Requirement::PersonalResource {
+                        resource: "food".to_string(),
+                        amount: 100,
+                    },
+                ],
+                weight: 0.3,
+            },
+        ]
+    }
+
+    /// Luxury drive progression (comfort and decoration)
+    fn luxury_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Basic comfort items".to_string(),
+                requirements: vec![
+                    Requirement::OwnsItem {
+                        item: "furniture".to_string(),
+                    },
+                ],
+                weight: 0.3,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Decorated living space".to_string(),
+                requirements: vec![
+                    Requirement::PersonalResource {
+                        resource: "decorations".to_string(),
+                        amount: 5,
+                    },
+                    Requirement::OwnsItem {
+                        item: "quality_furniture".to_string(),
+                    },
+                ],
+                weight: 0.2,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Fine clothing and jewelry".to_string(),
+                requirements: vec![
+                    Requirement::OwnsItem {
+                        item: "fine_clothing".to_string(),
+                    },
+                    Requirement::OwnsItem {
+                        item: "jewelry".to_string(),
+                    },
+                ],
+                weight: 0.15,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Opulent lifestyle with rare items".to_string(),
+                requirements: vec![
+                    Requirement::PersonalBuilding {
+                        building_type: "manor".to_string(),
+                    },
+                    Requirement::PersonalResource {
+                        resource: "rare_goods".to_string(),
+                        amount: 10,
+                    },
+                ],
+                weight: 0.1,
+            },
+        ]
+    }
+
+    /// Utility drive progression (tools and equipment)
+    fn utility_tiers() -> Vec<DriveTierRequirement> {
+        vec![
+            DriveTierRequirement {
+                tier: DriveTier::Basic,
+                description: "Basic tools for work".to_string(),
+                requirements: vec![
+                    Requirement::OwnsItem {
+                        item: "stone_tool".to_string(),
+                    },
+                ],
+                weight: 0.8,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Intermediate,
+                description: "Improved tool set".to_string(),
+                requirements: vec![
+                    Requirement::OwnsItem {
+                        item: "iron_tool".to_string(),
+                    },
+                    Requirement::StorehouseResource {
+                        resource: "tools".to_string(),
+                        amount: 10,
+                    },
+                ],
+                weight: 0.6,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Advanced,
+                description: "Specialized equipment for trade".to_string(),
+                requirements: vec![
+                    Requirement::OwnsItem {
+                        item: "specialized_tools".to_string(),
+                    },
+                    Requirement::BuildingExists {
+                        building_type: "workshop".to_string(),
+                    },
+                ],
+                weight: 0.4,
+            },
+            DriveTierRequirement {
+                tier: DriveTier::Luxury,
+                description: "Master craftsman equipment".to_string(),
+                requirements: vec![
+                    Requirement::OwnsItem {
+                        item: "master_tools".to_string(),
+                    },
+                    Requirement::PersonalBuilding {
+                        building_type: "workshop".to_string(),
+                    },
+                ],
+                weight: 0.3,
+            },
+        ]
+    }
+
     /// Get the current tier requirements
     pub fn current_requirements(&self) -> Option<&DriveTierRequirement> {
         self.tiers.iter().find(|t| t.tier == self.current_tier)
@@ -408,5 +917,101 @@ mod tests {
         // Should progress from longhouse to personal houses
         assert!(tiers.iter().any(|t| t.description.contains("Longhouse")));
         assert!(tiers.iter().any(|t| t.description.contains("Personal house")));
+    }
+
+    #[test]
+    fn test_thirst_tiers() {
+        let tiers = DriveProgression::thirst_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert_eq!(tiers[0].tier, DriveTier::Basic);
+        assert!(tiers.iter().any(|t| t.description.contains("water")));
+    }
+
+    #[test]
+    fn test_rest_tiers() {
+        let tiers = DriveProgression::rest_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert_eq!(tiers[0].tier, DriveTier::Basic);
+        assert!(tiers.iter().any(|t| t.description.contains("sleep")));
+    }
+
+    #[test]
+    fn test_industry_tiers() {
+        let tiers = DriveProgression::industry_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert!(tiers.iter().any(|t| t.description.contains("Workshop")));
+        assert!(tiers.iter().any(|t| t.description.contains("Smithy")));
+    }
+
+    #[test]
+    fn test_sustenance_tiers() {
+        let tiers = DriveProgression::sustenance_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert!(tiers.iter().any(|t| t.description.contains("agriculture") || t.description.contains("farm")));
+    }
+
+    #[test]
+    fn test_curiosity_tiers() {
+        let tiers = DriveProgression::curiosity_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert!(tiers.iter().any(|t| t.description.contains("Explored")));
+    }
+
+    #[test]
+    fn test_social_tiers() {
+        let tiers = DriveProgression::social_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert!(tiers.iter().any(|t| t.description.contains("community")));
+    }
+
+    #[test]
+    fn test_reproduction_tiers() {
+        let tiers = DriveProgression::reproduction_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert!(tiers.iter().any(|t| t.description.contains("partnership")));
+        assert!(tiers.iter().any(|t| t.description.contains("Family")));
+    }
+
+    #[test]
+    fn test_luxury_tiers() {
+        let tiers = DriveProgression::luxury_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert!(tiers.iter().any(|t| t.description.contains("comfort")));
+        // Luxury tier should have lowest weight (optional/nice-to-have)
+        assert!(tiers.last().unwrap().weight < 0.2);
+    }
+
+    #[test]
+    fn test_utility_tiers() {
+        let tiers = DriveProgression::utility_tiers();
+        assert_eq!(tiers.len(), 4);
+        assert!(tiers.iter().any(|t| t.description.contains("tools")));
+    }
+
+    #[test]
+    fn test_all_drives_have_progressions() {
+        // All 14 drive types should have progression tiers
+        let drives = vec![
+            DriveType::Hunger,
+            DriveType::Thirst,
+            DriveType::Rest,
+            DriveType::Shelter,
+            DriveType::Safety,
+            DriveType::Preparedness,
+            DriveType::Industry,
+            DriveType::Sustenance,
+            DriveType::Curiosity,
+            DriveType::Social,
+            DriveType::Reproduction,
+            DriveType::Luxury,
+            DriveType::Utility,
+            DriveType::Construction,
+        ];
+
+        for drive in drives {
+            let progression = DriveProgression::new(drive);
+            assert!(!progression.tiers.is_empty(), "Drive {:?} should have progression tiers", drive);
+            assert!(progression.tiers.len() >= 2, "Drive {:?} should have at least 2 tiers", drive);
+        }
     }
 }
