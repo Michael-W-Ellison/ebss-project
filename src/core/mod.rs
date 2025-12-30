@@ -18,7 +18,7 @@ pub mod planning;
 #[cfg(test)]
 mod tests;
 
-pub use behavior_tree::{BehaviorTree, BehaviorNode, NodeType, ExecutionResult};
+pub use behavior_tree::{BehaviorTree, BehaviorNode, NodeType, ExecutionResult, BehaviorContext, DefaultBehaviorContext};
 pub use drives::{Drive, DriveType, DriveState};
 pub use learning::{ObservableEvent, ObservableEventType, LearningResult, observe_and_learn, process_population_learning};
 pub use memory::{Memory, SpatialMemoryType, KnowledgeMemory};
