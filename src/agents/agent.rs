@@ -2689,18 +2689,3 @@ impl Agent {
         })
     }
 }
-
-/// Population needs data structure for job selection
-#[derive(Clone, Debug, Default)]
-pub struct PopulationNeeds {
-    pub food_shortage: bool,
-    pub food_critical: bool,
-    pub wood_shortage: bool,
-    pub wood_critical: bool,
-    pub stone_shortage: bool,
-    pub stone_critical: bool,
-    pub tools_shortage: bool,
-    pub shelter_shortage: bool,
-    pub shelter_critical: bool,
-    pub food_processing_needed: bool,
-}

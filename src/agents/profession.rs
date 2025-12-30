@@ -16,7 +16,7 @@
 //! - `JobType` enum: Defined but not actively used outside this module
 //! - `Profession` struct: Complete but not attached to agents
 //! - `workplace()` method: Ready for building assignment integration
-//! - `tick_production()`: Deprecated, replaced by skill-based crafting
+//! - Production methods: Available for future use when profession system is integrated
 //!
 //! ## Implementation Priority Guide
 //!
@@ -598,34 +598,10 @@ impl Profession {
         self.production_progress = 0;
     }
 
-    /// Tick production progress, returns Some((ItemType, quantity)) if production completes
-    /// NOTE: This method is deprecated as the profession system is no longer in active use.
-    /// Crafting is now handled through the skill-based system in src/world/crafting.rs
-    #[allow(dead_code)]
-    pub fn tick_production(&mut self) -> Option<Vec<(crate::world::ItemType, u32)>> {
-        // This method is no longer functional after profession system removal
-        None
-    }
-
     /// Cancel current production
-    #[allow(dead_code)]
     pub fn cancel_production(&mut self) {
         self.current_recipe_index = None;
         self.production_progress = 0;
-    }
-
-    /// Get progress percentage of current production (0-100)
-    /// NOTE: This method is deprecated as the profession system is no longer in active use.
-    #[allow(dead_code)]
-    pub fn production_progress_percent(&self) -> u8 {
-        0
-    }
-
-    /// Get the current recipe being worked on
-    /// NOTE: This method is deprecated as the profession system is no longer in active use.
-    #[allow(dead_code)]
-    pub fn get_current_recipe(&self) -> Option<crate::world::Recipe> {
-        None
     }
 }
 
