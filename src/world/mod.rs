@@ -1541,34 +1541,132 @@ mod tests {
         assert_eq!(config.volume(), 640000);
     }
 
-    // TODO: Rewrite these tests for the current 2D World API
-    // The World struct was refactored from 3D to 2D
-    // #[test]
-    // fn test_world_creation() {
-    //     let world = World::new(WorldConfig::default());
-    //     // Update assertions for 2D grid
-    // }
+    #[test]
+    fn test_world_creation() {
+        let world = World::new(WorldConfig::default());
+        // Default size is (50, 50)
+        assert_eq!(world.grid.width, 50);
+        assert_eq!(world.grid.height, 50);
+        // Grid should have tiles
+        assert!(!world.grid.tiles.is_empty());
+    }
 
-    // #[test]
-    // fn test_world_position_validation() {
-    //     let world = World::new(WorldConfig::default());
-    //     // Update assertions for 2D positions
-    // }
+    #[test]
+    fn test_world_creation_custom_size() {
+        let config = WorldConfig {
+            size: (100, 80),
+            initial_resources: ResourceConfig::default(),
+        };
+        let world = World::new(config);
+        assert_eq!(world.grid.width, 100);
+        assert_eq!(world.grid.height, 80);
+    }
 
-    // #[test]
-    // fn test_world_config() {
-    //     let config = WorldConfig::default();
-    //     assert_eq!(config.size, (50, 50));
-    // }
+    #[test]
+    fn test_world_config_default() {
+        let config = WorldConfig::default();
+        assert_eq!(config.size, (50, 50));
+    }
 
-    // #[test]
-    // fn test_custom_world_config() {
-    //     let config = WorldConfig {
-    //         size: (300, 400),
-    //         initial_resources: ResourceConfig::default(),
-    //     };
-    //     assert_eq!(config.size, (300, 400));
-    // }
+    #[test]
+    fn test_world_config_with_size() {
+        let config = WorldConfig::default().with_size(200, 150);
+        assert_eq!(config.size, (200, 150));
+    }
+
+    #[test]
+    fn test_world_terrain_access() {
+        let world = World::new(WorldConfig::default());
+        // Valid position should return a terrain type
+        let terrain = world.get_terrain_at((10, 10, 0));
+        assert!(terrain.is_some());
+
+        // Out of bounds should return None
+        let out_of_bounds = world.get_terrain_at((100, 100, 0));
+        assert!(out_of_bounds.is_none());
+
+        // Negative coordinates should return None
+        let negative = world.get_terrain_at((-1, -1, 0));
+        assert!(negative.is_none());
+    }
+
+    #[test]
+    fn test_world_terrain_passability() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Most terrain should be passable initially
+        // (depends on generated terrain, but center should typically be passable)
+        let center_passable = world.is_terrain_passable((25, 25, 0));
+        // Note: We can't guarantee this since terrain is generated
+        // Just verify the method works without panicking
+        let _ = center_passable;
+
+        // Set an area as impassable and verify
+        world.set_terrain_impassable((25, 25, 0), 2);
+        assert!(!world.is_terrain_passable((25, 25, 0)));
+    }
+
+    #[test]
+    fn test_world_set_terrain() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Set a specific terrain type
+        world.set_terrain_at((20, 20, 0), TerrainType::Water);
+        let terrain = world.get_terrain_at((20, 20, 0));
+        assert_eq!(terrain, Some(TerrainType::Water));
+
+        // Water is not passable
+        assert!(!world.is_terrain_passable((20, 20, 0)));
+
+        // Set it to plains (passable)
+        world.set_terrain_at((20, 20, 0), TerrainType::Plains);
+        assert!(world.is_terrain_passable((20, 20, 0)));
+    }
+
+    #[test]
+    fn test_world_resource_placement() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Place a resource node
+        world.place_resource_node("iron", (10, 10, 0));
+
+        // Verify it was added
+        assert!(world.resource_nodes.contains_key("iron"));
+        assert!(world.resource_nodes.get("iron").unwrap().contains(&(10, 10, 0)));
+    }
+
+    #[test]
+    fn test_world_building_placement() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Record initial building count (world may spawn some buildings)
+        let initial_count = world.buildings.len();
+
+        // Add a building
+        world.add_building_at(BuildingType::SmallHouse, (15, 15, 0));
+
+        // Verify it was added
+        assert_eq!(world.buildings.len(), initial_count + 1);
+
+        // Find the building we added (it should be the last one)
+        let added_building = world.buildings.last().unwrap();
+        assert_eq!(added_building.building_type, BuildingType::SmallHouse);
+        assert_eq!(added_building.position, Position::new(15, 15));
+    }
+
+    #[test]
+    fn test_world_total_tiles() {
+        let world = World::new(WorldConfig::default());
+        // Default is 50x50 = 2500 tiles
+        assert_eq!(world.total_tiles(), 2500);
+
+        let custom_config = WorldConfig {
+            size: (100, 80),
+            initial_resources: ResourceConfig::default(),
+        };
+        let custom_world = World::new(custom_config);
+        assert_eq!(custom_world.total_tiles(), 8000);
+    }
 
     #[test]
     fn test_position_distance() {
