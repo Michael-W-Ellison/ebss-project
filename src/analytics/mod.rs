@@ -523,7 +523,7 @@ impl Simulation {
                 if is_plan_action {
                     if action_result.success {
                         // Successful action - advance to next plan step
-                        agent.advance_plan_step(true, 1); // TODO: Track actual ticks
+                        agent.advance_plan_step(true, agent.plan_step_ticks + 1);
                         debug!(
                             "Agent {} completed plan step, progress: {:?}",
                             agent_id,
