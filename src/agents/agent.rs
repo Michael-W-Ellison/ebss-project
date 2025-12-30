@@ -2031,7 +2031,7 @@ impl Agent {
     /// Record that a source satisfied a drive
     /// Also triggers gratitude (happiness and bond improvement) if source is an agent
     pub fn record_drive_satisfaction(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32) {
-        let current_tick = 0; // TODO: Get actual tick from context
+        let current_tick = self.state.age;
         self.satisfaction_tracker.record(drive_type, source_id, amount, current_tick);
 
         // Trigger gratitude response (happiness and bond improvement)
