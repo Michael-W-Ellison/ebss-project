@@ -286,6 +286,7 @@ fn test_plan_abandoned_when_storehouse_already_stocked() {
         gathered_resources: 0,
         owns_house: false,
         has_protection: false,
+        ..Default::default()
     };
 
     // Check plan relevance - should return false (goal already satisfied)
@@ -323,6 +324,7 @@ fn test_goal_marked_complete_when_satisfied_by_world_state() {
         gathered_resources: 0,
         owns_house: false,
         has_protection: false,
+        ..Default::default()
     };
 
     // Update plan relevance (which also marks satisfied goals as complete)
@@ -378,6 +380,7 @@ fn test_plan_continues_when_goal_not_satisfied() {
         gathered_resources: 0,
         owns_house: false,
         has_protection: false,
+        ..Default::default()
     };
 
     // Plan should still be relevant
@@ -411,6 +414,7 @@ fn test_personal_food_goal_satisfied() {
         gathered_resources: 0,
         owns_house: false,
         has_protection: false,
+        ..Default::default()
     };
 
     // Goal should be satisfied
@@ -443,6 +447,7 @@ fn test_tools_goal_satisfied() {
         gathered_resources: 0,
         owns_house: false,
         has_protection: false,
+        ..Default::default()
     };
 
     // Goal should be satisfied

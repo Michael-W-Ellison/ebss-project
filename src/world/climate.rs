@@ -396,10 +396,35 @@ impl ClimateManager {
     }
 
     /// Check if shelter is available at a position
+    ///
+    /// Shelter can be provided by:
+    /// - Forest: Dense tree cover provides moderate protection from elements
+    /// - Mountain: Natural cave formations and rocky overhangs
+    /// - Hills: Rocky outcrops can provide limited shelter
+    /// - Buildings at the position (checked by caller via World)
     pub fn has_shelter_at(&self, _pos: Position, terrain: TerrainType) -> bool {
-        // For now, only buildings provide shelter
-        // In future, this could check for caves, dense forest, etc.
-        matches!(terrain, TerrainType::Forest) // Forest provides partial shelter
+        match terrain {
+            TerrainType::Forest => true,   // Dense tree cover provides good shelter
+            TerrainType::Mountain => true, // Caves and overhangs in mountainous terrain
+            TerrainType::Hills => true,    // Rocky outcrops provide some shelter
+            _ => false,                    // Other terrains need constructed shelter
+        }
+    }
+
+    /// Get the shelter quality at a position (0.0 = no shelter, 1.0 = full shelter)
+    ///
+    /// This affects how well the agent is protected from weather effects.
+    pub fn shelter_quality(&self, terrain: TerrainType, has_building: bool) -> f32 {
+        if has_building {
+            return 1.0; // Buildings provide full shelter
+        }
+
+        match terrain {
+            TerrainType::Mountain => 0.8, // Caves provide excellent natural shelter
+            TerrainType::Forest => 0.6,   // Trees provide moderate shelter
+            TerrainType::Hills => 0.4,    // Outcrops provide limited shelter
+            _ => 0.0,                     // No natural shelter
+        }
     }
 
     /// Clear biome cache (call when world terrain changes)

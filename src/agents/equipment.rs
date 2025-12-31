@@ -887,6 +887,14 @@ impl EquipmentManager {
             .unwrap_or(1.0)
     }
 
+    /// Get weapon range (reach)
+    /// Returns 1.0 for unarmed (melee only), higher for spears/ranged weapons
+    pub fn weapon_range(&self) -> f32 {
+        self.get_weapon()
+            .map(|w| w.reach)
+            .unwrap_or(1.0) // Unarmed reach
+    }
+
     /// Get equipped tool for a task
     pub fn get_tool_for_task(&self, task: &str) -> Option<&EquipmentItem> {
         let required_type = match task {

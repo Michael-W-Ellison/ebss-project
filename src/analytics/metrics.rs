@@ -219,11 +219,11 @@ impl SimulationMetrics {
                 .or_insert_with(Vec::new)
                 .push(agent.emotions.happiness);
 
-            // Collect curiosity (default value for now, as it's not tracked in EmotionState)
+            // Collect curiosity from agent's emotion state
             emotion_map
                 .entry(crate::core::EmotionType::Curiosity)
                 .or_insert_with(Vec::new)
-                .push(0.5); // Neutral curiosity default
+                .push(agent.emotions.curiosity);
         }
 
         let average_well_being = if population.agents.is_empty() {
@@ -246,10 +246,16 @@ impl SimulationMetrics {
             .collect()
     }
 
-    fn snapshot_traits(&self, _population: &Population) -> HashMap<Trait, u32> {
-        // Note: Trait type mismatch between core::Trait and agents::Trait
-        // Returning empty map for now - needs trait system reconciliation
-        HashMap::new()
+    fn snapshot_traits(&self, population: &Population) -> HashMap<Trait, u32> {
+        let mut trait_counts: HashMap<Trait, u32> = HashMap::new();
+
+        for agent in &population.agents {
+            for trait_type in agent.traits.get_traits() {
+                *trait_counts.entry(*trait_type).or_insert(0) += 1;
+            }
+        }
+
+        trait_counts
     }
 
     fn snapshot_relationships(&self, population: &Population) -> RelationshipSnapshot {

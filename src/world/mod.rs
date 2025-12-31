@@ -1189,8 +1189,12 @@ impl World {
                 ResourceType::Stone => stats.stone_available += resource.amount,
                 ResourceType::Iron => stats.iron_available += resource.amount,
                 ResourceType::Food => stats.food_available += resource.amount,
-                // New resource types - not yet tracked in stats
-                _ => {}
+                ResourceType::Clay => stats.clay_available += resource.amount,
+                ResourceType::Coal => stats.coal_available += resource.amount,
+                ResourceType::Grain => stats.grain_available += resource.amount,
+                ResourceType::Herbs => stats.herbs_available += resource.amount,
+                ResourceType::Hides => stats.hides_available += resource.amount,
+                _ => {} // Other resource types not tracked in aggregate stats
             }
         }
 
@@ -1408,14 +1412,23 @@ impl World {
 pub struct WorldStats {
     pub total_resources: usize,
     pub total_buildings: usize,
+    // Basic resources
     pub wood_available: u32,
     pub stone_available: u32,
     pub iron_available: u32,
     pub food_available: u32,
+    // Extended resources
+    pub clay_available: u32,
+    pub coal_available: u32,
+    pub grain_available: u32,
+    pub herbs_available: u32,
+    pub hides_available: u32,
+    // Storage
     pub wood_stored: u32,
     pub stone_stored: u32,
     pub iron_stored: u32,
     pub food_stored: u32,
+    // Buildings
     pub longhouses: usize,
     pub small_houses: usize,
     pub medium_houses: usize,

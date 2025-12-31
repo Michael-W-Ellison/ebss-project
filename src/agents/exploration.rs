@@ -315,6 +315,93 @@ impl ExplorationKnowledge {
 
         counts
     }
+
+    // ===== Fog of War Methods =====
+
+    /// Reveal all tiles within a given visibility radius around a position
+    ///
+    /// This simulates the agent's line of sight. All tiles within the radius
+    /// are marked as explored. Returns the number of newly explored tiles.
+    pub fn reveal_in_radius(&mut self, center: Position, radius: u32, current_tick: u32) -> usize {
+        let mut newly_explored = 0;
+
+        for dx in -(radius as i32)..=(radius as i32) {
+            for dy in -(radius as i32)..=(radius as i32) {
+                // Use circular vision (Euclidean distance check)
+                let dist_sq = (dx * dx + dy * dy) as u32;
+                if dist_sq <= radius * radius {
+                    let pos = Position::new(center.x + dx, center.y + dy);
+                    if self.explore_tile(pos, current_tick) {
+                        newly_explored += 1;
+                    }
+                }
+            }
+        }
+
+        newly_explored
+    }
+
+    /// Get all tiles currently visible from a position
+    ///
+    /// Returns positions within the visibility radius. This does NOT mark
+    /// them as explored - use `reveal_in_radius` for that.
+    pub fn visible_tiles(&self, center: Position, visibility_radius: u32) -> Vec<Position> {
+        let mut visible = Vec::new();
+
+        for dx in -(visibility_radius as i32)..=(visibility_radius as i32) {
+            for dy in -(visibility_radius as i32)..=(visibility_radius as i32) {
+                let dist_sq = (dx * dx + dy * dy) as u32;
+                if dist_sq <= visibility_radius * visibility_radius {
+                    visible.push(Position::new(center.x + dx, center.y + dy));
+                }
+            }
+        }
+
+        visible
+    }
+
+    /// Check if a position is currently visible from the agent's position
+    pub fn is_visible(&self, from: Position, target: Position, visibility_radius: u32) -> bool {
+        from.distance_to(&target) <= visibility_radius
+    }
+
+    /// Get visibility status for a set of positions
+    ///
+    /// Returns a map of positions to their visibility status:
+    /// - `Visible` - Currently in line of sight
+    /// - `Explored` - Previously seen but not currently visible
+    /// - `Unexplored` - Never seen (fog of war)
+    pub fn visibility_status(
+        &self,
+        viewer_pos: Position,
+        visibility_radius: u32,
+        positions: &[Position],
+    ) -> HashMap<Position, VisibilityStatus> {
+        positions
+            .iter()
+            .map(|pos| {
+                let status = if self.is_visible(viewer_pos, *pos, visibility_radius) {
+                    VisibilityStatus::Visible
+                } else if self.is_explored(pos) {
+                    VisibilityStatus::Explored
+                } else {
+                    VisibilityStatus::Unexplored
+                };
+                (*pos, status)
+            })
+            .collect()
+    }
+}
+
+/// Visibility status for fog of war
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisibilityStatus {
+    /// Currently visible (in line of sight)
+    Visible,
+    /// Previously explored but not currently visible
+    Explored,
+    /// Never seen (complete fog of war)
+    Unexplored,
 }
 
 impl Default for ExplorationKnowledge {

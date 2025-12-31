@@ -162,11 +162,10 @@ fn get_skill_gains_for_action(action_type: ActionType) -> Vec<(SkillType, u32)> 
             (SkillType::Crafting, 15),
         ],
         ActionType::Social => vec![
-            // Social skills don't map directly to current skill system
-            // Could add social skill in future
+            (SkillType::Social, 20), // Social interactions build social skill
         ],
         ActionType::Navigation => vec![
-            // Navigation could map to survival or general experience
+            (SkillType::Navigation, 15), // Pathfinding builds navigation skill
         ],
         ActionType::ProblemSolving => vec![
             // General intelligence/problem-solving boost

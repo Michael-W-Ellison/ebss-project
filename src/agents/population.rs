@@ -172,8 +172,6 @@ impl Population {
             agent.state.age_tick(current_tick);
         }
 
-        // Note: Job selection has been removed in favor of skill-based, drive-driven behavior
-
         // Update relationships between nearby agents
         self.update_relationships();
 

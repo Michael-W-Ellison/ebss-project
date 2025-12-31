@@ -795,8 +795,34 @@ impl Agent {
     pub fn respond_to_threat(&mut self, threat_strength: f32, source: super::EmotionSource) -> super::EmotionType {
         use super::ThreatAssessment;
 
-        // Calculate agent strength (simplified: health + body functionality)
-        let agent_strength = self.state.health / 100.0 * self.body.movement_speed_multiplier();
+        // Calculate comprehensive agent strength:
+        // 1. Health factor (0.0 to 1.0)
+        let health_factor = self.state.health / 100.0;
+
+        // 2. Body functionality (movement ability)
+        let body_factor = self.body.movement_speed_multiplier();
+
+        // 3. Equipment bonuses (armor and weapons)
+        let armor_bonus = self.equipment.total_armor() / 100.0; // Normalize to 0-1 range
+        let weapon_bonus = if self.equipment.get_weapon().is_some() { 0.3 } else { 0.0 };
+
+        // 4. Skill bonuses (melee combat skill)
+        let combat_skill = self.skills.get_skill(crate::agents::SkillType::MeleeCombat);
+        let skill_bonus = (combat_skill.level as f32 + 10.0) / 20.0; // Normalize -10..10 to 0..1
+
+        // 5. Trait modifiers
+        let bravery_modifier = if self.traits.has(crate::core::Trait::Brave) {
+            1.3 // Brave agents feel 30% stronger
+        } else if self.traits.has(crate::core::Trait::Anxious) {
+            0.7 // Anxious agents feel 30% weaker
+        } else {
+            1.0
+        };
+
+        // Combined strength calculation
+        let base_strength = health_factor * body_factor;
+        let equipment_bonus = armor_bonus * 0.3 + weapon_bonus;
+        let agent_strength = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
 
         let assessment = ThreatAssessment::assess(agent_strength, threat_strength, source.clone());
 
@@ -2510,24 +2536,217 @@ impl Agent {
         return_location: (i32, i32, i32),
         current_tick: u32,
     ) -> bool {
-        use crate::core::ExternalGoal;
+        use crate::core::{ExternalGoal, InternalGoal, EmotionType};
 
-        // Get the highest priority external goal
+        // Get the highest priority goal (internal or external)
         let goal = self.goals.highest_priority_goal();
         if goal.is_none() {
             return false;
         }
 
         let goal = goal.unwrap();
-        let external_goal = match &goal.external {
-            Some(ext) => ext.clone(),
-            None => return false, // Internal goals don't need plans
-        };
 
         // Get traits for complexity check
         let traits: Vec<_> = self.traits.get_traits().iter().copied().collect();
 
-        // Generate plan based on goal type
+        // Handle internal goals first
+        if let Some(internal_goal) = &goal.internal {
+            let steps = match internal_goal {
+                InternalGoal::IncreaseEmotion(emotion, _target) => {
+                    match emotion {
+                        EmotionType::Happiness => {
+                            // Seek entertainment or social interaction
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                                    estimated_ticks: 30,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.5,
+                                },
+                            ]
+                        }
+                        EmotionType::Curiosity => {
+                            // Explore or learn something new
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::MoveTo { location: resource_location },
+                                    estimated_ticks: 40,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: Some(resource_location),
+                                    confidence: 0.7,
+                                },
+                            ]
+                        }
+                        _ => {
+                            // Default: rest and reflect
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 20 },
+                                    estimated_ticks: 20,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.8,
+                                },
+                            ]
+                        }
+                    }
+                }
+                InternalGoal::DecreaseEmotion(emotion, _target) => {
+                    match emotion {
+                        EmotionType::Fear => {
+                            // Find shelter or safety
+                            let shelter = self.find_nearest_shelter();
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::MoveTo { location: shelter },
+                                    estimated_ticks: 30,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: Some(shelter),
+                                    confidence: 0.8,
+                                },
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 30 },
+                                    estimated_ticks: 30,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: Some(shelter),
+                                    confidence: 0.9,
+                                },
+                            ]
+                        }
+                        EmotionType::Anger => {
+                            // Rest to calm down
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 40 },
+                                    estimated_ticks: 40,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.7,
+                                },
+                            ]
+                        }
+                        EmotionType::Sadness => {
+                            // Seek social support
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                                    estimated_ticks: 40,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.5,
+                                },
+                            ]
+                        }
+                        _ => {
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 20 },
+                                    estimated_ticks: 20,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.8,
+                                },
+                            ]
+                        }
+                    }
+                }
+                InternalGoal::MaintainWellBeing(_threshold) => {
+                    // Balance of rest and social activity
+                    vec![
+                        PlanStep {
+                            action: PlanActionType::Rest { duration: 20 },
+                            estimated_ticks: 20,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.85,
+                        },
+                        PlanStep {
+                            action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                            estimated_ticks: 20,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.6,
+                        },
+                    ]
+                }
+                InternalGoal::ReduceStress => {
+                    // Find shelter and rest
+                    let shelter = self.find_nearest_shelter();
+                    vec![
+                        PlanStep {
+                            action: PlanActionType::MoveTo { location: shelter },
+                            estimated_ticks: 25,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: Some(shelter),
+                            confidence: 0.85,
+                        },
+                        PlanStep {
+                            action: PlanActionType::Rest { duration: 50 },
+                            estimated_ticks: 50,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: Some(shelter),
+                            confidence: 0.9,
+                        },
+                    ]
+                }
+                InternalGoal::SeekEntertainment => {
+                    // Explore and socialize
+                    vec![
+                        PlanStep {
+                            action: PlanActionType::MoveTo { location: resource_location },
+                            estimated_ticks: 30,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.7,
+                        },
+                        PlanStep {
+                            action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                            estimated_ticks: 30,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.5,
+                        },
+                    ]
+                }
+            };
+
+            let plan = ActionPlan::new(
+                format!("{:?}", internal_goal),
+                steps,
+                current_tick,
+                "fulfilling emotional need".to_string(),
+            );
+
+            if !plan.exceeds_complexity_limit(&traits) {
+                self.current_plan = Some(plan);
+                self.plan_step_ticks = 0;
+                return true;
+            }
+            return false;
+        }
+
+        // Handle external goals
+        let external_goal = match &goal.external {
+            Some(ext) => ext.clone(),
+            None => return false,
+        };
+
+        // Generate plan based on external goal type
         match &external_goal {
             ExternalGoal::GatherResource(resource, amount) => {
                 self.create_gather_plan(
@@ -2673,8 +2892,311 @@ impl Agent {
                 }
                 false
             }
-            _ => {
-                // Other goal types not yet supported for planning
+            ExternalGoal::OwnHouse => {
+                // Build a small house for the agent
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "wood".to_string(),
+                            amount: 20,
+                        },
+                        estimated_ticks: 60,
+                        required_tool: Some("axe".to_string()),
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.8,
+                    },
+                    PlanStep {
+                        action: PlanActionType::BuildStructure {
+                            structure: "small_house".to_string(),
+                        },
+                        estimated_ticks: 150,
+                        required_tool: Some("hammer".to_string()),
+                        required_resources: vec![("wood".to_string(), 20)],
+                        target_location: Some(self.state.position),
+                        confidence: 0.6,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    "Build own house".to_string(),
+                    steps,
+                    current_tick,
+                    "constructing home".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::ObtainProtection => {
+                // Craft basic protection equipment
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "leather".to_string(),
+                            amount: 5,
+                        },
+                        estimated_ticks: 40,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.7,
+                    },
+                    PlanStep {
+                        action: PlanActionType::CraftItem {
+                            item: "leather_armor".to_string(),
+                            count: 1,
+                        },
+                        estimated_ticks: 50,
+                        required_tool: None,
+                        required_resources: vec![("leather".to_string(), 5)],
+                        target_location: None,
+                        confidence: 0.6,
+                    },
+                    PlanStep {
+                        action: PlanActionType::EquipItem {
+                            item: "leather_armor".to_string(),
+                        },
+                        estimated_ticks: 2,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: None,
+                        confidence: 0.95,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    "Obtain protection".to_string(),
+                    steps,
+                    current_tick,
+                    "crafting armor".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::EnsureToolsAvailable(target_count) => {
+                // Craft tools and deposit them
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "wood".to_string(),
+                            amount: 5,
+                        },
+                        estimated_ticks: 30,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.85,
+                    },
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "stone".to_string(),
+                            amount: 3,
+                        },
+                        estimated_ticks: 25,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.85,
+                    },
+                    PlanStep {
+                        action: PlanActionType::CraftItem {
+                            item: "stone_axe".to_string(),
+                            count: 1,
+                        },
+                        estimated_ticks: 20,
+                        required_tool: None,
+                        required_resources: vec![
+                            ("wood".to_string(), 2),
+                            ("stone".to_string(), 1),
+                        ],
+                        target_location: None,
+                        confidence: 0.7,
+                    },
+                    PlanStep {
+                        action: PlanActionType::MoveTo { location: return_location },
+                        estimated_ticks: 30,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(return_location),
+                        confidence: 0.95,
+                    },
+                    PlanStep {
+                        action: PlanActionType::Deposit {
+                            resource: "stone_axe".to_string(),
+                            amount: *target_count,
+                        },
+                        estimated_ticks: 5,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(return_location),
+                        confidence: 0.9,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    "Ensure tools available".to_string(),
+                    steps,
+                    current_tick,
+                    "crafting tools".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::LearnSkill(skill_name) => {
+                // Create a learning plan with practice time
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::LearnSkill {
+                            skill: skill_name.clone(),
+                        },
+                        estimated_ticks: 100,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: None,
+                        confidence: 0.5, // Learning outcomes are uncertain
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    format!("Learn {}", skill_name),
+                    steps,
+                    current_tick,
+                    "practicing".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::FormRelationship(relationship_type) => {
+                // Find nearby agents and socialize
+                // Use a placeholder target ID - actual target selection happens during execution
+                let target_id = uuid::Uuid::nil(); // Placeholder, will be resolved at execution time
+
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::Socialize { target_id },
+                        estimated_ticks: 30,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: None,
+                        confidence: 0.4, // Relationship outcomes are uncertain
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    format!("Form {} relationship", relationship_type),
+                    steps,
+                    current_tick,
+                    "socializing".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::CompleteJob(job_name) => {
+                // Generic job completion - maps to appropriate actions
+                // The job name determines what resources to gather or items to craft
+                let steps = match job_name.as_str() {
+                    "woodcutting" => vec![
+                        PlanStep {
+                            action: PlanActionType::GatherResource {
+                                resource: "wood".to_string(),
+                                amount: 10,
+                            },
+                            estimated_ticks: 60,
+                            required_tool: Some("axe".to_string()),
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.8,
+                        },
+                    ],
+                    "mining" => vec![
+                        PlanStep {
+                            action: PlanActionType::GatherResource {
+                                resource: "stone".to_string(),
+                                amount: 10,
+                            },
+                            estimated_ticks: 80,
+                            required_tool: Some("pickaxe".to_string()),
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.7,
+                        },
+                    ],
+                    "hunting" => vec![
+                        PlanStep {
+                            action: PlanActionType::GatherResource {
+                                resource: "meat".to_string(),
+                                amount: 5,
+                            },
+                            estimated_ticks: 90,
+                            required_tool: Some("bow".to_string()),
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.5,
+                        },
+                    ],
+                    "crafting" => vec![
+                        PlanStep {
+                            action: PlanActionType::CraftItem {
+                                item: "tool".to_string(),
+                                count: 1,
+                            },
+                            estimated_ticks: 40,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.7,
+                        },
+                    ],
+                    _ => vec![
+                        // Generic work task - rest and observe
+                        PlanStep {
+                            action: PlanActionType::Rest { duration: 10 },
+                            estimated_ticks: 10,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.9,
+                        },
+                    ],
+                };
+
+                let plan = ActionPlan::new(
+                    format!("Complete {} job", job_name),
+                    steps,
+                    current_tick,
+                    "working".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
                 false
             }
         }

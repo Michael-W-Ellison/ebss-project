@@ -59,7 +59,6 @@ pub mod reproduction;
 pub mod shared_knowledge;
 pub mod knowledge;
 pub mod relationships;
-pub mod profession;
 pub mod social_interactions;
 pub mod exploration;
 pub mod exploration_behavior;
@@ -73,7 +72,6 @@ pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
 pub use shared_knowledge::{SharedKnowledge, DiscoveredResource};
 pub use knowledge::{PersonalKnowledge, ResourceKnowledge, KnowledgeSource};
 pub use relationships::{SocialNetwork, RelationshipLevel, TrustLevel};
-pub use profession::{Profession, JobType, JobCategory};
 pub use social_interactions::{
     SocialInteractionType, ConversationTopic, HelpType, SocialInteractionResult,
     calculate_relationship_change, calculate_social_satisfaction, should_greet,

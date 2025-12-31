@@ -193,12 +193,34 @@ impl Information {
 
     /// Apply manipulative distortion (lying)
     fn apply_manipulative_distortion(&self) -> (InformationType, DistortionType) {
+        self.apply_manipulative_distortion_with_neighbors(&[])
+    }
+
+    /// Apply manipulative distortion with knowledge of nearby agents
+    ///
+    /// When neighbor information is available, manipulative agents will
+    /// create more realistic fabrications that blame known individuals.
+    fn apply_manipulative_distortion_with_neighbors(&self, neighbors: &[Uuid]) -> (InformationType, DistortionType) {
         match &self.info_type {
-            InformationType::Observation { observer: _, observed, location: _ } => {
+            InformationType::Observation { observer, observed, location: _ } => {
                 // "rabbit eating crops" becomes accusation against neighbor
-                if observed.contains("rabbit") || observed.contains("animal") {
-                    // Would need neighbor info, simplified here
-                    (self.info_type.clone(), DistortionType::Fabrication)
+                if observed.contains("rabbit") || observed.contains("animal") || observed.contains("damage") {
+                    // If we know of neighbors, blame one of them
+                    if !neighbors.is_empty() {
+                        // Pick a neighbor to blame (in real use, could use relationship data)
+                        let blamed = neighbors[0];
+                        (
+                            InformationType::Accusation {
+                                accuser: *observer,
+                                accused: blamed,
+                                crime: format!("caused the {}", observed),
+                            },
+                            DistortionType::Fabrication,
+                        )
+                    } else {
+                        // No neighbors known, create generic fabrication
+                        (self.info_type.clone(), DistortionType::Fabrication)
+                    }
                 } else {
                     (self.info_type.clone(), DistortionType::None)
                 }
@@ -208,6 +230,38 @@ impl Information {
                 (self.info_type.clone(), DistortionType::Fabrication)
             }
             _ => (self.info_type.clone(), DistortionType::None),
+        }
+    }
+
+    /// Distort information based on trait with neighbor context
+    ///
+    /// This allows more realistic manipulative distortions that can
+    /// blame specific known individuals.
+    pub fn distort_by_trait_with_neighbors(
+        &self,
+        trait_type: Trait,
+        distorter: Uuid,
+        neighbors: &[Uuid],
+    ) -> Self {
+        let (new_info_type, distortion_type) = match trait_type {
+            Trait::Manipulative | Trait::Manipulator => {
+                self.apply_manipulative_distortion_with_neighbors(neighbors)
+            }
+            _ => return self.distort(trait_type, distorter),
+        };
+
+        Self {
+            id: Uuid::new_v4(),
+            info_type: new_info_type,
+            original_source: self.original_source,
+            reliability: self.reliability * 0.5, // Fabrications are very unreliable
+            ground_truth: false,
+            distortion: Some(InformationDistortion {
+                distortion_type,
+                distorter,
+                original_info: self.id,
+            }),
+            timestamp: self.timestamp,
         }
     }
 
