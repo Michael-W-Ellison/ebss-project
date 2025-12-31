@@ -1144,8 +1144,9 @@ impl World {
         }
 
         // Update crafting jobs (progress crafting)
-        let _completed_crafts = self.crafting_manager.tick();
-        // Note: Completed items should be added to crafter inventories by caller
+        // Completed crafts are tracked but not auto-distributed - agents poll for their completed jobs
+        // via World::get_completed_crafts_for_agent() to add items to their inventories
+        self.crafting_manager.tick();
 
         // Remove depleted resources
         self.remove_depleted_resources();

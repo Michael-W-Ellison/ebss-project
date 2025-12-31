@@ -3,7 +3,7 @@
 
 use crate::agents::{Agent, AgentConfig};
 use crate::core::DriveType;
-use crate::core::planning::{ActionPlan, ActionType as PlanActionType, PlanStep};
+use crate::core::planning::{ActionPlan, PlanActionType, PlanStep};
 use crate::core::{Goal, GoalWorldState, ExternalGoal};
 
 #[test]

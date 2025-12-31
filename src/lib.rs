@@ -49,7 +49,7 @@ pub mod prelude {
         goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager},
         preferences::{Preferences, Obsession, ObsessionType},
         drive_progression::{DriveProgression, DriveTier, DriveTierRequirement, Requirement},
-        planning::{Planner, ActionPlan, PlanStep, ActionType, ActionOutcome},
+        planning::{Planner, ActionPlan, PlanStep, PlanActionType, ActionOutcome},
     };
 
     pub use crate::agents::{

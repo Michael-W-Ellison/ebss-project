@@ -1,5 +1,13 @@
 // src/world/inventory.rs
-//! Inventory and item management system.
+//! Storehouse and communal inventory management system.
+//!
+//! This module provides `StorehouseInventory` for tracking communal resources
+//! in buildings like storehouses. For personal agent inventories with weight,
+//! durability, and quality tracking, see `crate::agents::Inventory`.
+//!
+//! The key distinction:
+//! - `StorehouseInventory` (this module): Simple quantity-based storage for buildings
+//! - `agents::Inventory`: Full-featured personal inventory with weight limits
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -250,14 +258,21 @@ impl Item {
     }
 }
 
-/// Inventory for storing items
+/// Storehouse inventory for communal resource storage.
+///
+/// This is a simple quantity-based inventory used by buildings (storehouses, workshops)
+/// to track stored resources. Unlike `agents::Inventory`, it does not track weight,
+/// durability, or quality - just quantities of each item type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Inventory {
+pub struct StorehouseInventory {
     pub items: HashMap<ItemType, Item>,
     pub capacity: u32, // Maximum total quantity
 }
 
-impl Inventory {
+/// Type alias for backwards compatibility
+pub type Inventory = StorehouseInventory;
+
+impl StorehouseInventory {
     pub fn new(capacity: u32) -> Self {
         Self {
             items: HashMap::new(),

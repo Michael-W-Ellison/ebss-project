@@ -11,9 +11,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::collections::HashMap;
 
-/// Type of action that can be observed
+/// Category of observable activity that can be learned through observation.
+/// Each category represents a distinct type of activity with different
+/// learning difficulties and observation requirements.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ActionType {
+pub enum ObservableActionType {
     /// Mining/harvesting resources
     Mining,
     /// Crafting items
@@ -34,34 +36,37 @@ pub enum ActionType {
     ProblemSolving,
 }
 
-impl ActionType {
+/// Type alias for backwards compatibility
+pub type ActionType = ObservableActionType;
+
+impl ObservableActionType {
     /// Get learning difficulty (0.0 = easy, 1.0 = hard)
     pub fn learning_difficulty(&self) -> f32 {
         match self {
-            ActionType::Mining => 0.2,        // Simple, repetitive
-            ActionType::Crafting => 0.5,      // Requires planning
-            ActionType::Building => 0.6,      // Complex coordination
-            ActionType::Combat => 0.7,        // Dangerous, requires practice
-            ActionType::Cooking => 0.3,       // Moderate complexity
-            ActionType::ToolUse => 0.4,       // Requires understanding
-            ActionType::Social => 0.5,        // Context-dependent
-            ActionType::Navigation => 0.3,    // Learning paths
-            ActionType::ProblemSolving => 0.8, // Very complex
+            ObservableActionType::Mining => 0.2,        // Simple, repetitive
+            ObservableActionType::Crafting => 0.5,      // Requires planning
+            ObservableActionType::Building => 0.6,      // Complex coordination
+            ObservableActionType::Combat => 0.7,        // Dangerous, requires practice
+            ObservableActionType::Cooking => 0.3,       // Moderate complexity
+            ObservableActionType::ToolUse => 0.4,       // Requires understanding
+            ObservableActionType::Social => 0.5,        // Context-dependent
+            ObservableActionType::Navigation => 0.3,    // Learning paths
+            ObservableActionType::ProblemSolving => 0.8, // Very complex
         }
     }
 
     /// Base number of observations needed to learn (before modifiers)
     pub fn observations_to_learn(&self) -> u32 {
         match self {
-            ActionType::Mining => 3,
-            ActionType::Crafting => 5,
-            ActionType::Building => 7,
-            ActionType::Combat => 10,
-            ActionType::Cooking => 4,
-            ActionType::ToolUse => 5,
-            ActionType::Social => 6,
-            ActionType::Navigation => 4,
-            ActionType::ProblemSolving => 12,
+            ObservableActionType::Mining => 3,
+            ObservableActionType::Crafting => 5,
+            ObservableActionType::Building => 7,
+            ObservableActionType::Combat => 10,
+            ObservableActionType::Cooking => 4,
+            ObservableActionType::ToolUse => 5,
+            ObservableActionType::Social => 6,
+            ObservableActionType::Navigation => 4,
+            ObservableActionType::ProblemSolving => 12,
         }
     }
 }

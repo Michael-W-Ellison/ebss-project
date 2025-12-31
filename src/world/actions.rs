@@ -341,43 +341,6 @@ impl World {
         }
     }
 
-    fn execute_craft_item(
-        &mut self,
-        agent_id: Uuid,
-        item_type: ItemType,
-        quantity: u32,
-    ) -> ActionResult {
-        // Map ItemType to recipe ID
-        let recipe_id = match item_type {
-            ItemType::WoodenAxe => "stone_axe",
-            ItemType::StoneAxe => "stone_axe",
-            ItemType::IronAxe => "iron_axe",
-            ItemType::WoodenSpear => "stone_spear",
-            ItemType::Leather => "leather",
-            ItemType::Cloth => "simple_tunic",
-            ItemType::Furniture => "wooden_chest",
-            _ => {
-                return ActionResult::Failure {
-                    reason: format!("No recipe found for {:?}", item_type),
-                };
-            }
-        };
-
-        // Start crafting job
-        if let Some(job_id) = self.crafting_manager.start_crafting(recipe_id.to_string(), agent_id) {
-            ActionResult::Success {
-                message: format!(
-                    "Started crafting {} x{} (job {})",
-                    recipe_id, quantity, job_id
-                ),
-            }
-        } else {
-            ActionResult::Failure {
-                reason: format!("Failed to start crafting {}", recipe_id),
-            }
-        }
-    }
-
     fn execute_social_interaction(
         &self,
         initiator_id: Uuid,

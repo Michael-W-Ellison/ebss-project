@@ -2,7 +2,7 @@
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
-use crate::core::planning::{ActionPlan, ActionType as PlanActionType, Planner, PlanStep, ActionOutcome};
+use crate::core::planning::{ActionPlan, PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
 use std::collections::HashMap;
 
