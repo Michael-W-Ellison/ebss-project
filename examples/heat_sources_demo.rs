@@ -10,7 +10,7 @@
 //! - Material heating and smelting simulation
 //! - Heat source progression (campfire → furnace)
 
-use ebss::world::{World, WorldConfig, WorldSize, ResourceConfig};
+use ebss::world::{World, WorldConfig, ResourceConfig};
 use ebss::environment::HeatSourceType;
 
 fn main() {
@@ -90,8 +90,8 @@ fn main() {
     let config = WorldConfig {
         size: (50, 50),
         initial_resources: ResourceConfig {
-            stones: 100,
-            trees: 50,
+            stone_nodes: 100,
+            wood_nodes: 50,
             ..Default::default()
         },
     };

@@ -1,8 +1,8 @@
 // examples/debug_survival.rs
 //! Debug simulation to test survival mechanics and drive satisfaction.
 
-use ebss::agents::{Population, AgentConfig};
-use ebss::world::{World, WorldConfig, ResourceConfig, Position, Action, ResourceType, ItemType};
+use ebss::agents::{Population, AgentConfig, InventoryItem};
+use ebss::world::{World, WorldConfig, ResourceConfig, Position, Action, ResourceType};
 use ebss::core::DriveType;
 
 fn main() {
@@ -16,6 +16,7 @@ fn main() {
             stone_nodes: 3,
             iron_nodes: 2,
             food_nodes: 10, // Lots of food for testing
+            ..Default::default()
         },
     };
     let mut world = World::new(world_config);
@@ -51,8 +52,8 @@ fn main() {
                 println!("  Is survival critical: {}", agent.state.is_survival_critical());
 
                 println!("\nAgent Inventory:");
-                println!("  Food: {}", agent.inventory.count_item(&ItemType::Food));
-                println!("  Wood: {}", agent.inventory.count_item(&ItemType::Wood));
+                println!("  Food: {}", agent.inventory.count_item("food"));
+                println!("  Wood: {}", agent.inventory.count_item("wood"));
 
                 println!("\nTop 5 Drives:");
                 let active_drives = agent.drives.active_drives();
@@ -77,14 +78,16 @@ fn main() {
         if let Some(agent) = population.agents.first_mut() {
             let agent_id = agent.id;
 
-            // Try to eat
-            let ate = agent.try_eat(tick);
-            if ate && tick % 50 < 10 {
-                println!("  → Agent ate food! Energy restored.");
+            // Try to eat if we have food in inventory
+            if agent.inventory.count_item("food") > 0 {
+                let ate = agent.eat_food(1);
+                if ate && tick % 50 < 10 {
+                    println!("  → Agent ate food! Energy restored.");
+                }
             }
 
             let mut agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
-            let needs_food = agent.needs_food();
+            let needs_food = agent.state.is_starving() || agent.state.energy < 50.0;
             let is_critical = agent.state.is_survival_critical();
 
             // Simple AI: prioritize food if needed
@@ -174,7 +177,9 @@ fn main() {
                     // Add harvested items to inventory
                     if let Some((item_type, quantity)) = result.take_items() {
                         if quantity > 0 {
-                            agent.inventory.add_item(item_type, quantity);
+                            let item_id = format!("{:?}", item_type).to_lowercase();
+                            let item = InventoryItem::new(item_id, quantity);
+                            agent.inventory.add_item(item);
                             if tick % 50 < 10 {
                                 println!("  ✓ Added {} {:?} to inventory", quantity, item_type);
                             }

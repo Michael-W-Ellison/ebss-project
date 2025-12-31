@@ -107,8 +107,39 @@ impl Information {
     /// Create distorted version of this information
     pub fn distort(&self, distortion_trait: Trait, distorter: Uuid) -> Self {
         let (new_info_type, distortion_type) = match distortion_trait {
+            // Creative/Dramatic distortions
             Trait::Imaginative => self.apply_imaginative_distortion(),
-            Trait::Manipulative => self.apply_manipulative_distortion(),
+            Trait::Gossip => self.apply_gossip_distortion(),
+
+            // Deceptive distortions
+            Trait::Manipulative | Trait::Manipulator => self.apply_manipulative_distortion(),
+            Trait::Dishonest => self.apply_dishonest_distortion(),
+
+            // Fear/Anxiety-based distortions
+            Trait::Paranoid => self.apply_paranoid_distortion(),
+            Trait::Anxious => self.apply_anxious_distortion(),
+            Trait::Suspicious => self.apply_suspicious_distortion(),
+
+            // Conflict-related distortions
+            Trait::HotHeaded | Trait::Hottempered => self.apply_hothead_distortion(),
+            Trait::Vengeful => self.apply_vengeful_distortion(),
+            Trait::Aggressive => self.apply_aggressive_distortion(),
+
+            // Calming/Minimizing distortions
+            Trait::Calm => self.apply_calm_distortion(),
+            Trait::Forgiving => self.apply_forgiving_distortion(),
+            Trait::Peaceful => self.apply_peaceful_distortion(),
+
+            // Empathy-based distortions
+            Trait::KindHearted => self.apply_kindhearted_distortion(),
+            Trait::Cruel | Trait::Callous => self.apply_cruel_distortion(),
+            Trait::Empathic | Trait::Empathetic => self.apply_empathic_distortion(),
+
+            // Trust-based distortions
+            Trait::Trusting => self.apply_trusting_distortion(),
+            Trait::Skeptic => self.apply_skeptic_distortion(),
+
+            // Other traits - no distortion
             _ => (self.info_type.clone(), DistortionType::None),
         };
 
@@ -162,12 +193,34 @@ impl Information {
 
     /// Apply manipulative distortion (lying)
     fn apply_manipulative_distortion(&self) -> (InformationType, DistortionType) {
+        self.apply_manipulative_distortion_with_neighbors(&[])
+    }
+
+    /// Apply manipulative distortion with knowledge of nearby agents
+    ///
+    /// When neighbor information is available, manipulative agents will
+    /// create more realistic fabrications that blame known individuals.
+    fn apply_manipulative_distortion_with_neighbors(&self, neighbors: &[Uuid]) -> (InformationType, DistortionType) {
         match &self.info_type {
-            InformationType::Observation { observer: _, observed, location: _ } => {
+            InformationType::Observation { observer, observed, location: _ } => {
                 // "rabbit eating crops" becomes accusation against neighbor
-                if observed.contains("rabbit") || observed.contains("animal") {
-                    // Would need neighbor info, simplified here
-                    (self.info_type.clone(), DistortionType::Fabrication)
+                if observed.contains("rabbit") || observed.contains("animal") || observed.contains("damage") {
+                    // If we know of neighbors, blame one of them
+                    if !neighbors.is_empty() {
+                        // Pick a neighbor to blame (in real use, could use relationship data)
+                        let blamed = neighbors[0];
+                        (
+                            InformationType::Accusation {
+                                accuser: *observer,
+                                accused: blamed,
+                                crime: format!("caused the {}", observed),
+                            },
+                            DistortionType::Fabrication,
+                        )
+                    } else {
+                        // No neighbors known, create generic fabrication
+                        (self.info_type.clone(), DistortionType::Fabrication)
+                    }
                 } else {
                     (self.info_type.clone(), DistortionType::None)
                 }
@@ -177,6 +230,361 @@ impl Information {
                 (self.info_type.clone(), DistortionType::Fabrication)
             }
             _ => (self.info_type.clone(), DistortionType::None),
+        }
+    }
+
+    /// Distort information based on trait with neighbor context
+    ///
+    /// This allows more realistic manipulative distortions that can
+    /// blame specific known individuals.
+    pub fn distort_by_trait_with_neighbors(
+        &self,
+        trait_type: Trait,
+        distorter: Uuid,
+        neighbors: &[Uuid],
+    ) -> Self {
+        let (new_info_type, distortion_type) = match trait_type {
+            Trait::Manipulative | Trait::Manipulator => {
+                self.apply_manipulative_distortion_with_neighbors(neighbors)
+            }
+            _ => return self.distort(trait_type, distorter),
+        };
+
+        Self {
+            id: Uuid::new_v4(),
+            info_type: new_info_type,
+            original_source: self.original_source,
+            reliability: self.reliability * 0.5, // Fabrications are very unreliable
+            ground_truth: false,
+            distortion: Some(InformationDistortion {
+                distortion_type,
+                distorter,
+                original_info: self.id,
+            }),
+            timestamp: self.timestamp,
+        }
+    }
+
+    /// Apply gossip distortion (dramatization for entertainment)
+    fn apply_gossip_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Conflict { agent1, agent2 } => {
+                // Minor disagreement becomes "bitter feud"
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Exaggeration)
+            }
+            InformationType::EmotionalOutburst { agent, emotion } => {
+                // Emotion is dramatically amplified
+                let dramatic = format!("extreme {}", emotion);
+                (InformationType::EmotionalOutburst { agent: *agent, emotion: dramatic }, DistortionType::Exaggeration)
+            }
+            InformationType::UnattachedAgent { agent } => {
+                // Single person becomes "desperately lonely"
+                (InformationType::UnattachedAgent { agent: *agent }, DistortionType::Exaggeration)
+            }
+            InformationType::RecreationalActivity { building, rating } => {
+                // Either best or worst - gossips love extremes
+                let extreme_rating = if *rating >= 5 { 10 } else { 1 };
+                (InformationType::RecreationalActivity { building: building.clone(), rating: extreme_rating }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply dishonest distortion (outright lies)
+    fn apply_dishonest_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::ResourceLocation { resource, location } => {
+                // Lie about resource location
+                let fake_location = (location.0 + 50, location.1 + 50, location.2);
+                (InformationType::ResourceLocation { resource: resource.clone(), location: fake_location }, DistortionType::Fabrication)
+            }
+            InformationType::Accusation { accuser, accused, crime } => {
+                // Swap accuser and accused, or change the crime
+                (InformationType::Accusation { accuser: *accused, accused: *accuser, crime: crime.clone() }, DistortionType::Fabrication)
+            }
+            InformationType::AgentTrait { agent, trait_name: _ } => {
+                // Lie about someone's traits
+                (InformationType::AgentTrait { agent: *agent, trait_name: "dishonest".to_string() }, DistortionType::Fabrication)
+            }
+            _ => (self.info_type.clone(), DistortionType::Fabrication),
+        }
+    }
+
+    /// Apply paranoid distortion (assumes malice)
+    fn apply_paranoid_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Observation { observer, observed, location } => {
+                // Neutral observation becomes threatening
+                let threatening = format!("suspicious {} (probably plotting something)", observed);
+                (InformationType::Observation { observer: *observer, observed: threatening, location: *location }, DistortionType::Exaggeration)
+            }
+            InformationType::UnattachedAgent { agent } => {
+                // Single person is "watching everyone"
+                (InformationType::AgentTrait { agent: *agent, trait_name: "suspicious loner".to_string() }, DistortionType::Fabrication)
+            }
+            InformationType::TechnologyDiscovered { tech } => {
+                // New tech is "dangerous"
+                let dangerous = format!("dangerous {} (could be used against us)", tech);
+                (InformationType::TechnologyDiscovered { tech: dangerous }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply anxious distortion (exaggerates dangers)
+    fn apply_anxious_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Observation { observer, observed, location } => {
+                // Any observation becomes worrying
+                let worrying = format!("alarming {} (we should be careful)", observed);
+                (InformationType::Observation { observer: *observer, observed: worrying, location: *location }, DistortionType::Exaggeration)
+            }
+            InformationType::Death { agent, cause } => {
+                // Death becomes epidemic warning
+                let scary_cause = format!("{} (could happen to any of us!)", cause);
+                (InformationType::Death { agent: *agent, cause: scary_cause }, DistortionType::Exaggeration)
+            }
+            InformationType::Conflict { agent1, agent2 } => {
+                // Conflict might escalate to violence
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply suspicious distortion (adds negative interpretation)
+    fn apply_suspicious_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Alibi { agent, witnesses, time_period } => {
+                // Alibi seems "too convenient"
+                (InformationType::Alibi { agent: *agent, witnesses: witnesses.clone(), time_period: format!("suspiciously during {}", time_period) }, DistortionType::Exaggeration)
+            }
+            InformationType::ResourceLocation { resource, location } => {
+                // Why are they sharing this? What's the angle?
+                let suspicious = format!("{} (why tell us this?)", resource);
+                (InformationType::ResourceLocation { resource: suspicious, location: *location }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply hot-headed distortion (escalates conflicts)
+    fn apply_hothead_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Conflict { agent1, agent2 } => {
+                // Minor disagreement becomes major fight
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Exaggeration)
+            }
+            InformationType::Observation { observer, observed, location } => {
+                // Observations become provocations
+                let aggressive = format!("{} (an insult to all of us!)", observed);
+                (InformationType::Observation { observer: *observer, observed: aggressive, location: *location }, DistortionType::Exaggeration)
+            }
+            InformationType::Accusation { accuser, accused, crime } => {
+                // Crime is definitely intentional and malicious
+                let worse_crime = format!("deliberate {}", crime);
+                (InformationType::Accusation { accuser: *accuser, accused: *accused, crime: worse_crime }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply vengeful distortion (emphasizes wrongs)
+    fn apply_vengeful_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Conflict { agent1, agent2 } => {
+                // Remembers and emphasizes who was wronged
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Exaggeration)
+            }
+            InformationType::Accusation { accuser, accused, crime } => {
+                // Crime is unforgivable
+                let unforgivable = format!("unforgivable {}", crime);
+                (InformationType::Accusation { accuser: *accuser, accused: *accused, crime: unforgivable }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply aggressive distortion (frames things as challenges)
+    fn apply_aggressive_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Observation { observer, observed, location } => {
+                let challenging = format!("{} (a challenge to our strength)", observed);
+                (InformationType::Observation { observer: *observer, observed: challenging, location: *location }, DistortionType::Exaggeration)
+            }
+            InformationType::TechnologyDiscovered { tech } => {
+                let weapon_potential = format!("{} (could be weaponized)", tech);
+                (InformationType::TechnologyDiscovered { tech: weapon_potential }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply calm distortion (minimizes events)
+    fn apply_calm_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Conflict { agent1, agent2 } => {
+                // "Fight" becomes "minor disagreement"
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Omission)
+            }
+            InformationType::EmotionalOutburst { agent, emotion } => {
+                // Downplay the emotion
+                let mild = format!("slight {}", emotion);
+                (InformationType::EmotionalOutburst { agent: *agent, emotion: mild }, DistortionType::Omission)
+            }
+            InformationType::RecreationalActivity { building, rating } => {
+                // Moderate the rating toward average
+                let moderate_rating = ((*rating as f32 + 5.0) / 2.0) as i32;
+                (InformationType::RecreationalActivity { building: building.clone(), rating: moderate_rating }, DistortionType::Omission)
+            }
+            _ => (self.info_type.clone(), DistortionType::Omission),
+        }
+    }
+
+    /// Apply forgiving distortion (downplays wrongdoing)
+    fn apply_forgiving_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Accusation { accuser, accused, crime } => {
+                // Crime was probably an accident
+                let accident = format!("accidental {}", crime);
+                (InformationType::Accusation { accuser: *accuser, accused: *accused, crime: accident }, DistortionType::Omission)
+            }
+            InformationType::Conflict { agent1, agent2 } => {
+                // They've probably made up by now
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Omission)
+            }
+            _ => (self.info_type.clone(), DistortionType::Omission),
+        }
+    }
+
+    /// Apply peaceful distortion (removes conflict elements)
+    fn apply_peaceful_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Conflict { agent1, agent2 } => {
+                // Omit the conflict entirely, focus on resolution
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Omission)
+            }
+            InformationType::Accusation { accuser, accused, crime } => {
+                // Maybe omit the accusation or soften it
+                let misunderstanding = format!("misunderstanding about {}", crime);
+                (InformationType::Accusation { accuser: *accuser, accused: *accused, crime: misunderstanding }, DistortionType::Omission)
+            }
+            _ => (self.info_type.clone(), DistortionType::Omission),
+        }
+    }
+
+    /// Apply kind-hearted distortion (protects reputations)
+    fn apply_kindhearted_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Accusation { accuser, accused, crime: _ } => {
+                // Omit negative details about the accused
+                (InformationType::Accusation { accuser: *accuser, accused: *accused, crime: "minor incident".to_string() }, DistortionType::Omission)
+            }
+            InformationType::AgentTrait { agent, trait_name } => {
+                // Reframe negative traits positively
+                let positive = match trait_name.as_str() {
+                    "lazy" => "relaxed",
+                    "aggressive" => "assertive",
+                    "dishonest" => "creative",
+                    "greedy" => "ambitious",
+                    _ => trait_name.as_str(),
+                };
+                (InformationType::AgentTrait { agent: *agent, trait_name: positive.to_string() }, DistortionType::Omission)
+            }
+            InformationType::EmotionalOutburst { agent, emotion } => {
+                // Protect their dignity
+                let gentle = format!("understandable {}", emotion);
+                (InformationType::EmotionalOutburst { agent: *agent, emotion: gentle }, DistortionType::Omission)
+            }
+            _ => (self.info_type.clone(), DistortionType::Omission),
+        }
+    }
+
+    /// Apply cruel distortion (emphasizes suffering)
+    fn apply_cruel_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Death { agent, cause } => {
+                // Emphasize the suffering
+                let painful = format!("painful {}", cause);
+                (InformationType::Death { agent: *agent, cause: painful }, DistortionType::Exaggeration)
+            }
+            InformationType::EmotionalOutburst { agent, emotion } => {
+                // Emphasize their distress
+                let pathetic = format!("pathetic {}", emotion);
+                (InformationType::EmotionalOutburst { agent: *agent, emotion: pathetic }, DistortionType::Exaggeration)
+            }
+            InformationType::AgentTrait { agent, trait_name } => {
+                // Emphasize negative traits
+                let harsh = match trait_name.as_str() {
+                    "relaxed" => "lazy",
+                    "assertive" => "aggressive",
+                    "creative" => "dishonest",
+                    "ambitious" => "greedy",
+                    _ => trait_name.as_str(),
+                };
+                (InformationType::AgentTrait { agent: *agent, trait_name: harsh.to_string() }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::Exaggeration),
+        }
+    }
+
+    /// Apply empathic distortion (adds emotional context)
+    fn apply_empathic_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Death { agent, cause } => {
+                // Add emotional weight
+                let tragic = format!("tragic {}", cause);
+                (InformationType::Death { agent: *agent, cause: tragic }, DistortionType::Exaggeration)
+            }
+            InformationType::Conflict { agent1, agent2 } => {
+                // Understand both sides - might blur details
+                (InformationType::Conflict { agent1: *agent1, agent2: *agent2 }, DistortionType::Omission)
+            }
+            InformationType::EmotionalOutburst { agent, emotion } => {
+                // Validate and expand on the emotion
+                let validated = format!("deeply felt {}", emotion);
+                (InformationType::EmotionalOutburst { agent: *agent, emotion: validated }, DistortionType::Exaggeration)
+            }
+            _ => (self.info_type.clone(), DistortionType::None),
+        }
+    }
+
+    /// Apply trusting distortion (assumes best intentions)
+    fn apply_trusting_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::Accusation { accuser, accused, crime } => {
+                // Surely there's a good explanation
+                let innocent = format!("alleged {} (probably a misunderstanding)", crime);
+                (InformationType::Accusation { accuser: *accuser, accused: *accused, crime: innocent }, DistortionType::Omission)
+            }
+            InformationType::Observation { observer, observed, location } => {
+                // Interpret positively
+                let positive = format!("{} (with good intentions)", observed);
+                (InformationType::Observation { observer: *observer, observed: positive, location: *location }, DistortionType::Omission)
+            }
+            _ => (self.info_type.clone(), DistortionType::None),
+        }
+    }
+
+    /// Apply skeptic distortion (questions and minimizes)
+    fn apply_skeptic_distortion(&self) -> (InformationType, DistortionType) {
+        match &self.info_type {
+            InformationType::TechnologyDiscovered { tech } => {
+                // Downplay discoveries until verified
+                let unverified = format!("unconfirmed {}", tech);
+                (InformationType::TechnologyDiscovered { tech: unverified }, DistortionType::Omission)
+            }
+            InformationType::Observation { observer, observed, location } => {
+                // Add doubt
+                let doubtful = format!("allegedly {}", observed);
+                (InformationType::Observation { observer: *observer, observed: doubtful, location: *location }, DistortionType::Omission)
+            }
+            InformationType::Accusation { accuser, accused, crime } => {
+                // Require more evidence
+                let unproven = format!("unproven {}", crime);
+                (InformationType::Accusation { accuser: *accuser, accused: *accused, crime: unproven }, DistortionType::Omission)
+            }
+            _ => (self.info_type.clone(), DistortionType::Omission),
         }
     }
 }

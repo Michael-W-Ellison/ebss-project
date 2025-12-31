@@ -3,8 +3,13 @@
 //!
 //! Young agents learn from observing adults, especially parents.
 //! Learning rate is higher for younger agents.
+//!
+//! Learning is now exposure-based: repeated observations accumulate
+//! until a threshold is reached, guaranteeing learning eventually.
 
 use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use crate::agents::{Agent, LifeStage};
 use crate::core::DriveType;
 
@@ -35,6 +40,52 @@ pub struct LearningResult {
     pub learned: bool,
     pub knowledge_gained: Option<String>,
     pub proficiency_increase: f32,
+}
+
+/// Tracks accumulated exposure to knowledge/skills
+/// Learning triggers when exposure reaches threshold
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LearningExposure {
+    /// Accumulated exposure per knowledge item (0.0 to threshold)
+    exposures: HashMap<String, f32>,
+    /// Threshold at which learning is guaranteed (default: 1.0)
+    pub threshold: f32,
+}
+
+impl LearningExposure {
+    pub fn new() -> Self {
+        Self {
+            exposures: HashMap::new(),
+            threshold: 1.0,
+        }
+    }
+
+    /// Add exposure to a knowledge item, returns true if threshold reached
+    pub fn add_exposure(&mut self, knowledge: &str, amount: f32) -> bool {
+        let current = self.exposures.entry(knowledge.to_string()).or_insert(0.0);
+        *current += amount;
+        *current >= self.threshold
+    }
+
+    /// Get current exposure level (0.0 to threshold)
+    pub fn get_exposure(&self, knowledge: &str) -> f32 {
+        self.exposures.get(knowledge).copied().unwrap_or(0.0)
+    }
+
+    /// Check if ready to learn (exposure >= threshold)
+    pub fn ready_to_learn(&self, knowledge: &str) -> bool {
+        self.get_exposure(knowledge) >= self.threshold
+    }
+
+    /// Reset exposure after learning
+    pub fn reset_exposure(&mut self, knowledge: &str) {
+        self.exposures.remove(knowledge);
+    }
+
+    /// Get exposure as percentage of threshold
+    pub fn exposure_percentage(&self, knowledge: &str) -> f32 {
+        (self.get_exposure(knowledge) / self.threshold).min(1.0)
+    }
 }
 
 /// Check if an agent can observe another agent
@@ -119,6 +170,8 @@ pub fn observe_and_learn(
 }
 
 /// Learn an action by observation
+/// Uses exposure-based learning: each observation adds exposure,
+/// and learning is guaranteed when exposure threshold is reached.
 fn learn_action(
     observer: &mut Agent,
     action_name: &str,
@@ -127,9 +180,12 @@ fn learn_action(
 ) -> LearningResult {
     // Check if observer already knows this action
     if let Some(knowledge) = observer.memory.get_knowledge_mut(action_name) {
-        // Improve proficiency
+        // Improve proficiency - always gain something from successful observation
         if success {
-            let increase = 0.05 * learning_rate;
+            // Base increase + bonus based on learning rate
+            let base_increase = 0.02;
+            let rate_bonus = 0.03 * learning_rate;
+            let increase = base_increase + rate_bonus;
             knowledge.proficiency = (knowledge.proficiency + increase).min(1.0);
             LearningResult {
                 learned: true,
@@ -137,27 +193,47 @@ fn learn_action(
                 proficiency_increase: increase,
             }
         } else {
+            // Even failed observations provide small learning (what NOT to do)
+            let small_increase = 0.01 * learning_rate;
+            knowledge.proficiency = (knowledge.proficiency + small_increase).min(1.0);
             LearningResult {
-                learned: false,
+                learned: true,
                 knowledge_gained: None,
-                proficiency_increase: 0.0,
+                proficiency_increase: small_increase,
             }
         }
     } else {
-        // Learn new action with probability based on learning rate
+        // Learning new action: exposure-based with breakthrough chance
+        // Exposure gain is proportional to learning rate and success
+        let exposure_gain = if success {
+            learning_rate * 0.25  // Successful observations are more educational
+        } else {
+            learning_rate * 0.10  // Failed observations still teach something
+        };
+
+        // Add exposure (stored in observer's learning_exposure field)
+        let threshold_reached = observer.learning_exposure.add_exposure(action_name, exposure_gain);
+
+        // Check for breakthrough learning (random chance even before threshold)
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        if rng.gen::<f32>() < learning_rate * 0.3 {
+        let exposure_pct = observer.learning_exposure.exposure_percentage(action_name);
+        let breakthrough_chance = exposure_pct * learning_rate * 0.2; // Higher exposure = higher breakthrough chance
+
+        if threshold_reached || rng.gen::<f32>() < breakthrough_chance {
+            // Learn the action
             observer.memory.learn(
                 action_name.to_string(),
                 format!("Learned by observing {}", action_name),
             );
+            observer.learning_exposure.reset_exposure(action_name);
             LearningResult {
                 learned: true,
                 knowledge_gained: Some(action_name.to_string()),
                 proficiency_increase: 0.0,
             }
         } else {
+            // Not learned yet, but exposure increased (progress made)
             LearningResult {
                 learned: false,
                 knowledge_gained: None,
@@ -168,6 +244,7 @@ fn learn_action(
 }
 
 /// Learn how to satisfy a drive
+/// Uses exposure-based learning with higher base gain for survival drives
 fn learn_drive_satisfaction(
     observer: &mut Agent,
     drive_type: DriveType,
@@ -176,17 +253,44 @@ fn learn_drive_satisfaction(
     let knowledge_name = format!("{:?}_satisfaction", drive_type);
 
     if observer.memory.get_knowledge(&knowledge_name).is_none() {
+        // Drive satisfaction is important - higher exposure gain
+        // Survival drives (hunger, thirst) are learned faster
+        let base_exposure = match drive_type {
+            DriveType::Hunger | DriveType::Thirst | DriveType::Rest => 0.35,
+            DriveType::Safety => 0.30,
+            _ => 0.25,
+        };
+        let exposure_gain = base_exposure * learning_rate;
+
+        let threshold_reached = observer.learning_exposure.add_exposure(&knowledge_name, exposure_gain);
+
+        // Breakthrough chance scales with accumulated exposure
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        if rng.gen::<f32>() < learning_rate * 0.4 {
+        let exposure_pct = observer.learning_exposure.exposure_percentage(&knowledge_name);
+        let breakthrough_chance = exposure_pct * learning_rate * 0.25;
+
+        if threshold_reached || rng.gen::<f32>() < breakthrough_chance {
             observer.memory.learn(
                 knowledge_name.clone(),
                 format!("How to satisfy {:?} drive", drive_type),
             );
+            observer.learning_exposure.reset_exposure(&knowledge_name);
             return LearningResult {
                 learned: true,
                 knowledge_gained: Some(knowledge_name),
                 proficiency_increase: 0.0,
+            };
+        }
+    } else {
+        // Already know this - improve proficiency slightly
+        if let Some(knowledge) = observer.memory.get_knowledge_mut(&knowledge_name) {
+            let increase = 0.02 * learning_rate;
+            knowledge.proficiency = (knowledge.proficiency + increase).min(1.0);
+            return LearningResult {
+                learned: true,
+                knowledge_gained: None,
+                proficiency_increase: increase,
             };
         }
     }
@@ -199,23 +303,46 @@ fn learn_drive_satisfaction(
 }
 
 /// Learn a discovery/recipe
+/// Discoveries are easier to learn (higher exposure gain) since they're
+/// significant events worth paying attention to
 fn learn_discovery(
     observer: &mut Agent,
     knowledge_name: &str,
     learning_rate: f32,
 ) -> LearningResult {
     if observer.memory.get_knowledge(knowledge_name).is_none() {
+        // Discoveries are memorable - high exposure gain
+        let exposure_gain = learning_rate * 0.40;
+
+        let threshold_reached = observer.learning_exposure.add_exposure(knowledge_name, exposure_gain);
+
+        // Higher breakthrough chance for discoveries (they're exciting!)
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        if rng.gen::<f32>() < learning_rate * 0.5 {
+        let exposure_pct = observer.learning_exposure.exposure_percentage(knowledge_name);
+        let breakthrough_chance = exposure_pct * learning_rate * 0.35;
+
+        if threshold_reached || rng.gen::<f32>() < breakthrough_chance {
             observer.memory.learn(
                 knowledge_name.to_string(),
                 format!("Discovered: {}", knowledge_name),
             );
+            observer.learning_exposure.reset_exposure(knowledge_name);
             return LearningResult {
                 learned: true,
                 knowledge_gained: Some(knowledge_name.to_string()),
                 proficiency_increase: 0.0,
+            };
+        }
+    } else {
+        // Already know this discovery - improve proficiency
+        if let Some(knowledge) = observer.memory.get_knowledge_mut(knowledge_name) {
+            let increase = 0.03 * learning_rate;
+            knowledge.proficiency = (knowledge.proficiency + increase).min(1.0);
+            return LearningResult {
+                learned: true,
+                knowledge_gained: None,
+                proficiency_increase: increase,
             };
         }
     }
@@ -228,6 +355,7 @@ fn learn_discovery(
 }
 
 /// Learn a behavior tree by observation
+/// Behavior trees are complex - require more exposure but are very valuable
 fn learn_behavior(
     observer: &mut Agent,
     observed: &Agent,
@@ -237,7 +365,7 @@ fn learn_behavior(
 ) -> LearningResult {
     // Check if observer already has this behavior tree
     if observer.behavior_trees.iter().any(|t| t.name == tree_name) {
-        // Already know it, no additional learning
+        // Already know it, no additional learning needed
         return LearningResult {
             learned: false,
             knowledge_gained: None,
@@ -247,20 +375,39 @@ fn learn_behavior(
 
     // Try to learn the behavior tree
     if let Some(observed_tree) = observed.behavior_trees.iter().find(|t| t.name == tree_name) {
-        // Only learn if the observed behavior was successful
-        if success {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-            if rng.gen::<f32>() < learning_rate * 0.2 {
-                // Clone the behavior tree with some pruning
-                let learned_tree = observed_tree.clone_with_pruning(0.5);
-                observer.behavior_trees.push(learned_tree);
-                return LearningResult {
-                    learned: true,
-                    knowledge_gained: Some(format!("behavior:{}", tree_name)),
-                    proficiency_increase: 0.0,
-                };
-            }
+        let behavior_key = format!("behavior:{}", tree_name);
+
+        // Exposure gain depends on success - failed attempts teach less
+        let exposure_gain = if success {
+            learning_rate * 0.20  // Successful behavior is worth watching
+        } else {
+            learning_rate * 0.05  // Failed behavior teaches what not to do
+        };
+
+        let threshold_reached = observer.learning_exposure.add_exposure(&behavior_key, exposure_gain);
+
+        // Breakthrough chance (lower for complex behaviors)
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let exposure_pct = observer.learning_exposure.exposure_percentage(&behavior_key);
+        let breakthrough_chance = if success {
+            exposure_pct * learning_rate * 0.15
+        } else {
+            0.0  // Can't have breakthrough learning from watching failures
+        };
+
+        if threshold_reached || (success && rng.gen::<f32>() < breakthrough_chance) {
+            // Clone the behavior tree with pruning based on exposure level
+            // More exposure = better understanding = less pruning needed
+            let pruning_threshold = 0.3 + (0.4 * (1.0 - exposure_pct));
+            let learned_tree = observed_tree.clone_with_pruning(pruning_threshold);
+            observer.behavior_trees.push(learned_tree);
+            observer.learning_exposure.reset_exposure(&behavior_key);
+            return LearningResult {
+                learned: true,
+                knowledge_gained: Some(behavior_key),
+                proficiency_increase: 0.0,
+            };
         }
     }
 

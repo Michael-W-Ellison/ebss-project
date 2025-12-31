@@ -273,6 +273,7 @@ mod tests {
                 stone_nodes: 2,
                 iron_nodes: 1,
                 food_nodes: 2,
+                ..Default::default()
             },
         });
         let population = Population::new();

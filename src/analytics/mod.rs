@@ -356,14 +356,92 @@ impl Simulation {
                     }
                 }
 
-                // Generate action based on priority: shelter needs > percepts > goals > drives
-                let action = {
+                // Check if current plan is still relevant given updated world state
+                // This allows agents to abandon plans when goals are already satisfied
+                // (e.g., another agent restocked the storehouse)
+                {
+                    use crate::world::ItemType;
+                    use crate::core::GoalWorldState;
+
+                    // Calculate storehouse contents
+                    let food_types = vec![
+                        ItemType::Food, ItemType::Bread, ItemType::Cheese,
+                        ItemType::Meat, ItemType::Fish, ItemType::Honey, ItemType::Ale,
+                    ];
+                    let resource_types = vec![
+                        ItemType::Wood, ItemType::Stone, ItemType::Iron,
+                        ItemType::Clay, ItemType::Sand, ItemType::Coal,
+                    ];
+                    let tool_types = vec![
+                        ItemType::WoodenAxe, ItemType::StoneAxe, ItemType::IronAxe,
+                        ItemType::WoodenPickaxe, ItemType::StonePickaxe, ItemType::IronPickaxe,
+                        ItemType::WoodenHammer, ItemType::StoneHammer, ItemType::IronHammer,
+                    ];
+
+                    let storehouse_food: u32 = food_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    let storehouse_materials: u32 = resource_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    let storehouse_tools: u32 = tool_types.iter()
+                        .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                        .map(|item| item.quantity)
+                        .sum();
+
+                    // Get agent's personal inventory state
+                    let agent = &self.population.agents[agent_index];
+                    let personal_food = agent.inventory.get_item("food")
+                        .map(|i| i.quantity)
+                        .unwrap_or(0);
+                    let gathered_resources = agent.inventory.get_item("wood")
+                        .map(|i| i.quantity)
+                        .unwrap_or(0)
+                        + agent.inventory.get_item("stone")
+                            .map(|i| i.quantity)
+                            .unwrap_or(0);
+
+                    // Check if agent has protection equipment (check for any armor items)
+                    let has_protection = agent.inventory.get_all_items().iter()
+                        .any(|(item_id, _)| {
+                            item_id.contains("armor") ||
+                            item_id.contains("Armor") ||
+                            item_id.contains("shield")
+                        });
+
+                    // Check if agent owns a house (based on memory or state)
+                    // For now, we estimate based on whether agent has built structures
+                    let owns_house = agent.memory.knowledge.iter()
+                        .any(|k| k.description.contains("house") || k.description.contains("shelter"));
+
+                    let world_state = GoalWorldState {
+                        storehouse_food,
+                        storehouse_materials,
+                        storehouse_tools,
+                        personal_food,
+                        gathered_resources,
+                        owns_house,
+                        has_protection,
+                        ..Default::default()
+                    };
+
+                    // Update plan relevance - this will abandon the plan if goal is satisfied
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.update_plan_relevance(&world_state);
+                }
+
+                // Generate action based on priority: shelter > percepts > plan > goals > drives
+                let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
 
                     // PRIORITY 1: Check if agent needs shelter due to exposure
                     if agent.needs_shelter() && agent.shelter_priority() > 0.7 {
                         // Critical shelter need - override all other actions
-                        crate::environment::Action::SeekShelter
+                        (crate::environment::Action::SeekShelter, false)
                     } else {
                         // PRIORITY 2: Check for high-salience percepts that should override drive-based actions
                         let percept_action = Self::generate_action_from_percepts(
@@ -373,19 +451,38 @@ impl Simulation {
                         );
 
                         if percept_action.is_some() {
-                            percept_action.unwrap()
+                            (percept_action.unwrap(), false)
+                        } else if agent.should_execute_plan() {
+                            // PRIORITY 3: Execute current plan step if agent has an active plan
+                            if let Some(plan_action) = agent.get_plan_action() {
+                                debug!(
+                                    "Agent {} executing plan step: {:?}",
+                                    agent_id,
+                                    agent.current_plan_step_description()
+                                );
+                                (plan_action, true)
+                            } else {
+                                // Plan step can't be converted to action (e.g., EquipItem)
+                                // Advance plan and use goal-based action instead
+                                (Self::generate_action_for_drive(drive_type, agent_position), false)
+                            }
+                        } else if agent.has_active_plan() {
+                            // Agent has a plan but shouldn't execute it (survival override)
+                            // Still use drive-based action
+                            (Self::generate_action_for_drive(drive_type, agent_position), false)
                         } else {
-                            // PRIORITY 3: Check if we have active goals and generate goal-aligned action
+                            // PRIORITY 4: Check if we have active goals and generate goal-aligned action
+                            // Also try to create a plan for the goal if we don't have one
                             if let Some(active_goal) = agent.goals.highest_priority_goal() {
                                 let goal_action = Self::generate_action_for_goal(active_goal, agent_position, drive_type);
 
                                 // Use goal-aligned action if available, otherwise fall back to drive-based
-                                goal_action.unwrap_or_else(|| {
+                                (goal_action.unwrap_or_else(|| {
                                     Self::generate_action_for_drive(drive_type, agent_position)
-                                })
+                                }), false)
                             } else {
-                                // PRIORITY 4: Use drive-based action
-                                Self::generate_action_for_drive(drive_type, agent_position)
+                                // PRIORITY 5: Use drive-based action
+                                (Self::generate_action_for_drive(drive_type, agent_position), false)
                             }
                         }
                     }
@@ -422,6 +519,46 @@ impl Simulation {
                 // Apply feedback to agent (drive satisfaction)
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
+
+                // Update plan execution state if this was a plan action
+                if is_plan_action {
+                    if action_result.success {
+                        // Successful action - advance to next plan step
+                        agent.advance_plan_step(true, agent.plan_step_ticks + 1);
+                        debug!(
+                            "Agent {} completed plan step, progress: {:?}",
+                            agent_id,
+                            agent.plan_progress()
+                        );
+                    } else {
+                        // Failed action - increment step ticks and potentially abandon plan
+                        agent.tick_plan_step();
+                        if !agent.should_execute_plan() {
+                            // Plan has timed out or is no longer viable
+                            debug!("Agent {} abandoning plan due to failure/timeout", agent_id);
+                            agent.abandon_plan();
+                        }
+                    }
+                } else {
+                    // Not a plan action - tick the plan step counter anyway
+                    // This allows plans to timeout if agent keeps getting interrupted
+                    agent.tick_plan_step();
+                }
+
+                // Try to create a plan for goals if agent doesn't have one
+                // Only do this periodically to avoid constant replanning
+                if !agent.has_active_plan() && self.current_tick % 50 == 0 {
+                    // Use a default resource/return location (should be enhanced with real world data)
+                    let resource_loc = (50, 50, 0);
+                    let return_loc = (0, 0, 0);
+                    if agent.create_plan_for_goal(resource_loc, return_loc, self.current_tick) {
+                        debug!(
+                            "Agent {} created new plan: {:?}",
+                            agent_id,
+                            agent.current_plan_step_description()
+                        );
+                    }
+                }
 
                 // Update behavior tree weights based on action success
                 if let Some(tree) = agent.select_behavior_tree() {
@@ -1097,22 +1234,33 @@ impl Simulation {
                 let attacker_pos = self.population.agents[agent_index].state.position;
                 let target_pos = self.population.agents[target_index].state.position;
 
-                // Check if target is in range (melee range = 1 tile, unarmed or melee weapon)
+                // Check if target is in range
                 let distance = ((target_pos.0 - attacker_pos.0).abs() + (target_pos.1 - attacker_pos.1).abs()) as u32;
-                let max_range = 1; // Melee range for now
 
-                if distance > max_range {
-                    return ActionResult::failure(format!("Target too far away (distance: {})", distance));
+                // Get weapon range from equipment (melee = 1, ranged = further)
+                let attacker = &self.population.agents[agent_index];
+                let weapon_range = attacker.equipment.weapon_range();
+
+                if (distance as f32) > weapon_range {
+                    return ActionResult::failure(format!("Target too far away (distance: {}, weapon range: {})", distance, weapon_range));
                 }
 
-                // Calculate base damage
-                let base_damage = if weapon.is_some() {
-                    // Weapon damage (will be expanded later with actual weapon stats)
-                    rng.gen_range(10.0..25.0)
-                } else {
-                    // Unarmed combat
-                    rng.gen_range(5.0..15.0)
-                };
+                // Calculate weapon-based damage
+                let attacker = &self.population.agents[agent_index];
+                let weapon_damage = attacker.equipment.weapon_damage();
+                let weapon_speed = attacker.equipment.weapon_attack_speed();
+
+                // Get combat skill bonus (MeleeCombat for melee, Archery for ranged)
+                let skill_level = attacker.skills.get_skill_if_exists(crate::agents::SkillType::MeleeCombat)
+                    .map(|s| s.level)
+                    .unwrap_or(0);
+                let skill_modifier = 1.0 + (skill_level as f32 / 20.0); // -10 to 10 -> 0.5 to 1.5
+
+                // Calculate base damage with variance
+                // Weapon speed affects damage: faster weapons deal slightly less damage per hit
+                let damage_variance = rng.gen_range(0.8..1.2); // +/- 20% randomness
+                let speed_factor = (2.0 - weapon_speed).max(0.5); // Fast weapons (1.5) -> 0.5, slow (0.6) -> 1.4
+                let base_damage = weapon_damage * damage_variance * skill_modifier * speed_factor;
 
                 // Get attacker's tool efficiency (arm health affects combat)
                 let attacker = &self.population.agents[agent_index];
@@ -1511,31 +1659,36 @@ impl Simulation {
                 let current_pos = agent.state.position;
                 let current_2d = Position::new(current_pos.0, current_pos.1);
 
-                // Target position (2D, ignore z for now)
+                // Target position
                 let target_2d = Position::new(target.0, target.1);
 
-                // Check if already at target
-                if current_2d == target_2d {
+                // Check if already at target (including Z-axis)
+                if current_2d == target_2d && current_pos.2 == target.2 {
                     return ActionResult::success()
                         .with_message("Already at destination".to_string());
                 }
 
-                // Calculate movement distance (Manhattan distance)
-                let distance = current_2d.distance_to(&target_2d);
-
-                // Determine next step towards target (simple pathfinding - move one step)
+                // Calculate movement distance (3D Manhattan distance)
                 let dx = target.0 - current_pos.0;
                 let dy = target.1 - current_pos.1;
+                let dz = target.2 - current_pos.2;
 
                 // Normalize to -1, 0, or 1 for each axis
                 let step_x = if dx > 0 { 1 } else if dx < 0 { -1 } else { 0 };
                 let step_y = if dy > 0 { 1 } else if dy < 0 { -1 } else { 0 };
+                let step_z = if dz > 0 { 1 } else if dz < 0 { -1 } else { 0 };
 
-                // Prioritize longer axis for movement
-                let (next_x, next_y) = if dx.abs() >= dy.abs() {
-                    (current_pos.0 + step_x, current_pos.1)
+                // Determine next step - prioritize horizontal movement, then vertical
+                // This models climbing/descending as slower than horizontal movement
+                let (next_x, next_y, next_z) = if dx.abs() >= dy.abs() && dx.abs() >= dz.abs() {
+                    // Move along X axis
+                    (current_pos.0 + step_x, current_pos.1, current_pos.2)
+                } else if dy.abs() >= dz.abs() {
+                    // Move along Y axis
+                    (current_pos.0, current_pos.1 + step_y, current_pos.2)
                 } else {
-                    (current_pos.0, current_pos.1 + step_y)
+                    // Move along Z axis (climbing/descending)
+                    (current_pos.0, current_pos.1, current_pos.2 + step_z)
                 };
 
                 let next_pos = Position::new(next_x, next_y);
@@ -1580,19 +1733,22 @@ impl Simulation {
                     return ActionResult::failure("Too injured to move (legs crippled)".to_string());
                 };
 
-                // Update agent position
+                // Update agent position (including Z-axis)
                 let agent = &mut self.population.agents[agent_index];
-                agent.state.position = (next_x, next_y, target.2);
+                agent.state.position = (next_x, next_y, next_z);
+
+                // Calculate remaining 3D distance
+                let remaining_distance = ((target.0 - next_x).abs() + (target.1 - next_y).abs() + (target.2 - next_z).abs()) as u32;
 
                 debug!(
-                    "Agent {} moved from ({}, {}) to ({}, {}) (distance to target: {}, speed: {:.2}x, mounted: {})",
-                    agent.id, current_pos.0, current_pos.1, next_x, next_y,
-                    distance - 1, movement_speed,
+                    "Agent {} moved from ({}, {}, {}) to ({}, {}, {}) (distance to target: {}, speed: {:.2}x, mounted: {})",
+                    agent.id, current_pos.0, current_pos.1, current_pos.2, next_x, next_y, next_z,
+                    remaining_distance, movement_speed,
                     if agent.transport.is_mounted() { "yes" } else { "no" }
                 );
 
                 // Determine drive satisfaction based on purpose (Safety or Curiosity)
-                let drive_type = if distance <= 5 {
+                let drive_type = if remaining_distance <= 5 {
                     Some(DriveType::Safety) // Moving to nearby location (fleeing or seeking safety)
                 } else {
                     Some(DriveType::Curiosity) // Exploring distant location
@@ -1600,7 +1756,7 @@ impl Simulation {
 
                 let mut result = ActionResult::success()
                     .with_energy_cost(actual_energy_cost)
-                    .with_message(format!("Moved to ({}, {}), {} steps to goal", next_x, next_y, distance - 1));
+                    .with_message(format!("Moved to ({}, {}, {}), {} steps to goal", next_x, next_y, next_z, remaining_distance));
 
                 if let Some(drive) = drive_type {
                     result = result.with_drive_change(drive, -0.05);
@@ -3016,10 +3172,36 @@ impl Simulation {
         let weather = self.world.climate.weather.clone();
         let time_of_day = self.world.climate.calendar.time_of_day;
 
+        // Collect position data first to avoid borrow issues with climate.get_climate
+        let agent_data: Vec<_> = self.population.agents.iter()
+            .filter(|a| a.state.is_alive)
+            .map(|a| {
+                let pos = crate::world::Position::new(a.state.position.0, a.state.position.1);
+                let terrain = self.world.grid.get_tile(&pos)
+                    .map(|t| t.terrain.terrain_type)
+                    .unwrap_or(crate::world::TerrainType::Plains);
+                (a.id, pos, terrain)
+            })
+            .collect();
+
+        // Get climate data for each agent position
+        let climate_data: std::collections::HashMap<_, _> = agent_data.iter()
+            .map(|(id, pos, terrain)| {
+                let climate = self.world.climate.get_climate(*pos, *terrain);
+                (*id, climate)
+            })
+            .collect();
+
         for agent in &mut self.population.agents {
             if !agent.state.is_alive {
                 continue;
             }
+
+            // Get the climate for this agent
+            let climate = match climate_data.get(&agent.id) {
+                Some(c) => c.clone(),
+                None => continue,
+            };
 
             // Get environmental temperature at agent's position
             let agent_pos = crate::world::Position::new(agent.state.position.0, agent.state.position.1);
@@ -3027,7 +3209,10 @@ impl Simulation {
                 .map(|t| t.terrain.terrain_type)
                 .unwrap_or(crate::world::TerrainType::Plains);
 
-            let environmental_temp = self.world.climate.get_temperature(agent_pos, terrain_type);
+            let environmental_temp = climate.temperature;
+
+            // Update agent's body temperature based on climate
+            agent.update_temperature(&climate);
 
             // Check if agent has shelter
             // Agent has shelter if they're in a completed building
@@ -3035,10 +3220,24 @@ impl Simulation {
                 b.position == agent_pos && b.is_completed()
             }) || matches!(terrain_type, crate::world::TerrainType::Forest); // Forest provides partial shelter
 
-            // Check if agent has water access (simplified: check inventory for water containers)
-            let has_water_access = agent.inventory.get_item("waterskin")
+            // Check if agent has water access:
+            // 1. Water containers in inventory (waterskin, water_flask, water_bucket)
+            // 2. Near water terrain (river, lake)
+            // 3. Near well building
+            let has_water_container = agent.inventory.get_item("waterskin")
+                .or_else(|| agent.inventory.get_item("water_flask"))
+                .or_else(|| agent.inventory.get_item("water_bucket"))
                 .map(|item| item.fill_percentage() > 0.1)
                 .unwrap_or(false);
+
+            let near_water_terrain = matches!(
+                terrain_type,
+                crate::world::TerrainType::Water |
+                crate::world::TerrainType::Riverbank |
+                crate::world::TerrainType::Wetland
+            );
+
+            let has_water_access = has_water_container || near_water_terrain;
 
             // Update exposure and apply damage
             let damage = agent.update_exposure(
@@ -3054,6 +3253,19 @@ impl Simulation {
                 debug!(
                     "Agent {} taking exposure damage: {:.3} (exposures: {:?})",
                     agent.id, damage, agent.exposure_status.active_exposures
+                );
+            }
+
+            // Log body temperature issues
+            if agent.body_temperature.is_hypothermic() {
+                debug!(
+                    "Agent {} is hypothermic! Body temp: {:.1}°C",
+                    agent.id, agent.body_temperature.current
+                );
+            } else if agent.body_temperature.is_hyperthermic() {
+                debug!(
+                    "Agent {} is hyperthermic! Body temp: {:.1}°C",
+                    agent.id, agent.body_temperature.current
                 );
             }
 

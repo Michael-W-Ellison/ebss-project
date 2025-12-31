@@ -18,7 +18,24 @@ pub enum ExplorationDecision {
 
 impl Agent {
     /// Decide if and where the agent should explore
+    ///
+    /// Exploration is suppressed when survival drives (hunger/thirst) are active.
+    /// A starving agent should focus on finding food, not wandering into unknown territory.
     pub fn decide_exploration(&self, current_tick: u32) -> ExplorationDecision {
+        // Check if survival drives are active - survival takes priority over exploration
+        let hunger_active = self.drives.get(DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+        let thirst_active = self.drives.get(DriveType::Thirst)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        if hunger_active || thirst_active {
+            return ExplorationDecision::NoExploration {
+                reason: "Survival drives active - must address hunger/thirst before exploring".to_string(),
+            };
+        }
+
         // Get curiosity drive
         let curiosity = self.drives.get(DriveType::Curiosity)
             .map(|d| d.value)
@@ -70,8 +87,22 @@ impl Agent {
     }
 
     /// Get exploration priority (0.0 to 1.0)
-    /// Higher values mean exploration is more important right now
+    ///
+    /// Returns 0.0 when survival drives are active - agents should not explore when starving.
+    /// Higher values mean exploration is more important right now.
     pub fn exploration_priority(&self) -> f32 {
+        // Survival drives suppress exploration priority entirely
+        let hunger_active = self.drives.get(DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+        let thirst_active = self.drives.get(DriveType::Thirst)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        if hunger_active || thirst_active {
+            return 0.0; // No exploration when survival is threatened
+        }
+
         let curiosity = self.drives.get(DriveType::Curiosity)
             .map(|d| d.value)
             .unwrap_or(0.0);

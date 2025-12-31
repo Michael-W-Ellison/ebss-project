@@ -40,6 +40,10 @@ pub enum SkillType {
     Archery,
     /// Melee combat
     MeleeCombat,
+    /// Social interaction and persuasion
+    Social,
+    /// Navigation and wayfinding
+    Navigation,
     /// Custom skill
     Custom(u32),
 }
@@ -63,6 +67,8 @@ impl SkillType {
             SkillType::Masonry => "Masonry",
             SkillType::Archery => "Archery",
             SkillType::MeleeCombat => "Melee Combat",
+            SkillType::Social => "Social",
+            SkillType::Navigation => "Navigation",
             SkillType::Custom(_) => "Custom Skill",
         }
     }

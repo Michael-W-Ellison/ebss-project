@@ -12,7 +12,7 @@ fn main() {
 
     // Spawn some agents close to each other
     for i in 0..5 {
-        let mut config = AgentConfig::default();
+        let config = AgentConfig::default();
         population.spawn_agent(config);
 
         // Position agents near each other (within social interaction range)
@@ -29,7 +29,7 @@ fn main() {
         let social_drive = agent.drives.get(DriveType::Social)
             .map(|d| d.value)
             .unwrap_or(0.0);
-        let relationships = agent.social_network.all_relationships().len();
+        let relationships = agent.relationships.get_all().len();
 
         println!("  Agent {}: Position: {:?}, Social Drive: {:.2}, Relationships: {}",
             idx, agent.state.position, social_drive, relationships);
@@ -48,15 +48,16 @@ fn main() {
                 let social_drive = agent.drives.get(DriveType::Social)
                     .map(|d| d.value)
                     .unwrap_or(0.0);
-                let relationships = agent.social_network.all_relationships();
+                let relationships = agent.relationships.get_all();
 
                 println!("  Agent {}: Social Drive: {:.3}", idx, social_drive);
 
                 // Show relationships
-                for rel in relationships {
-                    println!("    -> Relationship with agent (level: {}, trust: {})",
-                        rel.relationship_level.name(),
-                        rel.trust_level.name());
+                for (_agent_id, rel) in relationships {
+                    println!("    -> {:?} (bond: {:.2}, interactions: {})",
+                        rel.relationship_type,
+                        rel.bond_strength,
+                        rel.total_interactions);
                 }
             }
             println!();
@@ -69,8 +70,8 @@ fn main() {
         let social_drive = agent.drives.get(DriveType::Social)
             .map(|d| d.value)
             .unwrap_or(0.0);
-        let relationships = agent.social_network.all_relationships();
-        let total_interactions: u32 = relationships.iter()
+        let relationships = agent.relationships.get_all();
+        let total_interactions: u32 = relationships.values()
             .map(|r| r.total_interactions)
             .sum();
 
@@ -79,11 +80,11 @@ fn main() {
         println!("  Total Relationships: {}", relationships.len());
         println!("  Total Interactions: {}", total_interactions);
 
-        for rel in relationships {
-            println!("    Relationship: {} ({}), Trust: {} ({} interactions)",
-                rel.relationship_level.name(),
-                rel.relationship_level.value(),
-                rel.trust_level.name(),
+        for (_agent_id, rel) in relationships {
+            println!("    {:?}: bond={:.2}, time_together={}, interactions={}",
+                rel.relationship_type,
+                rel.bond_strength,
+                rel.time_together,
                 rel.total_interactions);
         }
         println!();

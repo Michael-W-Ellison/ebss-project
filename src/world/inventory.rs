@@ -31,6 +31,12 @@ pub enum ItemType {
     Clay,
     Sand,
     Coal,
+    Copper,
+    Tin,
+
+    // === Processed Metals ===
+    Bronze,
+    Steel,
 
     // === Processed Materials ===
     Flour,
@@ -59,24 +65,37 @@ pub enum ItemType {
     // === Tools ===
     WoodenAxe,
     StoneAxe,
+    CopperAxe,
+    BronzeAxe,
     IronAxe,
     WoodenPickaxe,
     StonePickaxe,
+    CopperPickaxe,
+    BronzePickaxe,
     IronPickaxe,
     WoodenHammer,
     StoneHammer,
+    CopperHammer,
+    BronzeHammer,
     IronHammer,
 
     // === Weapons ===
     WoodenSpear,
     WoodenBow,
     StoneSpear,
+    CopperSpear,
+    CopperSword,
+    BronzeSpear,
+    BronzeSword,
+    BronzeBow,
     IronSword,
     IronBow,
     SteelSword,
 
     // === Armor ===
     LeatherArmor,
+    CopperArmor,
+    BronzeArmor,
     IronArmor,
     SteelArmor,
 }
@@ -86,9 +105,12 @@ impl ItemType {
     pub fn is_tool(&self) -> bool {
         matches!(
             self,
-            ItemType::WoodenAxe | ItemType::StoneAxe | ItemType::IronAxe |
-            ItemType::WoodenPickaxe | ItemType::StonePickaxe | ItemType::IronPickaxe |
-            ItemType::WoodenHammer | ItemType::StoneHammer | ItemType::IronHammer
+            ItemType::WoodenAxe | ItemType::StoneAxe | ItemType::CopperAxe |
+            ItemType::BronzeAxe | ItemType::IronAxe |
+            ItemType::WoodenPickaxe | ItemType::StonePickaxe | ItemType::CopperPickaxe |
+            ItemType::BronzePickaxe | ItemType::IronPickaxe |
+            ItemType::WoodenHammer | ItemType::StoneHammer | ItemType::CopperHammer |
+            ItemType::BronzeHammer | ItemType::IronHammer
         )
     }
 
@@ -97,6 +119,8 @@ impl ItemType {
         matches!(
             self,
             ItemType::WoodenSpear | ItemType::WoodenBow | ItemType::StoneSpear |
+            ItemType::CopperSpear | ItemType::CopperSword |
+            ItemType::BronzeSpear | ItemType::BronzeSword | ItemType::BronzeBow |
             ItemType::IronSword | ItemType::IronBow | ItemType::SteelSword
         )
     }
@@ -105,7 +129,8 @@ impl ItemType {
     pub fn is_armor(&self) -> bool {
         matches!(
             self,
-            ItemType::LeatherArmor | ItemType::IronArmor | ItemType::SteelArmor
+            ItemType::LeatherArmor | ItemType::CopperArmor | ItemType::BronzeArmor |
+            ItemType::IronArmor | ItemType::SteelArmor
         )
     }
 
@@ -128,6 +153,10 @@ impl ItemType {
         match self {
             // Iron tools - 2x efficiency
             ItemType::IronAxe | ItemType::IronPickaxe | ItemType::IronHammer => 2.0,
+            // Bronze tools - 1.8x efficiency
+            ItemType::BronzeAxe | ItemType::BronzePickaxe | ItemType::BronzeHammer => 1.8,
+            // Copper tools - 1.6x efficiency
+            ItemType::CopperAxe | ItemType::CopperPickaxe | ItemType::CopperHammer => 1.6,
             // Stone tools - 1.5x efficiency
             ItemType::StoneAxe | ItemType::StonePickaxe | ItemType::StoneHammer => 1.5,
             // Wooden tools - 1.2x efficiency
@@ -144,13 +173,21 @@ impl ItemType {
             ItemType::WoodenAxe | ItemType::WoodenPickaxe | ItemType::WoodenHammer => 50,
             // Stone tools - moderate durability
             ItemType::StoneAxe | ItemType::StonePickaxe | ItemType::StoneHammer => 100,
-            // Iron tools - high durability
+            // Copper tools - moderate-high durability (soft metal)
+            ItemType::CopperAxe | ItemType::CopperPickaxe | ItemType::CopperHammer => 120,
+            // Bronze tools - high durability (harder alloy)
+            ItemType::BronzeAxe | ItemType::BronzePickaxe | ItemType::BronzeHammer => 160,
+            // Iron tools - very high durability
             ItemType::IronAxe | ItemType::IronPickaxe | ItemType::IronHammer => 200,
 
             // Wooden weapons
             ItemType::WoodenSpear | ItemType::WoodenBow => 30,
             // Stone weapons
             ItemType::StoneSpear => 60,
+            // Copper weapons
+            ItemType::CopperSpear | ItemType::CopperSword => 80,
+            // Bronze weapons
+            ItemType::BronzeSpear | ItemType::BronzeSword | ItemType::BronzeBow => 120,
             // Iron weapons
             ItemType::IronSword | ItemType::IronBow => 150,
             // Steel weapons
@@ -158,6 +195,8 @@ impl ItemType {
 
             // Armor durability
             ItemType::LeatherArmor => 80,
+            ItemType::CopperArmor => 120,
+            ItemType::BronzeArmor => 160,
             ItemType::IronArmor => 200,
             ItemType::SteelArmor => 300,
 

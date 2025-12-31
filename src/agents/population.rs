@@ -172,8 +172,6 @@ impl Population {
             agent.state.age_tick(current_tick);
         }
 
-        // Note: Job selection has been removed in favor of skill-based, drive-driven behavior
-
         // Update relationships between nearby agents
         self.update_relationships();
 
@@ -217,81 +215,6 @@ impl Population {
 
         // Update statistics
         self.update_stats();
-    }
-
-    /// Calculate population needs for job selection
-    ///
-    /// This analyzes resource stockpiles, agent inventories, and population size
-    /// to determine what the population urgently needs for survival.
-    /// NOTE: This method is no longer used after profession system removal
-    #[allow(dead_code)]
-    fn calculate_population_needs(&self) -> super::agent::PopulationNeeds {
-        use super::agent::PopulationNeeds;
-
-        let mut needs = PopulationNeeds::default();
-
-        // Count total resources in agent inventories
-        let mut total_food = 0u32;
-        let mut total_wood = 0u32;
-        let mut total_stone = 0u32;
-        let mut total_tools = 0u32;
-        let agent_count = self.agents.len() as u32;
-
-        for agent in &self.agents {
-            if let Some(item) = agent.inventory.get_item("food") {
-                total_food += item.quantity;
-            }
-            if let Some(item) = agent.inventory.get_item("wood") {
-                total_wood += item.quantity;
-            }
-            if let Some(item) = agent.inventory.get_item("stone") {
-                total_stone += item.quantity;
-            }
-
-            // Count tools
-            let tool_types = vec!["woodenaxe", "woodenpickaxe", "stoneaxe", "stonepickaxe",
-                                  "ironaxe", "ironpickaxe", "ironhammer"];
-            for tool_type in &tool_types {
-                if let Some(item) = agent.inventory.get_item(tool_type) {
-                    total_tools += item.quantity;
-                }
-            }
-        }
-
-        // Calculate per-agent resource amounts
-        let food_per_agent = if agent_count > 0 { total_food / agent_count } else { 0 };
-        let wood_per_agent = if agent_count > 0 { total_wood / agent_count } else { 0 };
-        let stone_per_agent = if agent_count > 0 { total_stone / agent_count } else { 0 };
-        let tools_per_agent = if agent_count > 0 { total_tools / agent_count } else { 0 };
-
-        // Determine needs based on thresholds
-        // CRITICAL: Less than 3 days worth of resources
-        // SHORTAGE: Less than 7 days worth
-
-        // Food needs (agents eat ~1 food per day = 1440 ticks)
-        needs.food_critical = food_per_agent < 3;  // Less than 3 food per agent
-        needs.food_shortage = food_per_agent < 7;  // Less than 7 food per agent
-
-        // Wood needs (used for tools, building, fuel)
-        needs.wood_critical = wood_per_agent < 10;  // Very low wood
-        needs.wood_shortage = wood_per_agent < 30;  // Low wood
-
-        // Stone needs (used for tools, building)
-        needs.stone_critical = stone_per_agent < 5;   // Very low stone
-        needs.stone_shortage = stone_per_agent < 15;  // Low stone
-
-        // Tool needs (at least 1 tool per 2 agents)
-        needs.tools_shortage = tools_per_agent == 0 || (total_tools < agent_count / 2);
-
-        // Shelter needs (check if agents have housing)
-        // For now, simplified: if population > 10, need shelter
-        needs.shelter_shortage = agent_count > 10;
-        needs.shelter_critical = agent_count > 20;
-
-        // Food processing (if we have lots of raw food, need processing)
-        needs.food_processing_needed = total_food > agent_count * 10;
-
-        needs
     }
 
     /// Update relationships between nearby agents
@@ -743,14 +666,19 @@ impl Population {
     }
 
     /// Process reproduction attempts
+    ///
+    /// Agents will only reproduce when survival needs are met (not hungry/thirsty).
+    /// This naturally limits population growth based on resource availability.
     pub fn process_reproduction(&mut self) {
         let mut new_offspring = Vec::new();
 
         // Find potential mating pairs
+        // Use should_attempt_reproduction() which checks both capability AND survival state
+        // Agents with active hunger/thirst drives are excluded - they must secure food first
         let alive_agents: Vec<usize> = self.agents
             .iter()
             .enumerate()
-            .filter(|(_, a)| a.state.is_alive && a.can_reproduce())
+            .filter(|(_, a)| a.should_attempt_reproduction())
             .filter(|(_, a)| !self.is_on_cooldown(a.id))
             .map(|(i, _)| i)
             .collect();
@@ -900,6 +828,9 @@ impl Population {
     }
 
     /// Process social interactions between nearby agents
+    ///
+    /// Agents with active survival drives (hunger/thirst) will not engage in social
+    /// interactions - they must prioritize finding food and water over socializing.
     pub fn process_social_interactions(&mut self) {
         use crate::agents::social_interactions::{
             SocialInteractionType,
@@ -921,6 +852,17 @@ impl Population {
                 continue;
             }
 
+            // Skip agents with active survival drives - they must focus on survival
+            let hunger_active = self.agents[i].drives.get(DriveType::Hunger)
+                .map(|d| d.is_active())
+                .unwrap_or(false);
+            let thirst_active = self.agents[i].drives.get(DriveType::Thirst)
+                .map(|d| d.is_active())
+                .unwrap_or(false);
+            if hunger_active || thirst_active {
+                continue;
+            }
+
             let _agent1_id = self.agents[i].id;
             let agent1_pos = self.agents[i].state.position;
             let agent1_social_drive = self.agents[i].drives.get(DriveType::Social)
@@ -934,6 +876,17 @@ impl Population {
 
             for j in (i + 1)..self.agents.len() {
                 if !self.agents[j].state.is_alive {
+                    continue;
+                }
+
+                // Skip agents with active survival drives
+                let hunger_active_2 = self.agents[j].drives.get(DriveType::Hunger)
+                    .map(|d| d.is_active())
+                    .unwrap_or(false);
+                let thirst_active_2 = self.agents[j].drives.get(DriveType::Thirst)
+                    .map(|d| d.is_active())
+                    .unwrap_or(false);
+                if hunger_active_2 || thirst_active_2 {
                     continue;
                 }
 
@@ -1089,11 +1042,154 @@ impl Population {
     }
 
     /// Process exploration without world (for standalone population updates)
-    /// This is called from tick() and just tracks that agents are exploring
+    ///
+    /// When world access is not available, this method enables agents to share
+    /// their exploration knowledge with nearby agents. This simulates information
+    /// sharing through conversation - agents tell each other about discovered
+    /// buildings, resources, and storage locations.
+    ///
+    /// Knowledge sharing occurs when agents are within 5 tiles of each other.
+    /// The receiver gains curiosity satisfaction from learning new locations.
     fn process_exploration(&mut self) {
-        // This method is a placeholder for when we don't have world access
-        // In a full simulation, this would call process_exploration_with_world
-        // For now, it does nothing - exploration happens when world is available
+        use crate::core::DriveType;
+
+        let current_tick = self.current_tick;
+
+        // Collect agent positions and exploration data to avoid borrow issues
+        let agent_data: Vec<(usize, (i32, i32, i32), bool)> = self.agents
+            .iter()
+            .enumerate()
+            .map(|(i, a)| (i, a.state.position, a.state.is_alive))
+            .collect();
+
+        // Process pairs of nearby agents to share exploration knowledge
+        for i in 0..agent_data.len() {
+            if !agent_data[i].2 {
+                continue; // Skip dead agents
+            }
+
+            for j in (i + 1)..agent_data.len() {
+                if !agent_data[j].2 {
+                    continue; // Skip dead agents
+                }
+
+                let pos1 = agent_data[i].1;
+                let pos2 = agent_data[j].1;
+
+                // Calculate distance
+                let dx = (pos1.0 - pos2.0) as f32;
+                let dy = (pos1.1 - pos2.1) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                // Only share knowledge when within conversation range (5 tiles)
+                if distance > 5.0 {
+                    continue;
+                }
+
+                // Collect knowledge to share from agent i to agent j
+                let buildings_i: Vec<_> = self.agents[i]
+                    .exploration_knowledge
+                    .known_buildings
+                    .iter()
+                    .map(|(pos, bt)| (*pos, *bt))
+                    .collect();
+
+                let resources_i: Vec<_> = self.agents[i]
+                    .exploration_knowledge
+                    .known_resources
+                    .iter()
+                    .map(|(pos, rt)| (*pos, *rt))
+                    .collect();
+
+                let storage_i: Vec<_> = self.agents[i]
+                    .exploration_knowledge
+                    .known_storage
+                    .iter()
+                    .map(|(pos, (st, cap))| (*pos, st.clone(), *cap))
+                    .collect();
+
+                // Collect knowledge to share from agent j to agent i
+                let buildings_j: Vec<_> = self.agents[j]
+                    .exploration_knowledge
+                    .known_buildings
+                    .iter()
+                    .map(|(pos, bt)| (*pos, *bt))
+                    .collect();
+
+                let resources_j: Vec<_> = self.agents[j]
+                    .exploration_knowledge
+                    .known_resources
+                    .iter()
+                    .map(|(pos, rt)| (*pos, *rt))
+                    .collect();
+
+                let storage_j: Vec<_> = self.agents[j]
+                    .exploration_knowledge
+                    .known_storage
+                    .iter()
+                    .map(|(pos, (st, cap))| (*pos, st.clone(), *cap))
+                    .collect();
+
+                // Share knowledge from agent i to agent j
+                let mut discoveries_j = 0;
+                for (pos, building_type) in buildings_i {
+                    if self.agents[j].exploration_knowledge.discover_building(pos, building_type, current_tick) {
+                        discoveries_j += 1;
+                    }
+                }
+                for (pos, resource_type) in resources_i {
+                    if self.agents[j].exploration_knowledge.discover_resource(pos, resource_type, current_tick) {
+                        discoveries_j += 1;
+                    }
+                }
+                for (pos, storage_type, capacity) in storage_i {
+                    if self.agents[j].exploration_knowledge.discover_storage(pos, storage_type, capacity, current_tick) {
+                        discoveries_j += 1;
+                    }
+                }
+
+                // Share knowledge from agent j to agent i
+                let mut discoveries_i = 0;
+                for (pos, building_type) in buildings_j {
+                    if self.agents[i].exploration_knowledge.discover_building(pos, building_type, current_tick) {
+                        discoveries_i += 1;
+                    }
+                }
+                for (pos, resource_type) in resources_j {
+                    if self.agents[i].exploration_knowledge.discover_resource(pos, resource_type, current_tick) {
+                        discoveries_i += 1;
+                    }
+                }
+                for (pos, storage_type, capacity) in storage_j {
+                    if self.agents[i].exploration_knowledge.discover_storage(pos, storage_type, capacity, current_tick) {
+                        discoveries_i += 1;
+                    }
+                }
+
+                // Satisfy curiosity for agents who learned new information
+                if discoveries_i > 0 {
+                    if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Curiosity) {
+                        // Learning from others is less satisfying than direct discovery
+                        let satisfaction = (discoveries_i as f32 * 0.01).min(0.2);
+                        drive.partial_satisfy(satisfaction);
+                    }
+                }
+
+                if discoveries_j > 0 {
+                    if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Curiosity) {
+                        let satisfaction = (discoveries_j as f32 * 0.01).min(0.2);
+                        drive.partial_satisfy(satisfaction);
+                    }
+                }
+            }
+        }
+
+        // Update exploration tick for all living agents
+        for agent in &mut self.agents {
+            if agent.state.is_alive {
+                agent.exploration_knowledge.last_exploration_tick = current_tick;
+            }
+        }
     }
 
     /// Process observational learning between agents

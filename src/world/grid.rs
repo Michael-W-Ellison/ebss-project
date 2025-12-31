@@ -2,7 +2,8 @@
 //! Spatial grid system for the world.
 
 use serde::{Deserialize, Serialize};
-use crate::world::Tile;
+use rand::Rng;
+use crate::world::{Tile, TerrainType};
 
 /// 2D Position in the world
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -72,30 +73,194 @@ impl Grid {
         }
     }
 
-    /// Generate procedural terrain
+    /// Generate procedural terrain with naturalistic distribution
+    ///
+    /// Creates a diverse landscape with:
+    /// - Water bodies and associated riverbanks/beaches/wetlands
+    /// - Mountain regions with surrounding hills
+    /// - Plains, meadows, and forests
+    /// - Desert regions in appropriate areas
     pub fn generate_terrain(&mut self) {
+        let mut rng = rand::thread_rng();
 
-        use crate::world::TerrainType;
-        let _rng = rand::thread_rng();
-
-        // Simple noise-based terrain generation
+        // First pass: generate base terrain using noise
         for y in 0..self.height {
             for x in 0..self.width {
-                let noise = self.simple_noise(x as f32 * 0.1, y as f32 * 0.1);
+                // Use multiple noise octaves for more natural terrain
+                let base_noise = self.simple_noise(x as f32 * 0.1, y as f32 * 0.1);
+                let detail_noise = self.simple_noise(x as f32 * 0.3, y as f32 * 0.3) * 0.3;
+                let moisture_noise = self.simple_noise(x as f32 * 0.05 + 100.0, y as f32 * 0.05);
+                let combined = (base_noise + detail_noise).clamp(0.0, 1.0);
 
-                let terrain_type = if noise < 0.2 {
+                // Generate base terrain based on elevation (combined noise)
+                let terrain_type = if combined < 0.15 {
                     TerrainType::Water
-                } else if noise < 0.4 {
-                    TerrainType::Plains
-                } else if noise < 0.7 {
-                    TerrainType::Forest
+                } else if combined < 0.25 {
+                    // Low-lying areas near water
+                    if moisture_noise > 0.6 {
+                        TerrainType::Wetland
+                    } else {
+                        TerrainType::Plains
+                    }
+                } else if combined < 0.45 {
+                    // Mid-low elevation
+                    if moisture_noise > 0.7 {
+                        TerrainType::Meadow
+                    } else if moisture_noise < 0.3 {
+                        TerrainType::Desert
+                    } else {
+                        TerrainType::Plains
+                    }
+                } else if combined < 0.65 {
+                    // Mid elevation
+                    if moisture_noise > 0.5 {
+                        TerrainType::Forest
+                    } else {
+                        TerrainType::Meadow
+                    }
+                } else if combined < 0.8 {
+                    // Higher elevation
+                    TerrainType::Hills
                 } else {
+                    // High elevation
                     TerrainType::Mountain
                 };
 
                 self.tiles[y][x].terrain.terrain_type = terrain_type;
             }
         }
+
+        // Second pass: create transition zones (beaches, riverbanks)
+        self.generate_transition_terrain();
+
+        // Third pass: ensure some minimum terrain diversity
+        self.ensure_terrain_diversity(&mut rng);
+    }
+
+    /// Generate transition terrain between water and land
+    fn generate_transition_terrain(&mut self) {
+        let mut rng = rand::thread_rng();
+
+        // Create a copy of terrain types for reference
+        let terrain_copy: Vec<Vec<TerrainType>> = self.tiles.iter()
+            .map(|row| row.iter().map(|t| t.terrain.terrain_type).collect())
+            .collect();
+
+        for y in 1..self.height - 1 {
+            for x in 1..self.width - 1 {
+                let current = terrain_copy[y][x];
+
+                // Check if current tile is adjacent to water
+                let adjacent_water = self.is_adjacent_to_terrain(&terrain_copy, x, y, TerrainType::Water);
+
+                if adjacent_water && current != TerrainType::Water {
+                    // Create beach or riverbank based on surrounding terrain
+                    let is_coastal = self.count_adjacent_terrain(&terrain_copy, x, y, TerrainType::Water) >= 2;
+
+                    let new_terrain = if is_coastal {
+                        // Coastal areas get beaches
+                        if rng.gen::<f32>() < 0.7 {
+                            TerrainType::Beach
+                        } else {
+                            TerrainType::Riverbank
+                        }
+                    } else {
+                        // Single-water adjacent = river
+                        TerrainType::Riverbank
+                    };
+
+                    // Only change Plains, Meadow to transition terrain
+                    if matches!(current, TerrainType::Plains | TerrainType::Meadow) {
+                        self.tiles[y][x].terrain.terrain_type = new_terrain;
+                    }
+                }
+
+                // Create wetlands near water in low areas
+                if current == TerrainType::Plains {
+                    let water_count = self.count_adjacent_terrain(&terrain_copy, x, y, TerrainType::Water);
+                    let riverbank_count = self.count_adjacent_terrain(&terrain_copy, x, y, TerrainType::Riverbank);
+
+                    if water_count + riverbank_count >= 2 && rng.gen::<f32>() < 0.4 {
+                        self.tiles[y][x].terrain.terrain_type = TerrainType::Wetland;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Ensure minimum terrain diversity for resource spawning
+    fn ensure_terrain_diversity(&mut self, rng: &mut impl Rng) {
+
+        // Count terrain types
+        let mut terrain_counts: std::collections::HashMap<TerrainType, usize> = std::collections::HashMap::new();
+        for row in &self.tiles {
+            for tile in row {
+                *terrain_counts.entry(tile.terrain.terrain_type).or_insert(0) += 1;
+            }
+        }
+
+        let total_tiles = self.width * self.height;
+        let min_percentage = 0.02; // Ensure at least 2% of each required terrain type
+
+        // Required terrain types for resources
+        let required_terrains = vec![
+            TerrainType::Forest,
+            TerrainType::Mountain,
+            TerrainType::Plains,
+            TerrainType::Hills,
+            TerrainType::Meadow,
+            TerrainType::Water,
+        ];
+
+        for terrain in required_terrains {
+            let count = terrain_counts.get(&terrain).copied().unwrap_or(0);
+            let min_count = (total_tiles as f32 * min_percentage) as usize;
+
+            if count < min_count {
+                // Add more of this terrain type
+                let needed = min_count - count;
+                let mut added = 0;
+
+                for _ in 0..needed * 10 {
+                    if added >= needed {
+                        break;
+                    }
+
+                    let x = rng.gen_range(0..self.width);
+                    let y = rng.gen_range(0..self.height);
+
+                    // Only replace Plains to maintain variety
+                    if self.tiles[y][x].terrain.terrain_type == TerrainType::Plains {
+                        self.tiles[y][x].terrain.terrain_type = terrain;
+                        added += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check if a position is adjacent to a specific terrain type
+    fn is_adjacent_to_terrain(&self, terrain_map: &[Vec<TerrainType>], x: usize, y: usize, terrain: TerrainType) -> bool {
+        self.count_adjacent_terrain(terrain_map, x, y, terrain) > 0
+    }
+
+    /// Count how many adjacent tiles have a specific terrain type
+    fn count_adjacent_terrain(&self, terrain_map: &[Vec<TerrainType>], x: usize, y: usize, terrain: TerrainType) -> usize {
+        let mut count = 0;
+        let offsets: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+
+        for (dx, dy) in offsets {
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+
+            if nx >= 0 && ny >= 0 && (nx as usize) < self.width && (ny as usize) < self.height {
+                if terrain_map[ny as usize][nx as usize] == terrain {
+                    count += 1;
+                }
+            }
+        }
+
+        count
     }
 
     // Simple noise function for terrain generation

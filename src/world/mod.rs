@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use rand::Rng;
 
 /// World size presets for common use cases
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +68,7 @@ pub mod spatial_planning;
 pub mod zoning;
 pub mod path_planning;
 pub mod territory;
+pub mod resource_spawning;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -80,8 +82,12 @@ pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput};
 pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketStatistics};
 pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
 pub use climate::{ClimateManager, terrain_to_biome};
+pub use resource_spawning::{
+    NaturalisticResourceConfig, NaturalisticSpawner, TerrainResourceMapper,
+    AnimalResourceConfig, AnimalResourceMapper, TerrainGenerator,
+};
 
-use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager};
+use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager, AnimalSpawnConfig};
 
 /// Status of a heat source for smelting
 #[derive(Debug, Clone)]
@@ -127,22 +133,66 @@ pub struct WorldConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceConfig {
+    // Basic resources
     pub wood_nodes: usize,
     pub stone_nodes: usize,
     pub iron_nodes: usize,
     pub food_nodes: usize,
+
+    // Mineral resources (for technology progression)
+    pub clay_clusters: usize,
+    pub sand_clusters: usize,
+    pub coal_clusters: usize,
+
+    // Agricultural resources
+    pub grain_patches: usize,
+    pub flax_patches: usize,
+    pub herb_patches: usize,
+    pub cotton_patches: usize,
+
+    // Gatherable resources
+    pub honey_locations: usize,
+    pub fish_areas: usize,
+
+    // Whether to use naturalistic spawning (terrain-appropriate, clustered)
+    pub use_naturalistic_spawning: bool,
+}
+
+impl Default for ResourceConfig {
+    fn default() -> Self {
+        Self {
+            // Basic resources
+            wood_nodes: 20,
+            stone_nodes: 15,
+            iron_nodes: 8,
+            food_nodes: 25,
+
+            // Minerals
+            clay_clusters: 4,
+            sand_clusters: 3,
+            coal_clusters: 3,
+
+            // Agricultural
+            grain_patches: 5,
+            flax_patches: 3,
+            herb_patches: 6,
+            cotton_patches: 2,
+
+            // Gatherable
+            honey_locations: 4,
+            fish_areas: 5,
+
+            // Use naturalistic spawning by default
+            use_naturalistic_spawning: true,
+        }
+    }
 }
 
 impl Default for WorldConfig {
     fn default() -> Self {
         Self {
             size: (50, 50),
-            initial_resources: ResourceConfig {
-                wood_nodes: 20,
-                stone_nodes: 15,
-                iron_nodes: 8,
-                food_nodes: 25,
-            },
+            initial_resources: ResourceConfig::default(),
         }
     }
 }
@@ -238,13 +288,30 @@ impl World {
             Position::new(center.0 as i32, center.1 as i32),
         ));
 
+        // Spawn initial wildlife based on terrain
+        let spawn_config = AnimalSpawnConfig::default();
+        world.animals.spawn_naturalistic(&world.grid, &spawn_config);
+
         world
     }
 
     fn generate_resources(&mut self, config: &ResourceConfig) {
-        use rand::Rng;
         let mut rng = rand::thread_rng();
 
+        // Generate basic resources (legacy method for backward compatibility)
+        self.generate_basic_resources(config, &mut rng);
+
+        // Generate additional resources using naturalistic spawning
+        if config.use_naturalistic_spawning {
+            self.generate_naturalistic_resources(config);
+        }
+
+        // Update resource_nodes map for spatial queries
+        self.update_resource_node_map();
+    }
+
+    /// Generate basic resources (wood, stone, iron, food)
+    fn generate_basic_resources(&mut self, config: &ResourceConfig, rng: &mut impl Rng) {
         // Generate wood nodes (in forest areas)
         for _ in 0..config.wood_nodes {
             let pos = self.find_random_terrain_position(TerrainType::Forest);
@@ -255,9 +322,14 @@ impl World {
             ));
         }
 
-        // Generate stone nodes (in mountain areas)
+        // Generate stone nodes (in mountain and hills areas)
         for _ in 0..config.stone_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Mountain);
+            let terrain = if rng.gen::<f32>() < 0.7 {
+                TerrainType::Mountain
+            } else {
+                TerrainType::Hills
+            };
+            let pos = self.find_random_terrain_position(terrain);
             self.resources.push(ResourceNode::new(
                 ResourceType::Stone,
                 pos,
@@ -275,14 +347,67 @@ impl World {
             ));
         }
 
-        // Generate food nodes (in plains)
+        // Generate food nodes (in plains and meadows)
         for _ in 0..config.food_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Plains);
+            let terrain = if rng.gen::<f32>() < 0.6 {
+                TerrainType::Plains
+            } else {
+                TerrainType::Meadow
+            };
+            let pos = self.find_random_terrain_position(terrain);
             self.resources.push(ResourceNode::new(
                 ResourceType::Food,
                 pos,
                 rng.gen_range(20..60),
             ));
+        }
+    }
+
+    /// Generate naturalistic resources for technology progression
+    fn generate_naturalistic_resources(&mut self, config: &ResourceConfig) {
+        use resource_spawning::{NaturalisticResourceConfig, NaturalisticSpawner};
+
+        // Convert ResourceConfig to NaturalisticResourceConfig
+        let nat_config = NaturalisticResourceConfig {
+            clay_clusters: config.clay_clusters,
+            sand_clusters: config.sand_clusters,
+            coal_clusters: config.coal_clusters,
+            grain_patches: config.grain_patches,
+            flax_patches: config.flax_patches,
+            herb_patches: config.herb_patches,
+            cotton_patches: config.cotton_patches,
+            honey_locations: config.honey_locations,
+            fish_areas: config.fish_areas,
+            nodes_per_cluster: 3,
+            cluster_radius: 5,
+        };
+
+        // Use naturalistic spawner
+        let mut spawner = NaturalisticSpawner::new(&self.grid);
+        let new_resources = spawner.spawn_all(&nat_config);
+
+        // Add spawned resources
+        self.resources.extend(new_resources);
+
+        log::info!(
+            "Generated naturalistic resources: {} clay, {} sand, {} coal, {} grain, {} flax, {} herbs clusters",
+            config.clay_clusters, config.sand_clusters, config.coal_clusters,
+            config.grain_patches, config.flax_patches, config.herb_patches
+        );
+    }
+
+    /// Update the resource_nodes map for efficient spatial queries
+    fn update_resource_node_map(&mut self) {
+        self.resource_nodes.clear();
+
+        for resource in &self.resources {
+            let type_name = format!("{:?}", resource.resource_type);
+            let pos_tuple = (resource.position.x, resource.position.y, 0);
+
+            self.resource_nodes
+                .entry(type_name)
+                .or_insert_with(Vec::new)
+                .push(pos_tuple);
         }
     }
 
@@ -1064,8 +1189,12 @@ impl World {
                 ResourceType::Stone => stats.stone_available += resource.amount,
                 ResourceType::Iron => stats.iron_available += resource.amount,
                 ResourceType::Food => stats.food_available += resource.amount,
-                // New resource types - not yet tracked in stats
-                _ => {}
+                ResourceType::Clay => stats.clay_available += resource.amount,
+                ResourceType::Coal => stats.coal_available += resource.amount,
+                ResourceType::Grain => stats.grain_available += resource.amount,
+                ResourceType::Herbs => stats.herbs_available += resource.amount,
+                ResourceType::Hides => stats.hides_available += resource.amount,
+                _ => {} // Other resource types not tracked in aggregate stats
             }
         }
 
@@ -1214,17 +1343,68 @@ impl World {
             return false;
         }
 
-        // For now, all in-bounds terrain is passable
-        // In the future, check for water, mountains, etc.
-        true
+        // Check actual terrain walkability
+        let pos = Position::new(position.0, position.1);
+        if let Some(tile) = self.grid.get_tile(&pos) {
+            tile.terrain.is_walkable()
+        } else {
+            false
+        }
     }
 
     /// Mark an area as impassable (for testing terrain constraints)
-    pub fn set_terrain_impassable(&mut self, _center: (i32, i32, i32), _radius: i32) {
-        // This would modify terrain in the grid
-        // For now, we'll just note this as a placeholder
-        // The actual implementation would mark tiles in self.grid
-        // as impassable terrain types
+    pub fn set_terrain_impassable(&mut self, center: (i32, i32, i32), radius: i32) {
+        // Mark tiles within radius as Water (impassable terrain)
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                let x = center.0 + dx;
+                let y = center.1 + dy;
+
+                // Check bounds
+                if x < 0 || y < 0 {
+                    continue;
+                }
+                if x >= self.grid.width as i32 || y >= self.grid.height as i32 {
+                    continue;
+                }
+
+                // Check if within circular radius
+                if dx * dx + dy * dy <= radius * radius {
+                    let pos = Position::new(x, y);
+                    if let Some(tile) = self.grid.get_tile_mut(&pos) {
+                        tile.terrain.terrain_type = TerrainType::Water;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Mark a specific tile with a terrain type
+    pub fn set_terrain_at(&mut self, position: (i32, i32, i32), terrain_type: TerrainType) {
+        if position.0 < 0 || position.1 < 0 {
+            return;
+        }
+        if position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return;
+        }
+
+        let pos = Position::new(position.0, position.1);
+        if let Some(tile) = self.grid.get_tile_mut(&pos) {
+            tile.terrain.terrain_type = terrain_type;
+        }
+    }
+
+    /// Get the terrain type at a position
+    pub fn get_terrain_at(&self, position: (i32, i32, i32)) -> Option<TerrainType> {
+        if position.0 < 0 || position.1 < 0 {
+            return None;
+        }
+        if position.0 >= self.grid.width as i32 || position.1 >= self.grid.height as i32 {
+            return None;
+        }
+
+        let pos = Position::new(position.0, position.1);
+        self.grid.get_tile(&pos).map(|tile| tile.terrain.terrain_type)
     }
 }
 
@@ -1232,14 +1412,23 @@ impl World {
 pub struct WorldStats {
     pub total_resources: usize,
     pub total_buildings: usize,
+    // Basic resources
     pub wood_available: u32,
     pub stone_available: u32,
     pub iron_available: u32,
     pub food_available: u32,
+    // Extended resources
+    pub clay_available: u32,
+    pub coal_available: u32,
+    pub grain_available: u32,
+    pub herbs_available: u32,
+    pub hides_available: u32,
+    // Storage
     pub wood_stored: u32,
     pub stone_stored: u32,
     pub iron_stored: u32,
     pub food_stored: u32,
+    // Buildings
     pub longhouses: usize,
     pub small_houses: usize,
     pub medium_houses: usize,
@@ -1365,34 +1554,132 @@ mod tests {
         assert_eq!(config.volume(), 640000);
     }
 
-    // TODO: Rewrite these tests for the current 2D World API
-    // The World struct was refactored from 3D to 2D
-    // #[test]
-    // fn test_world_creation() {
-    //     let world = World::new(WorldConfig::default());
-    //     // Update assertions for 2D grid
-    // }
+    #[test]
+    fn test_world_creation() {
+        let world = World::new(WorldConfig::default());
+        // Default size is (50, 50)
+        assert_eq!(world.grid.width, 50);
+        assert_eq!(world.grid.height, 50);
+        // Grid should have tiles
+        assert!(!world.grid.tiles.is_empty());
+    }
 
-    // #[test]
-    // fn test_world_position_validation() {
-    //     let world = World::new(WorldConfig::default());
-    //     // Update assertions for 2D positions
-    // }
+    #[test]
+    fn test_world_creation_custom_size() {
+        let config = WorldConfig {
+            size: (100, 80),
+            initial_resources: ResourceConfig::default(),
+        };
+        let world = World::new(config);
+        assert_eq!(world.grid.width, 100);
+        assert_eq!(world.grid.height, 80);
+    }
 
-    // #[test]
-    // fn test_world_config() {
-    //     let config = WorldConfig::default();
-    //     assert_eq!(config.size, (50, 50));
-    // }
+    #[test]
+    fn test_world_config_default() {
+        let config = WorldConfig::default();
+        assert_eq!(config.size, (50, 50));
+    }
 
-    // #[test]
-    // fn test_custom_world_config() {
-    //     let config = WorldConfig {
-    //         size: (300, 400),
-    //         initial_resources: ResourceConfig::default(),
-    //     };
-    //     assert_eq!(config.size, (300, 400));
-    // }
+    #[test]
+    fn test_world_config_with_size() {
+        let config = WorldConfig::default().with_size(200, 150);
+        assert_eq!(config.size, (200, 150));
+    }
+
+    #[test]
+    fn test_world_terrain_access() {
+        let world = World::new(WorldConfig::default());
+        // Valid position should return a terrain type
+        let terrain = world.get_terrain_at((10, 10, 0));
+        assert!(terrain.is_some());
+
+        // Out of bounds should return None
+        let out_of_bounds = world.get_terrain_at((100, 100, 0));
+        assert!(out_of_bounds.is_none());
+
+        // Negative coordinates should return None
+        let negative = world.get_terrain_at((-1, -1, 0));
+        assert!(negative.is_none());
+    }
+
+    #[test]
+    fn test_world_terrain_passability() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Most terrain should be passable initially
+        // (depends on generated terrain, but center should typically be passable)
+        let center_passable = world.is_terrain_passable((25, 25, 0));
+        // Note: We can't guarantee this since terrain is generated
+        // Just verify the method works without panicking
+        let _ = center_passable;
+
+        // Set an area as impassable and verify
+        world.set_terrain_impassable((25, 25, 0), 2);
+        assert!(!world.is_terrain_passable((25, 25, 0)));
+    }
+
+    #[test]
+    fn test_world_set_terrain() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Set a specific terrain type
+        world.set_terrain_at((20, 20, 0), TerrainType::Water);
+        let terrain = world.get_terrain_at((20, 20, 0));
+        assert_eq!(terrain, Some(TerrainType::Water));
+
+        // Water is not passable
+        assert!(!world.is_terrain_passable((20, 20, 0)));
+
+        // Set it to plains (passable)
+        world.set_terrain_at((20, 20, 0), TerrainType::Plains);
+        assert!(world.is_terrain_passable((20, 20, 0)));
+    }
+
+    #[test]
+    fn test_world_resource_placement() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Place a resource node
+        world.place_resource_node("iron", (10, 10, 0));
+
+        // Verify it was added
+        assert!(world.resource_nodes.contains_key("iron"));
+        assert!(world.resource_nodes.get("iron").unwrap().contains(&(10, 10, 0)));
+    }
+
+    #[test]
+    fn test_world_building_placement() {
+        let mut world = World::new(WorldConfig::default());
+
+        // Record initial building count (world may spawn some buildings)
+        let initial_count = world.buildings.len();
+
+        // Add a building
+        world.add_building_at(BuildingType::SmallHouse, (15, 15, 0));
+
+        // Verify it was added
+        assert_eq!(world.buildings.len(), initial_count + 1);
+
+        // Find the building we added (it should be the last one)
+        let added_building = world.buildings.last().unwrap();
+        assert_eq!(added_building.building_type, BuildingType::SmallHouse);
+        assert_eq!(added_building.position, Position::new(15, 15));
+    }
+
+    #[test]
+    fn test_world_total_tiles() {
+        let world = World::new(WorldConfig::default());
+        // Default is 50x50 = 2500 tiles
+        assert_eq!(world.total_tiles(), 2500);
+
+        let custom_config = WorldConfig {
+            size: (100, 80),
+            initial_resources: ResourceConfig::default(),
+        };
+        let custom_world = World::new(custom_config);
+        assert_eq!(custom_world.total_tiles(), 8000);
+    }
 
     #[test]
     fn test_position_distance() {

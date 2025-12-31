@@ -27,6 +27,7 @@ fn main() {
             stone_nodes: 30,
             iron_nodes: 15,
             food_nodes: 40,
+            ..Default::default()
         },
     };
 
@@ -34,7 +35,7 @@ fn main() {
 
     println!("Created world: {} x {}", world.grid.width, world.grid.height);
     println!("Initial state:");
-    println!("  Animals: {}", world.animals.total_count());
+    println!("  Animals: {}", world.animals.population_count());
     println!("  Plants: {}", world.plants.total_count());
     println!("  Heat sources: {}", world.heat_sources.all().len());
     println!();
@@ -60,7 +61,7 @@ fn main() {
     let bear_id = world.spawn_animal("bear".to_string(), (60, 60)).unwrap();
     println!("  Spawned bear at (60, 60) - ID: {}", bear_id);
 
-    println!("\nTotal animals: {}", world.animals.total_count());
+    println!("\nTotal animals: {}", world.animals.population_count());
     println!();
 
     // ===== Part 3: Spawning Wild Plants =====
@@ -203,7 +204,7 @@ fn main() {
 
         if tick % 25 == 0 {
             println!("\n  Tick {}:", tick);
-            println!("    Animals: {}", world.animals.total_count());
+            println!("    Animals: {}", world.animals.population_count());
             println!("    Plants: {}", world.plants.total_count());
 
             // Check plant growth
@@ -328,8 +329,8 @@ fn main() {
 
     // ===== Summary =====
     println!("=== Final World State ===");
-    println!("Total Animals: {}", world.animals.total_count());
-    println!("  - Wild: {}", world.animals.total_count() - domesticated.len());
+    println!("Total Animals: {}", world.animals.population_count());
+    println!("  - Wild: {}", world.animals.population_count() - domesticated.len());
     println!("  - Domesticated: {}", world.get_domesticated_animals().len());
     println!();
     println!("Total Plants: {}", world.plants.total_count());
