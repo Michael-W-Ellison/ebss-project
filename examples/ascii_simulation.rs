@@ -34,6 +34,7 @@ fn main() {
             stone_nodes: 20,
             iron_nodes: 10,
             food_nodes: 40,
+            ..Default::default()
         },
     };
     let mut world = World::new(world_config);
@@ -152,11 +153,62 @@ fn main() {
     }
 }
 
-/// Helper to count items in agent inventory
-fn count_inventory_item(agent: &ebss::agents::Agent, item_id: &str) -> u32 {
-    agent.inventory.get_item(item_id)
-        .map(|item| item.quantity)
-        .unwrap_or(0)
+/// Personal observation: agent discovers nearby resources (vision range of 10 tiles)
+fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
+    const VISION_RANGE: u32 = 10;
+    let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+
+    for resource in &world.resources {
+        if agent_pos.distance_to(&resource.position) <= VISION_RANGE && resource.amount > 0 {
+            // Agent personally observes this resource
+            agent.observe_resource(resource.position, resource.resource_type, resource.amount);
+        }
+    }
+}
+
+/// Verify information when agent reaches a resource location they learned about from others
+fn verify_information(
+    world: &World,
+    agent: &mut ebss::agents::Agent,
+    resource_position: &Position,
+    resource_type: ResourceType,
+    current_tick: u32,
+) {
+    use ebss::agents::KnowledgeSource;
+
+    // Check if agent has knowledge about this resource
+    if let Some(knowledge) = agent.knowledge.get_resource_knowledge(resource_position) {
+        // Only verify if learned from another agent (not personal observation)
+        let (should_verify, source_id) = match &knowledge.source {
+            KnowledgeSource::DirectCommunication(id) | KnowledgeSource::Overheard(id) => {
+                (true, *id)
+            }
+            KnowledgeSource::PersonalObservation => (false, uuid::Uuid::nil()),
+        };
+
+        if should_verify {
+            // Calculate how long ago they were told this info
+            let info_age = current_tick.saturating_sub(knowledge.learned_tick);
+
+            // Check if the resource actually exists at this location
+            let resource_exists = world.resources.iter().any(|r| {
+                r.position == *resource_position
+                    && r.resource_type == resource_type
+                    && r.amount > 0
+            });
+
+            if resource_exists {
+                // Information was correct! Increase trust in source
+                agent.verify_information_from(source_id, info_age, current_tick);
+            } else {
+                // Information was wrong or resource depleted. Decrease trust
+                agent.information_was_wrong_from(source_id, info_age, current_tick);
+
+                // Forget this incorrect information
+                agent.knowledge.forget_resource(resource_position);
+            }
+        }
+    }
 }
 
 /// Find the closest resource of a given type
@@ -384,11 +436,11 @@ fn render_frame(
             agent.state.energy,
             agent.state.health,
         );
-        println!("║   Inventory: Food: {}  │  Wood: {}  │  Stone: {}  │  Iron: {}              ║",
-            count_inventory_item(agent, "food"),
-            count_inventory_item(agent, "wood"),
-            count_inventory_item(agent, "stone"),
-            count_inventory_item(agent, "iron"),
+        println!("║   Inventory: Food: {}  │  Wood: {}  │  Stone: {}  │  Iron: {}            ║",
+            agent.inventory.count_item("food"),
+            agent.inventory.count_item("wood"),
+            agent.inventory.count_item("stone"),
+            agent.inventory.count_item("iron"),
         );
     }
 

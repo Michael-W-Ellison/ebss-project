@@ -4,7 +4,50 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use super::flora::ClimateZone;
+use crate::world::{Grid, TerrainType};
 use uuid::Uuid;
+
+/// Maps terrain type to the most likely climate zone for that terrain
+pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
+    match terrain {
+        TerrainType::Desert => ClimateZone::Desert,
+        // Most terrain types are temperate
+        TerrainType::Plains
+        | TerrainType::Forest
+        | TerrainType::Hills
+        | TerrainType::Meadow
+        | TerrainType::Wetland
+        | TerrainType::Riverbank
+        | TerrainType::Beach
+        | TerrainType::Water => ClimateZone::Temperate,
+        // Mountains can be cold (arctic adjacent)
+        TerrainType::Mountain => ClimateZone::Arctic,
+    }
+}
+
+/// Configuration for naturalistic animal spawning during world generation
+#[derive(Debug, Clone)]
+pub struct AnimalSpawnConfig {
+    /// Base number of herds/groups to spawn per 100x100 tiles
+    pub herds_per_10000_tiles: usize,
+    /// Whether to spawn predators
+    pub spawn_predators: bool,
+    /// Ratio of prey to predator groups
+    pub prey_to_predator_ratio: f32,
+    /// Maximum initial population cap
+    pub max_initial_population: usize,
+}
+
+impl Default for AnimalSpawnConfig {
+    fn default() -> Self {
+        Self {
+            herds_per_10000_tiles: 8,
+            spawn_predators: true,
+            prey_to_predator_ratio: 4.0,
+            max_initial_population: 200,
+        }
+    }
+}
 
 /// Animal behavior classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +107,32 @@ pub struct AnimalSpecies {
     pub can_domesticate: bool,
     /// Products from living animal (milk, wool, eggs)
     pub living_products: Vec<AnimalProduct>,
+
+    // === LIFECYCLE FIELDS ===
+    /// Lifespan in ticks (min, max) - animals die of old age
+    pub lifespan: (u32, u32),
+    /// Age at which animal reaches maturity
+    pub maturity_age: u32,
+    /// Breeding cooldown in ticks after reproduction
+    pub breeding_cooldown: u32,
+    /// Gestation period in ticks (0 for egg-layers)
+    pub gestation_period: u32,
+    /// Number of offspring per birth (min, max)
+    pub litter_size: (u32, u32),
+    /// Hunger rate - how fast hunger increases per tick
+    pub hunger_rate: f32,
+    /// Max hunger before starvation damage begins
+    pub max_hunger: f32,
+    /// Food value when eaten (for prey animals)
+    pub food_value: f32,
+    /// Prey species IDs this carnivore/omnivore can hunt
+    pub prey_species: Vec<String>,
+
+    // === MIGRATION FIELDS ===
+    /// Whether this species migrates seasonally
+    pub is_migratory: bool,
+    /// Preferred migration direction (dx, dy) per season change
+    pub migration_direction: (i32, i32),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,6 +293,18 @@ fn rabbit() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
+        // Lifecycle
+        lifespan: (8000, 12000),      // Short-lived
+        maturity_age: 500,             // Mature quickly
+        breeding_cooldown: 300,        // Breed often
+        gestation_period: 200,         // Quick gestation
+        litter_size: (3, 8),           // Large litters
+        hunger_rate: 0.15,             // High metabolism
+        max_hunger: 100.0,
+        food_value: 15.0,              // Small prey
+        prey_species: vec![],          // Herbivore
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -248,6 +329,17 @@ fn squirrel() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (6000, 10000),
+        maturity_age: 400,
+        breeding_cooldown: 500,
+        gestation_period: 250,
+        litter_size: (2, 5),
+        hunger_rate: 0.12,
+        max_hunger: 80.0,
+        food_value: 10.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -278,6 +370,17 @@ fn chicken() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
+        lifespan: (5000, 8000),
+        maturity_age: 300,
+        breeding_cooldown: 200,
+        gestation_period: 0, // Egg layer
+        litter_size: (1, 1), // Eggs handled separately
+        hunger_rate: 0.1,
+        max_hunger: 80.0,
+        food_value: 12.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -307,6 +410,17 @@ fn fox() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (10000, 15000),
+        maturity_age: 800,
+        breeding_cooldown: 1000,
+        gestation_period: 400,
+        litter_size: (2, 5),
+        hunger_rate: 0.08,
+        max_hunger: 150.0,
+        food_value: 30.0,
+        prey_species: vec!["rabbit".to_string(), "squirrel".to_string(), "chicken".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -331,8 +445,19 @@ fn wolf() -> AnimalSpecies {
             AnimalDrop::new("leather".to_string(), 2, 3),
             AnimalDrop::new("wolf_fang".to_string(), 1, 2).with_chance(0.8),
         ],
-        can_domesticate: false, // Would need special mechanics
+        can_domesticate: false,
         living_products: vec![],
+        lifespan: (12000, 18000),
+        maturity_age: 1000,
+        breeding_cooldown: 1500,
+        gestation_period: 500,
+        litter_size: (3, 6),
+        hunger_rate: 0.06,
+        max_hunger: 200.0,
+        food_value: 45.0,
+        prey_species: vec!["rabbit".to_string(), "deer".to_string(), "sheep".to_string(), "goat".to_string()],
+        is_migratory: true, // Wolves follow prey herds
+        migration_direction: (0, -20), // Move south in winter
     }
 }
 
@@ -358,10 +483,21 @@ fn deer() -> AnimalSpecies {
         drops: vec![
             AnimalDrop::new("deer_meat".to_string(), 8, 12),
             AnimalDrop::new("leather".to_string(), 4, 6),
-            AnimalDrop::new("antler".to_string(), 2, 2).with_chance(0.5), // Only males
+            AnimalDrop::new("antler".to_string(), 2, 2).with_chance(0.5),
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (15000, 25000),
+        maturity_age: 1200,
+        breeding_cooldown: 2000,
+        gestation_period: 800,
+        litter_size: (1, 2),
+        hunger_rate: 0.05,
+        max_hunger: 200.0,
+        food_value: 60.0,
+        prey_species: vec![],
+        is_migratory: true, // Deer migrate seasonally
+        migration_direction: (0, -15), // Move south in winter
     }
 }
 
@@ -389,10 +525,21 @@ fn sheep() -> AnimalSpecies {
         living_products: vec![
             AnimalProduct {
                 material_id: "wool".to_string(),
-                production_time: 600, // Shear every 600 ticks
+                production_time: 600,
                 quantity: 4,
             },
         ],
+        lifespan: (12000, 18000),
+        maturity_age: 800,
+        breeding_cooldown: 1500,
+        gestation_period: 600,
+        litter_size: (1, 3),
+        hunger_rate: 0.04,
+        max_hunger: 180.0,
+        food_value: 50.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -424,6 +571,17 @@ fn goat() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
+        lifespan: (14000, 20000),
+        maturity_age: 900,
+        breeding_cooldown: 1200,
+        gestation_period: 550,
+        litter_size: (1, 3),
+        hunger_rate: 0.045,
+        max_hunger: 170.0,
+        food_value: 55.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -452,8 +610,19 @@ fn boar() -> AnimalSpecies {
             AnimalDrop::new("leather".to_string(), 3, 5),
             AnimalDrop::new("boar_tusk".to_string(), 2, 2).with_chance(0.6),
         ],
-        can_domesticate: true, // Becomes pig
+        can_domesticate: true,
         living_products: vec![],
+        lifespan: (12000, 18000),
+        maturity_age: 1000,
+        breeding_cooldown: 1500,
+        gestation_period: 500,
+        litter_size: (4, 8),
+        hunger_rate: 0.06,
+        max_hunger: 220.0,
+        food_value: 80.0,
+        prey_species: vec!["rabbit".to_string(), "squirrel".to_string()], // Omnivore
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -485,6 +654,17 @@ fn cow() -> AnimalSpecies {
                 quantity: 2,
             },
         ],
+        lifespan: (18000, 28000),
+        maturity_age: 1500,
+        breeding_cooldown: 2500,
+        gestation_period: 900,
+        litter_size: (1, 1),
+        hunger_rate: 0.04,
+        max_hunger: 300.0,
+        food_value: 100.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -516,6 +696,17 @@ fn bear() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (25000, 35000),
+        maturity_age: 2000,
+        breeding_cooldown: 4000,
+        gestation_period: 800,
+        litter_size: (1, 3),
+        hunger_rate: 0.03,
+        max_hunger: 400.0,
+        food_value: 200.0,
+        prey_species: vec!["deer".to_string(), "sheep".to_string(), "boar".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -542,6 +733,17 @@ fn lion() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (20000, 30000),
+        maturity_age: 1800,
+        breeding_cooldown: 3000,
+        gestation_period: 700,
+        litter_size: (1, 4),
+        hunger_rate: 0.035,
+        max_hunger: 350.0,
+        food_value: 180.0,
+        prey_species: vec!["deer".to_string(), "goat".to_string(), "camel".to_string(), "boar".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -566,11 +768,22 @@ fn arctic_fox() -> AnimalSpecies {
         group_size: (1, 2),
         drops: vec![
             AnimalDrop::new("fox_meat".to_string(), 2, 3),
-            AnimalDrop::new("fur".to_string(), 3, 5), // More fur than regular fox
+            AnimalDrop::new("fur".to_string(), 3, 5),
             AnimalDrop::new("leather".to_string(), 1, 2),
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (8000, 12000),
+        maturity_age: 600,
+        breeding_cooldown: 800,
+        gestation_period: 350,
+        litter_size: (3, 8),
+        hunger_rate: 0.09,
+        max_hunger: 140.0,
+        food_value: 35.0,
+        prey_species: vec!["rabbit".to_string(), "squirrel".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -593,7 +806,7 @@ fn camel() -> AnimalSpecies {
             AnimalDrop::new("camel_meat".to_string(), 15, 20),
             AnimalDrop::new("leather".to_string(), 10, 15),
             AnimalDrop::new("thick_hide".to_string(), 4, 6),
-            AnimalDrop::new("fur".to_string(), 4, 6), // Camel hair
+            AnimalDrop::new("fur".to_string(), 4, 6),
         ],
         can_domesticate: true,
         living_products: vec![
@@ -603,6 +816,17 @@ fn camel() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
+        lifespan: (30000, 50000),
+        maturity_age: 2500,
+        breeding_cooldown: 4000,
+        gestation_period: 1000,
+        litter_size: (1, 1),
+        hunger_rate: 0.02, // Low metabolism - desert adapted
+        max_hunger: 400.0,
+        food_value: 120.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -630,6 +854,17 @@ fn mammoth() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (50000, 80000),
+        maturity_age: 5000,
+        breeding_cooldown: 8000,
+        gestation_period: 2000,
+        litter_size: (1, 1),
+        hunger_rate: 0.025,
+        max_hunger: 600.0,
+        food_value: 300.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -664,6 +899,17 @@ fn duck() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
+        lifespan: (5000, 8000),
+        maturity_age: 300,
+        breeding_cooldown: 200,
+        gestation_period: 0,
+        litter_size: (1, 1),
+        hunger_rate: 0.1,
+        max_hunger: 70.0,
+        food_value: 10.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -684,7 +930,7 @@ fn goose() -> AnimalSpecies {
         group_size: (5, 12),
         drops: vec![
             AnimalDrop::new("goose_meat".to_string(), 3, 4),
-            AnimalDrop::new("feathers".to_string(), 6, 10), // More feathers than duck
+            AnimalDrop::new("feathers".to_string(), 6, 10),
         ],
         can_domesticate: true,
         living_products: vec![
@@ -694,6 +940,17 @@ fn goose() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
+        lifespan: (6000, 10000),
+        maturity_age: 350,
+        breeding_cooldown: 250,
+        gestation_period: 0,
+        litter_size: (1, 1),
+        hunger_rate: 0.08,
+        max_hunger: 90.0,
+        food_value: 15.0,
+        prey_species: vec![],
+        is_migratory: true, // Geese are classic migratory birds
+        migration_direction: (0, -30), // Fly far south in winter
     }
 }
 
@@ -718,6 +975,17 @@ fn pig() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
+        lifespan: (12000, 18000),
+        maturity_age: 800,
+        breeding_cooldown: 1200,
+        gestation_period: 400,
+        litter_size: (6, 12),
+        hunger_rate: 0.07,
+        max_hunger: 200.0,
+        food_value: 60.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -733,7 +1001,7 @@ fn crow() -> AnimalSpecies {
         health: 8.0,
         attack_damage: 2.0,
         defense: 0.0,
-        speed: 2.0, // Very fast (flying)
+        speed: 2.0,
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
@@ -746,6 +1014,17 @@ fn crow() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (10000, 15000),
+        maturity_age: 400,
+        breeding_cooldown: 500,
+        gestation_period: 0,
+        litter_size: (3, 6),
+        hunger_rate: 0.12,
+        max_hunger: 60.0,
+        food_value: 8.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -757,7 +1036,7 @@ fn eagle() -> AnimalSpecies {
         health: 25.0,
         attack_damage: 10.0,
         defense: 1.0,
-        speed: 2.5, // Extremely fast (flying)
+        speed: 2.5,
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
@@ -771,6 +1050,17 @@ fn eagle() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (20000, 35000),
+        maturity_age: 1500,
+        breeding_cooldown: 3000,
+        gestation_period: 0,
+        litter_size: (1, 3),
+        hunger_rate: 0.06,
+        max_hunger: 120.0,
+        food_value: 25.0,
+        prey_species: vec!["rabbit".to_string(), "squirrel".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -793,8 +1083,19 @@ fn hawk() -> AnimalSpecies {
             AnimalDrop::new("bird_meat".to_string(), 2, 3),
             AnimalDrop::new("feathers".to_string(), 3, 5),
         ],
-        can_domesticate: true, // Falconry
+        can_domesticate: true,
         living_products: vec![],
+        lifespan: (15000, 25000),
+        maturity_age: 1000,
+        breeding_cooldown: 2000,
+        gestation_period: 0,
+        litter_size: (2, 4),
+        hunger_rate: 0.07,
+        max_hunger: 100.0,
+        food_value: 20.0,
+        prey_species: vec!["rabbit".to_string(), "squirrel".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -819,6 +1120,17 @@ fn owl() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (12000, 20000),
+        maturity_age: 800,
+        breeding_cooldown: 1500,
+        gestation_period: 0,
+        litter_size: (2, 5),
+        hunger_rate: 0.08,
+        max_hunger: 90.0,
+        food_value: 18.0,
+        prey_species: vec!["rabbit".to_string(), "squirrel".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -841,8 +1153,19 @@ fn parrot() -> AnimalSpecies {
             AnimalDrop::new("bird_meat".to_string(), 1, 2),
             AnimalDrop::new("feathers".to_string(), 4, 6),
         ],
-        can_domesticate: true, // As pets
+        can_domesticate: true,
         living_products: vec![],
+        lifespan: (30000, 60000), // Parrots live very long
+        maturity_age: 1500,
+        breeding_cooldown: 2000,
+        gestation_period: 0,
+        litter_size: (2, 4),
+        hunger_rate: 0.09,
+        max_hunger: 80.0,
+        food_value: 12.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -856,7 +1179,7 @@ fn snake() -> AnimalSpecies {
         name: "Snake".to_string(),
         description: "Venomous reptile, dangerous despite small size".to_string(),
         health: 20.0,
-        attack_damage: 15.0, // Venomous
+        attack_damage: 15.0,
         defense: 1.0,
         speed: 1.2,
         behavior: AnimalBehavior::Defensive,
@@ -872,6 +1195,17 @@ fn snake() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (15000, 25000),
+        maturity_age: 1000,
+        breeding_cooldown: 2000,
+        gestation_period: 0, // Egg layer
+        litter_size: (5, 20),
+        hunger_rate: 0.02, // Very low - can go long without eating
+        max_hunger: 200.0,
+        food_value: 20.0,
+        prey_species: vec!["rabbit".to_string(), "squirrel".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -898,6 +1232,17 @@ fn tiger() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (18000, 28000),
+        maturity_age: 2000,
+        breeding_cooldown: 4000,
+        gestation_period: 700,
+        litter_size: (2, 4),
+        hunger_rate: 0.04,
+        max_hunger: 380.0,
+        food_value: 190.0,
+        prey_species: vec!["deer".to_string(), "boar".to_string(), "goat".to_string(), "monkey".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -908,8 +1253,8 @@ fn crocodile() -> AnimalSpecies {
         description: "Ancient reptilian predator, lurks in water".to_string(),
         health: 150.0,
         attack_damage: 35.0,
-        defense: 12.0, // Armored scales
-        speed: 0.9, // Slow on land
+        defense: 12.0,
+        speed: 0.9,
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
@@ -924,6 +1269,17 @@ fn crocodile() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (50000, 80000), // Crocodiles live very long
+        maturity_age: 3000,
+        breeding_cooldown: 5000,
+        gestation_period: 0, // Egg layer
+        litter_size: (20, 50),
+        hunger_rate: 0.015, // Very low metabolism
+        max_hunger: 500.0,
+        food_value: 150.0,
+        prey_species: vec!["deer".to_string(), "goat".to_string(), "fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -944,12 +1300,23 @@ fn polar_bear() -> AnimalSpecies {
         group_size: (1, 1),
         drops: vec![
             AnimalDrop::new("bear_meat".to_string(), 22, 35),
-            AnimalDrop::new("fur".to_string(), 15, 20), // Extra warm fur
+            AnimalDrop::new("fur".to_string(), 15, 20),
             AnimalDrop::new("thick_hide".to_string(), 10, 15),
             AnimalDrop::new("bear_claw".to_string(), 4, 4),
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (25000, 40000),
+        maturity_age: 2500,
+        breeding_cooldown: 5000,
+        gestation_period: 900,
+        litter_size: (1, 3),
+        hunger_rate: 0.025,
+        max_hunger: 450.0,
+        food_value: 220.0,
+        prey_species: vec!["seal".to_string(), "fish".to_string(), "reindeer".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -977,8 +1344,19 @@ fn elk_animal() -> AnimalSpecies {
             AnimalDrop::new("leather".to_string(), 6, 10),
             AnimalDrop::new("antler".to_string(), 2, 2).with_chance(0.6),
         ],
-        can_domesticate: true, // Can be trained as mount
+        can_domesticate: true,
         living_products: vec![],
+        lifespan: (18000, 28000),
+        maturity_age: 1500,
+        breeding_cooldown: 2500,
+        gestation_period: 850,
+        litter_size: (1, 2),
+        hunger_rate: 0.045,
+        max_hunger: 250.0,
+        food_value: 90.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1003,8 +1381,19 @@ fn reindeer_animal() -> AnimalSpecies {
             AnimalDrop::new("fur".to_string(), 4, 6),
             AnimalDrop::new("antler".to_string(), 2, 2).with_chance(0.7),
         ],
-        can_domesticate: true, // Can be trained as mount
+        can_domesticate: true,
         living_products: vec![],
+        lifespan: (15000, 22000),
+        maturity_age: 1200,
+        breeding_cooldown: 2000,
+        gestation_period: 750,
+        litter_size: (1, 1),
+        hunger_rate: 0.05,
+        max_hunger: 200.0,
+        food_value: 70.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1031,8 +1420,19 @@ fn monkey() -> AnimalSpecies {
             AnimalDrop::new("monkey_meat".to_string(), 2, 4),
             AnimalDrop::new("fur".to_string(), 1, 2),
         ],
-        can_domesticate: true, // As companions/pets
+        can_domesticate: true,
         living_products: vec![],
+        lifespan: (20000, 35000),
+        maturity_age: 1500,
+        breeding_cooldown: 2000,
+        gestation_period: 500,
+        litter_size: (1, 2),
+        hunger_rate: 0.1,
+        max_hunger: 120.0,
+        food_value: 25.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1050,7 +1450,7 @@ fn fish() -> AnimalSpecies {
         defense: 0.0,
         speed: 1.5,
         behavior: AnimalBehavior::Passive,
-        diet: DietType::Carnivore, // Eat smaller fish
+        diet: DietType::Carnivore,
         size: AnimalSize::Tiny,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Arctic],
@@ -1060,6 +1460,17 @@ fn fish() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (3000, 8000),
+        maturity_age: 200,
+        breeding_cooldown: 100,
+        gestation_period: 0, // Spawn eggs
+        litter_size: (50, 200), // Many eggs
+        hunger_rate: 0.05,
+        max_hunger: 50.0,
+        food_value: 5.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1080,10 +1491,21 @@ fn otter() -> AnimalSpecies {
         group_size: (2, 6),
         drops: vec![
             AnimalDrop::new("otter_meat".to_string(), 3, 5),
-            AnimalDrop::new("fur".to_string(), 3, 5), // Water-resistant fur
+            AnimalDrop::new("fur".to_string(), 3, 5),
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (12000, 18000),
+        maturity_age: 800,
+        breeding_cooldown: 1500,
+        gestation_period: 400,
+        litter_size: (1, 4),
+        hunger_rate: 0.1,
+        max_hunger: 130.0,
+        food_value: 30.0,
+        prey_species: vec!["fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1095,7 +1517,7 @@ fn seal() -> AnimalSpecies {
         health: 80.0,
         attack_damage: 8.0,
         defense: 4.0,
-        speed: 1.1, // Slow on land, fast in water
+        speed: 1.1,
         behavior: AnimalBehavior::Passive,
         diet: DietType::Carnivore,
         size: AnimalSize::Medium,
@@ -1104,12 +1526,23 @@ fn seal() -> AnimalSpecies {
         group_size: (3, 12),
         drops: vec![
             AnimalDrop::new("seal_meat".to_string(), 10, 15),
-            AnimalDrop::new("blubber".to_string(), 8, 12), // Fat/oil
+            AnimalDrop::new("blubber".to_string(), 8, 12),
             AnimalDrop::new("fur".to_string(), 4, 6),
             AnimalDrop::new("leather".to_string(), 3, 5),
         ],
         can_domesticate: false,
         living_products: vec![],
+        lifespan: (25000, 40000),
+        maturity_age: 2000,
+        breeding_cooldown: 3000,
+        gestation_period: 800,
+        litter_size: (1, 1),
+        hunger_rate: 0.04,
+        max_hunger: 250.0,
+        food_value: 80.0,
+        prey_species: vec!["fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
     }
 }
 
@@ -1166,6 +1599,7 @@ pub struct Animal {
     /// Age (in ticks)
     pub age: u32,
     pub maturity_age: u32, // Age when fully grown
+    pub max_lifespan: u32, // Maximum age before death
 
     /// Domestication
     pub is_domesticated: bool,
@@ -1175,6 +1609,15 @@ pub struct Animal {
     /// Reproduction
     pub can_reproduce: bool,
     pub reproduction_cooldown: u32,
+    pub is_pregnant: bool,
+    pub pregnancy_timer: u32, // Ticks until birth
+    pub mate_id: Option<Uuid>, // For tracking lineage
+
+    /// Hunger/feeding system
+    pub hunger: f32,        // Current hunger level (0 = full, max = starving)
+    pub max_hunger: f32,    // Max hunger before starvation damage
+    pub hunger_rate: f32,   // Hunger increase per tick
+    pub is_starving: bool,  // Taking starvation damage
 
     /// Living product timers
     pub product_timers: HashMap<String, u32>, // material_id -> ticks until production
@@ -1182,10 +1625,16 @@ pub struct Animal {
 
 impl Animal {
     pub fn new(species_id: String, position: (i32, i32), species: &AnimalSpecies) -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
         let mut product_timers = HashMap::new();
         for product in &species.living_products {
             product_timers.insert(product.material_id.clone(), product.production_time);
         }
+
+        // Calculate random lifespan within species range
+        let max_lifespan = rng.gen_range(species.lifespan.0..=species.lifespan.1);
 
         Self {
             id: Uuid::new_v4(),
@@ -1200,14 +1649,31 @@ impl Animal {
             state_timer: 0,
             group_id: None,
             age: 0,
-            maturity_age: 1000, // Default 1000 ticks to mature
+            maturity_age: species.maturity_age,
+            max_lifespan,
             is_domesticated: false,
             tame_level: 0.0,
             owner_id: None,
             can_reproduce: true,
             reproduction_cooldown: 0,
+            is_pregnant: false,
+            pregnancy_timer: 0,
+            mate_id: None,
+            hunger: 0.0,
+            max_hunger: species.max_hunger,
+            hunger_rate: species.hunger_rate,
+            is_starving: false,
             product_timers,
         }
+    }
+
+    /// Create a newborn animal (starts at age 0, inherits some traits)
+    pub fn new_offspring(species_id: String, position: (i32, i32), species: &AnimalSpecies, parent_group: Option<Uuid>) -> Self {
+        let mut offspring = Self::new(species_id, position, species);
+        offspring.group_id = parent_group;
+        // Newborns start with some hunger
+        offspring.hunger = offspring.max_hunger * 0.3;
+        offspring
     }
 
     /// Check if animal is alive
@@ -1295,6 +1761,82 @@ impl Animal {
         if self.reproduction_cooldown > 0 {
             self.reproduction_cooldown -= 1;
         }
+
+        // Update pregnancy timer
+        if self.is_pregnant && self.pregnancy_timer > 0 {
+            self.pregnancy_timer -= 1;
+        }
+    }
+
+    /// Check if animal has died of old age
+    pub fn is_too_old(&self) -> bool {
+        self.age >= self.max_lifespan
+    }
+
+    /// Check if animal can breed (mature, not pregnant, cooldown expired)
+    pub fn can_breed(&self) -> bool {
+        self.is_alive()
+            && self.is_mature()
+            && self.can_reproduce
+            && !self.is_pregnant
+            && self.reproduction_cooldown == 0
+            && !self.is_starving
+            && self.hunger < self.max_hunger * 0.7 // Not too hungry
+    }
+
+    /// Start pregnancy with gestation period
+    pub fn become_pregnant(&mut self, gestation_period: u32, breeding_cooldown: u32) {
+        self.is_pregnant = true;
+        self.pregnancy_timer = gestation_period;
+        self.reproduction_cooldown = breeding_cooldown;
+    }
+
+    /// Check if ready to give birth
+    pub fn ready_to_give_birth(&self) -> bool {
+        self.is_pregnant && self.pregnancy_timer == 0
+    }
+
+    /// Complete birth and reset pregnancy state
+    pub fn give_birth(&mut self) {
+        self.is_pregnant = false;
+        self.pregnancy_timer = 0;
+    }
+
+    /// Increase hunger by the animal's hunger rate
+    pub fn tick_hunger(&mut self) {
+        if !self.is_alive() {
+            return;
+        }
+
+        self.hunger = (self.hunger + self.hunger_rate).min(self.max_hunger * 1.5);
+
+        // Check starvation threshold
+        if self.hunger >= self.max_hunger {
+            self.is_starving = true;
+            // Take starvation damage proportional to how hungry
+            let starvation_damage = (self.hunger - self.max_hunger) * 0.1;
+            self.take_damage(starvation_damage);
+        } else {
+            self.is_starving = false;
+        }
+    }
+
+    /// Feed the animal, reducing hunger
+    pub fn feed(&mut self, amount: f32) {
+        self.hunger = (self.hunger - amount).max(0.0);
+        if self.hunger < self.max_hunger {
+            self.is_starving = false;
+        }
+    }
+
+    /// Check if animal is hungry enough to seek food
+    pub fn is_hungry(&self) -> bool {
+        self.hunger > self.max_hunger * 0.5
+    }
+
+    /// Check if animal is very hungry (urgent food seeking)
+    pub fn is_very_hungry(&self) -> bool {
+        self.hunger > self.max_hunger * 0.8
     }
 
     /// Get health percentage
@@ -1444,21 +1986,133 @@ impl AnimalManager {
         self.animals.retain(|a| a.is_alive());
     }
 
-    /// Tick all animals (age, products, natural healing, AI behaviors)
-    pub fn tick(&mut self) {
-        let registry = match &self.registry {
-            Some(r) => r,
-            None => return,
+    /// Kill an animal and generate drops based on its species
+    /// Returns a list of (material_id, quantity) tuples representing the drops
+    pub fn kill_animal(&mut self, animal_id: &Uuid) -> Vec<(String, u32)> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut drops = Vec::new();
+
+        // Find the animal and get its species
+        let species_id = {
+            if let Some(animal) = self.animals.iter_mut().find(|a| a.id == *animal_id) {
+                if !animal.is_alive() {
+                    return drops; // Already dead
+                }
+                animal.state = AnimalState::Dead;
+                animal.current_health = 0.0;
+                animal.species_id.clone()
+            } else {
+                return drops;
+            }
         };
 
-        // First pass: basic updates
+        // Get the species drops
+        if let Some(registry) = &self.registry {
+            if let Some(species) = registry.get(&species_id) {
+                for drop in &species.drops {
+                    // Check drop chance
+                    if rng.gen::<f32>() <= drop.drop_chance {
+                        let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                        drops.push((drop.material_id.clone(), quantity));
+                    }
+                }
+            }
+        }
+
+        drops
+    }
+
+    /// Get the drops that would result from hunting a specific animal
+    /// Does not actually kill the animal, just calculates expected drops
+    pub fn get_potential_drops(&self, animal_id: &Uuid) -> Vec<(String, u32, u32)> {
+        let mut potential_drops = Vec::new();
+
+        if let Some(animal) = self.animals.iter().find(|a| a.id == *animal_id) {
+            if let Some(registry) = &self.registry {
+                if let Some(species) = registry.get(&animal.species_id) {
+                    for drop in &species.drops {
+                        potential_drops.push((
+                            drop.material_id.clone(),
+                            drop.min_quantity,
+                            drop.max_quantity,
+                        ));
+                    }
+                }
+            }
+        }
+
+        potential_drops
+    }
+
+    /// Harvest living products from domesticated animals
+    /// Returns a map of animal_id -> list of (material_id, quantity) produced
+    pub fn harvest_living_products(&mut self) -> HashMap<Uuid, Vec<(String, u32)>> {
+        let mut products = HashMap::new();
+
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return products,
+        };
+
         for animal in &mut self.animals {
+            if !animal.is_alive() || !animal.is_mature() {
+                continue;
+            }
+
+            // Only domesticated animals produce regular products
+            if !animal.is_domesticated {
+                continue;
+            }
+
+            if let Some(species) = registry.get(&animal.species_id) {
+                let produced = animal.tick_products();
+
+                // Match product names with species living_products to get correct quantities
+                let mut animal_products = Vec::new();
+                for (material_id, _) in produced {
+                    if let Some(product_info) = species.living_products.iter()
+                        .find(|p| p.material_id == material_id)
+                    {
+                        animal_products.push((material_id, product_info.quantity));
+                    } else {
+                        animal_products.push((material_id, 1)); // Default quantity
+                    }
+                }
+
+                if !animal_products.is_empty() {
+                    products.insert(animal.id, animal_products);
+                }
+            }
+        }
+
+        products
+    }
+
+    /// Tick all animals (age, products, natural healing, AI behaviors, lifecycle)
+    pub fn tick(&mut self) {
+        if self.registry.is_none() {
+            return;
+        }
+
+        // First pass: basic updates and lifecycle
+        let mut deaths_from_age = Vec::new();
+        for (idx, animal) in self.animals.iter_mut().enumerate() {
             if !animal.is_alive() {
                 continue;
             }
 
             // Age
             animal.tick_age();
+
+            // Check for death from old age
+            if animal.is_too_old() {
+                deaths_from_age.push(idx);
+                continue;
+            }
+
+            // Hunger system
+            animal.tick_hunger();
 
             // Natural stamina recovery when resting
             if animal.state == AnimalState::Resting {
@@ -1468,8 +2122,8 @@ impl AnimalManager {
                 animal.use_stamina(0.1);
             }
 
-            // Slow natural healing
-            if animal.current_health < animal.max_health {
+            // Slow natural healing (if not starving)
+            if animal.current_health < animal.max_health && !animal.is_starving {
                 animal.heal(0.1);
             }
 
@@ -1482,24 +2136,325 @@ impl AnimalManager {
             }
         }
 
-        // Second pass: AI behavior (needs mutable access and species lookup)
-        let animals_data: Vec<(usize, String, AnimalBehavior, bool)> = self.animals
-            .iter()
-            .enumerate()
-            .filter(|(_, a)| a.is_alive())
-            .filter_map(|(idx, a)| {
-                let species = registry.get(&a.species_id)?;
-                Some((idx, a.species_id.clone(), species.behavior, a.is_wild()))
-            })
-            .collect();
+        // Kill animals that died of old age
+        for idx in deaths_from_age.iter().rev() {
+            if let Some(animal) = self.animals.get_mut(*idx) {
+                animal.state = AnimalState::Dead;
+                animal.current_health = 0.0;
+            }
+        }
 
-        for (idx, _species_id, behavior, is_wild) in animals_data {
-            self.update_animal_behavior(idx, behavior, is_wild);
+        // Second pass: Births (process pregnant animals ready to give birth)
+        self.process_births();
+
+        // Third pass: Breeding attempts
+        self.process_breeding();
+
+        // Fourth pass: Predator hunting
+        self.process_predation();
+
+        // Fifth pass: Herbivore feeding (grazing reduces hunger)
+        self.process_grazing();
+
+        // Sixth pass: AI behavior (needs fresh registry borrow)
+        let animals_data: Vec<(usize, String, AnimalBehavior, bool, bool)> = {
+            let registry = match &self.registry {
+                Some(r) => r,
+                None => return,
+            };
+            self.animals
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a.is_alive())
+                .filter_map(|(idx, a)| {
+                    let species = registry.get(&a.species_id)?;
+                    Some((idx, a.species_id.clone(), species.behavior, a.is_wild(), a.is_hungry()))
+                })
+                .collect()
+        };
+
+        for (idx, _species_id, behavior, is_wild, is_hungry) in animals_data {
+            self.update_animal_behavior_with_hunger(idx, behavior, is_wild, is_hungry);
         }
     }
 
-    /// Update individual animal AI behavior
-    fn update_animal_behavior(&mut self, animal_idx: usize, behavior: AnimalBehavior, is_wild: bool) {
+    /// Process births for pregnant animals
+    fn process_births(&mut self) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return,
+        };
+
+        // Collect birth data
+        let births: Vec<(String, (i32, i32), Option<Uuid>, u32, u32)> = self.animals
+            .iter_mut()
+            .filter(|a| a.is_alive() && a.ready_to_give_birth())
+            .filter_map(|a| {
+                let species = registry.get(&a.species_id)?;
+                let litter_size = rng.gen_range(species.litter_size.0..=species.litter_size.1);
+
+                // Complete birth
+                a.give_birth();
+
+                Some((
+                    a.species_id.clone(),
+                    a.position,
+                    a.group_id,
+                    litter_size,
+                    species.breeding_cooldown,
+                ))
+            })
+            .collect();
+
+        // Spawn offspring
+        for (species_id, position, group_id, litter_size, _cooldown) in births {
+            if let Some(species) = registry.get(&species_id) {
+                for _ in 0..litter_size {
+                    if self.animals.len() >= self.max_population {
+                        break;
+                    }
+
+                    // Spawn near parent with some offset
+                    let offset_x = rng.gen_range(-2..=2);
+                    let offset_y = rng.gen_range(-2..=2);
+                    let offspring_pos = (position.0 + offset_x, position.1 + offset_y);
+
+                    let offspring = Animal::new_offspring(
+                        species_id.clone(),
+                        offspring_pos,
+                        species,
+                        group_id,
+                    );
+                    self.animals.push(offspring);
+                }
+            }
+        }
+    }
+
+    /// Process breeding attempts for eligible animals
+    fn process_breeding(&mut self) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return,
+        };
+
+        // Only attempt breeding occasionally (not every tick)
+        if rng.gen::<f32>() > 0.01 {
+            return;
+        }
+
+        // Find breeding candidates by species
+        let mut breeding_candidates: HashMap<String, Vec<usize>> = HashMap::new();
+        for (idx, animal) in self.animals.iter().enumerate() {
+            if animal.can_breed() {
+                breeding_candidates
+                    .entry(animal.species_id.clone())
+                    .or_insert_with(Vec::new)
+                    .push(idx);
+            }
+        }
+
+        // For each species with 2+ candidates, attempt breeding
+        for (species_id, candidates) in breeding_candidates {
+            if candidates.len() < 2 {
+                continue;
+            }
+
+            // Get species data
+            let species = match registry.get(&species_id) {
+                Some(s) => s,
+                None => continue,
+            };
+
+            // Check pairs for proximity (within breeding distance)
+            for i in 0..candidates.len() {
+                for j in (i + 1)..candidates.len() {
+                    let idx_a = candidates[i];
+                    let idx_b = candidates[j];
+
+                    let pos_a = self.animals[idx_a].position;
+                    let pos_b = self.animals[idx_b].position;
+
+                    // Check proximity (within 5 tiles)
+                    let distance = ((pos_a.0 - pos_b.0).abs() + (pos_a.1 - pos_b.1).abs()) as f32;
+                    if distance <= 5.0 {
+                        // Breeding chance based on proximity
+                        if rng.gen::<f32>() < 0.3 {
+                            // One becomes pregnant (or both go on cooldown for egg-layers)
+                            if species.gestation_period > 0 {
+                                // Mammal-style: one becomes pregnant
+                                self.animals[idx_a].become_pregnant(
+                                    species.gestation_period,
+                                    species.breeding_cooldown,
+                                );
+                                self.animals[idx_b].reproduction_cooldown = species.breeding_cooldown;
+                            } else {
+                                // Egg-layer: both go on cooldown, eggs spawn immediately
+                                self.animals[idx_a].reproduction_cooldown = species.breeding_cooldown;
+                                self.animals[idx_b].reproduction_cooldown = species.breeding_cooldown;
+
+                                // Spawn eggs (as new animals with age 0)
+                                let litter = rng.gen_range(species.litter_size.0..=species.litter_size.1);
+                                for _ in 0..litter {
+                                    if self.animals.len() >= self.max_population {
+                                        break;
+                                    }
+                                    let pos = self.animals[idx_a].position;
+                                    let offspring = Animal::new_offspring(
+                                        species_id.clone(),
+                                        pos,
+                                        species,
+                                        self.animals[idx_a].group_id,
+                                    );
+                                    self.animals.push(offspring);
+                                }
+                            }
+                            break; // Only one breeding per species per tick
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Process predator hunting - carnivores/omnivores hunt prey
+    fn process_predation(&mut self) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return,
+        };
+
+        // Only process predation occasionally
+        if rng.gen::<f32>() > 0.02 {
+            return;
+        }
+
+        // Find hungry predators and their prey
+        let predator_data: Vec<(usize, String, Vec<String>, (i32, i32), f32)> = self.animals
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.is_alive() && a.is_hungry())
+            .filter_map(|(idx, a)| {
+                let species = registry.get(&a.species_id)?;
+                if species.prey_species.is_empty() {
+                    return None;
+                }
+                Some((
+                    idx,
+                    a.species_id.clone(),
+                    species.prey_species.clone(),
+                    a.position,
+                    species.attack_damage,
+                ))
+            })
+            .collect();
+
+        // For each predator, look for nearby prey
+        let mut kills = Vec::new();
+        for (pred_idx, _pred_species, prey_species, pred_pos, attack) in predator_data {
+            // Find nearby prey
+            for (prey_idx, prey) in self.animals.iter().enumerate() {
+                if !prey.is_alive() || prey_idx == pred_idx {
+                    continue;
+                }
+
+                // Check if this is a valid prey species
+                if !prey_species.contains(&prey.species_id) {
+                    continue;
+                }
+
+                // Check proximity (hunting range of 8 tiles)
+                let distance = ((pred_pos.0 - prey.position.0).abs()
+                    + (pred_pos.1 - prey.position.1).abs()) as f32;
+                if distance > 8.0 {
+                    continue;
+                }
+
+                // Hunt success based on speed comparison and randomness
+                let prey_species_data = registry.get(&prey.species_id);
+                let prey_speed = prey_species_data.map(|s| s.speed).unwrap_or(1.0);
+                let pred_species_data = registry.get(&self.animals[pred_idx].species_id);
+                let pred_speed = pred_species_data.map(|s| s.speed).unwrap_or(1.0);
+
+                let chase_chance = (pred_speed / prey_speed).min(1.0) * 0.4;
+
+                if rng.gen::<f32>() < chase_chance {
+                    // Successful hunt - attack prey
+                    let prey_food_value = prey_species_data.map(|s| s.food_value).unwrap_or(10.0);
+                    kills.push((pred_idx, prey_idx, attack, prey_food_value));
+                    break; // One hunt per predator per tick
+                }
+            }
+        }
+
+        // Apply kills
+        for (pred_idx, prey_idx, damage, food_value) in kills {
+            // Damage prey
+            if let Some(prey) = self.animals.get_mut(prey_idx) {
+                prey.take_damage(damage);
+            }
+
+            // If prey died, feed predator
+            if let Some(prey) = self.animals.get(prey_idx) {
+                if !prey.is_alive() {
+                    if let Some(predator) = self.animals.get_mut(pred_idx) {
+                        predator.feed(food_value);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Process grazing - herbivores reduce hunger when grazing
+    fn process_grazing(&mut self) {
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return,
+        };
+
+        for animal in &mut self.animals {
+            if !animal.is_alive() {
+                continue;
+            }
+
+            // Only grazing animals get food
+            if animal.state != AnimalState::Grazing {
+                continue;
+            }
+
+            // Get diet type
+            if let Some(species) = registry.get(&animal.species_id) {
+                match species.diet {
+                    DietType::Herbivore | DietType::Omnivore => {
+                        // Grazing provides food (proportional to size)
+                        let graze_amount = match species.size {
+                            AnimalSize::Tiny => 2.0,
+                            AnimalSize::Small => 4.0,
+                            AnimalSize::Medium => 6.0,
+                            AnimalSize::Large => 10.0,
+                            AnimalSize::Huge => 15.0,
+                        };
+                        animal.feed(graze_amount);
+                    }
+                    DietType::Carnivore => {
+                        // Carnivores don't benefit from grazing
+                    }
+                }
+            }
+        }
+    }
+
+    /// Update animal behavior with hunger consideration
+    fn update_animal_behavior_with_hunger(&mut self, animal_idx: usize, behavior: AnimalBehavior, is_wild: bool, is_hungry: bool) {
         let animal = &mut self.animals[animal_idx];
 
         // If state timer is active, continue current behavior
@@ -1507,17 +2462,26 @@ impl AnimalManager {
             return;
         }
 
-        // Transition to new state based on behavior type and conditions
+        // Hungry animals prioritize food seeking
+        if is_hungry && animal.is_very_hungry() {
+            animal.state = AnimalState::Grazing; // Or hunting for carnivores
+            animal.state_timer = 40;
+            // Move while seeking food
+            let offset = (rand::random::<i32>() % 5 - 2, rand::random::<i32>() % 5 - 2);
+            animal.position.0 += offset.0;
+            animal.position.1 += offset.1;
+            return;
+        }
+
+        // Normal behavior based on type
         match behavior {
             AnimalBehavior::Passive => {
-                // Passive animals: graze, rest, or idle
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 50;
-                } else if rand::random::<f32>() < 0.3 {
+                } else if is_hungry || rand::random::<f32>() < 0.3 {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 30;
-                    // Move slightly while grazing
                     let offset = (rand::random::<i32>() % 3 - 1, rand::random::<i32>() % 3 - 1);
                     animal.position.0 += offset.0;
                     animal.position.1 += offset.1;
@@ -1527,27 +2491,25 @@ impl AnimalManager {
                 }
             }
             AnimalBehavior::Neutral => {
-                // Neutral animals: idle, drink, or graze
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 40;
+                } else if is_hungry {
+                    animal.state = AnimalState::Grazing;
+                    animal.state_timer = 35;
                 } else if rand::random::<f32>() < 0.2 {
                     animal.state = AnimalState::Drinking;
                     animal.state_timer = 25;
-                } else if rand::random::<f32>() < 0.4 {
-                    animal.state = AnimalState::Grazing;
-                    animal.state_timer = 30;
                 } else {
                     animal.state = AnimalState::Idle;
                     animal.state_timer = 25;
                 }
             }
             AnimalBehavior::Defensive => {
-                // Defensive animals: mostly graze but ready to react
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 45;
-                } else if rand::random::<f32>() < 0.5 {
+                } else if is_hungry || rand::random::<f32>() < 0.5 {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 35;
                 } else {
@@ -1556,15 +2518,12 @@ impl AnimalManager {
                 }
             }
             AnimalBehavior::Aggressive | AnimalBehavior::Territorial => {
-                // Aggressive/territorial animals: hunt or patrol
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 60;
-                } else if is_wild && rand::random::<f32>() < 0.3 {
-                    // Wild predators occasionally hunt
+                } else if is_wild && (is_hungry || rand::random::<f32>() < 0.3) {
                     animal.state = AnimalState::Hunting { target_id: None };
                     animal.state_timer = 50;
-                    // Patrol/move while hunting
                     let offset = (rand::random::<i32>() % 5 - 2, rand::random::<i32>() % 5 - 2);
                     animal.position.0 += offset.0;
                     animal.position.1 += offset.1;
@@ -1605,6 +2564,197 @@ impl AnimalManager {
                     .unwrap_or(false)
             })
             .count()
+    }
+
+    /// Spawn animals naturalistically based on terrain during world generation
+    ///
+    /// This method spawns animals in appropriate biomes based on terrain types:
+    /// - Herbivores spawn in herds in plains, meadows, and forests
+    /// - Predators spawn in smaller numbers
+    /// - Aquatic animals spawn near water
+    /// - Mountain animals spawn in highlands
+    pub fn spawn_naturalistic(&mut self, grid: &Grid, config: &AnimalSpawnConfig) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let registry = match &self.registry {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        let total_tiles = grid.width * grid.height;
+        let total_herds = (total_tiles * config.herds_per_10000_tiles) / 10000;
+
+        // Categorize species by diet for balanced spawning
+        let herbivores: Vec<_> = registry.all_species()
+            .into_iter()
+            .filter(|s| s.diet == DietType::Herbivore)
+            .collect();
+        let predators: Vec<_> = registry.all_species()
+            .into_iter()
+            .filter(|s| s.diet == DietType::Carnivore || s.diet == DietType::Omnivore)
+            .filter(|s| !s.prey_species.is_empty())
+            .collect();
+
+        if herbivores.is_empty() {
+            return;
+        }
+
+        // Calculate prey vs predator herds
+        let prey_herds = if config.spawn_predators && !predators.is_empty() {
+            ((total_herds as f32) * config.prey_to_predator_ratio / (config.prey_to_predator_ratio + 1.0)) as usize
+        } else {
+            total_herds
+        };
+        let predator_herds = total_herds.saturating_sub(prey_herds);
+
+        // Collect terrain positions by climate zone
+        let mut positions_by_climate: HashMap<ClimateZone, Vec<(i32, i32)>> = HashMap::new();
+        for y in 0..grid.height {
+            for x in 0..grid.width {
+                let terrain = grid.tiles[y][x].terrain.terrain_type;
+                // Skip water for land animals
+                if terrain == TerrainType::Water {
+                    continue;
+                }
+                let climate = terrain_to_climate_zone(terrain);
+                positions_by_climate.entry(climate)
+                    .or_insert_with(Vec::new)
+                    .push((x as i32, y as i32));
+            }
+        }
+
+        // Spawn herbivore herds
+        let mut spawned = 0;
+        for _ in 0..prey_herds {
+            if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
+                break;
+            }
+
+            // Pick a random herbivore species
+            let species = &herbivores[rng.gen_range(0..herbivores.len())];
+
+            // Find a position in an appropriate biome
+            let climate = if !species.primary_biomes.is_empty() {
+                species.primary_biomes[rng.gen_range(0..species.primary_biomes.len())]
+            } else {
+                ClimateZone::Temperate
+            };
+
+            if let Some(positions) = positions_by_climate.get(&climate) {
+                if !positions.is_empty() {
+                    let pos = positions[rng.gen_range(0..positions.len())];
+                    let herd_size = rng.gen_range(species.group_size.0..=species.group_size.1);
+
+                    if let Some(_) = self.spawn_group(species.id.clone(), pos, herd_size) {
+                        spawned += herd_size as usize;
+                    }
+                }
+            }
+        }
+
+        // Spawn predator groups (smaller)
+        if config.spawn_predators && !predators.is_empty() {
+            for _ in 0..predator_herds {
+                if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
+                    break;
+                }
+
+                // Pick a random predator species
+                let species = &predators[rng.gen_range(0..predators.len())];
+
+                // Find a position in an appropriate biome
+                let climate = if !species.primary_biomes.is_empty() {
+                    species.primary_biomes[rng.gen_range(0..species.primary_biomes.len())]
+                } else {
+                    ClimateZone::Temperate
+                };
+
+                if let Some(positions) = positions_by_climate.get(&climate) {
+                    if !positions.is_empty() {
+                        let pos = positions[rng.gen_range(0..positions.len())];
+                        // Predator packs are typically smaller
+                        let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
+
+                        if let Some(_) = self.spawn_group(species.id.clone(), pos, pack_size) {
+                            spawned += pack_size as usize;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get a summary of spawned animals by species
+    pub fn population_summary(&self) -> HashMap<String, usize> {
+        let mut summary = HashMap::new();
+        for animal in &self.animals {
+            if animal.is_alive() {
+                *summary.entry(animal.species_id.clone()).or_insert(0) += 1;
+            }
+        }
+        summary
+    }
+
+    /// Process seasonal migration for migratory species
+    ///
+    /// Called when the season changes. Migratory animals will move in their
+    /// migration direction, simulating seasonal movement patterns like
+    /// birds flying south or herds following food sources.
+    pub fn process_migration(&mut self, season: crate::environment::Season, world_size: (usize, usize)) {
+        use crate::environment::Season;
+
+        let registry = match &self.registry {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        // Only migrate at season changes - check which direction to go
+        let migration_multiplier = match season {
+            Season::Fall | Season::Winter => 1.0,   // Move in migration direction
+            Season::Spring | Season::Summer => -1.0, // Return migration
+        };
+
+        for animal in &mut self.animals {
+            if !animal.is_alive() {
+                continue;
+            }
+
+            // Get species to check if migratory
+            let species = match registry.get(&animal.species_id) {
+                Some(s) => s,
+                None => continue,
+            };
+
+            if !species.is_migratory {
+                continue;
+            }
+
+            // Calculate new position based on migration direction
+            let (dx, dy) = species.migration_direction;
+            let new_x = animal.position.0 + (dx as f32 * migration_multiplier) as i32;
+            let new_y = animal.position.1 + (dy as f32 * migration_multiplier) as i32;
+
+            // Clamp to world bounds
+            let new_x = new_x.clamp(0, world_size.0 as i32 - 1);
+            let new_y = new_y.clamp(0, world_size.1 as i32 - 1);
+
+            animal.position = (new_x, new_y);
+        }
+    }
+
+    /// Check if any species are currently migrating
+    pub fn get_migrating_species(&self) -> Vec<String> {
+        let registry = match &self.registry {
+            Some(r) => r,
+            None => return vec![],
+        };
+
+        registry.all_species()
+            .into_iter()
+            .filter(|s| s.is_migratory)
+            .map(|s| s.id.clone())
+            .collect()
     }
 }
 
@@ -1688,5 +2838,167 @@ mod tests {
         assert_eq!(rabbit.size, AnimalSize::Tiny);
         assert_eq!(deer.size, AnimalSize::Medium);
         assert_eq!(mammoth.size, AnimalSize::Huge);
+    }
+
+    // ========================================================================
+    // LIFECYCLE TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_animal_aging() {
+        let species = rabbit();
+        let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
+
+        let initial_age = animal.age;
+        animal.tick_age();
+        assert_eq!(animal.age, initial_age + 1);
+    }
+
+    #[test]
+    fn test_animal_death_from_old_age() {
+        let species = rabbit();
+        let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
+
+        // Set age beyond lifespan
+        animal.age = species.lifespan.1 + 100;
+        animal.max_lifespan = species.lifespan.1;
+
+        assert!(animal.is_too_old());
+    }
+
+    #[test]
+    fn test_animal_maturity() {
+        let species = rabbit();
+        let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
+
+        // Young animal
+        animal.age = 10;
+        animal.maturity_age = 500;
+        assert!(!animal.can_breed());
+
+        // Mature animal with cooldown 0
+        animal.age = 600;
+        animal.reproduction_cooldown = 0;
+        assert!(animal.can_breed());
+    }
+
+    #[test]
+    fn test_animal_hunger_system() {
+        let species = rabbit();
+        let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
+
+        let initial_hunger = animal.hunger;
+        animal.tick_hunger();
+        assert!(animal.hunger > initial_hunger);
+
+        // Feed the animal
+        let hunger_before_feed = animal.hunger;
+        animal.feed(50.0);
+        assert!(animal.hunger < hunger_before_feed);
+    }
+
+    #[test]
+    fn test_animal_starvation() {
+        let species = rabbit();
+        let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
+
+        animal.hunger = animal.max_hunger + 10.0;
+        animal.tick_hunger();
+
+        assert!(animal.is_starving);
+        assert!(animal.current_health < species.health);
+    }
+
+    #[test]
+    fn test_pregnancy_and_birth() {
+        let species = rabbit();
+        let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
+
+        // Make animal pregnant
+        animal.become_pregnant(100, 1000);
+        assert!(animal.is_pregnant);
+        assert_eq!(animal.pregnancy_timer, 100);
+
+        // Advance pregnancy
+        for _ in 0..100 {
+            animal.tick_age(); // This decrements pregnancy timer
+        }
+
+        assert!(animal.ready_to_give_birth());
+
+        // Give birth
+        animal.give_birth();
+        assert!(!animal.is_pregnant);
+        assert!(animal.reproduction_cooldown > 0);
+    }
+
+    #[test]
+    fn test_offspring_creation() {
+        let species = rabbit();
+        let parent_pos = (10, 20);
+        let offspring = Animal::new_offspring(
+            "rabbit".to_string(),
+            parent_pos,
+            &species,
+            None,
+        );
+
+        assert_eq!(offspring.species_id, "rabbit");
+        assert_eq!(offspring.age, 0);
+        assert!(!offspring.can_breed()); // Too young
+        assert!(offspring.is_alive());
+    }
+
+    #[test]
+    fn test_predator_prey_species() {
+        let wolf = wolf();
+        let rabbit = rabbit();
+
+        // Wolf should have prey species
+        assert!(!wolf.prey_species.is_empty());
+        assert!(wolf.prey_species.contains(&"rabbit".to_string()));
+
+        // Rabbit should not have prey species (herbivore)
+        assert!(rabbit.prey_species.is_empty());
+    }
+
+    #[test]
+    fn test_animal_manager_tick_aging() {
+        let mut manager = AnimalManager::new(100);
+        manager.spawn_animal("rabbit".to_string(), (0, 0));
+
+        let initial_age = manager.animals[0].age;
+        manager.tick();
+
+        // Animal should have aged
+        assert!(manager.animals[0].age > initial_age);
+    }
+
+    #[test]
+    fn test_animal_manager_population_summary() {
+        let mut manager = AnimalManager::new(100);
+        manager.spawn_animal("rabbit".to_string(), (0, 0));
+        manager.spawn_animal("rabbit".to_string(), (1, 0));
+        manager.spawn_animal("wolf".to_string(), (5, 5));
+
+        let summary = manager.population_summary();
+        assert_eq!(summary.get("rabbit"), Some(&2));
+        assert_eq!(summary.get("wolf"), Some(&1));
+    }
+
+    #[test]
+    fn test_terrain_to_climate_zone() {
+        assert_eq!(terrain_to_climate_zone(TerrainType::Desert), ClimateZone::Desert);
+        assert_eq!(terrain_to_climate_zone(TerrainType::Mountain), ClimateZone::Arctic);
+        assert_eq!(terrain_to_climate_zone(TerrainType::Plains), ClimateZone::Temperate);
+        assert_eq!(terrain_to_climate_zone(TerrainType::Forest), ClimateZone::Temperate);
+    }
+
+    #[test]
+    fn test_animal_spawn_config_default() {
+        let config = AnimalSpawnConfig::default();
+        assert!(config.herds_per_10000_tiles > 0);
+        assert!(config.spawn_predators);
+        assert!(config.prey_to_predator_ratio > 1.0);
     }
 }

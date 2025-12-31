@@ -8,3 +8,4 @@ mod spatial_planning_tests;
 mod zoning_tests;
 mod path_planning_tests;
 mod territory_claiming_tests;
+mod naturalistic_resource_tests;

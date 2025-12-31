@@ -18,6 +18,9 @@ pub struct SmeltingRecipe {
     /// How much input is needed
     pub input_quantity: u32,
 
+    /// Secondary input material (for alloys like bronze = copper + tin)
+    pub secondary_input: Option<(String, u32)>,
+
     /// Output material (ingot, metal, etc.)
     pub output_material: String,
     /// How much output is produced
@@ -46,6 +49,7 @@ impl SmeltingRecipe {
             description: String::new(),
             input_material,
             input_quantity: 1,
+            secondary_input: None,
             output_material,
             output_quantity: 1,
             melting_point,
@@ -65,6 +69,12 @@ impl SmeltingRecipe {
         self
     }
 
+    /// Add a secondary input material (for alloys)
+    pub fn with_secondary_input(mut self, material: String, quantity: u32) -> Self {
+        self.secondary_input = Some((material, quantity));
+        self
+    }
+
     pub fn with_time(mut self, ticks: u32) -> Self {
         self.smelting_time = ticks;
         self
@@ -73,6 +83,11 @@ impl SmeltingRecipe {
     pub fn with_fuel_cost(mut self, multiplier: f32) -> Self {
         self.fuel_cost_multiplier = multiplier;
         self
+    }
+
+    /// Check if this recipe requires a secondary input
+    pub fn requires_secondary(&self) -> bool {
+        self.secondary_input.is_some()
     }
 }
 
@@ -169,6 +184,8 @@ impl SmeltingRegistry {
         // Bronze is an alloy (not technically smelting, but similar process)
         // Requires copper + tin at copper's melting point
 
+        // Bronze alloy: 9 copper + 1 tin = 10 bronze
+        // Historical bronze was typically 88% copper, 12% tin
         self.register(
             SmeltingRecipe::new(
                 "make_bronze".to_string(),
@@ -178,13 +195,11 @@ impl SmeltingRegistry {
                 1085.0,
             )
             .with_description("Alloy copper with tin to create bronze".to_string())
-            .with_quantities(9, 10) // 9 copper + tin -> 10 bronze (handled specially)
+            .with_quantities(9, 10) // 9 copper + 1 tin -> 10 bronze
+            .with_secondary_input("tin_ingot".to_string(), 1) // Requires tin
             .with_time(120)
             .with_fuel_cost(1.0),
         );
-
-        // Note: Bronze actually needs both copper and tin ingots
-        // This is simplified; full implementation would check for both
 
         // ===== Iron Smelting =====
         // Iron melting point is 1538°C, but bloomery process works at 1200-1400°C
@@ -381,22 +396,79 @@ pub enum SmeltingCheck {
     },
 }
 
-/// Check if material is ready to smelt
+/// Select the best recipe from a list based on current conditions
+///
+/// Prioritizes:
+/// 1. Recipes achievable at current temperature
+/// 2. Higher output quantity (better yield)
+/// 3. Lower time requirement (efficiency)
+fn select_best_recipe<'a>(recipes: &[&'a SmeltingRecipe], current_temp: f32) -> &'a SmeltingRecipe {
+    // Filter to recipes that can be done at current temperature
+    let achievable: Vec<_> = recipes.iter()
+        .filter(|r| current_temp >= r.melting_point)
+        .collect();
+
+    // If some are achievable, pick the best one
+    if !achievable.is_empty() {
+        // Score by: output_quantity / input_quantity / time
+        // Higher is better
+        achievable.into_iter()
+            .max_by(|a, b| {
+                let score_a = (a.output_quantity as f32 / a.input_quantity as f32) / a.smelting_time as f32;
+                let score_b = (b.output_quantity as f32 / b.input_quantity as f32) / b.smelting_time as f32;
+                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+            .unwrap()
+    } else {
+        // No achievable recipes - return the one with lowest temp requirement
+        recipes.iter()
+            .min_by(|a, b| a.melting_point.partial_cmp(&b.melting_point).unwrap_or(std::cmp::Ordering::Equal))
+            .copied()
+            .unwrap()
+    }
+}
+
+/// Check if material is ready to smelt using the best available recipe
 pub fn check_smelting(
     registry: &SmeltingRegistry,
     material_id: &str,
     heating_time: u32,
     current_temp: f32,
 ) -> SmeltingCheck {
-    // Find recipe for this material
+    check_smelting_with_recipe(registry, material_id, None, heating_time, current_temp)
+}
+
+/// Check if material is ready to smelt with optional recipe selection
+///
+/// If recipe_id is None, selects the best recipe based on:
+/// 1. Temperature requirements (recipes achievable at current temp)
+/// 2. Output efficiency (higher output quantity preferred)
+/// 3. Time efficiency (faster recipes preferred when temps are similar)
+pub fn check_smelting_with_recipe(
+    registry: &SmeltingRegistry,
+    material_id: &str,
+    recipe_id: Option<&str>,
+    heating_time: u32,
+    current_temp: f32,
+) -> SmeltingCheck {
+    // Find recipes for this material
     let recipes = registry.get_by_input(material_id);
 
     if recipes.is_empty() {
         return SmeltingCheck::NoRecipe;
     }
 
-    // Use the first recipe (in future, could allow choosing)
-    let recipe = recipes[0];
+    // Select recipe: either by ID or choose the best one
+    let recipe = if let Some(id) = recipe_id {
+        match recipes.iter().find(|r| r.id == id) {
+            Some(r) => r,
+            None => return SmeltingCheck::NoRecipe,
+        }
+    } else {
+        // Select best recipe based on current conditions
+        select_best_recipe(&recipes, current_temp)
+    };
 
     // Check temperature
     if current_temp < recipe.melting_point {

@@ -10,7 +10,7 @@
 //! - Material heating and smelting simulation
 //! - Heat source progression (campfire → furnace)
 
-use ebss::world::{World, WorldConfig, WorldSize, ResourceConfig};
+use ebss::world::{World, WorldConfig, ResourceConfig};
 use ebss::environment::HeatSourceType;
 
 fn main() {

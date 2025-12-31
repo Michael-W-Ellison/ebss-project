@@ -23,6 +23,7 @@ fn main() {
             stone_nodes: 3,
             iron_nodes: 2,
             food_nodes: 10, // Lots of food for testing
+            ..Default::default()
         },
     };
     let mut world = World::new(world_config);
@@ -58,8 +59,8 @@ fn main() {
                 println!("  Is survival critical: {}", agent.state.is_survival_critical());
 
                 println!("\nAgent Inventory:");
-                println!("  Food: {}", count_inventory_item(agent, "food"));
-                println!("  Wood: {}", count_inventory_item(agent, "wood"));
+                println!("  Food: {}", agent.inventory.count_item("food"));
+                println!("  Wood: {}", agent.inventory.count_item("wood"));
 
                 println!("\nTop 5 Drives:");
                 let active_drives = agent.drives.active_drives();
@@ -84,26 +85,16 @@ fn main() {
         if let Some(agent) = population.agents.first_mut() {
             let agent_id = agent.id;
 
-            // Try to eat if we have food and are hungry
-            let hunger_value = agent.drives.get(DriveType::Hunger).map(|d| d.value).unwrap_or(0.0);
-            let needs_food = hunger_value > 0.6 || agent.state.energy < 30.0;
-            let has_food = count_inventory_item(agent, "food") > 0;
-            let mut ate = false;
-
-            if has_food && needs_food {
-                if agent.inventory.remove_item("food", 1).is_some() {
-                    agent.state.eat(tick, 25.0);
-                    if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
-                        hunger_drive.partial_satisfy(0.3);
-                    }
-                    ate = true;
+            // Try to eat if we have food in inventory
+            if agent.inventory.count_item("food") > 0 {
+                let ate = agent.eat_food(1);
+                if ate && tick % 50 < 10 {
+                    println!("  → Agent ate food! Energy restored.");
                 }
-            }
-            if ate && tick % 50 < 10 {
-                println!("  → Agent ate food! Energy restored.");
             }
 
             let mut agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+            let needs_food = agent.state.is_starving() || agent.state.energy < 50.0;
             let is_critical = agent.state.is_survival_critical();
 
             // Simple AI: prioritize food if needed

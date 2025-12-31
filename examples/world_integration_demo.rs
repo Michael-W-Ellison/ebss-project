@@ -27,6 +27,7 @@ fn main() {
             stone_nodes: 30,
             iron_nodes: 15,
             food_nodes: 40,
+            ..Default::default()
         },
     };
 

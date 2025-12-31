@@ -102,9 +102,8 @@ impl Recipe {
     }
 }
 
-// Note: Job-based recipe organization has been removed in favor of skill-based crafting.
-// See src/world/crafting.rs for the new skill-based crafting system.
-// This file is kept for legacy Recipe, Quality, and related types used by analytics.
+// Core production types used by the skill-based crafting system.
+// See src/world/crafting.rs for the crafting registry and skill gates.
 
 #[cfg(test)]
 mod tests {

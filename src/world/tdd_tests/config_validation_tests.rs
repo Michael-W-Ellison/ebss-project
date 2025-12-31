@@ -107,6 +107,7 @@ fn test_world_config_builder_pattern() {
             stone_nodes: 40,
             iron_nodes: 20,
             food_nodes: 60,
+            ..Default::default()
         });
 
     assert_eq!(config.size, (100, 100));

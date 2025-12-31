@@ -147,28 +147,147 @@ impl World {
                 message: format!("Rested for {} ticks", duration),
             },
 
-            Action::ConstructBuilding {
-                building_type,
-                position,
-            } => self.execute_construct_building(*building_type, position),
-
             Action::CraftItem { item_type, quantity } => {
-                self.execute_craft_item(agent_id, *item_type, *quantity)
+                self.execute_craft(agent_id, *item_type, *quantity)
             }
 
-            Action::SocialInteraction {
-                target_agent_id,
-                interaction_type,
-            } => self.execute_social_interaction(agent_id, *target_agent_id, interaction_type),
+            Action::ConstructBuilding { building_type, position } => {
+                self.execute_construct_building(agent_id, *building_type, position)
+            }
 
-            Action::SeekSocialInteraction { target_agent_id: _ } => {
-                // SeekSocialInteraction is handled by the agent's decision system
-                // which will issue MoveTo actions. This is a placeholder for when
-                // the action is incorrectly issued directly.
-                ActionResult::Failure {
-                    reason: "SeekSocialInteraction should be handled by agent decision system".to_string(),
+            Action::SocialInteraction { target_agent_id, interaction_type } => {
+                self.execute_social_interaction(agent_id, *target_agent_id, interaction_type)
+            }
+
+            Action::SeekSocialInteraction { target_agent_id } => {
+                self.execute_seek_social(*target_agent_id, agent_position, occupied_positions)
+            }
+        }
+    }
+
+    fn execute_craft(
+        &mut self,
+        agent_id: Uuid,
+        item_type: ItemType,
+        quantity: u32,
+    ) -> ActionResult {
+        use crate::world::crafting::ToolRequirement;
+
+        // Map ItemType to recipe ID
+        let recipe_id = match item_type {
+            ItemType::WoodenAxe => "stone_axe",
+            ItemType::WoodenSpear => "stone_spear",
+            ItemType::StoneAxe => "stone_axe",
+            ItemType::StonePickaxe => "stone_pickaxe",
+            ItemType::IronSword => "iron_sword",
+            ItemType::IronAxe => "iron_axe",
+            ItemType::IronPickaxe => "iron_pickaxe",
+            ItemType::LeatherArmor => "leather_chestplate",
+            ItemType::Clothing => "simple_tunic",
+            ItemType::Furniture => "wooden_chest",
+            _ => {
+                return ActionResult::Failure {
+                    reason: format!("No recipe for {:?}", item_type),
+                };
+            }
+        };
+
+        // Get recipe from crafting manager
+        let recipe = match self.crafting_manager.get_recipe(recipe_id) {
+            Some(r) => r.clone(),
+            None => {
+                return ActionResult::Failure {
+                    reason: format!("Recipe '{}' not found", recipe_id),
+                };
+            }
+        };
+
+        // Check materials from storehouse
+        let mut materials_available = std::collections::HashMap::new();
+        for mat_req in &recipe.materials {
+            // Map material string to ItemType
+            let item = match mat_req.material_id.as_str() {
+                "wood" => ItemType::Wood,
+                "stone" => ItemType::Stone,
+                "iron_ingot" | "iron" => ItemType::Iron,
+                "leather" => ItemType::Hides, // Using Hides as leather source
+                "cloth" => ItemType::Cloth,
+                "thread" => ItemType::Cloth, // Simplify - treat thread as cloth
+                "planks" => ItemType::Wood,
+                "wool" => ItemType::Wool,
+                _ => {
+                    return ActionResult::Failure {
+                        reason: format!("Unknown material: {}", mat_req.material_id),
+                    };
                 }
+            };
+            let count = self.storehouse_inventory.count_item(&item);
+            materials_available.insert(mat_req.material_id.clone(), count);
+        }
+
+        // Check tool requirement
+        let has_tool = match recipe.tool_requirement {
+            ToolRequirement::None => true,
+            ToolRequirement::Workbench => self.buildings.iter().any(|b|
+                matches!(b.building_type, crate::world::BuildingType::Workshop) && b.is_completed()
+            ),
+            ToolRequirement::Anvil | ToolRequirement::Furnace => self.buildings.iter().any(|b|
+                matches!(b.building_type, crate::world::BuildingType::Smithy) && b.is_completed()
+            ),
+            ToolRequirement::Loom => self.buildings.iter().any(|b|
+                matches!(b.building_type, crate::world::BuildingType::Workshop) && b.is_completed()
+            ),
+            ToolRequirement::Tannery => self.buildings.iter().any(|b|
+                matches!(b.building_type, crate::world::BuildingType::Workshop) && b.is_completed()
+            ),
+            ToolRequirement::Alchemy => false, // No alchemy station yet
+        };
+
+        if !has_tool {
+            return ActionResult::Failure {
+                reason: format!("Missing required tool/building: {:?}", recipe.tool_requirement),
+            };
+        }
+
+        // Check and consume materials
+        for mat_req in &recipe.materials {
+            let available = materials_available.get(&mat_req.material_id).copied().unwrap_or(0);
+            if available < mat_req.quantity * quantity {
+                return ActionResult::Failure {
+                    reason: format!(
+                        "Insufficient {}: need {}, have {}",
+                        mat_req.material_id,
+                        mat_req.quantity * quantity,
+                        available
+                    ),
+                };
             }
+        }
+
+        // Consume materials from storehouse
+        for mat_req in &recipe.materials {
+            let item = match mat_req.material_id.as_str() {
+                "wood" | "planks" => ItemType::Wood,
+                "stone" => ItemType::Stone,
+                "iron_ingot" | "iron" => ItemType::Iron,
+                "leather" => ItemType::Hides,
+                "cloth" | "thread" => ItemType::Cloth,
+                "wool" => ItemType::Wool,
+                _ => continue,
+            };
+            self.storehouse_inventory.remove_item(&item, mat_req.quantity * quantity);
+        }
+
+        // Add crafted items to storehouse
+        self.storehouse_inventory.add_item(item_type, quantity * recipe.output_quantity);
+
+        // Start crafting job (for tracking, even though it completes instantly here)
+        let _ = self.crafting_manager.start_crafting(recipe_id.to_string(), agent_id);
+
+        ActionResult::SuccessWithItems {
+            message: format!("Crafted {} x{}", recipe.name, quantity * recipe.output_quantity),
+            item_type,
+            quantity: quantity * recipe.output_quantity,
         }
     }
 

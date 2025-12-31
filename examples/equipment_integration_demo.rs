@@ -132,49 +132,23 @@ fn main() {
         println!("    Weight: {:.1} kg", item.weight);
         println!("    Durability: {:.0}/{:.0}", item.durability, item.max_durability);
     }
-    println!();
 
-    // ===== Part 5: Combat Stats =====
-    println!("--- Part 5: Combat Statistics ---");
+    let iron_armor = EquipmentItem::new(
+        "iron_armor".to_string(),
+        EquipmentType::HeavyArmor,
+        EquipmentSlot::Legs,
+        EquipmentMaterial::Metal(MetalMaterial::Iron),
+        Quality::Moderate,
+    );
 
-    let weapon_damage = agent.get_weapon_damage();
-    let total_armor = agent.get_total_armor();
-
-    println!("Weapon damage: {:.1}", weapon_damage);
-    println!("Total armor rating: {:.1}", total_armor);
-    println!("Estimated damage reduction: {:.0}%", total_armor * 100.0);
-    println!();
-
-    println!("Combat effectiveness:");
-    println!("  Attack power: {:.1} damage per hit", weapon_damage);
-    println!("  Defense: Can reduce incoming damage by up to {:.0}%", total_armor.min(0.95) * 100.0);
-    println!();
-
-    // ===== Part 6: Environmental Protection =====
-    println!("--- Part 6: Environmental Protection ---");
-
-    let cold_insulation = agent.get_total_cold_insulation();
-    let heat_resistance = agent.get_total_heat_resistance();
-
-    println!("Cold insulation: {:.1}°C protection", cold_insulation);
-    println!("Heat resistance: {:.1}°C protection", heat_resistance);
-    println!();
-
-    if cold_insulation > 10.0 {
-        println!("✓ Well protected against cold environments");
-    } else {
-        println!("⚠ Limited cold protection - additional clothing recommended");
-    }
-
-    if heat_resistance > 5.0 {
-        println!("✓ Good heat resistance for hot environments");
-    } else {
-        println!("⚠ Limited heat resistance");
+    match agent.equipment.equip(iron_armor) {
+        Ok(_) => println!("  ✓ Equipped iron armor to legs"),
+        Err(e) => println!("  ✗ Failed: {}", e),
     }
     println!();
 
-    // ===== Part 7: Tool Efficiency =====
-    println!("--- Part 7: Tool Efficiency Bonuses ---");
+    // ===== Part 4: Equipment Stats =====
+    println!("--- Part 4: Equipment Stats ---");
 
     println!("Equipping iron pickaxe for mining...");
     let pickaxe = EquipmentItem::new(
@@ -185,16 +159,13 @@ fn main() {
         Quality::Advanced,
     );
 
-    // Unequip sword first
-    agent.equipment.unequip(EquipmentSlot::MainHand);
-    agent.equipment.equip(pickaxe).ok();
+    println!("\nProtection stats:");
+    println!("  Cold insulation: {:.1}", agent.equipment.total_cold_insulation());
+    println!("  Heat resistance: {:.1}", agent.equipment.total_heat_resistance());
 
-    println!("  ✓ Equipped iron pickaxe");
-    println!();
-
-    let mining_speed = agent.get_mining_speed_bonus();
-    println!("Mining speed bonus: {:.1}x", mining_speed);
-    println!("Time to mine stone: {:.1}s (base: 10s)", 10.0 / mining_speed);
+    println!("\nEncumbrance:");
+    println!("  Total weight: {:.1} kg", agent.equipment.get_total_weight());
+    println!("  Movement multiplier: {:.0}%", agent.equipment.movement_speed_multiplier() * 100.0);
     println!();
 
     // Switch to hatchet
@@ -227,7 +198,6 @@ fn main() {
             tool.max_durability,
             (tool.durability / tool.max_durability) * 100.0);
     }
-    println!();
 
     println!("Using hatchet to chop 10 trees...");
     for i in 1..=10 {
@@ -248,7 +218,6 @@ fn main() {
             Err(e) => println!("  Error: {}", e),
         }
     }
-    println!();
 
     if let Some(tool) = agent.get_equipped(EquipmentSlot::MainHand) {
         println!("Stone hatchet condition after use:");
@@ -284,10 +253,7 @@ fn main() {
             }
             Err(e) => println!("  ✗ Failed: {}", e),
         }
-    } else {
-        println!("Cannot repair - hatchet already broke!");
     }
-    println!();
 
     // ===== Part 10: Encumbrance =====
     println!("--- Part 10: Equipment Weight and Encumbrance ---");
@@ -308,39 +274,30 @@ fn main() {
         Ok(_) => println!("  ✓ Equipped steel chestplate (heavy)"),
         Err(e) => println!("  ✗ Failed: {}", e),
     }
-    println!();
 
-    let is_encumbered = agent.is_encumbered();
-    let penalty = agent.get_encumbrance_penalty();
-    let speed_mult = agent.get_movement_speed_multiplier();
-
-    println!("Encumbrance status:");
-    println!("  Encumbered: {}", if is_encumbered { "YES" } else { "NO" });
-    println!("  Penalty: {:.0}%", penalty * 100.0);
-    println!("  Movement speed: {:.0}% of normal", speed_mult * 100.0);
-    println!();
-
-    if is_encumbered {
-        println!("⚠ Agent is carrying too much weight!");
-        println!("  Effects:");
-        println!("  - Movement speed reduced to {:.0}%", speed_mult * 100.0);
-        println!("  - Stamina drains faster");
-        println!("  - Combat effectiveness reduced");
-        println!();
-        println!("  Recommendation: Remove some heavy equipment");
-    } else {
-        println!("✓ Agent can carry all equipment comfortably");
+    if let Some(tool) = agent.equipment.get_equipped(EquipmentSlot::MainHand) {
+        let percent = (tool.durability / tool.max_durability) * 100.0;
+        println!("  After use: {:.0}% durability remaining", percent);
     }
     println!();
 
-    // ===== Part 11: Unequipping Items =====
-    println!("--- Part 11: Unequipping Items Back to Inventory ---");
+    // ===== Part 7: Equipment Summary =====
+    println!("--- Part 7: Final Equipment Summary ---");
 
-    println!("Unequipping steel chestplate...");
-    match agent.unequip_to_inventory(EquipmentSlot::Torso) {
-        Ok(_) => {
-            println!("  ✓ Unequipped and added to inventory");
-            println!("  New encumbrance penalty: {:.0}%", agent.get_encumbrance_penalty() * 100.0);
+    println!("\nAll equipped items:");
+    for slot in [
+        EquipmentSlot::Head,
+        EquipmentSlot::Torso,
+        EquipmentSlot::Legs,
+        EquipmentSlot::Feet,
+        EquipmentSlot::MainHand,
+        EquipmentSlot::OffHand,
+    ] {
+        if let Some(item) = agent.equipment.get_equipped(slot) {
+            println!("  {:?}: {} ({:?}, {:?})",
+                slot, item.name, item.equipment_type, item.quality);
+        } else {
+            println!("  {:?}: (empty)", slot);
         }
         Err(e) => println!("  ✗ Failed: {}", e),
     }
@@ -380,38 +337,16 @@ fn main() {
             item.name,
             (item.durability / item.max_durability) * 100.0);
     }
-    println!();
-
-    println!("Combat Stats:");
-    println!("  Weapon Damage: {:.1}", agent.get_weapon_damage());
-    println!("  Armor Rating: {:.1}", agent.get_total_armor());
-    println!();
-
-    println!("Environmental Protection:");
-    println!("  Cold Insulation: {:.1}°C", agent.get_total_cold_insulation());
-    println!("  Heat Resistance: {:.1}°C", agent.get_total_heat_resistance());
-    println!();
-
-    println!("Status:");
-    println!("  Encumbered: {}", if agent.is_encumbered() { "Yes" } else { "No" });
-    println!("  Movement Speed: {:.0}%", agent.get_movement_speed_multiplier() * 100.0);
-    println!();
 
     println!("\n=== Key Features Demonstrated ===");
-    println!("✓ Equipment system integrated into Agent");
-    println!("✓ Equip/unequip items from inventory");
-    println!("✓ Equipment slots (head, torso, hands, feet, etc.)");
-    println!("✓ Material-based stat calculations");
-    println!("✓ Quality modifiers");
-    println!("✓ Weapon damage bonuses");
-    println!("✓ Armor defense ratings");
-    println!("✓ Environmental protection (cold/heat)");
-    println!("✓ Tool efficiency bonuses");
-    println!("✓ Durability and wear mechanics");
-    println!("✓ Equipment repair");
-    println!("✓ Weight and encumbrance system");
-    println!("✓ Movement speed penalties");
-    println!("✓ Equipment loadouts for different activities");
+    println!("✓ Equipment creation with materials and quality");
+    println!("✓ Equipping items to appropriate slots");
+    println!("✓ Combat stats from weapons (damage, speed, range)");
+    println!("✓ Defense stats from armor (armor value, insulation)");
+    println!("✓ Tool efficiency for different tasks");
+    println!("✓ Durability tracking and damage");
+    println!("✓ Encumbrance and movement penalty");
+    println!("✓ Unequipping and re-equipping items");
 
     println!("\n=== Demonstration Complete ===");
 }

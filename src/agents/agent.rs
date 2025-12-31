@@ -1,7 +1,8 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences};
+use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
+use crate::core::planning::{ActionPlan, ActionType as PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
 use std::collections::HashMap;
 
@@ -335,6 +336,13 @@ impl Inventory {
             .unwrap_or(false)
     }
 
+    /// Count quantity of a specific item by id
+    pub fn count_item(&self, item_id: &str) -> u32 {
+        self.items.get(item_id)
+            .map(|item| item.quantity)
+            .unwrap_or(0)
+    }
+
     /// Get all items
     pub fn get_all_items(&self) -> &HashMap<String, InventoryItem> {
         &self.items
@@ -578,11 +586,19 @@ pub struct Agent {
     pub preferences: Preferences,
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
     pub satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker, // Tracks who/what satisfies which drives
+    /// Current active plan being executed
+    pub current_plan: Option<ActionPlan>,
+    /// Planning engine for generating and learning from plans
+    pub planner: Planner,
+    /// Ticks spent on current plan step (for timeout detection)
+    pub plan_step_ticks: u32,
+    /// Accumulated learning exposure for various knowledge/skills
+    pub learning_exposure: crate::core::learning::LearningExposure,
 }
 
 impl Agent {
     pub fn new(config: AgentConfig) -> Self {
-        Self {
+        let mut agent = Self {
             id: Uuid::new_v4(),
             state: AgentState::new(),
             drives: if config.random_weights {
@@ -613,7 +629,16 @@ impl Agent {
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
             satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker::new(),
-        }
+            current_plan: None,
+            planner: Planner::new(),
+            plan_step_ticks: 0,
+            learning_exposure: crate::core::learning::LearningExposure::new(),
+        };
+
+        // Initialize default behavior trees for each drive type
+        agent.initialize_behavior_trees();
+
+        agent
     }
 
     /// Create an agent with specified parents
@@ -777,8 +802,34 @@ impl Agent {
     pub fn respond_to_threat(&mut self, threat_strength: f32, source: super::EmotionSource) -> super::EmotionType {
         use super::ThreatAssessment;
 
-        // Calculate agent strength (simplified: health + body functionality)
-        let agent_strength = self.state.health / 100.0 * self.body.movement_speed_multiplier();
+        // Calculate comprehensive agent strength:
+        // 1. Health factor (0.0 to 1.0)
+        let health_factor = self.state.health / 100.0;
+
+        // 2. Body functionality (movement ability)
+        let body_factor = self.body.movement_speed_multiplier();
+
+        // 3. Equipment bonuses (armor and weapons)
+        let armor_bonus = self.equipment.total_armor() / 100.0; // Normalize to 0-1 range
+        let weapon_bonus = if self.equipment.get_weapon().is_some() { 0.3 } else { 0.0 };
+
+        // 4. Skill bonuses (melee combat skill)
+        let combat_skill = self.skills.get_skill(crate::agents::SkillType::MeleeCombat);
+        let skill_bonus = (combat_skill.level as f32 + 10.0) / 20.0; // Normalize -10..10 to 0..1
+
+        // 5. Trait modifiers
+        let bravery_modifier = if self.traits.has(crate::core::Trait::Brave) {
+            1.3 // Brave agents feel 30% stronger
+        } else if self.traits.has(crate::core::Trait::Anxious) {
+            0.7 // Anxious agents feel 30% weaker
+        } else {
+            1.0
+        };
+
+        // Combined strength calculation
+        let base_strength = health_factor * body_factor;
+        let equipment_bonus = armor_bonus * 0.3 + weapon_bonus;
+        let agent_strength = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
 
         let assessment = ThreatAssessment::assess(agent_strength, threat_strength, source.clone());
 
@@ -1117,7 +1168,6 @@ impl Agent {
     }
 
     /// Initialize default behavior trees for each drive type
-    #[allow(dead_code)]
     fn initialize_behavior_trees(&mut self) {
         for drive_type in DriveType::all() {
             let tree = Self::create_default_tree_for_drive(drive_type);
@@ -1200,9 +1250,34 @@ impl Agent {
         self.inventory.max_weight
     }
 
-    /// Check if agent can reproduce
+    /// Check if agent can reproduce (basic capability check)
     pub fn can_reproduce(&self) -> bool {
         self.state.is_alive && self.state.life_stage.can_reproduce()
+    }
+
+    /// Check if agent should attempt reproduction given current survival state
+    ///
+    /// Returns false if critical survival drives (hunger, thirst) are active,
+    /// as the agent should prioritize immediate survival over reproduction.
+    /// Agents will not reproduce when starving - they must be well-fed first.
+    pub fn should_attempt_reproduction(&self) -> bool {
+        if !self.can_reproduce() {
+            return false;
+        }
+
+        // Check if critical survival drives are threatening the agent
+        // If any of these are active (above threshold), reproduction is suppressed
+        let hunger_active = self.drives.get(DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        let thirst_active = self.drives.get(DriveType::Thirst)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        // Agent must not be hungry or thirsty to reproduce
+        // This ensures offspring are only created when resources are sufficient
+        !hunger_active && !thirst_active
     }
 
     /// Get fertility level (0.0 to 1.0)
@@ -1226,7 +1301,6 @@ impl Agent {
     }
 
     /// Create a default behavior tree for a specific drive
-    #[allow(dead_code)]
     fn create_default_tree_for_drive(drive_type: DriveType) -> BehaviorTree {
         let root = match drive_type {
             DriveType::Hunger => {
@@ -1369,6 +1443,9 @@ impl Agent {
 
 
     // Helper methods
+
+    /// Find the nearest known shelter (housing building) from the agent's exploration knowledge.
+    /// Returns the position of the nearest shelter, or the agent's current position if no shelter is known.
     fn find_nearest_shelter(&self) -> (i32, i32, i32) {
         use crate::world::BuildingType;
 
@@ -1650,6 +1727,9 @@ impl Agent {
     }
 
     /// Decide what storage action to take (if any) based on inventory and storage preferences
+    ///
+    /// When survival drives (hunger/thirst) are active, agents will only retrieve food
+    /// from storage - they will NOT deposit resources when their survival is threatened.
     /// Returns Some(Action) if agent should interact with storehouse, None otherwise
     pub fn decide_storage_action(
         &self,
@@ -1662,8 +1742,17 @@ impl Agent {
         };
         use crate::agents::storage_management::decide_storage_action;
         use crate::environment::Action;
-        
+
         use log::debug;
+
+        // Check if survival drives are active - if so, only allow food retrieval
+        let hunger_active = self.drives.get(DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+        let thirst_active = self.drives.get(DriveType::Thirst)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+        let survival_threatened = hunger_active || thirst_active;
 
         // Count what agent has
         let agent_food = count_food_in_inventory(&self.inventory);
@@ -1689,6 +1778,12 @@ impl Agent {
         use crate::agents::storage_management::StorageDecision;
         match decision {
             StorageDecision::Deposit { item_type, quantity, reason } => {
+                // When survival is threatened, do NOT deposit anything
+                // The agent should focus on their own survival, not community contribution
+                if survival_threatened {
+                    debug!("Agent {} skipping deposit (survival threatened): {}", self.id, reason);
+                    return None;
+                }
                 debug!("Agent {} storing: {}", self.id, reason);
                 Some(Action::Store {
                     item_type: item_type_to_id(item_type),
@@ -2169,19 +2264,993 @@ impl Agent {
             format!("I'm grieving because: {}. I feel lonely and lost without them.", reasons.join(", "))
         }
     }
-}
 
-/// Population needs data structure for job selection
-#[derive(Clone, Debug, Default)]
-pub struct PopulationNeeds {
-    pub food_shortage: bool,
-    pub food_critical: bool,
-    pub wood_shortage: bool,
-    pub wood_critical: bool,
-    pub stone_shortage: bool,
-    pub stone_critical: bool,
-    pub tools_shortage: bool,
-    pub shelter_shortage: bool,
-    pub shelter_critical: bool,
-    pub food_processing_needed: bool,
+    // ========== Plan Execution System ==========
+
+    /// Check if agent has an active plan
+    pub fn has_active_plan(&self) -> bool {
+        self.current_plan.as_ref().map(|p| !p.is_complete()).unwrap_or(false)
+    }
+
+    /// Check if agent should use their plan (vs. reactive behavior)
+    ///
+    /// Returns false if:
+    /// - No active plan exists
+    /// - Survival drives are active (must address immediate needs first)
+    /// - Plan has been stuck on same step too long (timeout)
+    pub fn should_execute_plan(&self) -> bool {
+        // Must have an active plan
+        if !self.has_active_plan() {
+            return false;
+        }
+
+        // Survival drives override plan execution
+        let hunger_active = self.drives.get(DriveType::Hunger)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+        let thirst_active = self.drives.get(DriveType::Thirst)
+            .map(|d| d.is_active())
+            .unwrap_or(false);
+
+        if hunger_active || thirst_active {
+            return false;
+        }
+
+        // Check for plan step timeout (stuck too long on one step)
+        if let Some(plan) = &self.current_plan {
+            if let Some(step) = plan.current_step() {
+                // Allow 3x estimated time before considering it stuck
+                let timeout = step.estimated_ticks * 3;
+                if self.plan_step_ticks > timeout && timeout > 0 {
+                    return false; // Plan is stuck, should abandon
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Check if the current plan is still relevant given updated world state
+    ///
+    /// Returns true if the plan should continue, false if it should be abandoned
+    /// because the underlying goal is already satisfied (e.g., someone else restocked
+    /// the storehouse while this agent was gathering resources).
+    ///
+    /// This enables agents to respond to new information and avoid wasted effort.
+    pub fn is_plan_still_relevant(&self, world_state: &GoalWorldState) -> bool {
+        // No plan = not relevant
+        if !self.has_active_plan() {
+            return false;
+        }
+
+        // Find the goal this plan was created for
+        // Check if any active goal matches the plan description and is now satisfied
+        if let Some(plan) = &self.current_plan {
+            for goal in &self.goals.goals {
+                if goal.completed {
+                    continue;
+                }
+
+                // Check if this goal is now satisfied by world state
+                if goal.is_satisfied(world_state) {
+                    // Check if plan was for this goal (rough match by description)
+                    let goal_matches = match &goal.external {
+                        Some(crate::core::ExternalGoal::ContributeFoodToStorehouse(_)) => {
+                            plan.goal_description.contains("food") ||
+                            plan.goal_description.contains("Food")
+                        }
+                        Some(crate::core::ExternalGoal::ContributeMaterialsToStorehouse(_)) => {
+                            plan.goal_description.contains("wood") ||
+                            plan.goal_description.contains("material") ||
+                            plan.goal_description.contains("Gather")
+                        }
+                        Some(crate::core::ExternalGoal::StockHouseFood(_)) => {
+                            plan.goal_description.contains("food") ||
+                            plan.goal_description.contains("stock")
+                        }
+                        Some(crate::core::ExternalGoal::GatherResource(resource, _)) => {
+                            plan.goal_description.to_lowercase().contains(&resource.to_lowercase())
+                        }
+                        _ => false,
+                    };
+
+                    if goal_matches {
+                        log::debug!(
+                            "Plan '{}' no longer relevant - goal already satisfied by world state",
+                            plan.goal_description
+                        );
+                        return false;
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Update plan relevance and abandon if goal is already satisfied
+    ///
+    /// Call this when the agent receives new information about the world
+    /// (e.g., learning that the storehouse was restocked via gossip).
+    pub fn update_plan_relevance(&mut self, world_state: &GoalWorldState) {
+        if !self.is_plan_still_relevant(world_state) {
+            if let Some(plan) = &self.current_plan {
+                log::info!(
+                    "Agent {} abandoning plan '{}' - goal already satisfied",
+                    self.id, plan.goal_description
+                );
+            }
+            self.abandon_plan();
+
+            // Also mark the satisfied goal as complete
+            for goal in &mut self.goals.goals {
+                if !goal.completed && goal.is_satisfied(world_state) {
+                    goal.completed = true;
+                    goal.progress = 1.0;
+                }
+            }
+        }
+    }
+
+    /// Get the next action from the current plan
+    ///
+    /// Converts the current PlanStep to an environment Action.
+    /// Returns None if no plan, plan is complete, or step can't be converted.
+    pub fn get_plan_action(&self) -> Option<Action> {
+        let plan = self.current_plan.as_ref()?;
+        let step = plan.current_step()?;
+
+        self.convert_plan_step_to_action(step)
+    }
+
+    /// Convert a PlanStep's ActionType to an environment Action
+    fn convert_plan_step_to_action(&self, step: &PlanStep) -> Option<Action> {
+        match &step.action {
+            PlanActionType::MoveTo { location } => {
+                Some(Action::Move { target: *location })
+            }
+            PlanActionType::EquipItem { item: _ } => {
+                // Equipment is handled internally, return None to skip
+                // The step will be marked complete when equipment is applied
+                None
+            }
+            PlanActionType::GatherResource { resource, amount: _ } => {
+                Some(Action::Gather { resource_type: resource.clone() })
+            }
+            PlanActionType::CraftItem { item, count: _ } => {
+                Some(Action::Craft { item_type: item.clone() })
+            }
+            PlanActionType::BuildStructure { structure } => {
+                let pos = step.target_location.unwrap_or(self.state.position);
+                Some(Action::Build { structure_type: structure.clone(), position: pos })
+            }
+            PlanActionType::Deposit { resource, amount } => {
+                Some(Action::Store { item_type: resource.clone(), amount: *amount })
+            }
+            PlanActionType::Retrieve { resource, amount } => {
+                Some(Action::Retrieve { item_type: resource.clone(), amount: *amount })
+            }
+            PlanActionType::Socialize { target_id } => {
+                Some(Action::Socialize { target_agent_id: *target_id })
+            }
+            PlanActionType::Rest { duration } => {
+                Some(Action::Sleep { duration: *duration })
+            }
+            PlanActionType::LearnSkill { skill: _ } => {
+                // Learning is passive, skip this step
+                None
+            }
+        }
+    }
+
+    /// Advance the plan after a successful action
+    ///
+    /// Records the outcome for learning, advances to next step,
+    /// and clears step ticks counter.
+    pub fn advance_plan_step(&mut self, success: bool, actual_ticks: u32) {
+        if let Some(plan) = &self.current_plan {
+            if let Some(step) = plan.current_step() {
+                // Record outcome for learning
+                let outcome = ActionOutcome {
+                    action_type: step.action.clone(),
+                    estimated_ticks: step.estimated_ticks,
+                    actual_ticks,
+                    success,
+                    tool_used: step.required_tool.clone(),
+                    tick: self.state.age, // Use age as proxy for current tick
+                };
+                self.planner.record_outcome(outcome);
+            }
+        }
+
+        // Advance to next step
+        if let Some(plan) = &mut self.current_plan {
+            plan.advance_step();
+            self.plan_step_ticks = 0;
+
+            // Clear plan if complete
+            if plan.is_complete() {
+                self.current_plan = None;
+            }
+        }
+    }
+
+    /// Abandon the current plan (e.g., due to failure or priority change)
+    pub fn abandon_plan(&mut self) {
+        if self.current_plan.is_some() {
+            log::debug!("Agent {} abandoning plan", self.id);
+        }
+        self.current_plan = None;
+        self.plan_step_ticks = 0;
+    }
+
+    /// Increment the tick counter for current plan step
+    pub fn tick_plan_step(&mut self) {
+        if self.has_active_plan() {
+            self.plan_step_ticks += 1;
+        }
+    }
+
+    /// Create a plan for gathering resources
+    pub fn create_gather_plan(
+        &mut self,
+        _resource: &str,
+        amount: u32,
+        resource_location: (i32, i32, i32),
+        return_location: (i32, i32, i32),
+        current_tick: u32,
+    ) {
+        // Get available tools from inventory
+        let available_tools: Vec<String> = self.inventory.items.values()
+            .filter(|item| {
+                item.item_id.ends_with("_axe") ||
+                item.item_id.ends_with("_pickaxe") ||
+                item.item_id.ends_with("_hammer")
+            })
+            .map(|item| item.item_id.clone())
+            .collect();
+
+        // Generate the plan
+        let plan = self.planner.plan_gather_wood(
+            self.state.position,
+            resource_location,
+            return_location,
+            &available_tools,
+            amount,
+        );
+
+        // Check if plan is acceptable for this agent's traits
+        let traits: Vec<_> = self.traits.get_traits().iter().copied().collect();
+        if !plan.exceeds_complexity_limit(&traits) {
+            log::debug!(
+                "Agent {} created plan: {} ({} steps, est. {} ticks)",
+                self.id, plan.goal_description, plan.steps.len(), plan.total_estimated_ticks
+            );
+            self.current_plan = Some(ActionPlan {
+                created_at: current_tick,
+                ..plan
+            });
+            self.plan_step_ticks = 0;
+        }
+    }
+
+    /// Create a plan for the current highest-priority goal
+    ///
+    /// Returns true if a plan was created, false otherwise.
+    pub fn create_plan_for_goal(
+        &mut self,
+        resource_location: (i32, i32, i32),
+        return_location: (i32, i32, i32),
+        current_tick: u32,
+    ) -> bool {
+        use crate::core::{ExternalGoal, InternalGoal, EmotionType};
+
+        // Get the highest priority goal (internal or external)
+        let goal = self.goals.highest_priority_goal();
+        if goal.is_none() {
+            return false;
+        }
+
+        let goal = goal.unwrap();
+
+        // Get traits for complexity check
+        let traits: Vec<_> = self.traits.get_traits().iter().copied().collect();
+
+        // Handle internal goals first
+        if let Some(internal_goal) = &goal.internal {
+            let steps = match internal_goal {
+                InternalGoal::IncreaseEmotion(emotion, _target) => {
+                    match emotion {
+                        EmotionType::Happiness => {
+                            // Seek entertainment or social interaction
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                                    estimated_ticks: 30,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.5,
+                                },
+                            ]
+                        }
+                        EmotionType::Curiosity => {
+                            // Explore or learn something new
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::MoveTo { location: resource_location },
+                                    estimated_ticks: 40,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: Some(resource_location),
+                                    confidence: 0.7,
+                                },
+                            ]
+                        }
+                        _ => {
+                            // Default: rest and reflect
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 20 },
+                                    estimated_ticks: 20,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.8,
+                                },
+                            ]
+                        }
+                    }
+                }
+                InternalGoal::DecreaseEmotion(emotion, _target) => {
+                    match emotion {
+                        EmotionType::Fear => {
+                            // Find shelter or safety
+                            let shelter = self.find_nearest_shelter();
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::MoveTo { location: shelter },
+                                    estimated_ticks: 30,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: Some(shelter),
+                                    confidence: 0.8,
+                                },
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 30 },
+                                    estimated_ticks: 30,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: Some(shelter),
+                                    confidence: 0.9,
+                                },
+                            ]
+                        }
+                        EmotionType::Anger => {
+                            // Rest to calm down
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 40 },
+                                    estimated_ticks: 40,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.7,
+                                },
+                            ]
+                        }
+                        EmotionType::Sadness => {
+                            // Seek social support
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                                    estimated_ticks: 40,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.5,
+                                },
+                            ]
+                        }
+                        _ => {
+                            vec![
+                                PlanStep {
+                                    action: PlanActionType::Rest { duration: 20 },
+                                    estimated_ticks: 20,
+                                    required_tool: None,
+                                    required_resources: vec![],
+                                    target_location: None,
+                                    confidence: 0.8,
+                                },
+                            ]
+                        }
+                    }
+                }
+                InternalGoal::MaintainWellBeing(_threshold) => {
+                    // Balance of rest and social activity
+                    vec![
+                        PlanStep {
+                            action: PlanActionType::Rest { duration: 20 },
+                            estimated_ticks: 20,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.85,
+                        },
+                        PlanStep {
+                            action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                            estimated_ticks: 20,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.6,
+                        },
+                    ]
+                }
+                InternalGoal::ReduceStress => {
+                    // Find shelter and rest
+                    let shelter = self.find_nearest_shelter();
+                    vec![
+                        PlanStep {
+                            action: PlanActionType::MoveTo { location: shelter },
+                            estimated_ticks: 25,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: Some(shelter),
+                            confidence: 0.85,
+                        },
+                        PlanStep {
+                            action: PlanActionType::Rest { duration: 50 },
+                            estimated_ticks: 50,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: Some(shelter),
+                            confidence: 0.9,
+                        },
+                    ]
+                }
+                InternalGoal::SeekEntertainment => {
+                    // Explore and socialize
+                    vec![
+                        PlanStep {
+                            action: PlanActionType::MoveTo { location: resource_location },
+                            estimated_ticks: 30,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.7,
+                        },
+                        PlanStep {
+                            action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
+                            estimated_ticks: 30,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.5,
+                        },
+                    ]
+                }
+            };
+
+            let plan = ActionPlan::new(
+                format!("{:?}", internal_goal),
+                steps,
+                current_tick,
+                "fulfilling emotional need".to_string(),
+            );
+
+            if !plan.exceeds_complexity_limit(&traits) {
+                self.current_plan = Some(plan);
+                self.plan_step_ticks = 0;
+                return true;
+            }
+            return false;
+        }
+
+        // Handle external goals
+        let external_goal = match &goal.external {
+            Some(ext) => ext.clone(),
+            None => return false,
+        };
+
+        // Generate plan based on external goal type
+        match &external_goal {
+            ExternalGoal::GatherResource(resource, amount) => {
+                self.create_gather_plan(
+                    resource,
+                    *amount,
+                    resource_location,
+                    return_location,
+                    current_tick,
+                );
+                self.has_active_plan()
+            }
+            ExternalGoal::StockHouseFood(amount) => {
+                // Food gathering plan
+                self.create_gather_plan(
+                    "food",
+                    *amount,
+                    resource_location,
+                    return_location,
+                    current_tick,
+                );
+                self.has_active_plan()
+            }
+            ExternalGoal::ContributeFoodToStorehouse(amount) => {
+                // If we have food, create deposit plan
+                let food_count = self.inventory.get_item("food")
+                    .map(|i| i.quantity)
+                    .unwrap_or(0);
+
+                if food_count >= *amount {
+                    // Create simple deposit plan
+                    let steps = vec![
+                        PlanStep {
+                            action: PlanActionType::MoveTo { location: return_location },
+                            estimated_ticks: 30,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: Some(return_location),
+                            confidence: 0.95,
+                        },
+                        PlanStep {
+                            action: PlanActionType::Deposit {
+                                resource: "food".to_string(),
+                                amount: *amount,
+                            },
+                            estimated_ticks: 5,
+                            required_tool: None,
+                            required_resources: vec![("food".to_string(), *amount)],
+                            target_location: Some(return_location),
+                            confidence: 0.95,
+                        },
+                    ];
+
+                    let plan = ActionPlan::new(
+                        "Contribute food to storehouse".to_string(),
+                        steps,
+                        current_tick,
+                        "carrying food".to_string(),
+                    );
+
+                    if !plan.exceeds_complexity_limit(&traits) {
+                        self.current_plan = Some(plan);
+                        self.plan_step_ticks = 0;
+                        return true;
+                    }
+                } else {
+                    // Need to gather food first
+                    self.create_gather_plan(
+                        "food",
+                        *amount,
+                        resource_location,
+                        return_location,
+                        current_tick,
+                    );
+                }
+                self.has_active_plan()
+            }
+            ExternalGoal::ContributeMaterialsToStorehouse(amount) => {
+                self.create_gather_plan(
+                    "wood",
+                    *amount,
+                    resource_location,
+                    return_location,
+                    current_tick,
+                );
+                self.has_active_plan()
+            }
+            ExternalGoal::CraftItem(item) => {
+                // Simple craft plan
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::CraftItem {
+                            item: item.clone(),
+                            count: 1,
+                        },
+                        estimated_ticks: 30,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: None,
+                        confidence: 0.7,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    format!("Craft {}", item),
+                    steps,
+                    current_tick,
+                    "crafting".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::BuildStructure(structure) => {
+                // Simple build plan
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::BuildStructure {
+                            structure: structure.clone(),
+                        },
+                        estimated_ticks: 100,
+                        required_tool: Some("hammer".to_string()),
+                        required_resources: vec![("wood".to_string(), 10)],
+                        target_location: Some(self.state.position),
+                        confidence: 0.6,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    format!("Build {}", structure),
+                    steps,
+                    current_tick,
+                    "constructing".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::OwnHouse => {
+                // Build a small house for the agent
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "wood".to_string(),
+                            amount: 20,
+                        },
+                        estimated_ticks: 60,
+                        required_tool: Some("axe".to_string()),
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.8,
+                    },
+                    PlanStep {
+                        action: PlanActionType::BuildStructure {
+                            structure: "small_house".to_string(),
+                        },
+                        estimated_ticks: 150,
+                        required_tool: Some("hammer".to_string()),
+                        required_resources: vec![("wood".to_string(), 20)],
+                        target_location: Some(self.state.position),
+                        confidence: 0.6,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    "Build own house".to_string(),
+                    steps,
+                    current_tick,
+                    "constructing home".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::ObtainProtection => {
+                // Craft basic protection equipment
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "leather".to_string(),
+                            amount: 5,
+                        },
+                        estimated_ticks: 40,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.7,
+                    },
+                    PlanStep {
+                        action: PlanActionType::CraftItem {
+                            item: "leather_armor".to_string(),
+                            count: 1,
+                        },
+                        estimated_ticks: 50,
+                        required_tool: None,
+                        required_resources: vec![("leather".to_string(), 5)],
+                        target_location: None,
+                        confidence: 0.6,
+                    },
+                    PlanStep {
+                        action: PlanActionType::EquipItem {
+                            item: "leather_armor".to_string(),
+                        },
+                        estimated_ticks: 2,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: None,
+                        confidence: 0.95,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    "Obtain protection".to_string(),
+                    steps,
+                    current_tick,
+                    "crafting armor".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::EnsureToolsAvailable(target_count) => {
+                // Craft tools and deposit them
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "wood".to_string(),
+                            amount: 5,
+                        },
+                        estimated_ticks: 30,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.85,
+                    },
+                    PlanStep {
+                        action: PlanActionType::GatherResource {
+                            resource: "stone".to_string(),
+                            amount: 3,
+                        },
+                        estimated_ticks: 25,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(resource_location),
+                        confidence: 0.85,
+                    },
+                    PlanStep {
+                        action: PlanActionType::CraftItem {
+                            item: "stone_axe".to_string(),
+                            count: 1,
+                        },
+                        estimated_ticks: 20,
+                        required_tool: None,
+                        required_resources: vec![
+                            ("wood".to_string(), 2),
+                            ("stone".to_string(), 1),
+                        ],
+                        target_location: None,
+                        confidence: 0.7,
+                    },
+                    PlanStep {
+                        action: PlanActionType::MoveTo { location: return_location },
+                        estimated_ticks: 30,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(return_location),
+                        confidence: 0.95,
+                    },
+                    PlanStep {
+                        action: PlanActionType::Deposit {
+                            resource: "stone_axe".to_string(),
+                            amount: *target_count,
+                        },
+                        estimated_ticks: 5,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: Some(return_location),
+                        confidence: 0.9,
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    "Ensure tools available".to_string(),
+                    steps,
+                    current_tick,
+                    "crafting tools".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::LearnSkill(skill_name) => {
+                // Create a learning plan with practice time
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::LearnSkill {
+                            skill: skill_name.clone(),
+                        },
+                        estimated_ticks: 100,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: None,
+                        confidence: 0.5, // Learning outcomes are uncertain
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    format!("Learn {}", skill_name),
+                    steps,
+                    current_tick,
+                    "practicing".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::FormRelationship(relationship_type) => {
+                // Find nearby agents and socialize
+                // Use a placeholder target ID - actual target selection happens during execution
+                let target_id = uuid::Uuid::nil(); // Placeholder, will be resolved at execution time
+
+                let steps = vec![
+                    PlanStep {
+                        action: PlanActionType::Socialize { target_id },
+                        estimated_ticks: 30,
+                        required_tool: None,
+                        required_resources: vec![],
+                        target_location: None,
+                        confidence: 0.4, // Relationship outcomes are uncertain
+                    },
+                ];
+
+                let plan = ActionPlan::new(
+                    format!("Form {} relationship", relationship_type),
+                    steps,
+                    current_tick,
+                    "socializing".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+            ExternalGoal::CompleteJob(job_name) => {
+                // Generic job completion - maps to appropriate actions
+                // The job name determines what resources to gather or items to craft
+                let steps = match job_name.as_str() {
+                    "woodcutting" => vec![
+                        PlanStep {
+                            action: PlanActionType::GatherResource {
+                                resource: "wood".to_string(),
+                                amount: 10,
+                            },
+                            estimated_ticks: 60,
+                            required_tool: Some("axe".to_string()),
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.8,
+                        },
+                    ],
+                    "mining" => vec![
+                        PlanStep {
+                            action: PlanActionType::GatherResource {
+                                resource: "stone".to_string(),
+                                amount: 10,
+                            },
+                            estimated_ticks: 80,
+                            required_tool: Some("pickaxe".to_string()),
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.7,
+                        },
+                    ],
+                    "hunting" => vec![
+                        PlanStep {
+                            action: PlanActionType::GatherResource {
+                                resource: "meat".to_string(),
+                                amount: 5,
+                            },
+                            estimated_ticks: 90,
+                            required_tool: Some("bow".to_string()),
+                            required_resources: vec![],
+                            target_location: Some(resource_location),
+                            confidence: 0.5,
+                        },
+                    ],
+                    "crafting" => vec![
+                        PlanStep {
+                            action: PlanActionType::CraftItem {
+                                item: "tool".to_string(),
+                                count: 1,
+                            },
+                            estimated_ticks: 40,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.7,
+                        },
+                    ],
+                    _ => vec![
+                        // Generic work task - rest and observe
+                        PlanStep {
+                            action: PlanActionType::Rest { duration: 10 },
+                            estimated_ticks: 10,
+                            required_tool: None,
+                            required_resources: vec![],
+                            target_location: None,
+                            confidence: 0.9,
+                        },
+                    ],
+                };
+
+                let plan = ActionPlan::new(
+                    format!("Complete {} job", job_name),
+                    steps,
+                    current_tick,
+                    "working".to_string(),
+                );
+
+                if !plan.exceeds_complexity_limit(&traits) {
+                    self.current_plan = Some(plan);
+                    self.plan_step_ticks = 0;
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
+    /// Get current plan progress (0.0 to 1.0), or None if no plan
+    pub fn plan_progress(&self) -> Option<f32> {
+        self.current_plan.as_ref().map(|p| p.progress())
+    }
+
+    /// Get description of current plan step, if any
+    pub fn current_plan_step_description(&self) -> Option<String> {
+        self.current_plan.as_ref().and_then(|plan| {
+            plan.current_step().map(|step| {
+                match &step.action {
+                    PlanActionType::MoveTo { location } => {
+                        format!("Moving to {:?}", location)
+                    }
+                    PlanActionType::GatherResource { resource, amount } => {
+                        format!("Gathering {} {}", amount, resource)
+                    }
+                    PlanActionType::CraftItem { item, count } => {
+                        format!("Crafting {} x{}", item, count)
+                    }
+                    PlanActionType::BuildStructure { structure } => {
+                        format!("Building {}", structure)
+                    }
+                    PlanActionType::Deposit { resource, amount } => {
+                        format!("Depositing {} {}", amount, resource)
+                    }
+                    PlanActionType::Retrieve { resource, amount } => {
+                        format!("Retrieving {} {}", amount, resource)
+                    }
+                    PlanActionType::EquipItem { item } => {
+                        format!("Equipping {}", item)
+                    }
+                    PlanActionType::Socialize { target_id } => {
+                        format!("Socializing with {}", target_id)
+                    }
+                    PlanActionType::Rest { duration } => {
+                        format!("Resting for {} ticks", duration)
+                    }
+                    PlanActionType::LearnSkill { skill } => {
+                        format!("Learning {}", skill)
+                    }
+                }
+            })
+        })
+    }
 }

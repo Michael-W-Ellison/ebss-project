@@ -6,10 +6,18 @@ use serde::{Deserialize, Serialize};
 /// Types of terrain
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TerrainType {
-    Plains,   // Walkable, good for farming and building
-    Forest,   // Walkable, source of wood
+    Plains,   // Walkable, good for farming (grain, cotton) and building
+    Forest,   // Walkable, source of wood, herbs, honey
     Mountain, // Slower movement, source of stone and iron
-    Water,    // Not walkable (for now)
+    Water,    // Not walkable (for now), source of fish
+
+    // New terrain types for naturalistic resource distribution
+    Desert,   // Hot, dry - source of sand
+    Wetland,  // Marshy areas near water - source of clay, flax, reeds
+    Meadow,   // Open grassland - herbs, flowers, wild food, grazing
+    Hills,    // Between plains and mountains - coal deposits, grazing
+    Beach,    // Coastal area - sand, shells, fish access
+    Riverbank, // Along rivers - clay, flax, fishing
 }
 
 /// Terrain with properties
@@ -26,18 +34,20 @@ impl Terrain {
     /// Check if terrain is walkable
     pub fn is_walkable(&self) -> bool {
         match self.terrain_type {
-            TerrainType::Plains | TerrainType::Forest | TerrainType::Mountain => true,
-            TerrainType::Water => false,
+            TerrainType::Plains | TerrainType::Forest | TerrainType::Mountain |
+            TerrainType::Desert | TerrainType::Meadow | TerrainType::Hills |
+            TerrainType::Beach | TerrainType::Riverbank => true,
+            TerrainType::Water | TerrainType::Wetland => false, // Wetland is marshy, slow/impassable
         }
     }
 
     /// Get movement cost (for pathfinding)
     pub fn movement_cost(&self) -> u32 {
         match self.terrain_type {
-            TerrainType::Plains => 1,
-            TerrainType::Forest => 2,
-            TerrainType::Mountain => 3,
-            TerrainType::Water => u32::MAX, // Impassable
+            TerrainType::Plains | TerrainType::Meadow | TerrainType::Beach => 1,
+            TerrainType::Forest | TerrainType::Hills | TerrainType::Riverbank => 2,
+            TerrainType::Mountain | TerrainType::Desert => 3, // Desert is slow due to sand
+            TerrainType::Water | TerrainType::Wetland => u32::MAX, // Impassable
         }
     }
 
@@ -48,6 +58,12 @@ impl Terrain {
             TerrainType::Forest => 'T',
             TerrainType::Mountain => '^',
             TerrainType::Water => '~',
+            TerrainType::Desert => ':',
+            TerrainType::Wetland => '%',
+            TerrainType::Meadow => ',',
+            TerrainType::Hills => 'n',
+            TerrainType::Beach => '_',
+            TerrainType::Riverbank => '=',
         }
     }
 
@@ -58,6 +74,12 @@ impl Terrain {
             TerrainType::Forest => "\x1b[32m",   // Green
             TerrainType::Mountain => "\x1b[37m", // White
             TerrainType::Water => "\x1b[34m",    // Blue
+            TerrainType::Desert => "\x1b[93m",   // Bright Yellow
+            TerrainType::Wetland => "\x1b[36m",  // Cyan
+            TerrainType::Meadow => "\x1b[92m",   // Bright Green
+            TerrainType::Hills => "\x1b[90m",    // Dark Gray
+            TerrainType::Beach => "\x1b[97m",    // Bright White
+            TerrainType::Riverbank => "\x1b[96m", // Bright Cyan
         }
     }
 }

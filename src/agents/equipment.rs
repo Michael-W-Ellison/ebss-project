@@ -887,6 +887,14 @@ impl EquipmentManager {
             .unwrap_or(1.0)
     }
 
+    /// Get weapon range (reach)
+    /// Returns 1.0 for unarmed (melee only), higher for spears/ranged weapons
+    pub fn weapon_range(&self) -> f32 {
+        self.get_weapon()
+            .map(|w| w.reach)
+            .unwrap_or(1.0) // Unarmed reach
+    }
+
     /// Get equipped tool for a task
     pub fn get_tool_for_task(&self, task: &str) -> Option<&EquipmentItem> {
         let required_type = match task {
@@ -979,6 +987,11 @@ impl EquipmentManager {
     /// Get movement speed multiplier based on weight
     pub fn movement_speed_multiplier(&self) -> f32 {
         1.0 - (self.encumbrance_penalty() * 0.5)
+    }
+
+    /// Get total weight of all equipped items
+    pub fn get_total_weight(&self) -> f32 {
+        self.total_weight
     }
 
     /// Get list of broken equipment

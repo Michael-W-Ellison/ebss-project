@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::agents::temperature::Temperature;
+use crate::environment::BiomeType;
 use super::seasons::Season;
 
 /// Types of precipitation
@@ -31,6 +32,8 @@ pub enum WeatherType {
     Blizzard,
     Fog,
     Sandstorm,
+    Sleet,
+    Hail,
 }
 
 impl WeatherType {
@@ -43,6 +46,8 @@ impl WeatherType {
             WeatherType::LightSnow | WeatherType::Snow | WeatherType::Blizzard => {
                 PrecipitationType::Snow
             }
+            WeatherType::Sleet => PrecipitationType::Sleet,
+            WeatherType::Hail => PrecipitationType::Hail,
             _ => PrecipitationType::None,
         }
     }
@@ -51,8 +56,8 @@ impl WeatherType {
     pub fn precipitation_intensity(&self) -> f32 {
         match self {
             WeatherType::LightRain | WeatherType::LightSnow => 0.3,
-            WeatherType::Rain | WeatherType::Snow => 0.6,
-            WeatherType::HeavyRain | WeatherType::Blizzard | WeatherType::Thunderstorm => 1.0,
+            WeatherType::Rain | WeatherType::Snow | WeatherType::Sleet => 0.6,
+            WeatherType::HeavyRain | WeatherType::Blizzard | WeatherType::Thunderstorm | WeatherType::Hail => 1.0,
             _ => 0.0,
         }
     }
@@ -64,8 +69,9 @@ impl WeatherType {
             WeatherType::PartlyCloudy => 0.0,
             WeatherType::Cloudy | WeatherType::Overcast => 0.1,
             WeatherType::LightRain | WeatherType::LightSnow => 0.2,
-            WeatherType::Rain | WeatherType::Snow | WeatherType::Fog => 0.4,
-            WeatherType::HeavyRain | WeatherType::Thunderstorm => 0.6,
+            WeatherType::Rain | WeatherType::Snow | WeatherType::Sleet => 0.4,
+            WeatherType::Fog => 0.6,
+            WeatherType::HeavyRain | WeatherType::Thunderstorm | WeatherType::Hail => 0.6,
             WeatherType::Blizzard | WeatherType::Sandstorm => 0.8,
         }
     }
@@ -75,8 +81,9 @@ impl WeatherType {
         match self {
             WeatherType::Clear | WeatherType::PartlyCloudy | WeatherType::Cloudy => 1.0,
             WeatherType::Overcast | WeatherType::LightRain | WeatherType::LightSnow => 0.9,
-            WeatherType::Rain | WeatherType::Snow | WeatherType::Fog => 0.8,
+            WeatherType::Rain | WeatherType::Snow | WeatherType::Fog | WeatherType::Sleet => 0.8,
             WeatherType::HeavyRain | WeatherType::Thunderstorm => 0.7,
+            WeatherType::Hail => 0.6,
             WeatherType::Blizzard | WeatherType::Sandstorm => 0.5,
         }
     }
@@ -89,6 +96,8 @@ impl WeatherType {
             WeatherType::Cloudy | WeatherType::Overcast => -2.0,
             WeatherType::LightRain | WeatherType::Rain => -3.0,
             WeatherType::HeavyRain | WeatherType::Thunderstorm => -5.0,
+            WeatherType::Sleet => -6.0,
+            WeatherType::Hail => -4.0,
             WeatherType::LightSnow | WeatherType::Snow => -8.0,
             WeatherType::Blizzard => -12.0,
             WeatherType::Fog => -2.0,
@@ -100,10 +109,10 @@ impl WeatherType {
     pub fn wind_modifier(&self) -> f32 {
         match self {
             WeatherType::Clear | WeatherType::PartlyCloudy => 1.0,
-            WeatherType::Cloudy => 1.2,
+            WeatherType::Cloudy | WeatherType::Fog => 1.2,
             WeatherType::Overcast | WeatherType::LightRain | WeatherType::LightSnow => 1.3,
-            WeatherType::Rain | WeatherType::Snow | WeatherType::Fog => 1.5,
-            WeatherType::HeavyRain => 1.8,
+            WeatherType::Rain | WeatherType::Snow | WeatherType::Sleet => 1.5,
+            WeatherType::HeavyRain | WeatherType::Hail => 1.8,
             WeatherType::Thunderstorm => 2.5,
             WeatherType::Blizzard | WeatherType::Sandstorm => 3.0,
         }
@@ -112,7 +121,7 @@ impl WeatherType {
     /// Is this dangerous weather?
     pub fn is_dangerous(&self) -> bool {
         matches!(self,
-            WeatherType::Thunderstorm | WeatherType::Blizzard | WeatherType::Sandstorm
+            WeatherType::Thunderstorm | WeatherType::Blizzard | WeatherType::Sandstorm | WeatherType::Hail
         )
     }
 
@@ -122,7 +131,22 @@ impl WeatherType {
             WeatherType::Thunderstorm => 0.02,
             WeatherType::Blizzard => 0.05,
             WeatherType::Sandstorm => 0.03,
+            WeatherType::Hail => 0.04,
             WeatherType::HeavyRain => 0.01,
+            WeatherType::Sleet => 0.015,
+            _ => 0.0,
+        }
+    }
+
+    /// Can this weather cause lightning?
+    pub fn can_cause_lightning(&self) -> bool {
+        matches!(self, WeatherType::Thunderstorm)
+    }
+
+    /// Get lightning strike chance per tick (0.0 to 1.0)
+    pub fn lightning_chance_per_tick(&self) -> f32 {
+        match self {
+            WeatherType::Thunderstorm => 0.001, // ~0.1% chance per tick
             _ => 0.0,
         }
     }
@@ -205,6 +229,12 @@ pub struct WeatherGenerator {
     wet_climate: bool,
     /// Is this a cold climate? (affects snow probability)
     cold_climate: bool,
+    /// Current humidity level (0.0 to 1.0)
+    pub humidity: f32,
+    /// Dominant biome type (affects weather patterns)
+    pub biome: Option<BiomeType>,
+    /// Previous weather (for transitions)
+    previous_weather: Option<WeatherType>,
 }
 
 impl WeatherGenerator {
@@ -213,16 +243,61 @@ impl WeatherGenerator {
             season,
             wet_climate,
             cold_climate,
+            humidity: 0.5,
+            biome: None,
+            previous_weather: None,
         }
     }
 
+    /// Create generator with biome
+    pub fn with_biome(season: Season, wet_climate: bool, cold_climate: bool, biome: BiomeType) -> Self {
+        Self {
+            season,
+            wet_climate,
+            cold_climate,
+            humidity: 0.5,
+            biome: Some(biome),
+            previous_weather: None,
+        }
+    }
+
+    /// Set humidity level
+    pub fn set_humidity(&mut self, humidity: f32) {
+        self.humidity = humidity.clamp(0.0, 1.0);
+    }
+
+    /// Set biome type
+    pub fn set_biome(&mut self, biome: BiomeType) {
+        self.biome = Some(biome);
+    }
+
     /// Generate new weather based on current conditions
-    pub fn generate_weather(&self) -> Weather {
+    pub fn generate_weather(&mut self) -> Weather {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
+        // Check for biome-specific weather first
+        if let Some(biome_weather) = self.generate_biome_specific_weather(&mut rng) {
+            let duration = rng.gen_range(300..1500);
+            let mut weather = Weather::new(biome_weather);
+            weather.duration_remaining = duration;
+            self.previous_weather = Some(biome_weather);
+            return weather;
+        }
+
+        // Check for fog conditions (high humidity, calm weather)
+        if self.humidity > 0.7 && rng.gen::<f32>() < 0.15 {
+            let duration = rng.gen_range(200..800);
+            let mut weather = Weather::new(WeatherType::Fog);
+            weather.duration_remaining = duration;
+            self.previous_weather = Some(WeatherType::Fog);
+            return weather;
+        }
+
         // Determine if precipitation occurs
-        let precip_chance = if self.wet_climate { 0.3 } else { 0.1 };
+        let base_precip_chance = if self.wet_climate { 0.3 } else { 0.1 };
+        let humidity_bonus = (self.humidity - 0.5).max(0.0) * 0.3;
+        let precip_chance = base_precip_chance + humidity_bonus;
         let has_precipitation = rng.gen::<f32>() < precip_chance;
 
         let weather_type = if !has_precipitation {
@@ -238,33 +313,7 @@ impl WeatherGenerator {
                 WeatherType::Overcast
             }
         } else {
-            // Precipitation - check season and climate for type
-            let is_cold_season = matches!(self.season, Season::Winter) ||
-                                (matches!(self.season, Season::Spring | Season::Fall) && self.cold_climate);
-
-            if is_cold_season {
-                // Snow
-                let intensity = rng.gen::<f32>();
-                if intensity < 0.4 {
-                    WeatherType::LightSnow
-                } else if intensity < 0.8 {
-                    WeatherType::Snow
-                } else {
-                    WeatherType::Blizzard
-                }
-            } else {
-                // Rain
-                let intensity = rng.gen::<f32>();
-                if intensity < 0.3 {
-                    WeatherType::LightRain
-                } else if intensity < 0.7 {
-                    WeatherType::Rain
-                } else if intensity < 0.9 {
-                    WeatherType::HeavyRain
-                } else {
-                    WeatherType::Thunderstorm
-                }
-            }
+            self.generate_precipitation_weather(&mut rng)
         };
 
         // Determine duration (500-2000 ticks)
@@ -272,12 +321,138 @@ impl WeatherGenerator {
 
         let mut weather = Weather::new(weather_type);
         weather.duration_remaining = duration;
+        self.previous_weather = Some(weather_type);
         weather
+    }
+
+    /// Generate biome-specific weather
+    fn generate_biome_specific_weather(&self, rng: &mut impl rand::Rng) -> Option<WeatherType> {
+        let biome = self.biome?;
+
+        match biome {
+            // Desert biomes can have sandstorms
+            BiomeType::Desert => {
+                if rng.gen::<f32>() < 0.12 {
+                    return Some(WeatherType::Sandstorm);
+                }
+            }
+            // Tropical biomes have more thunderstorms
+            BiomeType::Tropical => {
+                if rng.gen::<f32>() < 0.08 {
+                    return Some(WeatherType::Thunderstorm);
+                }
+            }
+            // Tundra/Arctic biomes have more blizzards
+            BiomeType::Tundra => {
+                if rng.gen::<f32>() < 0.10 {
+                    return Some(WeatherType::Blizzard);
+                }
+            }
+            // Wetlands have more fog
+            BiomeType::Wetland => {
+                if self.humidity > 0.5 && rng.gen::<f32>() < 0.15 {
+                    return Some(WeatherType::Fog);
+                }
+            }
+            // Coastal areas can have fog
+            BiomeType::Coast => {
+                if rng.gen::<f32>() < 0.10 {
+                    return Some(WeatherType::Fog);
+                }
+            }
+            _ => {}
+        }
+
+        None
+    }
+
+    /// Generate precipitation-based weather
+    fn generate_precipitation_weather(&self, rng: &mut impl rand::Rng) -> WeatherType {
+        let is_cold_season = matches!(self.season, Season::Winter) ||
+                            (matches!(self.season, Season::Spring | Season::Fall) && self.cold_climate);
+
+        // Transition seasons can have sleet
+        let is_transition = matches!(self.season, Season::Spring | Season::Fall);
+
+        if is_cold_season {
+            // Snow weather
+            let intensity = rng.gen::<f32>();
+            if intensity < 0.4 {
+                WeatherType::LightSnow
+            } else if intensity < 0.8 {
+                WeatherType::Snow
+            } else {
+                WeatherType::Blizzard
+            }
+        } else if is_transition && self.cold_climate {
+            // Transition season in cold climate - can have sleet or hail
+            let roll = rng.gen::<f32>();
+            if roll < 0.15 {
+                WeatherType::Sleet
+            } else if roll < 0.20 {
+                WeatherType::Hail
+            } else {
+                self.generate_rain_weather(rng)
+            }
+        } else {
+            // Rain weather (with possible hail in summer storms)
+            let roll = rng.gen::<f32>();
+            if roll < 0.05 && matches!(self.season, Season::Summer) {
+                WeatherType::Hail // Summer hailstorms
+            } else {
+                self.generate_rain_weather(rng)
+            }
+        }
+    }
+
+    /// Generate rain-type weather
+    fn generate_rain_weather(&self, rng: &mut impl rand::Rng) -> WeatherType {
+        let intensity = rng.gen::<f32>();
+        if intensity < 0.3 {
+            WeatherType::LightRain
+        } else if intensity < 0.7 {
+            WeatherType::Rain
+        } else if intensity < 0.9 {
+            WeatherType::HeavyRain
+        } else {
+            WeatherType::Thunderstorm
+        }
     }
 
     /// Set current season
     pub fn set_season(&mut self, season: Season) {
         self.season = season;
+    }
+
+    /// Predict upcoming weather (returns likely next weather and confidence)
+    pub fn forecast(&self, hours_ahead: u32) -> (WeatherType, f32) {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        // Base confidence decreases with time
+        let confidence = (1.0 - (hours_ahead as f32 / 48.0)).max(0.2);
+
+        // Current weather tends to persist
+        if let Some(current) = self.previous_weather {
+            if rng.gen::<f32>() < 0.6 * confidence {
+                return (current, confidence);
+            }
+        }
+
+        // Otherwise predict based on conditions
+        let predicted = if self.humidity > 0.7 {
+            if self.cold_climate {
+                WeatherType::Snow
+            } else {
+                WeatherType::Rain
+            }
+        } else if self.humidity < 0.3 {
+            WeatherType::Clear
+        } else {
+            WeatherType::PartlyCloudy
+        };
+
+        (predicted, confidence)
     }
 }
 
@@ -368,13 +543,94 @@ mod tests {
 
     #[test]
     fn test_weather_generator() {
-        let generator = WeatherGenerator::new(Season::Winter, false, true); // Winter, dry, cold climate
+        let mut generator = WeatherGenerator::new(Season::Winter, false, true); // Winter, dry, cold climate
         let weather = generator.generate_weather(); // Generate weather
 
         // In cold winter, precipitation should be snow if it occurs
         if weather.weather_type.precipitation_type() != PrecipitationType::None {
             assert_eq!(weather.weather_type.precipitation_type(), PrecipitationType::Snow);
         }
+    }
+
+    #[test]
+    fn test_sleet_and_hail_types() {
+        assert_eq!(WeatherType::Sleet.precipitation_type(), PrecipitationType::Sleet);
+        assert_eq!(WeatherType::Hail.precipitation_type(), PrecipitationType::Hail);
+        assert!(WeatherType::Hail.is_dangerous());
+        assert!(WeatherType::Sleet.exposure_damage_per_tick() > 0.0);
+        assert!(WeatherType::Hail.exposure_damage_per_tick() > WeatherType::Sleet.exposure_damage_per_tick());
+    }
+
+    #[test]
+    fn test_fog_properties() {
+        assert!(!WeatherType::Fog.is_dangerous());
+        assert!(WeatherType::Fog.visibility_reduction() > WeatherType::Rain.visibility_reduction());
+        assert_eq!(WeatherType::Fog.precipitation_type(), PrecipitationType::None);
+    }
+
+    #[test]
+    fn test_sandstorm_properties() {
+        assert!(WeatherType::Sandstorm.is_dangerous());
+        assert!(WeatherType::Sandstorm.visibility_reduction() > 0.7);
+        assert!(WeatherType::Sandstorm.temperature_modifier() > 0.0); // Hot wind
+        assert!(WeatherType::Sandstorm.exposure_damage_per_tick() > 0.0);
+    }
+
+    #[test]
+    fn test_biome_specific_weather() {
+        // Desert biome should generate sandstorms
+        let mut desert_gen = WeatherGenerator::with_biome(
+            Season::Summer, false, false, BiomeType::Desert
+        );
+
+        // Generate many times and check we get at least one sandstorm
+        let mut got_sandstorm = false;
+        for _ in 0..100 {
+            let weather = desert_gen.generate_weather();
+            if weather.weather_type == WeatherType::Sandstorm {
+                got_sandstorm = true;
+                break;
+            }
+        }
+        assert!(got_sandstorm, "Desert biome should occasionally generate sandstorms");
+    }
+
+    #[test]
+    fn test_fog_generation_high_humidity() {
+        let mut gen = WeatherGenerator::new(Season::Spring, true, false);
+        gen.set_humidity(0.9);
+
+        // With high humidity, fog should sometimes occur
+        let mut got_fog = false;
+        for _ in 0..100 {
+            let weather = gen.generate_weather();
+            if weather.weather_type == WeatherType::Fog {
+                got_fog = true;
+                break;
+            }
+        }
+        assert!(got_fog, "High humidity should occasionally generate fog");
+    }
+
+    #[test]
+    fn test_weather_forecast() {
+        let mut gen = WeatherGenerator::new(Season::Summer, true, false);
+        gen.set_humidity(0.8);
+        let _ = gen.generate_weather(); // Generate to set previous_weather
+
+        let (forecast, confidence) = gen.forecast(6);
+        assert!(confidence > 0.0 && confidence <= 1.0);
+        // Weather should be a valid type
+        assert!(matches!(forecast, WeatherType::Clear | WeatherType::PartlyCloudy |
+                        WeatherType::Rain | WeatherType::Snow | _));
+    }
+
+    #[test]
+    fn test_lightning_chance() {
+        assert!(WeatherType::Thunderstorm.can_cause_lightning());
+        assert!(WeatherType::Thunderstorm.lightning_chance_per_tick() > 0.0);
+        assert!(!WeatherType::Rain.can_cause_lightning());
+        assert_eq!(WeatherType::Rain.lightning_chance_per_tick(), 0.0);
     }
 
     #[test]

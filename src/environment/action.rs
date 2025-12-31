@@ -135,8 +135,27 @@ impl ActionEffects {
     }
 }
 
-/// A complete action definition
-#[allow(dead_code)]
+/// A complete action definition with requirements and effects.
+///
+/// This struct provides a comprehensive action template system that defines:
+/// - What type of action it is (via `ActionType`)
+/// - What is required to perform it (`ActionRequirements`)
+/// - What effects it has (`ActionEffects`)
+///
+/// # Relationship to `crate::environment::Action` enum
+///
+/// This `Action` struct is a template/definition system, while the `Action` enum
+/// in `environment/mod.rs` represents concrete action instances. This struct can
+/// be used to define action templates that specify requirements and effects,
+/// which can then be used to validate and execute the simpler `Action` enum values.
+///
+/// # Example
+///
+/// ```ignore
+/// let chop_action = Action::new("chop_tree", "Chop Tree", ActionType::Harvest)
+///     .with_requirements(ActionRequirements::none().with_tool(ToolType::Axe, ToolTier::Wooden))
+///     .with_effects(ActionEffects::none().with_time_cost(100));
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
     /// Unique identifier
@@ -157,7 +176,6 @@ pub struct Action {
     pub properties: HashMap<String, String>,
 }
 
-#[allow(dead_code)]
 impl Action {
     pub fn new(id: String, name: String, action_type: ActionType) -> Self {
         Self {

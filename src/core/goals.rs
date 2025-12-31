@@ -125,6 +125,145 @@ impl Goal {
     pub fn age(&self, current_tick: u32) -> u32 {
         current_tick.saturating_sub(self.created_at)
     }
+
+    /// Check if this goal is already satisfied given current world state
+    ///
+    /// Used to interrupt plans when new information indicates the goal is complete.
+    /// For example, if another agent already restocked the storehouse, this goal
+    /// should be marked as satisfied so the agent can stop pursuing it.
+    pub fn is_satisfied(&self, world_state: &GoalWorldState) -> bool {
+        if self.completed {
+            return true;
+        }
+
+        // Check internal goals first
+        if let Some(internal) = &self.internal {
+            return match internal {
+                InternalGoal::IncreaseEmotion(emotion, target) => {
+                    let emotion_key = format!("{:?}", emotion);
+                    world_state.emotion_levels
+                        .get(&emotion_key)
+                        .map(|level| *level >= *target)
+                        .unwrap_or(false)
+                }
+                InternalGoal::DecreaseEmotion(emotion, target) => {
+                    let emotion_key = format!("{:?}", emotion);
+                    world_state.emotion_levels
+                        .get(&emotion_key)
+                        .map(|level| *level <= *target)
+                        .unwrap_or(false)
+                }
+                InternalGoal::MaintainWellBeing(threshold) => {
+                    world_state.well_being >= *threshold
+                }
+                InternalGoal::ReduceStress => {
+                    world_state.stress_level < 0.3 // Stress is considered reduced below 30%
+                }
+                InternalGoal::SeekEntertainment => {
+                    // Entertainment is satisfied when happiness is above 0.6
+                    world_state.emotion_levels
+                        .get("Happiness")
+                        .map(|level| *level >= 0.6)
+                        .unwrap_or(false)
+                }
+            };
+        }
+
+        // Check external goals
+        match &self.external {
+            Some(ExternalGoal::ContributeFoodToStorehouse(target)) => {
+                world_state.storehouse_food >= *target
+            }
+            Some(ExternalGoal::ContributeMaterialsToStorehouse(target)) => {
+                world_state.storehouse_materials >= *target
+            }
+            Some(ExternalGoal::StockHouseFood(target)) => {
+                world_state.personal_food >= *target
+            }
+            Some(ExternalGoal::GatherResource(_resource, target)) => {
+                world_state.gathered_resources >= *target
+            }
+            Some(ExternalGoal::EnsureToolsAvailable(target)) => {
+                world_state.storehouse_tools >= *target
+            }
+            Some(ExternalGoal::OwnHouse) => {
+                world_state.owns_house
+            }
+            Some(ExternalGoal::ObtainProtection) => {
+                world_state.has_protection
+            }
+            Some(ExternalGoal::CraftItem(item)) => {
+                world_state.crafted_items
+                    .get(item)
+                    .map(|count| *count > 0)
+                    .unwrap_or(false)
+            }
+            Some(ExternalGoal::BuildStructure(structure)) => {
+                world_state.built_structures
+                    .get(structure)
+                    .map(|count| *count > 0)
+                    .unwrap_or(false)
+            }
+            Some(ExternalGoal::LearnSkill(skill)) => {
+                // Skill is learned if level is > 0
+                world_state.learned_skills
+                    .get(skill)
+                    .map(|level| *level > 0)
+                    .unwrap_or(false)
+            }
+            Some(ExternalGoal::FormRelationship(rel_type)) => {
+                world_state.relationships_formed
+                    .get(rel_type)
+                    .map(|count| *count > 0)
+                    .unwrap_or(false)
+            }
+            Some(ExternalGoal::CompleteJob(job)) => {
+                world_state.jobs_completed
+                    .get(job)
+                    .map(|count| *count > 0)
+                    .unwrap_or(false)
+            }
+            None => false,
+        }
+    }
+}
+
+/// World state information for checking goal satisfaction
+///
+/// This allows goals to be re-evaluated when new information arrives,
+/// enabling agents to abandon plans that are no longer necessary.
+#[derive(Debug, Clone, Default)]
+pub struct GoalWorldState {
+    /// Current food in the communal storehouse
+    pub storehouse_food: u32,
+    /// Current materials in the communal storehouse
+    pub storehouse_materials: u32,
+    /// Current tools in the communal storehouse
+    pub storehouse_tools: u32,
+    /// Food in agent's personal inventory
+    pub personal_food: u32,
+    /// Resources gathered by agent
+    pub gathered_resources: u32,
+    /// Whether agent owns a house
+    pub owns_house: bool,
+    /// Whether agent has protection equipment
+    pub has_protection: bool,
+    /// Items the agent has crafted (item name -> count)
+    pub crafted_items: std::collections::HashMap<String, u32>,
+    /// Structures the agent has built (structure name -> count)
+    pub built_structures: std::collections::HashMap<String, u32>,
+    /// Skills the agent has learned (skill name -> level)
+    pub learned_skills: std::collections::HashMap<String, i32>,
+    /// Relationships formed (relationship type -> count)
+    pub relationships_formed: std::collections::HashMap<String, u32>,
+    /// Jobs completed (job name -> count)
+    pub jobs_completed: std::collections::HashMap<String, u32>,
+    /// Current emotion levels (emotion type -> value 0.0-1.0)
+    pub emotion_levels: std::collections::HashMap<String, f32>,
+    /// Current overall well-being (0.0-1.0)
+    pub well_being: f32,
+    /// Current stress level (0.0-1.0)
+    pub stress_level: f32,
 }
 
 /// Agent's goal manager

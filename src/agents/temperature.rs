@@ -38,9 +38,19 @@ impl BodyTemperature {
         self.current < self.ideal - self.tolerance
     }
 
+    /// Alias for is_too_cold - check for hypothermia risk
+    pub fn is_hypothermic(&self) -> bool {
+        self.is_too_cold()
+    }
+
     /// Check if body is too hot (hyperthermia risk)
     pub fn is_too_hot(&self) -> bool {
         self.current > self.ideal + self.tolerance
+    }
+
+    /// Alias for is_too_hot - check for hyperthermia risk
+    pub fn is_hyperthermic(&self) -> bool {
+        self.is_too_hot()
     }
 
     /// Get temperature deviation from ideal (-ve = cold, +ve = hot)

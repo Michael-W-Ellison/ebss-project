@@ -214,6 +214,10 @@ impl Marketplace {
             ItemType::Tin => 6,     // Bronze alloy ingredient
             ItemType::Iron => 10,
 
+            // Processed metals
+            ItemType::Bronze => 25,
+            ItemType::Steel => 50,
+
             // Processed materials
             ItemType::Flour | ItemType::Leather | ItemType::Cloth | ItemType::Linen |
             ItemType::Charcoal | ItemType::Rope | ItemType::Paper | ItemType::Dye => 6,
@@ -232,17 +236,32 @@ impl Marketplace {
             // Tools - stone (moderate)
             ItemType::StoneAxe | ItemType::StonePickaxe | ItemType::StoneHammer => 20,
 
+            // Tools - copper (moderate-high)
+            ItemType::CopperAxe | ItemType::CopperPickaxe | ItemType::CopperHammer => 28,
+
+            // Tools - bronze (high)
+            ItemType::BronzeAxe | ItemType::BronzePickaxe | ItemType::BronzeHammer => 35,
+
             // Tools - iron (expensive)
             ItemType::IronAxe | ItemType::IronPickaxe | ItemType::IronHammer => 40,
 
-            // Weapons
+            // Weapons - wooden
             ItemType::WoodenSpear | ItemType::WoodenBow => 15,
+            // Weapons - stone
             ItemType::StoneSpear => 25,
+            // Weapons - copper
+            ItemType::CopperSpear | ItemType::CopperSword => 40,
+            // Weapons - bronze
+            ItemType::BronzeSpear | ItemType::BronzeSword | ItemType::BronzeBow => 55,
+            // Weapons - iron
             ItemType::IronSword | ItemType::IronBow => 60,
+            // Weapons - steel
             ItemType::SteelSword => 100,
 
             // Armor
             ItemType::LeatherArmor => 50,
+            ItemType::CopperArmor => 70,
+            ItemType::BronzeArmor => 90,
             ItemType::IronArmor => 100,
             ItemType::SteelArmor => 200,
         }
