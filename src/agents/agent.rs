@@ -336,6 +336,13 @@ impl Inventory {
             .unwrap_or(false)
     }
 
+    /// Count quantity of a specific item by id
+    pub fn count_item(&self, item_id: &str) -> u32 {
+        self.items.get(item_id)
+            .map(|item| item.quantity)
+            .unwrap_or(0)
+    }
+
     /// Get all items
     pub fn get_all_items(&self) -> &HashMap<String, InventoryItem> {
         &self.items

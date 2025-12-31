@@ -170,9 +170,8 @@ fn main() {
     println!("✓ Negative interaction: Rival stole food");
 
     println!("\nSocial Memory Stats:");
-    println!("  Total relationships: {}", memory.long_term.social_relationships.len());
-    println!("  Trusted agents: {}", memory.long_term.trusted_agents().len());
-    println!("  Agents to avoid: {}", memory.long_term.agents_to_avoid().len());
+    println!("  Note: Social relationships are now tracked in Agent.relationships");
+    println!("  Episodic memories of interactions are stored in memory.episodic");
     println!();
 
     // ===== Part 5: Context-Based Recall =====

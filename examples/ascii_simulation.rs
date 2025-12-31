@@ -34,6 +34,7 @@ fn main() {
             stone_nodes: 20,
             iron_nodes: 10,
             food_nodes: 40,
+            ..Default::default()
         },
     };
     let mut world = World::new(world_config);
@@ -155,7 +156,7 @@ fn main() {
 /// Personal observation: agent discovers nearby resources (vision range of 10 tiles)
 fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
     const VISION_RANGE: u32 = 10;
-    let agent_pos = agent.position();
+    let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
 
     for resource in &world.resources {
         if agent_pos.distance_to(&resource.position) <= VISION_RANGE && resource.amount > 0 {
@@ -328,7 +329,7 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                 let hunger_val = agent.drives.get(DriveType::Hunger).map(|d| d.value).unwrap_or(0.0);
                 eprintln!("[DEBUG Tick {}] Agent: critical={}, needs_food={}, hunger={:.2}, energy={:.1}, food_inv={}",
                     tick, is_critical, needs_food, hunger_val, agent.state.energy,
-                    agent.inventory.count_item(&ItemType::Food));
+                    agent.inventory.count_item("food"));
             }
 
             // Simple AI: Check most urgent drive
@@ -518,10 +519,10 @@ fn render_frame(
             agent.state.energy,
         );
         println!("║   Inventory: Food: {}  │  Wood: {}  │  Stone: {}  │  Iron: {}            ║",
-            agent.inventory.count_item(&ItemType::Food),
-            agent.inventory.count_item(&ItemType::Wood),
-            agent.inventory.count_item(&ItemType::Stone),
-            agent.inventory.count_item(&ItemType::Iron),
+            agent.inventory.count_item("food"),
+            agent.inventory.count_item("wood"),
+            agent.inventory.count_item("stone"),
+            agent.inventory.count_item("iron"),
         );
     }
 
