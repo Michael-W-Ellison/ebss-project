@@ -36,7 +36,7 @@ fn main() {
     println!("Created world: {} x {}", world.grid.width, world.grid.height);
     println!("Initial state:");
     println!("  Animals: {}", world.animals.population_count());
-    println!("  Plants: {}", world.plants.population_count());
+    println!("  Plants: {}", world.plants.total_count());
     println!("  Heat sources: {}", world.heat_sources.all().len());
     println!();
 
@@ -78,7 +78,7 @@ fn main() {
     let berry_patch = world.spawn_plant_patch("berry_bush".to_string(), (40, 40), 5, 0.3);
     println!("  Spawned berry patch: {} bushes around (40, 40)", berry_patch.len());
 
-    println!("\nTotal plants: {}", world.plants.population_count());
+    println!("\nTotal plants: {}", world.plants.total_count());
     println!();
 
     // ===== Part 4: Spatial Queries =====
@@ -205,7 +205,7 @@ fn main() {
         if tick % 25 == 0 {
             println!("\n  Tick {}:", tick);
             println!("    Animals: {}", world.animals.population_count());
-            println!("    Plants: {}", world.plants.population_count());
+            println!("    Plants: {}", world.plants.total_count());
 
             // Check plant growth
             let harvestable = world.get_harvestable_plants((50, 10), 20.0);
@@ -298,7 +298,7 @@ fn main() {
     println!();
 
     println!("Agriculture Status:");
-    let wild_plants = world.plants.population_count() - cultivated.len();
+    let wild_plants = world.plants.total_count() - cultivated.len();
     println!("  Wild plants: {}", wild_plants);
     println!("  Cultivated plants: {}", cultivated.len());
     println!();
@@ -333,8 +333,8 @@ fn main() {
     println!("  - Wild: {}", world.animals.population_count() - domesticated.len());
     println!("  - Domesticated: {}", world.get_domesticated_animals().len());
     println!();
-    println!("Total Plants: {}", world.plants.population_count());
-    println!("  - Wild: {}", world.plants.population_count() - world.get_cultivated_plants().len());
+    println!("Total Plants: {}", world.plants.total_count());
+    println!("  - Wild: {}", world.plants.total_count() - world.get_cultivated_plants().len());
     println!("  - Cultivated: {}", world.get_cultivated_plants().len());
     println!();
     println!("Buildings: {}", world.buildings.len());

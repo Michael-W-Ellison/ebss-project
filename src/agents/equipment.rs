@@ -989,6 +989,11 @@ impl EquipmentManager {
         1.0 - (self.encumbrance_penalty() * 0.5)
     }
 
+    /// Get total weight of all equipped items
+    pub fn get_total_weight(&self) -> f32 {
+        self.total_weight
+    }
+
     /// Get list of broken equipment
     pub fn get_broken_equipment(&self) -> Vec<EquipmentSlot> {
         self.equipped
