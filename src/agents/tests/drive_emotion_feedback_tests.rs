@@ -82,7 +82,7 @@ fn test_track_social_satisfaction_source() {
     let friend_id = Uuid::new_v4();
 
     // Record that friend satisfies social drive
-    agent.record_drive_satisfaction(DriveType::Social, friend_id, 0.2);
+    agent.record_drive_satisfaction(DriveType::Social, friend_id, 0.2, 0);
 
     // Should track this source
     let sources = agent.get_drive_satisfaction_sources(DriveType::Social);
@@ -98,9 +98,9 @@ fn test_multiple_social_sources() {
     let family = Uuid::new_v4();
 
     // Record multiple sources
-    agent.record_drive_satisfaction(DriveType::Social, friend1, 0.15);
-    agent.record_drive_satisfaction(DriveType::Social, friend2, 0.1);
-    agent.record_drive_satisfaction(DriveType::Social, family, 0.3);
+    agent.record_drive_satisfaction(DriveType::Social, friend1, 0.15, 0);
+    agent.record_drive_satisfaction(DriveType::Social, friend2, 0.1, 0);
+    agent.record_drive_satisfaction(DriveType::Social, family, 0.3, 0);
 
     let sources = agent.get_drive_satisfaction_sources(DriveType::Social);
     assert_eq!(sources.len(), 3, "Should track all social sources");
@@ -116,9 +116,9 @@ fn test_loss_of_social_source_triggers_sadness() {
     let best_friend = Uuid::new_v4();
 
     // Establish friend as primary social source
-    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.4);
-    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.3);
-    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.35);
+    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.4, 0);
+    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.3, 0);
+    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.35, 0);
 
     // Lose the friend
     let initial_sadness = agent.emotions.sadness;
@@ -137,9 +137,9 @@ fn test_loss_of_minor_source_less_sadness() {
     let acquaintance = Uuid::new_v4();
 
     // Establish friend as primary source, acquaintance as minor
-    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.4);
-    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.35);
-    agent.record_drive_satisfaction(DriveType::Social, acquaintance, 0.05);
+    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.4, 0);
+    agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.35, 0);
+    agent.record_drive_satisfaction(DriveType::Social, acquaintance, 0.05, 0);
 
     // Lose the acquaintance
     let initial_sadness = agent.emotions.sadness;
@@ -156,7 +156,7 @@ fn test_source_loss_with_high_drive_amplifies_emotion() {
 
     // Friend was satisfying social drive (multiple interactions = important source)
     for _ in 0..3 {
-        agent.record_drive_satisfaction(DriveType::Social, friend, 0.3);
+        agent.record_drive_satisfaction(DriveType::Social, friend, 0.3, 0);
     }
 
     // Social drive is now high (lonely)
@@ -180,7 +180,7 @@ fn test_anger_at_source_of_death_when_losing_satisfaction_source() {
     let killer = Uuid::new_v4();
 
     // Friend satisfies social drive
-    agent.record_drive_satisfaction(DriveType::Social, friend, 0.4);
+    agent.record_drive_satisfaction(DriveType::Social, friend, 0.4, 0);
 
     // Friend killed by another agent
     let initial_anger = agent.emotions.anger;
@@ -202,7 +202,7 @@ fn test_no_anger_at_natural_death() {
     let friend = Uuid::new_v4();
 
     // Friend satisfies social drive
-    agent.record_drive_satisfaction(DriveType::Social, friend, 0.3);
+    agent.record_drive_satisfaction(DriveType::Social, friend, 0.3, 0);
 
     // Friend dies of natural causes
     let initial_anger = agent.emotions.anger;
@@ -280,7 +280,7 @@ fn test_source_importance_tracked_over_time() {
 
     // Record satisfaction over multiple interactions
     for _ in 0..10 {
-        agent.record_drive_satisfaction(DriveType::Social, friend, 0.2);
+        agent.record_drive_satisfaction(DriveType::Social, friend, 0.2, 0);
     }
 
     // Should recognize this as an important, reliable source
@@ -289,7 +289,7 @@ fn test_source_importance_tracked_over_time() {
 
     // Compare to one-time source
     let stranger = Uuid::new_v4();
-    agent.record_drive_satisfaction(DriveType::Social, stranger, 0.2);
+    agent.record_drive_satisfaction(DriveType::Social, stranger, 0.2, 0);
 
     let stranger_importance = agent.get_source_importance(DriveType::Social, stranger);
     assert!(importance > stranger_importance, "Frequent source should be more important than one-time");
@@ -302,7 +302,7 @@ fn test_functional_grief_message() {
 
     // Establish friend as social source
     for _ in 0..5 {
-        agent.record_drive_satisfaction(DriveType::Social, friend, 0.3);
+        agent.record_drive_satisfaction(DriveType::Social, friend, 0.3, 0);
     }
 
     // Create relationship
@@ -371,7 +371,7 @@ fn test_receiving_help_improves_bond() {
         0.0 // No relationship exists yet
     };
     
-    agent.record_drive_satisfaction(DriveType::Social, helper, 0.4);
+    agent.record_drive_satisfaction(DriveType::Social, helper, 0.4, 0);
     
     // Bond should improve
     let new_bond = agent.relationships.get_relationship(&helper).unwrap().bond_strength;
@@ -385,7 +385,7 @@ fn test_receiving_help_creates_happiness() {
     let helper = Uuid::new_v4();
     
     // Helper provides help
-    agent.record_drive_satisfaction(DriveType::Hunger, helper, 0.5);
+    agent.record_drive_satisfaction(DriveType::Hunger, helper, 0.5, 0);
     
     // Should feel happiness (gratitude)
     assert!(agent.emotions.happiness > 0.1, "Receiving help should create happiness");
@@ -431,7 +431,7 @@ fn test_happiness_decays_over_time() {
     let helper = Uuid::new_v4();
     
     // Receive help, creating happiness
-    agent.record_drive_satisfaction(DriveType::Social, helper, 0.5);
+    agent.record_drive_satisfaction(DriveType::Social, helper, 0.5, 0);
     let initial_happiness = agent.emotions.happiness;
     
     // Tick multiple times

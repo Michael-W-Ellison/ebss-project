@@ -68,7 +68,7 @@ fn main() {
         let (min_temp, max_temp) = biome_type.temperature_range();
         println!("{:?}:", biome_type);
         println!("  Temperature range: {:.1}°C to {:.1}°C", min_temp, max_temp);
-        println!("  Humidity: {:.0}%", biome_type.humidity() * 100.0);
+        println!("  Humidity: {:.0}%", biome_type.average_humidity() * 100.0);
         println!("  Exposure risk: {:.1}/10", biome_type.exposure_risk() * 10.0);
         println!("  Shelter availability: {:.1}/10", biome_type.shelter_availability() * 10.0);
         println!("  Resource abundance: {:.1}/10", biome_type.resource_abundance() * 10.0);

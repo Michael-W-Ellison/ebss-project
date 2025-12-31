@@ -91,7 +91,7 @@ fn main() {
 
         let priority = ebss::agents::calculate_storage_priority(
             food_count,
-            agent.inventory.fullness_percentage(),
+            agent.inventory.weight_percentage(),
             preparedness,
             &agent.storage_preferences,
         );

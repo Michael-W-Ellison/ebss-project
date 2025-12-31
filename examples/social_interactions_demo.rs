@@ -29,10 +29,10 @@ fn main() {
         let social_drive = agent.drives.get(DriveType::Social)
             .map(|d| d.value)
             .unwrap_or(0.0);
-        let relationships = agent.relationships.get_all().len();
+        let relationship_count = agent.relationships.get_all().len();
 
         println!("  Agent {}: Position: {:?}, Social Drive: {:.2}, Relationships: {}",
-            idx, agent.state.position, social_drive, relationships);
+            idx, agent.state.position, social_drive, relationship_count);
     }
 
     // Run simulation for several ticks
@@ -53,11 +53,10 @@ fn main() {
                 println!("  Agent {}: Social Drive: {:.3}", idx, social_drive);
 
                 // Show relationships
-                for (_agent_id, rel) in relationships {
-                    println!("    -> {:?} (bond: {:.2}, interactions: {})",
-                        rel.relationship_type,
-                        rel.bond_strength,
-                        rel.total_interactions);
+                for rel in agent.relationships.get_all().values() {
+                    println!("    -> Relationship with agent (level: {}, trust: {})",
+                        rel.relationship_level().name(),
+                        rel.trust_level().name());
                 }
             }
             println!();
@@ -80,11 +79,11 @@ fn main() {
         println!("  Total Relationships: {}", relationships.len());
         println!("  Total Interactions: {}", total_interactions);
 
-        for (_agent_id, rel) in relationships {
-            println!("    {:?}: bond={:.2}, time_together={}, interactions={}",
-                rel.relationship_type,
-                rel.bond_strength,
-                rel.time_together,
+        for rel in relationships.values() {
+            println!("    Relationship: {} ({}), Trust: {} ({} interactions)",
+                rel.relationship_level().name(),
+                rel.relationship_level().value(),
+                rel.trust_level().name(),
                 rel.total_interactions);
         }
         println!();

@@ -6,12 +6,9 @@
 //! - Sensory memory
 //! - Percept processing and salience calculation
 
-use ebss::agents::{Agent, AgentConfig};
-use ebss::agents::senses::{Senses, Scent, ScentType, Sound, SoundType};
-use ebss::agents::{
-    Percept, process_sensory_input, calculate_salience, filter_by_salience, most_salient_percept
-};
-use ebss::core::{DriveState, DriveType};
+use ebss::agents::{Agent, AgentConfig, Percept};
+use ebss::agents::senses::{Scent, ScentType, Sound, SoundType};
+use ebss::core::DriveType;
 use uuid::Uuid;
 
 fn main() {
@@ -72,8 +69,8 @@ fn main() {
     // Add visible agents
     let agent_1 = Uuid::new_v4();
     let agent_2 = Uuid::new_v4();
-    agent.senses.vision.visible_agents.push(agent_1);
-    agent.senses.vision.visible_agents.push(agent_2);
+    agent.senses.vision.visible_agents.insert(agent_1);
+    agent.senses.vision.visible_agents.insert(agent_2);
 
     println!("Visible agents: {}", agent.senses.vision.visible_agents.len());
 
@@ -82,12 +79,14 @@ fn main() {
         source_position: (52, 51, 0),
         sound_type: SoundType::Speech,
         loudness: 0.5,
+        age: 0,
     });
 
     agent.senses.hearing.hear_sound(Sound {
         source_position: (45, 50, 0),
         sound_type: SoundType::Combat,
         loudness: 0.8,
+        age: 0,
     });
 
     println!("Heard sounds: {}", agent.senses.hearing.heard_sounds.len());
@@ -99,9 +98,9 @@ fn main() {
     // === Part 3: Sensory Memory ===
     println!("\n--- Part 3: Sensory Memory ---");
 
-    agent.senses.memory.remember_agent(agent_1, (52, 51, 0), 100);
-    agent.senses.memory.remember_agent(agent_2, (53, 50, 0), 100);
-    agent.senses.memory.remember_position((55, 52, 0), "Food cache".to_string(), 100);
+    agent.senses.memory.remember_agent(agent_1, (52, 51, 0));
+    agent.senses.memory.remember_agent(agent_2, (53, 50, 0));
+    agent.senses.memory.remember_position((55, 52, 0), "Food cache".to_string());
 
     println!("Agents in memory: {}", agent.senses.memory.seen_agents.len());
     println!("Locations in memory: {}", agent.senses.memory.seen_positions.len());

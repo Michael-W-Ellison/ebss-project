@@ -147,7 +147,7 @@ impl TechnologyTree {
             prerequisites: vec!["stone_tools"],
             discovery_difficulty: 40,
             required_items: vec![ItemType::Copper],
-            unlocks_recipes: vec![ItemType::CopperAxe, ItemType::CopperPickaxe, ItemType::CopperHammer],
+            unlocks_recipes: vec![],
         });
 
         self.add_tech(Technology {
@@ -169,7 +169,7 @@ impl TechnologyTree {
             prerequisites: vec!["fire", "pottery"],
             discovery_difficulty: 50,
             required_items: vec![ItemType::Coal, ItemType::Copper],
-            unlocks_recipes: vec![ItemType::CopperSpear, ItemType::CopperSword, ItemType::CopperArmor],
+            unlocks_recipes: vec![],
         });
 
         // === BRONZE AGE ===
@@ -182,9 +182,7 @@ impl TechnologyTree {
             prerequisites: vec!["basic_smelting"],
             discovery_difficulty: 60,
             required_items: vec![ItemType::Copper, ItemType::Tin],
-            unlocks_recipes: vec![ItemType::Bronze, ItemType::BronzeAxe, ItemType::BronzePickaxe,
-                                  ItemType::BronzeHammer, ItemType::BronzeSpear, ItemType::BronzeSword,
-                                  ItemType::BronzeBow, ItemType::BronzeArmor],
+            unlocks_recipes: vec![],
         });
 
         self.add_tech(Technology {

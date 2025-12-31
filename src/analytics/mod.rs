@@ -20,7 +20,11 @@ pub mod export;
 pub mod performance;
 
 pub use metrics::{SimulationMetrics, TickSnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
-pub use emergence::{EmergenceDetector, EmergentPattern, PatternType};
+pub use emergence::{
+    EmergenceDetector, EmergentPattern, PatternType,
+    DetectionThresholds, TrainingSample, CalibrationResult,
+    TrendDirection, PatternPrediction,
+};
 pub use export::{DataExporter, ExportFormat};
 pub use performance::{PerformanceMonitor, PerformanceSnapshot};
 
@@ -2584,8 +2588,9 @@ impl Simulation {
 
                 if success {
                     // Record that this agent satisfied our social drive
+                    let tick = self.current_tick;
                     let initiator = &mut self.population.agents[agent_index];
-                    initiator.record_drive_satisfaction(DriveType::Social, *target_agent_id, social_satisfaction);
+                    initiator.record_drive_satisfaction(DriveType::Social, *target_agent_id, social_satisfaction, tick);
 
                     // Helper happiness for initiator (providing social satisfaction to target)
                     let initiator = &mut self.population.agents[agent_index];
@@ -2593,7 +2598,7 @@ impl Simulation {
 
                     // Also record for the target (reciprocal satisfaction)
                     let target = &mut self.population.agents[target_index];
-                    target.record_drive_satisfaction(DriveType::Social, initiator_id, target_satisfaction);
+                    target.record_drive_satisfaction(DriveType::Social, initiator_id, target_satisfaction, tick);
 
                     // Helper happiness for target (providing social satisfaction to initiator)
                     let target = &mut self.population.agents[target_index];

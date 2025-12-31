@@ -18,7 +18,7 @@
 //! use ebss::prelude::*;
 //!
 //! fn main() {
-//!     let world = World::new(GridConfig::default());
+//!     let world = World::new(WorldConfig::default());
 //!     let mut population = Population::new();
 //!     
 //!     for _ in 0..10 {

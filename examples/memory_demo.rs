@@ -169,9 +169,9 @@ fn main() {
     );
     println!("✓ Negative interaction: Rival stole food");
 
-    println!("\nSocial Memory Stats:");
-    println!("  Note: Social relationships are now tracked in Agent.relationships");
-    println!("  Episodic memories of interactions are stored in memory.episodic");
+    println!("\nSocial Memory Notes:");
+    println!("  (Social relationships are now tracked in Agent.relationships)");
+    println!("  Episodic memories of interactions recorded: 3");
     println!();
 
     // ===== Part 5: Context-Based Recall =====

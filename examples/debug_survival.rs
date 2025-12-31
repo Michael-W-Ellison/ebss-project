@@ -2,8 +2,15 @@
 //! Debug simulation to test survival mechanics and drive satisfaction.
 
 use ebss::agents::{Population, AgentConfig, InventoryItem};
-use ebss::world::{World, WorldConfig, ResourceConfig, Position, Action, ResourceType};
+use ebss::world::{World, WorldConfig, ResourceConfig, Position, Action, ResourceType, ItemType};
 use ebss::core::DriveType;
+
+/// Helper to count items in agent inventory
+fn count_inventory_item(agent: &ebss::agents::Agent, item_id: &str) -> u32 {
+    agent.inventory.get_item(item_id)
+        .map(|item| item.quantity)
+        .unwrap_or(0)
+}
 
 fn main() {
     println!("=== DEBUG: Survival Mechanics Test ===\n");
@@ -177,8 +184,14 @@ fn main() {
                     // Add harvested items to inventory
                     if let Some((item_type, quantity)) = result.take_items() {
                         if quantity > 0 {
-                            let item_id = format!("{:?}", item_type).to_lowercase();
-                            let item = InventoryItem::new(item_id, quantity);
+                            let item_id = match item_type {
+                                ItemType::Food => "food",
+                                ItemType::Wood => "wood",
+                                ItemType::Stone => "stone",
+                                ItemType::Iron => "iron",
+                                _ => "misc",
+                            };
+                            let item = InventoryItem::new(item_id.to_string(), quantity);
                             agent.inventory.add_item(item);
                             if tick % 50 < 10 {
                                 println!("  ✓ Added {} {:?} to inventory", quantity, item_type);

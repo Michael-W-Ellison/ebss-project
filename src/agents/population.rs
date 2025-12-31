@@ -224,6 +224,9 @@ impl Population {
     fn update_relationships(&mut self) {
         use super::{Relationship, RelationshipType};
 
+        // Pre-compute squared interaction distance threshold (avoids sqrt)
+        const INTERACTION_RANGE_SQUARED: f32 = 100.0; // 10.0 * 10.0
+
         // Process all pairs of agents
         for i in 0..self.agents.len() {
             for j in (i + 1)..self.agents.len() {
@@ -232,14 +235,17 @@ impl Population {
                 let agent1_pos = self.agents[i].state.position;
                 let agent2_pos = self.agents[j].state.position;
 
-                // Calculate distance between agents
+                // Calculate squared distance (avoid expensive sqrt)
                 let dx = (agent1_pos.0 - agent2_pos.0) as f32;
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
-                let distance = (dx * dx + dy * dy).sqrt();
+                let distance_squared = dx * dx + dy * dy;
 
                 // Agents must be within interaction range (10 tiles)
-                if distance <= 10.0 {
-                    // Get traits for compatibility check
+                if distance_squared <= INTERACTION_RANGE_SQUARED {
+                    // Only compute actual distance when needed for proximity bonus
+                    let distance = distance_squared.sqrt();
+
+                    // Get traits for compatibility check (clone needed due to borrow rules)
                     let agent1_traits = self.agents[i].traits.clone();
                     let agent2_traits = self.agents[j].traits.clone();
 
@@ -346,6 +352,9 @@ impl Population {
     fn share_technologies(&mut self) {
         use crate::environment::technology::DiscoveryMethod;
 
+        // Pre-compute squared distance threshold (avoids sqrt)
+        const SHARE_RANGE_SQUARED: f32 = 25.0; // 5.0 * 5.0
+
         // Process all pairs of nearby agents
         for i in 0..self.agents.len() {
             for j in (i + 1)..self.agents.len() {
@@ -354,13 +363,13 @@ impl Population {
                 let agent1_pos = self.agents[i].state.position;
                 let agent2_pos = self.agents[j].state.position;
 
-                // Calculate distance
+                // Calculate squared distance (avoid expensive sqrt)
                 let dx = (agent1_pos.0 - agent2_pos.0) as f32;
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
-                let distance = (dx * dx + dy * dy).sqrt();
+                let distance_squared = dx * dx + dy * dy;
 
                 // Only share when very close (within 5 tiles)
-                if distance <= 5.0 {
+                if distance_squared <= SHARE_RANGE_SQUARED {
                     // Get technologies each agent knows
                     let agent1_techs: Vec<_> = self.agents[i]
                         .technology_knowledge
@@ -840,6 +849,9 @@ impl Population {
         use crate::core::DriveType;
         use rand::Rng;
 
+        // Pre-compute squared distance threshold (avoids sqrt)
+        const SOCIAL_RANGE_SQUARED: f32 = 25.0; // 5.0 * 5.0
+
         let mut rng = rand::thread_rng();
         let current_tick = self.current_tick;
 
@@ -893,13 +905,13 @@ impl Population {
                 let _agent2_id = self.agents[j].id;
                 let agent2_pos = self.agents[j].state.position;
 
-                // Calculate distance
+                // Calculate squared distance (avoid expensive sqrt)
                 let dx = (agent1_pos.0 - agent2_pos.0) as f32;
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
-                let distance = (dx * dx + dy * dy).sqrt();
+                let distance_squared = dx * dx + dy * dy;
 
                 // Must be within social interaction range (5 tiles)
-                if distance > 5.0 {
+                if distance_squared > SOCIAL_RANGE_SQUARED {
                     continue;
                 }
 
@@ -1042,152 +1054,77 @@ impl Population {
     }
 
     /// Process exploration without world (for standalone population updates)
-    ///
-    /// When world access is not available, this method enables agents to share
-    /// their exploration knowledge with nearby agents. This simulates information
-    /// sharing through conversation - agents tell each other about discovered
-    /// buildings, resources, and storage locations.
-    ///
-    /// Knowledge sharing occurs when agents are within 5 tiles of each other.
-    /// The receiver gains curiosity satisfaction from learning new locations.
+    /// This is called from tick() and handles exploration-related drive updates
+    /// and knowledge sharing between nearby agents
     fn process_exploration(&mut self) {
         use crate::core::DriveType;
 
-        let current_tick = self.current_tick;
+        const EXPLORATION_SHARE_RANGE_SQ: f32 = 25.0; // 5 tiles
 
-        // Collect agent positions and exploration data to avoid borrow issues
-        let agent_data: Vec<(usize, (i32, i32, i32), bool)> = self.agents
+        // First pass: identify agent positions for knowledge sharing
+        let agent_positions: Vec<(usize, (i32, i32, i32), bool)> = self.agents
             .iter()
             .enumerate()
             .map(|(i, a)| (i, a.state.position, a.state.is_alive))
             .collect();
 
-        // Process pairs of nearby agents to share exploration knowledge
-        for i in 0..agent_data.len() {
-            if !agent_data[i].2 {
-                continue; // Skip dead agents
+        // Second pass: process exploration drives and knowledge sharing
+        for i in 0..self.agents.len() {
+            let agent = &mut self.agents[i];
+            if !agent.state.is_alive {
+                continue;
             }
 
-            for j in (i + 1)..agent_data.len() {
-                if !agent_data[j].2 {
-                    continue; // Skip dead agents
-                }
-
-                let pos1 = agent_data[i].1;
-                let pos2 = agent_data[j].1;
-
-                // Calculate distance
-                let dx = (pos1.0 - pos2.0) as f32;
-                let dy = (pos1.1 - pos2.1) as f32;
-                let distance = (dx * dx + dy * dy).sqrt();
-
-                // Only share knowledge when within conversation range (5 tiles)
-                if distance > 5.0 {
-                    continue;
-                }
-
-                // Collect knowledge to share from agent i to agent j
-                let buildings_i: Vec<_> = self.agents[i]
-                    .exploration_knowledge
-                    .known_buildings
-                    .iter()
-                    .map(|(pos, bt)| (*pos, *bt))
-                    .collect();
-
-                let resources_i: Vec<_> = self.agents[i]
-                    .exploration_knowledge
-                    .known_resources
-                    .iter()
-                    .map(|(pos, rt)| (*pos, *rt))
-                    .collect();
-
-                let storage_i: Vec<_> = self.agents[i]
-                    .exploration_knowledge
-                    .known_storage
-                    .iter()
-                    .map(|(pos, (st, cap))| (*pos, st.clone(), *cap))
-                    .collect();
-
-                // Collect knowledge to share from agent j to agent i
-                let buildings_j: Vec<_> = self.agents[j]
-                    .exploration_knowledge
-                    .known_buildings
-                    .iter()
-                    .map(|(pos, bt)| (*pos, *bt))
-                    .collect();
-
-                let resources_j: Vec<_> = self.agents[j]
-                    .exploration_knowledge
-                    .known_resources
-                    .iter()
-                    .map(|(pos, rt)| (*pos, *rt))
-                    .collect();
-
-                let storage_j: Vec<_> = self.agents[j]
-                    .exploration_knowledge
-                    .known_storage
-                    .iter()
-                    .map(|(pos, (st, cap))| (*pos, st.clone(), *cap))
-                    .collect();
-
-                // Share knowledge from agent i to agent j
-                let mut discoveries_j = 0;
-                for (pos, building_type) in buildings_i {
-                    if self.agents[j].exploration_knowledge.discover_building(pos, building_type, current_tick) {
-                        discoveries_j += 1;
-                    }
-                }
-                for (pos, resource_type) in resources_i {
-                    if self.agents[j].exploration_knowledge.discover_resource(pos, resource_type, current_tick) {
-                        discoveries_j += 1;
-                    }
-                }
-                for (pos, storage_type, capacity) in storage_i {
-                    if self.agents[j].exploration_knowledge.discover_storage(pos, storage_type, capacity, current_tick) {
-                        discoveries_j += 1;
-                    }
-                }
-
-                // Share knowledge from agent j to agent i
-                let mut discoveries_i = 0;
-                for (pos, building_type) in buildings_j {
-                    if self.agents[i].exploration_knowledge.discover_building(pos, building_type, current_tick) {
-                        discoveries_i += 1;
-                    }
-                }
-                for (pos, resource_type) in resources_j {
-                    if self.agents[i].exploration_knowledge.discover_resource(pos, resource_type, current_tick) {
-                        discoveries_i += 1;
-                    }
-                }
-                for (pos, storage_type, capacity) in storage_j {
-                    if self.agents[i].exploration_knowledge.discover_storage(pos, storage_type, capacity, current_tick) {
-                        discoveries_i += 1;
-                    }
-                }
-
-                // Satisfy curiosity for agents who learned new information
-                if discoveries_i > 0 {
-                    if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Curiosity) {
-                        // Learning from others is less satisfying than direct discovery
-                        let satisfaction = (discoveries_i as f32 * 0.01).min(0.2);
-                        drive.partial_satisfy(satisfaction);
-                    }
-                }
-
-                if discoveries_j > 0 {
-                    if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Curiosity) {
-                        let satisfaction = (discoveries_j as f32 * 0.01).min(0.2);
-                        drive.partial_satisfy(satisfaction);
-                    }
+            // Slowly increase curiosity drive when not actively discovering
+            // This makes agents want to explore over time
+            if let Some(curiosity_drive) = agent.drives.get_mut(DriveType::Curiosity) {
+                // Curiosity increases by 0.002 per tick if below 0.7
+                if curiosity_drive.value < 0.7 {
+                    curiosity_drive.value = (curiosity_drive.value + 0.002).min(0.7);
                 }
             }
         }
 
-        // Update exploration tick for all living agents
-        for agent in &mut self.agents {
-            if agent.state.is_alive {
-                agent.exploration_knowledge.last_exploration_tick = current_tick;
+        // Knowledge sharing between nearby agents (simplified gossip about discoveries)
+        // Share random discoveries with nearby agents
+        for i in 0..self.agents.len() {
+            let (_, pos_i, alive_i) = agent_positions[i];
+            if !alive_i {
+                continue;
+            }
+
+            for j in (i + 1)..self.agents.len() {
+                let (_, pos_j, alive_j) = agent_positions[j];
+                if !alive_j {
+                    continue;
+                }
+
+                // Check if within sharing range
+                let dx = (pos_i.0 - pos_j.0) as f32;
+                let dy = (pos_i.1 - pos_j.1) as f32;
+                let dist_sq = dx * dx + dy * dy;
+
+                if dist_sq <= EXPLORATION_SHARE_RANGE_SQ {
+                    // Share a random discovery from i to j and vice versa
+                    // This simulates agents telling each other about places they've been
+                    let current_tick = self.current_tick;
+
+                    // Agent i shares with agent j
+                    if let Some((pos, building_type)) = self.agents[i].exploration_knowledge
+                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
+                    {
+                        self.agents[j].exploration_knowledge
+                            .discover_building(pos, building_type, current_tick);
+                    }
+
+                    // Agent j shares with agent i
+                    if let Some((pos, building_type)) = self.agents[j].exploration_knowledge
+                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
+                    {
+                        self.agents[i].exploration_knowledge
+                            .discover_building(pos, building_type, current_tick);
+                    }
+                }
             }
         }
     }

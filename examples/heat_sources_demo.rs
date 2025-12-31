@@ -92,7 +92,8 @@ fn main() {
         initial_resources: ResourceConfig {
             stone_nodes: 100,
             wood_nodes: 50,
-            ..Default::default()
+            iron_nodes: 10,
+            food_nodes: 20,
         },
     };
 

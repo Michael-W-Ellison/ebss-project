@@ -15,10 +15,7 @@ fn main() {
     std::thread::sleep(std::time::Duration::from_secs(2));
 
     // Create a world
-    let world = World::new(GridConfig {
-        size: (50, 50, 5),
-        chunk_size: 16,
-    });
+    let world = World::new(WorldConfig::default());
 
     // Create population with 5 agents
     let mut population = Population::new();

@@ -14,6 +14,7 @@ pub mod goals;
 pub mod preferences;
 pub mod drive_progression;
 pub mod planning;
+pub mod spatial;
 
 #[cfg(test)]
 mod tests;
@@ -30,4 +31,5 @@ pub use traits::{Trait, TraitSet};
 pub use goals::{Goal, GoalType, InternalGoal, ExternalGoal, GoalManager, GoalWorldState};
 pub use preferences::{Preferences, Obsession, ObsessionType};
 pub use drive_progression::{DriveProgression, DriveTier, DriveTierRequirement, Requirement};
-pub use planning::{Planner, ActionPlan, PlanStep, ActionType, ActionOutcome, PlanningContext};
+pub use planning::{Planner, ActionPlan, PlanStep, ActionType, ActionOutcome};
+pub use spatial::{SpatialGrid, distance_squared, distance_squared_2d, within_interaction_range, within_close_range};
