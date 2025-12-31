@@ -94,6 +94,7 @@ fn main() {
             wood_nodes: 50,
             iron_nodes: 10,
             food_nodes: 20,
+            ..Default::default()
         },
     };
 
