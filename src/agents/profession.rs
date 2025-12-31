@@ -415,8 +415,19 @@ impl JobType {
     ///
     /// Currently returns `false` for all jobs as the profession system
     /// is not yet integrated with the Agent struct.
+    ///
+    /// # Future Integration
+    /// When the profession system is integrated:
+    /// 1. Add a `profession: JobType` field to the Agent struct
+    /// 2. Implement profession assignment logic in agent spawning
+    /// 3. Update this method to return `true` for jobs that have been implemented
+    ///    (i.e., jobs where agents can actually perform the associated work)
+    ///
+    /// The implementation status tracks whether the game systems support
+    /// a profession, not whether any agent currently holds that job.
     pub fn is_actively_used(&self) -> bool {
-        // TODO: Update this when profession system is integrated
+        // Returns false until profession-specific behaviors are implemented.
+        // Start with core jobs (priority 1) and expand from there.
         false
     }
 

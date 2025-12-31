@@ -137,15 +137,24 @@ impl<'a> SpatialPlanner<'a> {
         best_pos
     }
 
-    /// Find optimal location considering agent's position
+    /// Find optimal location considering agent's position.
+    ///
+    /// This is a convenience method that infers placement criteria from the building type.
+    /// For more control, use [`find_optimal_location_with_criteria`] to specify explicit criteria.
+    ///
+    /// # Arguments
+    /// * `building_type` - The type of building to place (used to infer criteria)
+    /// * `agent_pos` - The agent's current position (used for distance calculations)
+    /// * `strategy` - The placement strategy to use
+    ///
+    /// # Returns
+    /// The optimal position for the building, or `None` if no valid location exists.
     pub fn find_optimal_location_for_agent(
         &self,
         building_type: BuildingType,
         agent_pos: Position,
         strategy: PlacementStrategy,
     ) -> Option<Position> {
-        // For NearResources strategy, we need to determine the appropriate criteria
-        // This is a workaround - ideally we'd pass criteria explicitly
         let criteria = self.infer_criteria_from_building(building_type);
         self.find_optimal_location_with_criteria(building_type, agent_pos, strategy, criteria)
     }
