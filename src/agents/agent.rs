@@ -591,7 +591,7 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(config: AgentConfig) -> Self {
-        Self {
+        let mut agent = Self {
             id: Uuid::new_v4(),
             state: AgentState::new(),
             drives: if config.random_weights {
@@ -626,7 +626,12 @@ impl Agent {
             planner: Planner::new(),
             plan_step_ticks: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
-        }
+        };
+
+        // Initialize default behavior trees for each drive type
+        agent.initialize_behavior_trees();
+
+        agent
     }
 
     /// Create an agent with specified parents
@@ -1130,7 +1135,6 @@ impl Agent {
     }
 
     /// Initialize default behavior trees for each drive type
-    #[allow(dead_code)]
     fn initialize_behavior_trees(&mut self) {
         for drive_type in DriveType::all() {
             let tree = Self::create_default_tree_for_drive(drive_type);
@@ -1264,7 +1268,6 @@ impl Agent {
     }
 
     /// Create a default behavior tree for a specific drive
-    #[allow(dead_code)]
     fn create_default_tree_for_drive(drive_type: DriveType) -> BehaviorTree {
         let root = match drive_type {
             DriveType::Hunger => {
