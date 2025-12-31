@@ -489,7 +489,6 @@ pub struct CraftingJob {
 /// Crafting manager
 #[derive(Debug, Clone)]
 pub struct CraftingManager {
-    #[allow(dead_code)]
     registry: RecipeRegistry,
     active_jobs: Vec<CraftingJob>,
 }

@@ -346,9 +346,12 @@ impl<'a> SpatialPlanner<'a> {
         score
     }
 
-    /// Score location considering agent position and strategy
-    #[allow(dead_code)]
-    fn score_location_for_agent(
+    /// Score location considering agent position and strategy.
+    ///
+    /// This is a convenience method that infers placement criteria from the
+    /// building type. For more control over placement criteria, use
+    /// `score_location_for_agent_with_criteria` directly.
+    pub fn score_location_for_agent(
         &self,
         pos: Position,
         agent_pos: Position,
