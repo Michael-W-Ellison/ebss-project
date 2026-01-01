@@ -42,29 +42,171 @@ pub struct LearningResult {
     pub proficiency_increase: f32,
 }
 
+/// Complexity level of knowledge affecting learning threshold
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KnowledgeComplexity {
+    /// Basic/instinctive knowledge - easiest to learn (threshold: 0.3)
+    /// Examples: basic movement, eating, drinking
+    Trivial,
+    /// Simple observable skills (threshold: 0.5)
+    /// Examples: gathering berries, basic tool use
+    Simple,
+    /// Standard knowledge requiring practice (threshold: 1.0)
+    /// Examples: hunting, crafting simple items, cooking
+    Normal,
+    /// Complex skills requiring significant observation (threshold: 1.5)
+    /// Examples: advanced crafting, building, combat techniques
+    Complex,
+    /// Expert-level knowledge (threshold: 2.0)
+    /// Examples: metallurgy, advanced construction, medicine
+    Advanced,
+    /// Master-level rare knowledge (threshold: 3.0)
+    /// Examples: secret techniques, rare recipes, specialized skills
+    Master,
+}
+
+impl KnowledgeComplexity {
+    /// Get the learning threshold for this complexity level
+    pub fn threshold(&self) -> f32 {
+        match self {
+            KnowledgeComplexity::Trivial => 0.3,
+            KnowledgeComplexity::Simple => 0.5,
+            KnowledgeComplexity::Normal => 1.0,
+            KnowledgeComplexity::Complex => 1.5,
+            KnowledgeComplexity::Advanced => 2.0,
+            KnowledgeComplexity::Master => 3.0,
+        }
+    }
+
+    /// Get complexity from a knowledge name (uses heuristics)
+    pub fn from_knowledge_name(name: &str) -> Self {
+        let lower = name.to_lowercase();
+
+        // Master-level knowledge
+        if lower.contains("secret") || lower.contains("master") || lower.contains("legendary") {
+            return KnowledgeComplexity::Master;
+        }
+
+        // Advanced knowledge
+        if lower.contains("advanced") || lower.contains("metallurgy") || lower.contains("forge")
+            || lower.contains("medicine") || lower.contains("architecture")
+        {
+            return KnowledgeComplexity::Advanced;
+        }
+
+        // Complex knowledge
+        if lower.contains("craft") || lower.contains("build") || lower.contains("combat")
+            || lower.contains("weapon") || lower.contains("armor") || lower.contains("tool")
+        {
+            return KnowledgeComplexity::Complex;
+        }
+
+        // Simple knowledge
+        if lower.contains("gather") || lower.contains("basic") || lower.contains("simple")
+            || lower.contains("find") || lower.contains("pick")
+        {
+            return KnowledgeComplexity::Simple;
+        }
+
+        // Trivial knowledge
+        if lower.contains("move") || lower.contains("eat") || lower.contains("drink")
+            || lower.contains("rest") || lower.contains("sleep")
+        {
+            return KnowledgeComplexity::Trivial;
+        }
+
+        // Default to normal
+        KnowledgeComplexity::Normal
+    }
+
+    /// Description of the complexity level
+    pub fn description(&self) -> &'static str {
+        match self {
+            KnowledgeComplexity::Trivial => "trivial (instinctive)",
+            KnowledgeComplexity::Simple => "simple (easily observed)",
+            KnowledgeComplexity::Normal => "normal (requires practice)",
+            KnowledgeComplexity::Complex => "complex (requires study)",
+            KnowledgeComplexity::Advanced => "advanced (expert knowledge)",
+            KnowledgeComplexity::Master => "master (rare expertise)",
+        }
+    }
+}
+
+impl Default for KnowledgeComplexity {
+    fn default() -> Self {
+        KnowledgeComplexity::Normal
+    }
+}
+
 /// Tracks accumulated exposure to knowledge/skills
-/// Learning triggers when exposure reaches threshold
+/// Learning triggers when exposure reaches complexity-based threshold
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LearningExposure {
     /// Accumulated exposure per knowledge item (0.0 to threshold)
     exposures: HashMap<String, f32>,
-    /// Threshold at which learning is guaranteed (default: 1.0)
-    pub threshold: f32,
+    /// Default threshold for unknown complexity (backwards compatible)
+    pub default_threshold: f32,
+    /// Override thresholds per knowledge item
+    #[serde(default)]
+    custom_thresholds: HashMap<String, f32>,
 }
 
 impl LearningExposure {
     pub fn new() -> Self {
         Self {
             exposures: HashMap::new(),
-            threshold: 1.0,
+            default_threshold: 1.0,
+            custom_thresholds: HashMap::new(),
         }
+    }
+
+    /// Create with a specific default threshold
+    pub fn with_default_threshold(threshold: f32) -> Self {
+        Self {
+            exposures: HashMap::new(),
+            default_threshold: threshold,
+            custom_thresholds: HashMap::new(),
+        }
+    }
+
+    /// Get the threshold for a specific knowledge item
+    fn get_threshold(&self, knowledge: &str) -> f32 {
+        // Check for custom threshold first
+        if let Some(&threshold) = self.custom_thresholds.get(knowledge) {
+            return threshold;
+        }
+
+        // Otherwise, determine from knowledge name
+        KnowledgeComplexity::from_knowledge_name(knowledge).threshold()
+    }
+
+    /// Set a custom threshold for specific knowledge
+    pub fn set_threshold(&mut self, knowledge: &str, threshold: f32) {
+        self.custom_thresholds.insert(knowledge.to_string(), threshold);
+    }
+
+    /// Set threshold based on complexity level
+    pub fn set_complexity(&mut self, knowledge: &str, complexity: KnowledgeComplexity) {
+        self.custom_thresholds.insert(knowledge.to_string(), complexity.threshold());
     }
 
     /// Add exposure to a knowledge item, returns true if threshold reached
     pub fn add_exposure(&mut self, knowledge: &str, amount: f32) -> bool {
+        let threshold = self.get_threshold(knowledge);
         let current = self.exposures.entry(knowledge.to_string()).or_insert(0.0);
         *current += amount;
-        *current >= self.threshold
+        *current >= threshold
+    }
+
+    /// Add exposure with explicit complexity level
+    pub fn add_exposure_with_complexity(
+        &mut self,
+        knowledge: &str,
+        amount: f32,
+        complexity: KnowledgeComplexity,
+    ) -> bool {
+        self.set_complexity(knowledge, complexity);
+        self.add_exposure(knowledge, amount)
     }
 
     /// Get current exposure level (0.0 to threshold)
@@ -74,7 +216,7 @@ impl LearningExposure {
 
     /// Check if ready to learn (exposure >= threshold)
     pub fn ready_to_learn(&self, knowledge: &str) -> bool {
-        self.get_exposure(knowledge) >= self.threshold
+        self.get_exposure(knowledge) >= self.get_threshold(knowledge)
     }
 
     /// Reset exposure after learning
@@ -84,7 +226,52 @@ impl LearningExposure {
 
     /// Get exposure as percentage of threshold
     pub fn exposure_percentage(&self, knowledge: &str) -> f32 {
-        (self.get_exposure(knowledge) / self.threshold).min(1.0)
+        let threshold = self.get_threshold(knowledge);
+        if threshold <= 0.0 {
+            return 1.0;
+        }
+        (self.get_exposure(knowledge) / threshold).min(1.0)
+    }
+
+    /// Get the complexity level for a knowledge item
+    pub fn get_complexity(&self, knowledge: &str) -> KnowledgeComplexity {
+        if let Some(&threshold) = self.custom_thresholds.get(knowledge) {
+            // Map threshold back to complexity
+            if threshold <= 0.3 {
+                KnowledgeComplexity::Trivial
+            } else if threshold <= 0.5 {
+                KnowledgeComplexity::Simple
+            } else if threshold <= 1.0 {
+                KnowledgeComplexity::Normal
+            } else if threshold <= 1.5 {
+                KnowledgeComplexity::Complex
+            } else if threshold <= 2.0 {
+                KnowledgeComplexity::Advanced
+            } else {
+                KnowledgeComplexity::Master
+            }
+        } else {
+            KnowledgeComplexity::from_knowledge_name(knowledge)
+        }
+    }
+
+    /// Get all knowledge items and their progress
+    pub fn all_progress(&self) -> Vec<(&str, f32, KnowledgeComplexity)> {
+        self.exposures
+            .iter()
+            .map(|(k, &exp)| {
+                let complexity = self.get_complexity(k);
+                let progress = exp / self.get_threshold(k);
+                (k.as_str(), progress, complexity)
+            })
+            .collect()
+    }
+
+    /// Legacy compatibility: get the default threshold
+    /// (maps to `default_threshold` for backwards compatibility)
+    #[inline]
+    pub fn threshold(&self) -> f32 {
+        self.default_threshold
     }
 }
 

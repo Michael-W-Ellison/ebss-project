@@ -143,21 +143,91 @@ impl ActionPlan {
         self.steps.len() > max_steps
     }
 
-    /// Calculate maximum steps an agent will tolerate based on traits
+    /// Calculate maximum steps an agent will tolerate based on personality traits
+    ///
+    /// Base complexity is 10 steps. Traits apply additive modifiers:
+    ///
+    /// **Positive modifiers (increase complexity tolerance):**
+    /// - Ambitious: +6 (tackles complex challenges)
+    /// - Stubborn: +4 (persists through long plans)
+    /// - Diligent: +4 (works hard on complex tasks)
+    /// - Curious: +3 (willing to explore complex solutions)
+    /// - Bookworm: +3 (enjoys intellectual challenges)
+    /// - Brave: +2 (not intimidated by complexity)
+    /// - Proud: +2 (wants to accomplish difficult goals)
+    /// - Explorer: +2 (willing to try complex paths)
+    ///
+    /// **Negative modifiers (decrease complexity tolerance):**
+    /// - Lazy: -5 (avoids complex work)
+    /// - Anxious: -3 (overwhelmed by complex plans)
+    /// - Coward: -2 (avoids challenging situations)
+    /// - Calm/Peaceful: -1 (prefers simple, stress-free plans)
+    ///
+    /// **Neutral/balancing modifiers:**
+    /// - Pragmatist: sets baseline to 8 (practical, efficient plans)
+    ///
+    /// Minimum complexity is 2 steps, maximum is 25 steps.
     fn calculate_max_steps(traits: &[Trait]) -> usize {
-        let mut max_steps = 10; // Default
+        let mut max_steps: i32 = 10; // Default base
+        let mut has_pragmatist = false;
 
         for trait_item in traits {
             match trait_item {
-                Trait::Lazy => max_steps = 3, // Lazy agents only do simple plans
-                Trait::Ambitious => max_steps = 20, // Ambitious agents tackle complex plans
-                Trait::Pragmatist => max_steps = 7, // Practical, moderate complexity
-                Trait::Stubborn => max_steps = 15, // Stubborn agents persist
+                // Large positive modifiers
+                Trait::Ambitious => max_steps += 6,
+                Trait::Stubborn => max_steps += 4,
+                Trait::Diligent => max_steps += 4,
+
+                // Medium positive modifiers
+                Trait::Curious => max_steps += 3,
+                Trait::Bookworm => max_steps += 3,
+                Trait::Brave => max_steps += 2,
+                Trait::Proud => max_steps += 2,
+                Trait::Explorer => max_steps += 2,
+
+                // Small positive modifiers
+                Trait::Resilient => max_steps += 1,
+                Trait::Handy => max_steps += 1,
+
+                // Large negative modifiers
+                Trait::Lazy => max_steps -= 5,
+
+                // Medium negative modifiers
+                Trait::Anxious => max_steps -= 3,
+                Trait::Coward => max_steps -= 2,
+
+                // Small negative modifiers
+                Trait::Calm => max_steps -= 1,
+                Trait::Peaceful => max_steps -= 1,
+                Trait::Ascetic => max_steps -= 1, // Prefers simplicity
+
+                // Pragmatist sets a reasonable baseline
+                Trait::Pragmatist => has_pragmatist = true,
+
                 _ => {}
             }
         }
 
-        max_steps
+        // Pragmatist prefers efficient plans - cap complexity at reasonable level
+        if has_pragmatist && max_steps > 12 {
+            max_steps = 12;
+        }
+
+        // Clamp between 2 and 25 steps
+        max_steps.clamp(2, 25) as usize
+    }
+
+    /// Get a descriptive complexity level for the agent's max steps
+    pub fn complexity_description(traits: &[Trait]) -> &'static str {
+        let max = Self::calculate_max_steps(traits);
+        match max {
+            0..=4 => "very simple",
+            5..=8 => "simple",
+            9..=12 => "moderate",
+            13..=17 => "complex",
+            18..=22 => "very complex",
+            _ => "extremely complex",
+        }
     }
 }
 

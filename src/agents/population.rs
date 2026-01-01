@@ -849,9 +849,6 @@ impl Population {
         use crate::core::DriveType;
         use rand::Rng;
 
-        // Pre-compute squared distance threshold (avoids sqrt)
-        const SOCIAL_RANGE_SQUARED: f32 = 25.0; // 5.0 * 5.0
-
         let mut rng = rand::thread_rng();
         let current_tick = self.current_tick;
 
@@ -886,6 +883,9 @@ impl Population {
                 continue;
             }
 
+            // Calculate social range based on personality traits
+            let agent1_social_range_sq = calculate_social_range_squared(&self.agents[i].traits.traits);
+
             for j in (i + 1)..self.agents.len() {
                 if !self.agents[j].state.is_alive {
                     continue;
@@ -910,8 +910,13 @@ impl Population {
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
                 let distance_squared = dx * dx + dy * dy;
 
-                // Must be within social interaction range (5 tiles)
-                if distance_squared > SOCIAL_RANGE_SQUARED {
+                // Use the larger of the two agents' social ranges
+                // (more social agent can reach out to less social one)
+                let agent2_social_range_sq = calculate_social_range_squared(&self.agents[j].traits.traits);
+                let max_social_range_sq = agent1_social_range_sq.max(agent2_social_range_sq);
+
+                // Must be within social interaction range
+                if distance_squared > max_social_range_sq {
                     continue;
                 }
 
@@ -1247,6 +1252,50 @@ pub struct PopulationLearningStats {
     pub total_ready_to_adopt: usize,
     pub agents_learning_from_parents: usize,
     pub average_unique_teachers: f32,
+}
+
+/// Calculate social interaction range based on agent personality traits
+///
+/// Returns squared range (to avoid sqrt in distance calculations)
+/// Base range is 5 tiles. Traits can modify this:
+/// - Extrovert/Sociable: +3 tiles (8 total)
+/// - Charismatic: +2 tiles
+/// - Introvert/Introverted: -2 tiles (3 total)
+/// - Mute: -1 tile
+/// - Explorer: +1 tile (willing to travel to meet people)
+///
+/// Range is clamped between 2 and 10 tiles.
+fn calculate_social_range_squared(traits: &[Trait]) -> f32 {
+    let mut range: f32 = 5.0; // Base social range in tiles
+
+    for trait_item in traits {
+        match trait_item {
+            // Traits that increase social range
+            Trait::Extrovert | Trait::Sociable => range += 3.0,
+            Trait::Charismatic => range += 2.0,
+            Trait::Explorer => range += 1.0,
+            Trait::Curious => range += 1.0,
+
+            // Traits that decrease social range
+            Trait::Introvert | Trait::Introverted => range -= 2.0,
+            Trait::Mute => range -= 1.0,
+            Trait::Anxious => range -= 1.0,
+            Trait::Paranoid => range -= 2.0,
+
+            _ => {}
+        }
+    }
+
+    // Clamp between 2 and 10 tiles
+    range = range.clamp(2.0, 10.0);
+
+    // Return squared range for efficient distance comparison
+    range * range
+}
+
+/// Get the base social range for a set of traits (in tiles, not squared)
+pub fn get_social_range(traits: &[Trait]) -> f32 {
+    calculate_social_range_squared(traits).sqrt()
 }
 
 impl Default for Population {

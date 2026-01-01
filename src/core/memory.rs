@@ -160,6 +160,10 @@ pub struct MemoryConfig {
     pub auto_forget: bool,
     /// Minimum strength to keep when auto-forgetting
     pub forget_threshold: f32,
+    /// How often to run batch pruning (in ticks) - optimizes large populations
+    pub prune_interval: u32,
+    /// Whether to use batch decay (more efficient for large populations)
+    pub batch_decay: bool,
 }
 
 impl Default for MemoryConfig {
@@ -169,6 +173,34 @@ impl Default for MemoryConfig {
             decay_rate: 0.001,        // Very slow decay (0.1% per tick)
             auto_forget: true,
             forget_threshold: 0.1,
+            prune_interval: 100,      // Batch prune every 100 ticks
+            batch_decay: true,        // Use batch decay by default
+        }
+    }
+}
+
+impl MemoryConfig {
+    /// Create a config optimized for large populations
+    pub fn for_large_population() -> Self {
+        Self {
+            max_memories: Some(500),  // Lower limit per agent
+            decay_rate: 0.002,        // Slightly faster decay
+            auto_forget: true,
+            forget_threshold: 0.15,   // Forget weaker memories sooner
+            prune_interval: 50,       // Prune more frequently
+            batch_decay: true,
+        }
+    }
+
+    /// Create a config for small populations with detailed memory
+    pub fn for_small_population() -> Self {
+        Self {
+            max_memories: Some(2000), // Higher limit
+            decay_rate: 0.0005,       // Slower decay
+            auto_forget: true,
+            forget_threshold: 0.05,   // Keep weaker memories longer
+            prune_interval: 200,      // Prune less frequently
+            batch_decay: false,       // Can afford per-tick decay
         }
     }
 }
@@ -276,6 +308,12 @@ pub struct Memory {
     pub spatial_memories: Vec<SpatialMemory>,
     pub knowledge: Vec<KnowledgeMemory>,
     pub current_tick: u32,
+    /// Configuration for memory behavior
+    #[serde(default)]
+    pub config: MemoryConfig,
+    /// Tick counter for batch operations
+    #[serde(default)]
+    ticks_since_prune: u32,
 }
 
 impl Memory {
@@ -284,20 +322,101 @@ impl Memory {
             spatial_memories: Vec::new(),
             knowledge: Vec::new(),
             current_tick: 0,
+            config: MemoryConfig::default(),
+            ticks_since_prune: 0,
         }
     }
 
-    /// Update memory for a new tick
+    /// Create memory with custom config
+    pub fn with_config(config: MemoryConfig) -> Self {
+        Self {
+            spatial_memories: Vec::new(),
+            knowledge: Vec::new(),
+            current_tick: 0,
+            config,
+            ticks_since_prune: 0,
+        }
+    }
+
+    /// Update memory for a new tick (optimized for large populations)
     pub fn tick(&mut self) {
         self.current_tick += 1;
+        self.ticks_since_prune += 1;
 
-        // Decay spatial memories
+        if self.config.batch_decay {
+            // Batch mode: only decay and prune at intervals
+            if self.ticks_since_prune >= self.config.prune_interval {
+                self.batch_decay_and_prune();
+                self.ticks_since_prune = 0;
+            }
+        } else {
+            // Per-tick mode: decay every tick (original behavior)
+            for memory in &mut self.spatial_memories {
+                memory.decay(self.current_tick);
+            }
+            // Remove very old, low-confidence memories
+            self.spatial_memories.retain(|m| m.confidence > self.config.forget_threshold);
+        }
+    }
+
+    /// Perform batch decay and pruning (efficient for large populations)
+    fn batch_decay_and_prune(&mut self) {
+        let decay_multiplier = self.config.prune_interval as f32; // Accumulate decay
+
+        // Apply accumulated decay to spatial memories
         for memory in &mut self.spatial_memories {
-            memory.decay(self.current_tick);
+            // Apply decay proportional to ticks elapsed
+            let time_elapsed = self.current_tick.saturating_sub(memory.last_seen);
+            let decay = (time_elapsed as f32 * 0.001 * decay_multiplier).min(1.0);
+            memory.confidence = (memory.confidence - decay).max(0.0);
         }
 
-        // Remove very old, low-confidence memories
-        self.spatial_memories.retain(|m| m.confidence > 0.1);
+        // Prune weak memories
+        self.spatial_memories.retain(|m| m.confidence > self.config.forget_threshold);
+
+        // Enforce max memory limit if set
+        if let Some(max) = self.config.max_memories {
+            if self.spatial_memories.len() > max {
+                // Sort by confidence and keep the strongest
+                self.spatial_memories.sort_by(|a, b| {
+                    b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                self.spatial_memories.truncate(max);
+            }
+        }
+    }
+
+    /// Force immediate pruning (useful when memory pressure is high)
+    pub fn force_prune(&mut self) {
+        self.batch_decay_and_prune();
+        self.ticks_since_prune = 0;
+    }
+
+    /// Get memory statistics
+    pub fn stats(&self) -> MemoryStats {
+        let total_memories = self.spatial_memories.len() + self.knowledge.len();
+        let average_strength = if self.spatial_memories.is_empty() {
+            0.0
+        } else {
+            self.spatial_memories.iter().map(|m| m.confidence).sum::<f32>()
+                / self.spatial_memories.len() as f32
+        };
+
+        MemoryStats {
+            total_memories,
+            by_type: HashMap::new(), // Simplified - could be expanded
+            by_importance: HashMap::new(),
+            average_strength,
+        }
+    }
+
+    /// Check if memory is under pressure (near capacity)
+    pub fn is_under_pressure(&self) -> bool {
+        if let Some(max) = self.config.max_memories {
+            self.spatial_memories.len() + self.knowledge.len() > (max * 9 / 10)
+        } else {
+            false
+        }
     }
 
     /// Add or update spatial memory
