@@ -292,6 +292,19 @@ impl BuildingType {
         }
     }
 
+    /// Check if this building type is residential (can house agents)
+    pub fn is_residential(&self) -> bool {
+        matches!(
+            self,
+            BuildingType::Longhouse
+                | BuildingType::UpgradedLonghouse
+                | BuildingType::SmallHouse
+                | BuildingType::MediumHouse
+                | BuildingType::LargeHouse
+                | BuildingType::Manor
+        )
+    }
+
     /// Get ASCII character for rendering
     pub fn ascii_char(&self) -> char {
         match self {

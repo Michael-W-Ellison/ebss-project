@@ -402,10 +402,36 @@ impl Memory {
                 / self.spatial_memories.len() as f32
         };
 
+        // Count memories by type
+        let mut by_type: HashMap<String, usize> = HashMap::new();
+        for memory in &self.spatial_memories {
+            let type_name = format!("{:?}", memory.memory_type);
+            *by_type.entry(type_name).or_insert(0) += 1;
+        }
+        // Add knowledge count
+        *by_type.entry("Knowledge".to_string()).or_insert(0) += self.knowledge.len();
+
+        // Categorize by strength/importance
+        let mut by_importance: HashMap<String, usize> = HashMap::new();
+        for memory in &self.spatial_memories {
+            let importance = if memory.confidence > 0.8 {
+                "Strong"
+            } else if memory.confidence > 0.5 {
+                "Moderate"
+            } else if memory.confidence > 0.2 {
+                "Weak"
+            } else {
+                "Fading"
+            };
+            *by_importance.entry(importance.to_string()).or_insert(0) += 1;
+        }
+        // Knowledge memories are assumed to be persistent/strong
+        *by_importance.entry("Persistent".to_string()).or_insert(0) += self.knowledge.len();
+
         MemoryStats {
             total_memories,
-            by_type: HashMap::new(), // Simplified - could be expanded
-            by_importance: HashMap::new(),
+            by_type,
+            by_importance,
             average_strength,
         }
     }
@@ -470,8 +496,10 @@ impl Default for Memory {
 #[derive(Debug, Clone)]
 pub struct MemoryStats {
     pub total_memories: usize,
-    pub by_type: HashMap<MemoryType, usize>,
-    pub by_importance: HashMap<MemoryImportance, usize>,
+    /// Count of memories by type (e.g., "Food", "Water", "Knowledge")
+    pub by_type: HashMap<String, usize>,
+    /// Count of memories by strength/importance (e.g., "Strong", "Moderate", "Weak")
+    pub by_importance: HashMap<String, usize>,
     pub average_strength: f32,
 }
 

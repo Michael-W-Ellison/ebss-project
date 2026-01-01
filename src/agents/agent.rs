@@ -1574,23 +1574,15 @@ impl Agent {
             return Err(format!("Item '{}' not found in inventory", item_id));
         }
 
-        // Create equipment item from inventory item
-        // For now, we'll create a basic equipment item
-        // In a full implementation, this would lookup item stats from a registry
-        use super::equipment::{EquipmentType, EquipmentMaterial, WoodMaterial};
-        use super::skills::Quality;
-
-        let equipment_type = match slot {
-            super::equipment::EquipmentSlot::MainHand | super::equipment::EquipmentSlot::OffHand => EquipmentType::Pickaxe,
-            _ => EquipmentType::Clothing,
-        };
+        // Item registry: maps item_id to (equipment_type, material, quality)
+        let (equipment_type, material, quality) = Self::lookup_item_properties(item_id, slot);
 
         let equipment_item = super::equipment::EquipmentItem::new(
             item_id.to_string(),
             equipment_type,
             slot,
-            EquipmentMaterial::Wood(WoodMaterial::Oak),
-            Quality::Basic,
+            material,
+            quality,
         );
 
         // Equip the item (this returns the previously equipped item if any)
@@ -1608,6 +1600,186 @@ impl Agent {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Lookup equipment properties from item registry
+    /// Returns (equipment_type, material, quality) for the given item
+    fn lookup_item_properties(
+        item_id: &str,
+        slot: super::equipment::EquipmentSlot,
+    ) -> (super::equipment::EquipmentType, super::equipment::EquipmentMaterial, super::skills::Quality) {
+        use super::equipment::{EquipmentType, EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial};
+        use super::skills::Quality;
+
+        // Normalize item_id for matching
+        let item_lower = item_id.to_lowercase();
+
+        // Match based on item name patterns
+        // Tools
+        if item_lower.contains("pickaxe") || item_lower.contains("pick") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Pickaxe, mat, qual);
+        }
+        if item_lower.contains("axe") && !item_lower.contains("pick") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Hatchet, mat, qual);
+        }
+        if item_lower.contains("shovel") || item_lower.contains("spade") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Shovel, mat, qual);
+        }
+        if item_lower.contains("hammer") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Hammer, mat, qual);
+        }
+        if item_lower.contains("sickle") || item_lower.contains("scythe") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Sickle, mat, qual);
+        }
+        if item_lower.contains("fishing") || item_lower.contains("rod") {
+            return (EquipmentType::FishingRod, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
+        }
+
+        // Weapons
+        if item_lower.contains("sword") || item_lower.contains("blade") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Sword, mat, qual);
+        }
+        if item_lower.contains("spear") || item_lower.contains("lance") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Spear, mat, qual);
+        }
+        if item_lower.contains("mace") || item_lower.contains("club") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Mace, mat, qual);
+        }
+        if item_lower.contains("dagger") || item_lower.contains("knife") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Dagger, mat, qual);
+        }
+        if item_lower.contains("bow") && !item_lower.contains("cross") {
+            return (EquipmentType::Bow, EquipmentMaterial::Wood(WoodMaterial::Yew), Quality::Basic);
+        }
+        if item_lower.contains("crossbow") {
+            return (EquipmentType::Crossbow, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
+        }
+        if item_lower.contains("shield") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Shield, mat, qual);
+        }
+
+        // Armor
+        if item_lower.contains("plate") || item_lower.contains("heavy armor") {
+            return (EquipmentType::HeavyArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
+        }
+        if item_lower.contains("chain") || item_lower.contains("mail") {
+            return (EquipmentType::MediumArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
+        }
+        if item_lower.contains("leather armor") || item_lower.contains("hide armor") {
+            return (EquipmentType::LightArmor, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
+        }
+
+        // Clothing
+        if item_lower.contains("fur") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Fur), Quality::Basic);
+        }
+        if item_lower.contains("wool") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Wool), Quality::Basic);
+        }
+        if item_lower.contains("leather") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
+        }
+        if item_lower.contains("linen") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic);
+        }
+        if item_lower.contains("cotton") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Cotton), Quality::Basic);
+        }
+
+        // Utility
+        if item_lower.contains("torch") {
+            return (EquipmentType::Torch, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
+        }
+        if item_lower.contains("lantern") || item_lower.contains("lamp") {
+            return (EquipmentType::Lantern, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
+        }
+
+        // Default based on slot type
+        match slot {
+            super::equipment::EquipmentSlot::MainHand | super::equipment::EquipmentSlot::OffHand => {
+                (EquipmentType::Pickaxe, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic)
+            }
+            _ => (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic)
+        }
+    }
+
+    /// Parse material and quality from item name
+    fn parse_material_quality(item_name: &str, is_tool_or_weapon: bool) -> (super::equipment::EquipmentMaterial, super::skills::Quality) {
+        use super::equipment::{EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial, StoneMaterial};
+        use super::skills::Quality;
+
+        // Parse quality (using Quality enum variants: Pathetic, Crude, Basic, Moderate, Advanced, Expert)
+        let quality = if item_name.contains("masterwork") || item_name.contains("master") || item_name.contains("expert") {
+            Quality::Expert
+        } else if item_name.contains("excellent") || item_name.contains("fine") || item_name.contains("advanced") {
+            Quality::Advanced
+        } else if item_name.contains("good") || item_name.contains("quality") || item_name.contains("moderate") {
+            Quality::Moderate
+        } else if item_name.contains("poor") || item_name.contains("crude") {
+            Quality::Crude
+        } else if item_name.contains("pathetic") || item_name.contains("terrible") {
+            Quality::Pathetic
+        } else {
+            Quality::Basic
+        };
+
+        // Parse material
+        let material = if is_tool_or_weapon {
+            // Tools and weapons use metal or wood
+            if item_name.contains("steel") {
+                EquipmentMaterial::Metal(MetalMaterial::Steel)
+            } else if item_name.contains("iron") {
+                EquipmentMaterial::Metal(MetalMaterial::Iron)
+            } else if item_name.contains("bronze") {
+                EquipmentMaterial::Metal(MetalMaterial::Bronze)
+            } else if item_name.contains("copper") {
+                EquipmentMaterial::Metal(MetalMaterial::Copper)
+            } else if item_name.contains("stone") {
+                EquipmentMaterial::Stone(StoneMaterial::Flint)
+            } else if item_name.contains("oak") {
+                EquipmentMaterial::Wood(WoodMaterial::Oak)
+            } else if item_name.contains("birch") {
+                EquipmentMaterial::Wood(WoodMaterial::Birch)
+            } else if item_name.contains("pine") {
+                EquipmentMaterial::Wood(WoodMaterial::Pine)
+            } else if item_name.contains("yew") {
+                EquipmentMaterial::Wood(WoodMaterial::Yew)
+            } else if item_name.contains("wood") {
+                EquipmentMaterial::Wood(WoodMaterial::Oak)
+            } else {
+                // Default to wood for basic tools
+                EquipmentMaterial::Wood(WoodMaterial::Oak)
+            }
+        } else {
+            // Armor and clothing
+            if item_name.contains("leather") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Leather)
+            } else if item_name.contains("fur") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Fur)
+            } else if item_name.contains("wool") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Wool)
+            } else if item_name.contains("linen") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
+            } else if item_name.contains("cotton") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Cotton)
+            } else if item_name.contains("hide") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Hide)
+            } else {
+                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
+            }
+        };
+
+        (material, quality)
     }
 
     /// Unequip an item from a slot and put it in inventory
@@ -2396,15 +2568,49 @@ impl Agent {
     ///
     /// Converts the current PlanStep to an environment Action.
     /// Returns None if no plan, plan is complete, or step can't be converted.
+    /// Note: Social actions may have nil UUIDs that need resolution at execution time.
     pub fn get_plan_action(&self) -> Option<Action> {
         let plan = self.current_plan.as_ref()?;
         let step = plan.current_step()?;
 
-        self.convert_plan_step_to_action(step)
+        self.convert_plan_step_to_action(step, &[])
+    }
+
+    /// Get the next action from the current plan, resolving social targets
+    ///
+    /// Like get_plan_action but resolves nil UUIDs in social actions to actual
+    /// nearby agents. The nearby_agents list should contain (id, position) pairs
+    /// for all agents that could be interacted with.
+    pub fn get_plan_action_with_nearby(
+        &self,
+        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Option<Action> {
+        let plan = self.current_plan.as_ref()?;
+        let step = plan.current_step()?;
+
+        self.convert_plan_step_to_action(step, nearby_agents)
+    }
+
+    /// Find the nearest agent from a list of candidates
+    fn find_nearest_agent(&self, candidates: &[(uuid::Uuid, (i32, i32, i32))]) -> Option<uuid::Uuid> {
+        let my_pos = self.state.position;
+        candidates
+            .iter()
+            .filter(|(id, _)| *id != self.id) // Exclude self
+            .min_by_key(|(_, pos)| {
+                let dx = (pos.0 - my_pos.0).abs();
+                let dy = (pos.1 - my_pos.1).abs();
+                dx + dy // Manhattan distance
+            })
+            .map(|(id, _)| *id)
     }
 
     /// Convert a PlanStep's ActionType to an environment Action
-    fn convert_plan_step_to_action(&self, step: &PlanStep) -> Option<Action> {
+    fn convert_plan_step_to_action(
+        &self,
+        step: &PlanStep,
+        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Option<Action> {
         match &step.action {
             PlanActionType::MoveTo { location } => {
                 Some(Action::Move { target: *location })
@@ -2431,7 +2637,13 @@ impl Agent {
                 Some(Action::Retrieve { item_type: resource.clone(), amount: *amount })
             }
             PlanActionType::Socialize { target_id } => {
-                Some(Action::Socialize { target_agent_id: *target_id })
+                // Resolve nil UUID to nearest agent if possible
+                let resolved_id = if target_id.is_nil() {
+                    self.find_nearest_agent(nearby_agents).unwrap_or(*target_id)
+                } else {
+                    *target_id
+                };
+                Some(Action::Socialize { target_agent_id: resolved_id })
             }
             PlanActionType::Rest { duration } => {
                 Some(Action::Sleep { duration: *duration })

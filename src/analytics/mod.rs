@@ -296,8 +296,13 @@ impl Simulation {
         // Note: agents have already been updated by population.tick() above
         // This loop handles behavior tree execution and action processing
 
-        // Collect agent IDs to avoid borrowing issues
+        // Collect agent IDs and positions to avoid borrowing issues
+        // This also allows us to resolve nil UUIDs in social actions
         let agent_ids: Vec<_> = self.population.agents.iter().map(|a| a.id).collect();
+        let agent_positions: Vec<(uuid::Uuid, (i32, i32, i32))> = self.population.agents
+            .iter()
+            .map(|a| (a.id, a.state.position))
+            .collect();
 
         for agent_id in agent_ids {
             // Find the agent
@@ -429,10 +434,12 @@ impl Simulation {
                             item_id.contains("shield")
                         });
 
-                    // Check if agent owns a house (based on memory or state)
-                    // For now, we estimate based on whether agent has built structures
-                    let owns_house = agent.memory.knowledge.iter()
-                        .any(|k| k.description.contains("house") || k.description.contains("shelter"));
+                    // Check if agent owns a house by checking actual building ownership
+                    let owns_house = self.world.buildings.iter().any(|b| {
+                        b.owner == Some(agent_id) &&
+                        b.is_completed() &&
+                        b.building_type.is_residential()
+                    });
 
                     let world_state = GoalWorldState {
                         storehouse_food,
@@ -503,6 +510,14 @@ impl Simulation {
                         }
                     }
                 };
+
+                // Resolve nil UUIDs in social actions to actual nearby agents
+                let action = Self::resolve_action_target(
+                    action,
+                    agent_id,
+                    agent_position,
+                    &agent_positions,
+                );
 
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
@@ -804,6 +819,58 @@ impl Simulation {
         }
     }
 
+    /// Find the nearest agent to use as a social interaction target
+    /// Returns None if no suitable target is found
+    fn find_nearest_social_target(
+        agent_id: uuid::Uuid,
+        position: (i32, i32, i32),
+        agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Option<uuid::Uuid> {
+        agents
+            .iter()
+            .filter(|(id, _)| *id != agent_id) // Exclude self
+            .min_by_key(|(_, pos)| {
+                let dx = (pos.0 - position.0).abs();
+                let dy = (pos.1 - position.1).abs();
+                dx + dy // Manhattan distance
+            })
+            .map(|(id, _)| *id)
+    }
+
+    /// Resolve a nil UUID in an action to an actual nearby agent
+    fn resolve_action_target(
+        action: Action,
+        agent_id: uuid::Uuid,
+        position: (i32, i32, i32),
+        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Action {
+        match action {
+            Action::Socialize { target_agent_id } if target_agent_id.is_nil() => {
+                if let Some(target) = Self::find_nearest_social_target(agent_id, position, nearby_agents) {
+                    Action::Socialize { target_agent_id: target }
+                } else {
+                    // No nearby agents, fall back to waiting
+                    Action::Wait
+                }
+            }
+            Action::ShareInformation { target_agent_id } if target_agent_id.is_nil() => {
+                if let Some(target) = Self::find_nearest_social_target(agent_id, position, nearby_agents) {
+                    Action::ShareInformation { target_agent_id: target }
+                } else {
+                    Action::Wait
+                }
+            }
+            Action::Mate { target_agent_id } if target_agent_id.is_nil() => {
+                if let Some(target) = Self::find_nearest_social_target(agent_id, position, nearby_agents) {
+                    Action::Mate { target_agent_id: target }
+                } else {
+                    Action::Wait
+                }
+            }
+            other => other, // Return unchanged
+        }
+    }
+
     /// Generate an action based on drive type and position
     fn generate_action_for_drive(drive_type: DriveType, position: (i32, i32, i32)) -> Action {
         use rand::Rng;
@@ -924,10 +991,33 @@ impl Simulation {
                 ExternalGoal::GatherResource(resource_name, _amount) => {
                     Some(Action::Gather { resource_type: resource_name.clone() })
                 },
-                ExternalGoal::LearnSkill(_skill_name) => {
-                    // Learning happens through practice - choose relevant action
-                    // For now, map to a generic action
-                    None
+                ExternalGoal::LearnSkill(skill_name) => {
+                    // Learning happens through practice - map skill to relevant action
+                    let skill_lower = skill_name.to_lowercase();
+                    if skill_lower.contains("mining") {
+                        Some(Action::Gather { resource_type: "stone".to_string() })
+                    } else if skill_lower.contains("woodcutting") || skill_lower.contains("carpentry") {
+                        Some(Action::Gather { resource_type: "wood".to_string() })
+                    } else if skill_lower.contains("crafting") || skill_lower.contains("metalworking") {
+                        Some(Action::Craft { item_type: "tool".to_string() })
+                    } else if skill_lower.contains("construction") || skill_lower.contains("masonry") {
+                        Some(Action::Build { structure_type: "structure".to_string(), position })
+                    } else if skill_lower.contains("farming") || skill_lower.contains("herbalism") {
+                        Some(Action::Gather { resource_type: "food".to_string() })
+                    } else if skill_lower.contains("cooking") || skill_lower.contains("smelting") {
+                        Some(Action::Craft { item_type: "processed".to_string() })
+                    } else if skill_lower.contains("hunting") || skill_lower.contains("combat") || skill_lower.contains("archery") {
+                        Some(Action::Hunt { animal_id: uuid::Uuid::nil(), weapon: None })
+                    } else if skill_lower.contains("fishing") {
+                        Some(Action::Gather { resource_type: "fish".to_string() })
+                    } else if skill_lower.contains("social") {
+                        Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
+                    } else if skill_lower.contains("navigation") {
+                        Some(Action::Explore { direction: (1, 0, 0) })
+                    } else {
+                        // Default: generic crafting to practice skills
+                        Some(Action::Craft { item_type: "practice".to_string() })
+                    }
                 },
                 ExternalGoal::FormRelationship(_relationship_type) => {
                     Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })

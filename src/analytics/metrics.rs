@@ -91,6 +91,7 @@ pub struct SimulationMetrics {
     pub snapshots: Vec<TickSnapshot>,
     pub sampling_interval: u32, // Take snapshot every N ticks
     pub max_snapshots: usize,   // Keep only last N snapshots
+    pub world_size: (usize, usize), // World dimensions (width, height) for exploration calculation
 }
 
 impl SimulationMetrics {
@@ -99,7 +100,23 @@ impl SimulationMetrics {
             snapshots: Vec::new(),
             sampling_interval,
             max_snapshots,
+            world_size: (100, 100), // Default, can be overridden
         }
+    }
+
+    /// Create metrics with specific world size
+    pub fn with_world_size(sampling_interval: u32, max_snapshots: usize, world_size: (usize, usize)) -> Self {
+        Self {
+            snapshots: Vec::new(),
+            sampling_interval,
+            max_snapshots,
+            world_size,
+        }
+    }
+
+    /// Set the world size for exploration calculations
+    pub fn set_world_size(&mut self, width: usize, height: usize) {
+        self.world_size = (width, height);
     }
 
     /// Record a snapshot if it's time to sample
@@ -409,10 +426,10 @@ impl SimulationMetrics {
             0.0
         };
 
-        // Estimate exploration percentage (assuming world size is tracked)
-        // For now, use a simple ratio
-        let exploration_percentage = if total_tiles > 0 {
-            (total_tiles as f32 / 10000.0) * 100.0  // Assuming 100x100 world
+        // Calculate exploration percentage based on actual world size
+        let total_world_tiles = (self.world_size.0 * self.world_size.1) as f32;
+        let exploration_percentage = if total_tiles > 0 && total_world_tiles > 0.0 {
+            (total_tiles as f32 / total_world_tiles) * 100.0
         } else {
             0.0
         };
