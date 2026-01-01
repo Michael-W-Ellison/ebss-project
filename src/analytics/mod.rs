@@ -19,6 +19,12 @@ pub mod emergence;
 pub mod export;
 pub mod performance;
 
+// New observation interface modules
+pub mod events;
+pub mod replay;
+pub mod storage;
+pub mod web_api;
+
 pub use metrics::{SimulationMetrics, TickSnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
 pub use emergence::{
     EmergenceDetector, EmergentPattern, PatternType,
@@ -27,6 +33,12 @@ pub use emergence::{
 };
 pub use export::{DataExporter, ExportFormat};
 pub use performance::{PerformanceMonitor, PerformanceSnapshot};
+
+// Export new modules
+pub use events::{EventBus, EventData, EventType, EventFilter, EventEmitter, SubscriptionId, EventValue};
+pub use replay::{SessionRecorder, SessionPlayer, StateSnapshot, AgentSnapshot, WorldSnapshot, RecordingConfig};
+pub use storage::{StorageManager, StorageConfig, TimeSeriesStore, DocumentStore, DataPoint};
+pub use web_api::{ApiServer, ApiConfig, SimulationDataProvider, SimulationStatus, PopulationSummary, AgentSummary, AgentDetail};
 
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
