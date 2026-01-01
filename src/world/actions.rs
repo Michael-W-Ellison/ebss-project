@@ -62,6 +62,7 @@ pub enum Action {
     /// Move towards another agent to socialize
     SeekSocialInteraction {
         target_agent_id: Uuid,
+        target_position: Position,
     },
 }
 
@@ -69,7 +70,10 @@ pub enum Action {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionResult {
     Success { message: String },
+    /// Action produced items that should be added to agent inventory
     SuccessWithItems { message: String, item_type: ItemType, quantity: u32 },
+    /// Action consumed items from agent inventory (caller should verify and remove)
+    SuccessConsumedItems { message: String, item_type: ItemType, quantity: u32 },
     Failure { reason: String },
     Partial { completed: f32, message: String },
     SocialSuccess {
@@ -82,17 +86,39 @@ pub enum ActionResult {
 
 impl ActionResult {
     pub fn is_success(&self) -> bool {
-        matches!(self, ActionResult::Success { .. } | ActionResult::SuccessWithItems { .. } | ActionResult::SocialSuccess { .. })
+        matches!(
+            self,
+            ActionResult::Success { .. }
+                | ActionResult::SuccessWithItems { .. }
+                | ActionResult::SuccessConsumedItems { .. }
+                | ActionResult::SocialSuccess { .. }
+        )
     }
 
-    /// Extract harvested items from the result, if any
-    pub fn take_items(&self) -> Option<(ItemType, u32)> {
+    /// Extract items to add to agent inventory from the result, if any
+    pub fn items_gained(&self) -> Option<(ItemType, u32)> {
         match self {
             ActionResult::SuccessWithItems { item_type, quantity, .. } => {
                 Some((*item_type, *quantity))
             }
             _ => None,
         }
+    }
+
+    /// Extract items that should be removed from agent inventory, if any
+    /// Caller should verify agent has these items before executing action
+    pub fn items_consumed(&self) -> Option<(ItemType, u32)> {
+        match self {
+            ActionResult::SuccessConsumedItems { item_type, quantity, .. } => {
+                Some((*item_type, *quantity))
+            }
+            _ => None,
+        }
+    }
+
+    /// Legacy alias for items_gained
+    pub fn take_items(&self) -> Option<(ItemType, u32)> {
+        self.items_gained()
     }
 
     /// Extract social satisfaction from the result, if any
@@ -159,8 +185,8 @@ impl World {
                 self.execute_social_interaction(agent_id, *target_agent_id, interaction_type)
             }
 
-            Action::SeekSocialInteraction { target_agent_id } => {
-                self.execute_seek_social(*target_agent_id, agent_position, occupied_positions)
+            Action::SeekSocialInteraction { target_agent_id, target_position } => {
+                self.execute_seek_social(*target_agent_id, agent_position, target_position, occupied_positions)
             }
         }
     }
@@ -381,16 +407,90 @@ impl World {
 
     fn execute_seek_social(
         &self,
-        _target_agent_id: Uuid,
-        _agent_position: &Position,
-        _occupied_positions: &[Position],
+        target_agent_id: Uuid,
+        agent_position: &mut Position,
+        target_position: &Position,
+        occupied_positions: &[Position],
     ) -> ActionResult {
-        // SeekSocialInteraction is a planning action - it indicates intent to move towards
-        // another agent for social interaction. Direct execution should fail because this
-        // action requires pathfinding and movement which should be handled by the planning system.
+        // Check if already adjacent to target (distance 1 or less)
+        if agent_position.distance_to(target_position) <= 1 {
+            return ActionResult::Success {
+                message: format!("Reached agent {} for social interaction", target_agent_id),
+            };
+        }
+
+        // Move one step towards target using simple pathfinding
+        let dx = (target_position.x - agent_position.x).signum();
+        let dy = (target_position.y - agent_position.y).signum();
+
+        // Try direct movement first
+        let direct_pos = Position::new(agent_position.x + dx, agent_position.y + dy);
+        let direct_blocked = occupied_positions.contains(&direct_pos)
+            || self.grid.get_tile(&direct_pos).map(|t| !t.terrain.is_walkable()).unwrap_or(true);
+
+        if !direct_blocked {
+            *agent_position = direct_pos;
+            let remaining_distance = agent_position.distance_to(target_position);
+            return ActionResult::Partial {
+                completed: 1.0 / (remaining_distance as f32 + 1.0),
+                message: format!(
+                    "Moving towards agent {} ({} steps remaining)",
+                    target_agent_id, remaining_distance
+                ),
+            };
+        }
+
+        // Try horizontal movement only
+        if dx != 0 {
+            let horiz_pos = Position::new(agent_position.x + dx, agent_position.y);
+            let horiz_blocked = occupied_positions.contains(&horiz_pos)
+                || self.grid.get_tile(&horiz_pos).map(|t| !t.terrain.is_walkable()).unwrap_or(true);
+            if !horiz_blocked {
+                *agent_position = horiz_pos;
+                let remaining_distance = agent_position.distance_to(target_position);
+                return ActionResult::Partial {
+                    completed: 1.0 / (remaining_distance as f32 + 1.0),
+                    message: format!(
+                        "Moving towards agent {} ({} steps remaining)",
+                        target_agent_id, remaining_distance
+                    ),
+                };
+            }
+        }
+
+        // Try vertical movement only
+        if dy != 0 {
+            let vert_pos = Position::new(agent_position.x, agent_position.y + dy);
+            let vert_blocked = occupied_positions.contains(&vert_pos)
+                || self.grid.get_tile(&vert_pos).map(|t| !t.terrain.is_walkable()).unwrap_or(true);
+            if !vert_blocked {
+                *agent_position = vert_pos;
+                let remaining_distance = agent_position.distance_to(target_position);
+                return ActionResult::Partial {
+                    completed: 1.0 / (remaining_distance as f32 + 1.0),
+                    message: format!(
+                        "Moving towards agent {} ({} steps remaining)",
+                        target_agent_id, remaining_distance
+                    ),
+                };
+            }
+        }
+
+        // Use full pathfinding if simple movement is blocked
+        if let Some(next_pos) = self.grid.find_path_with_agents(agent_position, target_position, occupied_positions) {
+            *agent_position = next_pos;
+            let remaining_distance = agent_position.distance_to(target_position);
+            return ActionResult::Partial {
+                completed: 1.0 / (remaining_distance as f32 + 1.0),
+                message: format!(
+                    "Pathfinding towards agent {} ({} steps remaining)",
+                    target_agent_id, remaining_distance
+                ),
+            };
+        }
+
         ActionResult::Failure {
-            reason: "SeekSocialInteraction is a planning action and cannot be executed directly. \
-                     Use pathfinding to move towards the target agent first.".to_string(),
+            reason: format!("Cannot find path to agent {}", target_agent_id),
         }
     }
 
@@ -514,11 +614,13 @@ impl World {
     }
 
     fn execute_deposit(&mut self, _agent_id: Uuid, item_type: ItemType, amount: u32) -> ActionResult {
-        // In full implementation, would take from agent inventory
-        // For now, assume agent has items
+        // Try to add items to storehouse
+        // The caller should verify agent has these items and remove them after success
         if self.storehouse_inventory.add_item(item_type, amount) {
-            ActionResult::Success {
-                message: format!("Deposited {} {:?}", amount, item_type),
+            ActionResult::SuccessConsumedItems {
+                message: format!("Deposited {} {:?} to storehouse", amount, item_type),
+                item_type,
+                quantity: amount,
             }
         } else {
             ActionResult::Failure {
@@ -528,14 +630,20 @@ impl World {
     }
 
     fn execute_retrieve(&mut self, _agent_id: Uuid, item_type: ItemType, amount: u32) -> ActionResult {
-        // In full implementation, would add to agent inventory
+        // Remove items from storehouse and return them for agent to collect
         if self.storehouse_inventory.remove_item(&item_type, amount) {
-            ActionResult::Success {
-                message: format!("Retrieved {} {:?}", amount, item_type),
+            ActionResult::SuccessWithItems {
+                message: format!("Retrieved {} {:?} from storehouse", amount, item_type),
+                item_type,
+                quantity: amount,
             }
         } else {
+            let available = self.storehouse_inventory.count_item(&item_type);
             ActionResult::Failure {
-                reason: "Not enough items in storehouse".to_string(),
+                reason: format!(
+                    "Not enough {:?} in storehouse (requested {}, available {})",
+                    item_type, amount, available
+                ),
             }
         }
     }
@@ -843,20 +951,57 @@ mod tests {
     }
 
     #[test]
-    fn test_seek_social_interaction_fails() {
+    fn test_seek_social_interaction_moves_towards_target() {
         let mut world = World::new(WorldConfig::default());
         let agent_id = Uuid::new_v4();
         let target_id = Uuid::new_v4();
         let mut agent_pos = Position::new(10, 10);
+        let target_pos = Position::new(15, 10);
 
         let occupied = vec![];
 
-        // SeekSocialInteraction should fail when executed directly
+        // SeekSocialInteraction should move agent towards target
         let action = Action::SeekSocialInteraction {
             target_agent_id: target_id,
+            target_position: target_pos,
+        };
+
+        let initial_distance = agent_pos.distance_to(&target_pos);
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
+
+        // Should return Partial (still moving) since we're not adjacent yet
+        match result {
+            ActionResult::Partial { .. } => {
+                // Agent should have moved closer
+                let new_distance = agent_pos.distance_to(&target_pos);
+                assert!(new_distance < initial_distance, "Agent should move closer to target");
+            }
+            ActionResult::Success { .. } => {
+                // If already adjacent, that's fine too
+                assert!(agent_pos.distance_to(&target_pos) <= 1);
+            }
+            _ => panic!("Expected Partial or Success, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_seek_social_interaction_success_when_adjacent() {
+        let mut world = World::new(WorldConfig::default());
+        let agent_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let target_pos = Position::new(11, 10); // Adjacent
+
+        let occupied = vec![];
+
+        let action = Action::SeekSocialInteraction {
+            target_agent_id: target_id,
+            target_position: target_pos,
         };
 
         let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
-        assert!(!result.is_success());
+
+        // Should succeed immediately since already adjacent
+        assert!(result.is_success());
     }
 }
