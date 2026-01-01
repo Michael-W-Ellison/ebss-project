@@ -172,9 +172,9 @@ impl SimulationMetrics {
         PopulationSnapshot {
             total,
             by_life_stage,
-            births_this_tick: 0, // Would need to track this in Population
-            deaths_this_tick: 0,
-            abandonments_this_tick: 0,
+            births_this_tick: population.stats.births_this_tick,
+            deaths_this_tick: population.stats.deaths_this_tick,
+            abandonments_this_tick: population.stats.abandonments_this_tick,
             average_happiness: population.stats.average_happiness,
             average_age,
         }

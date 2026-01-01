@@ -69,6 +69,10 @@ pub struct ExplorationKnowledge {
     pub curiosity_driven_explorations: u32,
     /// Total curiosity satisfaction gained from discoveries
     pub total_curiosity_satisfaction: f32,
+    /// Resource discovery tick tracking (position -> tick discovered)
+    pub resource_discovery_ticks: HashMap<Position, u32>,
+    /// Building discovery tick tracking (position -> tick discovered)
+    pub building_discovery_ticks: HashMap<Position, u32>,
 }
 
 impl ExplorationKnowledge {
@@ -84,6 +88,8 @@ impl ExplorationKnowledge {
             last_exploration_tick: 0,
             curiosity_driven_explorations: 0,
             total_curiosity_satisfaction: 0.0,
+            resource_discovery_ticks: HashMap::new(),
+            building_discovery_ticks: HashMap::new(),
         }
     }
 
@@ -107,6 +113,7 @@ impl ExplorationKnowledge {
     ) -> bool {
         if !self.known_resources.contains_key(&position) {
             self.known_resources.insert(position, resource_type);
+            self.resource_discovery_ticks.insert(position, current_tick);
 
             // Record discovery
             self.discoveries.push(Discovery {
@@ -133,6 +140,7 @@ impl ExplorationKnowledge {
     ) -> bool {
         if !self.known_buildings.contains_key(&position) {
             self.known_buildings.insert(position, building_type);
+            self.building_discovery_ticks.insert(position, current_tick);
 
             // Record discovery
             self.discoveries.push(Discovery {

@@ -24,6 +24,164 @@ struct Block {
     material_id: String,
 }
 
+/// Furnace state for smelting simulation
+#[derive(Debug, Clone)]
+pub struct FurnaceState {
+    /// Current temperature (0-1500 degrees)
+    pub temperature: f32,
+    /// Fuel remaining (in ticks)
+    pub fuel_remaining: u32,
+    /// Items being smelted
+    pub input_item: Option<String>,
+    /// Smelting progress (0-100)
+    pub smelt_progress: u32,
+    /// Output ready to collect
+    pub output_item: Option<String>,
+}
+
+impl FurnaceState {
+    pub fn new() -> Self {
+        Self {
+            temperature: 20.0, // Room temperature
+            fuel_remaining: 0,
+            input_item: None,
+            smelt_progress: 0,
+            output_item: None,
+        }
+    }
+
+    /// Add fuel to the furnace
+    pub fn add_fuel(&mut self, fuel_type: &str) -> bool {
+        let fuel_value = match fuel_type {
+            "coal" => 1600,      // 80 seconds worth
+            "charcoal" => 1600,  // Same as coal
+            "wood" => 300,       // 15 seconds
+            "planks" => 300,     // Same as wood
+            "sticks" => 100,     // 5 seconds
+            _ => 0,
+        };
+
+        if fuel_value > 0 {
+            self.fuel_remaining += fuel_value;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get smelting temperature requirement for an item
+    fn get_smelt_temperature(item: &str) -> f32 {
+        match item {
+            "iron_ore" => 1538.0,     // Iron melting point
+            "gold_ore" => 1064.0,     // Gold melting point
+            "copper_ore" => 1085.0,   // Copper melting point
+            "sand" => 1700.0,         // Glass making temperature
+            "clay" => 1000.0,         // Pottery/brick temperature
+            "raw_meat" | "raw_fish" => 75.0, // Cooking temperature
+            _ => 500.0,               // Default smelting temperature
+        }
+    }
+
+    /// Get smelting time in ticks for an item
+    fn get_smelt_time(item: &str) -> u32 {
+        match item {
+            "iron_ore" => 200,        // 10 seconds
+            "gold_ore" => 200,
+            "copper_ore" => 180,
+            "sand" => 200,            // Glass making
+            "clay" => 200,
+            "raw_meat" | "raw_fish" => 100, // 5 seconds cooking
+            _ => 200,
+        }
+    }
+
+    /// Get output item for a given input
+    fn get_smelt_output(item: &str) -> Option<&'static str> {
+        match item {
+            "iron_ore" => Some("iron_ingot"),
+            "gold_ore" => Some("gold_ingot"),
+            "copper_ore" => Some("copper_ingot"),
+            "sand" => Some("glass"),
+            "clay" => Some("brick"),
+            "raw_meat" => Some("cooked_meat"),
+            "raw_fish" => Some("cooked_fish"),
+            "wood" => Some("charcoal"),
+            _ => None,
+        }
+    }
+
+    /// Insert an item for smelting
+    pub fn insert_item(&mut self, item: &str) -> bool {
+        if self.input_item.is_some() || Self::get_smelt_output(item).is_none() {
+            return false;
+        }
+        self.input_item = Some(item.to_string());
+        self.smelt_progress = 0;
+        true
+    }
+
+    /// Tick the furnace simulation
+    pub fn tick(&mut self) {
+        // Burn fuel to maintain/increase temperature
+        if self.fuel_remaining > 0 {
+            self.fuel_remaining -= 1;
+            // Temperature increases towards max (1600) when burning
+            self.temperature = (self.temperature + 5.0).min(1600.0);
+        } else {
+            // Temperature decreases towards room temp when not burning
+            self.temperature = (self.temperature - 2.0).max(20.0);
+        }
+
+        // Process smelting if we have an item
+        if let Some(ref item) = self.input_item {
+            let required_temp = Self::get_smelt_temperature(item);
+            let smelt_time = Self::get_smelt_time(item);
+
+            // Only smelt if temperature is high enough
+            if self.temperature >= required_temp * 0.8 {
+                // Smelting speed based on how close to optimal temperature
+                let efficiency = (self.temperature / required_temp).min(1.2);
+                self.smelt_progress += (efficiency as u32).max(1);
+
+                // Check if smelting is complete
+                if self.smelt_progress >= smelt_time {
+                    if let Some(output) = Self::get_smelt_output(item) {
+                        self.output_item = Some(output.to_string());
+                    }
+                    self.input_item = None;
+                    self.smelt_progress = 0;
+                }
+            }
+        }
+    }
+
+    /// Collect the output item
+    pub fn collect_output(&mut self) -> Option<String> {
+        self.output_item.take()
+    }
+
+    /// Check if furnace is ready (has fuel and is hot)
+    pub fn is_ready(&self) -> bool {
+        self.fuel_remaining > 0 && self.temperature > 100.0
+    }
+
+    /// Get current smelting efficiency (0.0-1.0)
+    pub fn efficiency(&self) -> f32 {
+        if let Some(ref item) = self.input_item {
+            let required_temp = Self::get_smelt_temperature(item);
+            (self.temperature / required_temp).min(1.0)
+        } else {
+            0.0
+        }
+    }
+}
+
+impl Default for FurnaceState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Minecraft-style survival environment plugin
 pub struct MinecraftSurvivalPlugin {
     metadata: PluginMetadata,
@@ -248,12 +406,41 @@ impl MinecraftSurvivalPlugin {
                 .with_output(CraftingOutput::new("iron_axe".to_string(), 1))
         );
 
-        // Smelting recipe (simplified - uses coal as fuel indicator)
+        // Smelting recipes - use FurnaceState for realistic temperature-based smelting
+        // These simplified recipes allow direct crafting as fallback
         self.recipe_book.add_recipe(
             CraftingTemplate::new("iron_ingot".to_string(), "Iron Ingot".to_string())
                 .with_input(Ingredient::new("iron_ore".to_string(), 1))
                 .with_input(Ingredient::new("coal".to_string(), 1))
                 .with_output(CraftingOutput::new("iron_ingot".to_string(), 1))
+        );
+
+        self.recipe_book.add_recipe(
+            CraftingTemplate::new("gold_ingot".to_string(), "Gold Ingot".to_string())
+                .with_input(Ingredient::new("gold_ore".to_string(), 1))
+                .with_input(Ingredient::new("coal".to_string(), 1))
+                .with_output(CraftingOutput::new("gold_ingot".to_string(), 1))
+        );
+
+        self.recipe_book.add_recipe(
+            CraftingTemplate::new("glass".to_string(), "Glass".to_string())
+                .with_input(Ingredient::new("sand".to_string(), 1))
+                .with_input(Ingredient::new("coal".to_string(), 1))
+                .with_output(CraftingOutput::new("glass".to_string(), 1))
+        );
+
+        self.recipe_book.add_recipe(
+            CraftingTemplate::new("brick".to_string(), "Brick".to_string())
+                .with_input(Ingredient::new("clay".to_string(), 1))
+                .with_input(Ingredient::new("coal".to_string(), 1))
+                .with_output(CraftingOutput::new("brick".to_string(), 1))
+        );
+
+        self.recipe_book.add_recipe(
+            CraftingTemplate::new("charcoal".to_string(), "Charcoal".to_string())
+                .with_input(Ingredient::new("wood".to_string(), 1))
+                .with_input(Ingredient::new("coal".to_string(), 1)) // Bootstrap with coal, then use charcoal
+                .with_output(CraftingOutput::new("charcoal".to_string(), 1))
         );
     }
 

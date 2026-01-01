@@ -19,6 +19,10 @@ pub struct PopulationStats {
     pub adolescents: usize,
     pub adults: usize,
     pub elderly: usize,
+    // Per-tick tracking (reset at start of each tick)
+    pub births_this_tick: u32,
+    pub deaths_this_tick: u32,
+    pub abandonments_this_tick: u32,
 }
 
 /// Configuration for population behavior
@@ -161,6 +165,11 @@ impl Population {
     /// Update all agents and handle lifecycle events
     pub fn tick(&mut self) {
         self.current_tick += 1;
+
+        // Reset per-tick counters at the start of each tick
+        self.stats.births_this_tick = 0;
+        self.stats.deaths_this_tick = 0;
+        self.stats.abandonments_this_tick = 0;
 
         // Update shared knowledge tick counter
         self.shared_knowledge.tick();
@@ -615,6 +624,7 @@ impl Population {
         self.agents.retain(|agent| agent.state.is_alive);
         let deaths = before - self.agents.len();
         self.stats.total_deaths += deaths as u64;
+        self.stats.deaths_this_tick += deaths as u32;
 
         // Clean up tracking for dead agents
         for (deceased_id, _) in &dead_agents {
@@ -663,8 +673,10 @@ impl Population {
 
         // Remove agents who are abandoning
         if !agents_to_remove.is_empty() {
+            let abandonment_count = agents_to_remove.len();
             self.agents.retain(|agent| !agents_to_remove.contains(&agent.id));
-            self.stats.total_abandonments += agents_to_remove.len() as u64;
+            self.stats.total_abandonments += abandonment_count as u64;
+            self.stats.abandonments_this_tick += abandonment_count as u32;
 
             // Clean up tracking for abandoned agents
             for agent_id in agents_to_remove {
@@ -737,6 +749,7 @@ impl Population {
         let birth_count = new_offspring.len();
         self.agents.extend(new_offspring);
         self.stats.total_births += birth_count as u64;
+        self.stats.births_this_tick += birth_count as u32;
 
         // Satisfy reproduction drive and establish relationships for parents who reproduced
         for agent in &mut self.agents {
@@ -1052,9 +1065,100 @@ impl Population {
                     drive.partial_satisfy(satisfaction);
                 }
 
-                // Also track in observational learning if discovering new actions
-                // (future enhancement: learn from discovered resources/buildings)
+                // Award Navigation skill XP for exploration
+                agent.skills.gain_experience(super::SkillType::Navigation, new_discoveries as u32 * 2);
             }
+
+            // Learn skills from discovered resources
+            for (pos, resource_type) in &agent.exploration_knowledge.known_resources {
+                // Only give XP for recently discovered resources (within last 10 ticks)
+                if let Some(&discover_tick) = agent.exploration_knowledge.resource_discovery_ticks.get(pos) {
+                    if current_tick.saturating_sub(discover_tick) < 10 {
+                        let skill_xp = Self::get_skill_for_resource_discovery(resource_type);
+                        for (skill_type, xp) in skill_xp {
+                            agent.skills.gain_experience(skill_type, xp);
+                        }
+                    }
+                }
+            }
+
+            // Learn skills from discovered buildings
+            for (pos, building_type) in &agent.exploration_knowledge.known_buildings {
+                // Only give XP for recently discovered buildings (within last 10 ticks)
+                if let Some(&discover_tick) = agent.exploration_knowledge.building_discovery_ticks.get(pos) {
+                    if current_tick.saturating_sub(discover_tick) < 10 {
+                        let skill_xp = Self::get_skill_for_building_discovery(building_type);
+                        for (skill_type, xp) in skill_xp {
+                            agent.skills.gain_experience(skill_type, xp);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get skill XP gains for discovering a resource type
+    fn get_skill_for_resource_discovery(resource_type: &crate::world::ResourceType) -> Vec<(super::SkillType, u32)> {
+        use crate::world::ResourceType;
+        use super::SkillType;
+
+        match resource_type {
+            // Mining resources teach Mining skill
+            ResourceType::Stone | ResourceType::Iron | ResourceType::Coal
+            | ResourceType::Clay | ResourceType::Sand => {
+                vec![(SkillType::Mining, 5)]
+            }
+            // Wood resources teach Woodcutting
+            ResourceType::Wood => vec![(SkillType::Woodcutting, 5)],
+            // Agricultural resources teach Farming/Herbalism
+            ResourceType::Grain | ResourceType::Flax | ResourceType::Cotton => {
+                vec![(SkillType::Farming, 5)]
+            }
+            ResourceType::Herbs => vec![(SkillType::Herbalism, 5)],
+            // Animal resources teach Hunting
+            ResourceType::Meat | ResourceType::Hides => vec![(SkillType::Hunting, 5)],
+            // Fish teaches Fishing
+            ResourceType::Fish => vec![(SkillType::Fishing, 5)],
+            // Food and foraging
+            ResourceType::Food => vec![(SkillType::Herbalism, 3)],
+            // Other resources
+            _ => vec![(SkillType::Navigation, 2)],
+        }
+    }
+
+    /// Get skill XP gains for discovering a building type
+    fn get_skill_for_building_discovery(building_type: &crate::world::BuildingType) -> Vec<(super::SkillType, u32)> {
+        use crate::world::BuildingType;
+        use super::SkillType;
+
+        match building_type {
+            // Production buildings teach relevant crafting skills
+            BuildingType::Forge | BuildingType::Smithy => {
+                vec![(SkillType::Smelting, 10), (SkillType::Metalworking, 5)]
+            }
+            BuildingType::Workshop => vec![(SkillType::Crafting, 10)],
+            BuildingType::Farm => vec![(SkillType::Farming, 10)],
+            BuildingType::Bakery => vec![(SkillType::Cooking, 10)],
+            BuildingType::Butchery => vec![(SkillType::Cooking, 5), (SkillType::Hunting, 5)],
+            BuildingType::WeaverHut | BuildingType::TailorShop => {
+                vec![(SkillType::Crafting, 10)]
+            }
+            BuildingType::Tannery => vec![(SkillType::Leatherworking, 10)],
+            BuildingType::PotteryKiln | BuildingType::Brickyard => {
+                vec![(SkillType::Masonry, 10)]
+            }
+            BuildingType::Mill | BuildingType::Brewery | BuildingType::Dairy => {
+                vec![(SkillType::Cooking, 8)]
+            }
+            // Housing teaches Construction
+            BuildingType::SmallHouse | BuildingType::MediumHouse | BuildingType::LargeHouse
+            | BuildingType::Longhouse | BuildingType::Manor => {
+                vec![(SkillType::Construction, 10)]
+            }
+            // Civic buildings teach Social
+            BuildingType::TownCenter => vec![(SkillType::Social, 10), (SkillType::Construction, 5)],
+            // Other buildings give Navigation XP
+            _ => vec![(SkillType::Navigation, 5)],
         }
     }
 
@@ -1140,20 +1244,80 @@ impl Population {
     /// - Broadcasting actions to nearby observers
     /// - Automatic adoption of ready behaviors
     /// - Skill learning from adopted behaviors
+    /// - Drive satisfaction and emotional responses for learners and teachers
     pub fn process_observational_learning(&mut self) {
-        use super::observation_processing::{auto_adopt_ready_behaviors};
+        use super::observation_processing::auto_adopt_ready_behaviors;
+        use crate::core::DriveType;
+        use crate::agents::emotions::EmotionSource;
+
+        // Collect adopted behaviors with agent indices
+        let mut adoptions: Vec<(usize, uuid::Uuid, super::ActionType)> = Vec::new();
 
         // Process auto-adoption for each agent
         for i in 0..self.agents.len() {
             let adopted = auto_adopt_ready_behaviors(&mut self.agents[i]);
 
-            // Log adoptions (could be extended to notify parents, etc.)
             if !adopted.is_empty() {
                 for (teacher_id, action_type) in adopted {
-                    // Future: Could add events, notifications, or drive satisfaction here
-                    // For now, just record that learning happened
-                    let _ = (teacher_id, action_type);
+                    adoptions.push((i, teacher_id, action_type));
+
+                    // Satisfy learner's curiosity drive - learning is discovery!
+                    if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Curiosity) {
+                        drive.partial_satisfy(0.15); // Learning satisfies curiosity
+                    }
+
+                    // Learner experiences positive emotions from successful learning
+                    self.agents[i].emotions.add_happiness(
+                        EmotionSource::Event("learning_success".to_string()),
+                        0.1,
+                    );
                 }
+            }
+        }
+
+        // Process teacher satisfaction (teachers feel good when others learn from them)
+        for (learner_idx, teacher_id, action_type) in adoptions {
+            // Find the teacher in the population
+            if let Some(teacher_idx) = self.agents.iter().position(|a| a.id == teacher_id) {
+                // Teacher gets social drive satisfaction from teaching
+                if let Some(drive) = self.agents[teacher_idx].drives.get_mut(DriveType::Social) {
+                    drive.partial_satisfy(0.1); // Teaching is social interaction
+                }
+
+                // Teacher experiences positive emotions from being a role model
+                let learner_id = self.agents[learner_idx].id;
+                self.agents[teacher_idx].emotions.add_happiness(
+                    EmotionSource::Agent(learner_id),
+                    0.08,
+                );
+
+                // Strengthen relationship between teacher and learner
+                use crate::agents::emotions::{Relationship, RelationshipType};
+
+                // Learner develops respect for teacher
+                if self.agents[learner_idx].relationships.get_relationship(&teacher_id).is_none() {
+                    self.agents[learner_idx].relationships.add_relationship(
+                        Relationship::new(teacher_id, RelationshipType::Acquaintance)
+                    );
+                }
+                // Strengthen bond
+                if let Some(rel) = self.agents[learner_idx].relationships.get_relationship_mut(&teacher_id) {
+                    rel.bond_strength = (rel.bond_strength + 0.05).min(1.0);
+                }
+
+                // Teacher recognizes learner
+                if self.agents[teacher_idx].relationships.get_relationship(&learner_id).is_none() {
+                    self.agents[teacher_idx].relationships.add_relationship(
+                        Relationship::new(learner_id, RelationshipType::Acquaintance)
+                    );
+                }
+                // Strengthen bond
+                if let Some(rel) = self.agents[teacher_idx].relationships.get_relationship_mut(&learner_id) {
+                    rel.bond_strength = (rel.bond_strength + 0.03).min(1.0);
+                }
+
+                // Log the learning event for debugging/analytics
+                let _ = action_type; // Action type available for logging if needed
             }
         }
     }

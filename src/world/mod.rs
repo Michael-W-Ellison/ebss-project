@@ -71,7 +71,7 @@ pub mod territory;
 pub mod resource_spawning;
 
 // Re-exports
-pub use terrain::{Terrain, TerrainType, Tile};
+pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use resources::{Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
 pub use inventory::{Inventory, Item, ItemType};

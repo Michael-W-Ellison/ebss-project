@@ -362,6 +362,12 @@ pub enum EquipmentType {
     // Utility
     Torch,
     Lantern,
+
+    // Accessories (jewelry)
+    Ring,       // Worn on finger, provides bonuses
+    Necklace,   // Worn on neck, provides bonuses
+    Amulet,     // Worn on neck, often magical/protective
+    Bracelet,   // Worn on arms/wrists
 }
 
 impl EquipmentType {
@@ -401,6 +407,17 @@ impl EquipmentType {
                 | EquipmentType::MediumArmor
                 | EquipmentType::HeavyArmor
                 | EquipmentType::Shield
+        )
+    }
+
+    /// Is this an accessory (jewelry)?
+    pub fn is_accessory(&self) -> bool {
+        matches!(
+            self,
+            EquipmentType::Ring
+                | EquipmentType::Necklace
+                | EquipmentType::Amulet
+                | EquipmentType::Bracelet
         )
     }
 
@@ -1041,12 +1058,20 @@ impl EquipmentManager {
                     || matches!(equipment_type, EquipmentType::Shield | EquipmentType::Torch | EquipmentType::Lantern)
             }
             EquipmentSlot::Head | EquipmentSlot::Torso | EquipmentSlot::Back |
-            EquipmentSlot::Arms | EquipmentSlot::Legs | EquipmentSlot::Hands | EquipmentSlot::Feet => {
+            EquipmentSlot::Legs | EquipmentSlot::Hands | EquipmentSlot::Feet => {
                 equipment_type.is_armor()
             }
-            EquipmentSlot::Neck | EquipmentSlot::Finger => {
-                // Accessories - for now just clothing
-                matches!(equipment_type, EquipmentType::Clothing)
+            EquipmentSlot::Arms => {
+                // Arms can accept armor or bracelets
+                equipment_type.is_armor() || matches!(equipment_type, EquipmentType::Bracelet)
+            }
+            EquipmentSlot::Neck => {
+                // Neck accepts necklaces and amulets
+                matches!(equipment_type, EquipmentType::Necklace | EquipmentType::Amulet)
+            }
+            EquipmentSlot::Finger => {
+                // Finger accepts rings
+                matches!(equipment_type, EquipmentType::Ring)
             }
         }
     }

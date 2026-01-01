@@ -42,7 +42,7 @@ impl AsciiRenderer {
                 let char_to_render = self.get_char_at(&world, &population, &pos);
 
                 if self.use_color {
-                    let color = self.get_color_at(&world, &pos);
+                    let color = self.get_color_at(&world, &population, &pos);
                     output.push_str(color);
                     output.push(char_to_render);
                     output.push_str("\x1b[0m"); // Reset color
@@ -88,9 +88,24 @@ impl AsciiRenderer {
     }
 
     /// Get color code for position
-    fn get_color_at(&self, world: &World, pos: &Position) -> &'static str {
-        // Check for agents
-        // (Would need population access - skipping for now)
+    fn get_color_at(&self, world: &World, population: &Population, pos: &Position) -> &'static str {
+        // Check for agents first (highest priority)
+        for agent in &population.agents {
+            if agent.state.position == (pos.x, pos.y, 0) {
+                // Color agents based on their state
+                if !agent.state.is_alive {
+                    return "\x1b[90m"; // Gray for dead
+                }
+                // Color by life stage
+                return match agent.state.life_stage {
+                    crate::agents::LifeStage::Infant => "\x1b[95m",     // Magenta
+                    crate::agents::LifeStage::Child => "\x1b[96m",      // Cyan
+                    crate::agents::LifeStage::Adolescent => "\x1b[94m", // Blue
+                    crate::agents::LifeStage::Adult => "\x1b[92m",      // Green
+                    crate::agents::LifeStage::Elderly => "\x1b[93m",    // Yellow
+                };
+            }
+        }
 
         // Check for buildings
         if let Some(building) = world.get_building_at(pos) {

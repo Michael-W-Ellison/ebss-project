@@ -595,6 +595,80 @@ impl BuildingType {
             BuildingType::MedicalBuilding => vec![BuildingType::Workshop],
         }
     }
+
+    /// Get the production interval in ticks (0 means no production)
+    pub fn production_interval(&self) -> u32 {
+        match self {
+            // Production buildings produce resources
+            BuildingType::Farm => 100,
+            BuildingType::AnimalPen => 150,
+            BuildingType::Mill => 80,
+            BuildingType::Bakery => 60,
+            BuildingType::Butchery => 100,
+            BuildingType::Brewery => 120,
+            BuildingType::Dairy => 100,
+            BuildingType::WeaverHut => 80,
+            BuildingType::PotteryKiln => 100,
+            BuildingType::Tannery => 120,
+            BuildingType::Forge => 150,
+            BuildingType::Smithy => 200,
+            BuildingType::Glassworks => 150,
+            BuildingType::Dyeworks => 100,
+            BuildingType::Ropewalk => 80,
+            BuildingType::Brickyard => 120,
+            BuildingType::PaperMill => 100,
+            BuildingType::TailorShop => 80,
+            BuildingType::CobblerShop => 100,
+            BuildingType::Scriptorium => 150,
+            // Non-production buildings
+            _ => 0,
+        }
+    }
+
+    /// Get resources produced per production cycle
+    pub fn production_output(&self) -> Vec<Resource> {
+        match self {
+            BuildingType::Farm => vec![Resource::new(ResourceType::Food, 10)],
+            BuildingType::AnimalPen => vec![Resource::new(ResourceType::Food, 5)],
+            BuildingType::Mill => vec![Resource::new(ResourceType::Food, 3)],
+            BuildingType::Bakery => vec![Resource::new(ResourceType::Food, 5)],
+            BuildingType::Butchery => vec![Resource::new(ResourceType::Food, 8)],
+            BuildingType::Brewery => vec![Resource::new(ResourceType::Food, 3)],
+            BuildingType::Dairy => vec![Resource::new(ResourceType::Food, 4)],
+            BuildingType::WeaverHut => vec![Resource::new(ResourceType::Wood, 2)], // Represents cloth
+            BuildingType::PotteryKiln => vec![Resource::new(ResourceType::Stone, 3)], // Represents pottery
+            BuildingType::Tannery => vec![Resource::new(ResourceType::Food, 1)], // Represents leather
+            BuildingType::Forge => vec![Resource::new(ResourceType::Iron, 2)],
+            BuildingType::Smithy => vec![Resource::new(ResourceType::Iron, 3)],
+            BuildingType::Glassworks => vec![Resource::new(ResourceType::Stone, 2)], // Represents glass
+            BuildingType::Dyeworks => vec![Resource::new(ResourceType::Food, 1)], // Represents dyes
+            BuildingType::Ropewalk => vec![Resource::new(ResourceType::Wood, 2)], // Represents rope
+            BuildingType::Brickyard => vec![Resource::new(ResourceType::Stone, 5)],
+            BuildingType::PaperMill => vec![Resource::new(ResourceType::Wood, 2)], // Represents paper
+            BuildingType::TailorShop => vec![Resource::new(ResourceType::Wood, 1)], // Represents clothing
+            BuildingType::CobblerShop => vec![Resource::new(ResourceType::Wood, 1)], // Represents shoes
+            BuildingType::Scriptorium => vec![Resource::new(ResourceType::Wood, 1)], // Represents books
+            _ => Vec::new(),
+        }
+    }
+
+    /// Get the decay rate per tick (condition lost per tick without maintenance)
+    pub fn decay_rate(&self) -> f32 {
+        match self {
+            // Wooden structures decay faster
+            BuildingType::Longhouse | BuildingType::UpgradedLonghouse => 0.0002,
+            BuildingType::SmallHouse | BuildingType::MediumHouse => 0.00015,
+            BuildingType::LargeHouse | BuildingType::Manor => 0.0001,
+            // Stone/civic buildings are more durable
+            BuildingType::TownCenter | BuildingType::TownStorage => 0.00005,
+            BuildingType::Temple | BuildingType::Shrine => 0.00008,
+            // Production buildings need regular maintenance
+            BuildingType::Forge | BuildingType::Smithy => 0.0003,
+            BuildingType::Farm | BuildingType::AnimalPen => 0.00025,
+            // Default decay rate
+            _ => 0.0001,
+        }
+    }
 }
 
 /// Building construction state
@@ -616,6 +690,9 @@ pub struct Building {
     pub state: BuildingState,
     pub owner: Option<uuid::Uuid>, // Optional owner (for houses)
     pub occupants: Vec<uuid::Uuid>, // Agents currently living here
+    pub condition: f32, // Building condition 0.0-1.0, decays over time without maintenance
+    pub production_timer: u32, // Ticks until next production cycle
+    pub pending_production: Vec<Resource>, // Resources produced but not yet collected
 }
 
 impl Building {
@@ -626,6 +703,9 @@ impl Building {
             state: BuildingState::Completed, // Start completed for initial buildings
             owner: None,
             occupants: Vec::new(),
+            condition: 1.0, // New buildings start in perfect condition
+            production_timer: building_type.production_interval(),
+            pending_production: Vec::new(),
         }
     }
 
@@ -640,6 +720,9 @@ impl Building {
             },
             owner: None,
             occupants: Vec::new(),
+            condition: 1.0,
+            production_timer: 0, // Timer starts when building is completed
+            pending_production: Vec::new(),
         }
     }
 
@@ -881,8 +964,65 @@ impl Building {
         }
     }
 
+    /// Process building tick: decay and production
     pub fn tick(&mut self) {
-        // Buildings could decay, produce resources, etc. in the future
+        // Only completed buildings decay and produce
+        if !self.is_completed() {
+            return;
+        }
+
+        // Apply decay based on building type
+        let decay_rate = self.building_type.decay_rate();
+        self.condition = (self.condition - decay_rate).max(0.0);
+
+        // Production only works if building is in reasonable condition (>25%)
+        if self.condition < 0.25 {
+            return;
+        }
+
+        // Handle production timer
+        let production_interval = self.building_type.production_interval();
+        if production_interval > 0 {
+            if self.production_timer > 0 {
+                self.production_timer -= 1;
+            } else {
+                // Production cycle complete - generate resources
+                let output = self.building_type.production_output();
+
+                // Production efficiency based on condition
+                let efficiency = self.condition;
+                for mut resource in output {
+                    // Scale production by building condition
+                    resource.amount = (resource.amount as f32 * efficiency).ceil() as u32;
+                    if resource.amount > 0 {
+                        self.pending_production.push(resource);
+                    }
+                }
+
+                // Reset timer for next production cycle
+                self.production_timer = production_interval;
+            }
+        }
+    }
+
+    /// Collect all pending production from this building
+    pub fn collect_production(&mut self) -> Vec<Resource> {
+        std::mem::take(&mut self.pending_production)
+    }
+
+    /// Perform maintenance on the building (restore condition)
+    pub fn maintain(&mut self, repair_amount: f32) {
+        self.condition = (self.condition + repair_amount).min(1.0);
+    }
+
+    /// Check if building needs maintenance (condition below 50%)
+    pub fn needs_maintenance(&self) -> bool {
+        self.is_completed() && self.condition < 0.5
+    }
+
+    /// Check if building is in critical condition (below 25%)
+    pub fn is_critical_condition(&self) -> bool {
+        self.is_completed() && self.condition < 0.25
     }
 }
 

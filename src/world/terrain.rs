@@ -94,7 +94,8 @@ impl Default for Terrain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tile {
     pub terrain: Terrain,
-    pub explored: bool, // For fog of war (future feature)
+    pub explored: bool, // Global exploration state (any agent has seen this)
+    pub last_seen_tick: Option<u32>, // When was this tile last observed
 }
 
 impl Tile {
@@ -102,12 +103,86 @@ impl Tile {
         Self {
             terrain: Terrain::new(terrain_type),
             explored: false, // Tiles start unexplored (fog of war)
+            last_seen_tick: None,
         }
     }
 
     /// Mark this tile as explored (globally)
     pub fn mark_explored(&mut self) {
         self.explored = true;
+    }
+
+    /// Mark this tile as seen at a specific tick
+    pub fn mark_seen(&mut self, tick: u32) {
+        self.explored = true;
+        self.last_seen_tick = Some(tick);
+    }
+
+    /// Check if tile is currently visible (seen recently)
+    pub fn is_currently_visible(&self, current_tick: u32, visibility_duration: u32) -> bool {
+        if let Some(last_seen) = self.last_seen_tick {
+            current_tick.saturating_sub(last_seen) <= visibility_duration
+        } else {
+            false
+        }
+    }
+
+    /// Get visibility state for rendering
+    pub fn visibility_state(&self, current_tick: u32) -> TileVisibility {
+        if let Some(last_seen) = self.last_seen_tick {
+            let age = current_tick.saturating_sub(last_seen);
+            if age == 0 {
+                TileVisibility::Visible
+            } else if age <= 100 {
+                TileVisibility::RecentlySeen
+            } else {
+                TileVisibility::Explored
+            }
+        } else if self.explored {
+            TileVisibility::Explored
+        } else {
+            TileVisibility::Unknown
+        }
+    }
+}
+
+/// Visibility states for fog of war rendering
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TileVisibility {
+    /// Currently visible (in line of sight)
+    Visible,
+    /// Seen recently but not current (fading)
+    RecentlySeen,
+    /// Explored but not currently visible (remembered)
+    Explored,
+    /// Never explored (fog of war)
+    Unknown,
+}
+
+impl TileVisibility {
+    /// Get the brightness multiplier for rendering
+    pub fn brightness(&self) -> f32 {
+        match self {
+            TileVisibility::Visible => 1.0,
+            TileVisibility::RecentlySeen => 0.7,
+            TileVisibility::Explored => 0.4,
+            TileVisibility::Unknown => 0.0,
+        }
+    }
+
+    /// Get ANSI color modifier for this visibility state
+    pub fn color_modifier(&self) -> &'static str {
+        match self {
+            TileVisibility::Visible => "",           // Full color
+            TileVisibility::RecentlySeen => "\x1b[2m", // Dim
+            TileVisibility::Explored => "\x1b[90m",    // Gray
+            TileVisibility::Unknown => "\x1b[30m",     // Black (hidden)
+        }
+    }
+
+    /// Should entities on this tile be rendered?
+    pub fn shows_entities(&self) -> bool {
+        matches!(self, TileVisibility::Visible | TileVisibility::RecentlySeen)
     }
 }
 
