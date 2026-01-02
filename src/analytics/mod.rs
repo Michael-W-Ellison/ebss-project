@@ -703,6 +703,24 @@ impl Simulation {
         // Process environmental damage (exposure, falling, disease)
         self.process_environmental_damage();
 
+        // Process building production collection (every 50 ticks)
+        // Agents near production buildings automatically collect resources
+        if self.current_tick % 50 == 0 {
+            self.process_building_production_collection();
+        }
+
+        // Process building maintenance (every 100 ticks)
+        // Generate maintenance tasks for buildings in poor condition
+        if self.current_tick % 100 == 0 {
+            self.process_building_maintenance();
+        }
+
+        // Process information verification and lie detection (every 100 ticks)
+        // Agents verify information they've received against their knowledge
+        if self.current_tick % 100 == 0 {
+            self.process_information_verification();
+        }
+
         // Tick world (building construction progress, etc.)
         self.world.tick();
 
@@ -3259,6 +3277,171 @@ impl Simulation {
 
             // 4. NATURAL HEALING - Process body tick (handles conditions, bleeding, etc.)
             agent.body.tick();
+        }
+    }
+
+    /// Process building production collection
+    /// Agents within range of production buildings automatically collect pending resources
+    fn process_building_production_collection(&mut self) {
+        use crate::world::Position;
+
+        const COLLECTION_RANGE: f32 = 5.0; // Agents must be within 5 units to collect
+
+        // Get all pending production
+        let pending_production = self.world.get_pending_production_info();
+
+        if pending_production.is_empty() {
+            return;
+        }
+
+        // For each agent, check if they're near a production building
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+
+            // Check each building with pending production
+            for (building_pos, (building_type, _resource_count)) in &pending_production {
+                let dx = (agent_pos.x - building_pos.x) as f32;
+                let dy = (agent_pos.y - building_pos.y) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if distance <= COLLECTION_RANGE {
+                    // Agent is close enough to collect - collect from this building
+                    let resources = self.world.collect_building_production_at(*building_pos);
+
+                    for resource in resources {
+                        // Add resource to agent's inventory
+                        let item_name = format!("{:?}", resource.resource_type).to_lowercase();
+                        agent.inventory.add_item(
+                            crate::agents::InventoryItem::new(item_name.clone(), resource.amount)
+                        );
+
+                        debug!(
+                            "Agent {} collected {} {} from {:?} at ({}, {})",
+                            agent.id, resource.amount, item_name, building_type,
+                            building_pos.x, building_pos.y
+                        );
+                    }
+
+                    // Only collect from one building per tick per agent
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Process building maintenance needs
+    /// Generates maintenance goals for agents near buildings that need repair
+    fn process_building_maintenance(&mut self) {
+        use crate::world::Position;
+        use crate::core::goals::{Goal, ExternalGoal};
+
+        const MAINTENANCE_RANGE: f32 = 20.0; // Agents within 20 units get maintenance goals
+
+        // Get buildings needing maintenance
+        let maintenance_needed = self.world.get_buildings_needing_maintenance();
+        let critical_buildings = self.world.get_critical_buildings();
+
+        if maintenance_needed.is_empty() {
+            return;
+        }
+
+        // For critical buildings, assign maintenance to nearby agents
+        for (building_pos, building_type, condition) in &critical_buildings {
+            // Find the closest agent to this building
+            let mut closest_agent_idx: Option<usize> = None;
+            let mut closest_distance = f32::MAX;
+
+            for (idx, agent) in self.population.agents.iter().enumerate() {
+                if !agent.state.is_alive {
+                    continue;
+                }
+
+                let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+                let dx = (agent_pos.x - building_pos.x) as f32;
+                let dy = (agent_pos.y - building_pos.y) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if distance < closest_distance && distance <= MAINTENANCE_RANGE {
+                    closest_distance = distance;
+                    closest_agent_idx = Some(idx);
+                }
+            }
+
+            // Assign maintenance goal to closest agent
+            if let Some(idx) = closest_agent_idx {
+                let agent = &mut self.population.agents[idx];
+                let maintenance_job = format!("maintain_{:?}", building_type);
+
+                // Check if agent already has a maintenance goal for this building
+                let has_maintenance_goal = agent.goals.goals.iter().any(|g| {
+                    if let Some(ExternalGoal::CompleteJob(ref job)) = g.external {
+                        job.contains("maintain")
+                    } else {
+                        false
+                    }
+                });
+
+                if !has_maintenance_goal {
+                    let priority = if *condition < 0.25 { 0.9 } else { 0.6 };
+                    let goal = Goal::new_external(
+                        ExternalGoal::CompleteJob(maintenance_job),
+                        priority,
+                        self.current_tick,
+                    );
+                    agent.goals.add_goal(goal);
+
+                    debug!(
+                        "Agent {} assigned maintenance goal for {:?} at ({}, {}) - condition: {:.0}%",
+                        agent.id, building_type, building_pos.x, building_pos.y, condition * 100.0
+                    );
+                }
+            }
+        }
+
+        // For non-critical but degraded buildings, inform nearby agents (lower priority)
+        for (building_pos, building_type, condition) in &maintenance_needed {
+            if critical_buildings.iter().any(|(p, _, _)| p == building_pos) {
+                continue; // Already handled as critical
+            }
+
+            // Add to exploration knowledge of nearby agents so they're aware
+            for agent in &mut self.population.agents {
+                if !agent.state.is_alive {
+                    continue;
+                }
+
+                let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+                let dx = (agent_pos.x - building_pos.x) as f32;
+                let dy = (agent_pos.y - building_pos.y) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if distance <= MAINTENANCE_RANGE {
+                    // Agent is aware of this building's condition
+                    // Could be used to generate lower-priority maintenance tasks
+                    // For now, just log it
+                    debug!(
+                        "Agent {} aware of degraded {:?} at ({}, {}) - condition: {:.0}%",
+                        agent.id, building_type, building_pos.x, building_pos.y, condition * 100.0
+                    );
+                }
+            }
+        }
+    }
+
+    /// Process information verification and lie detection
+    /// Agents periodically verify information they've received against their knowledge
+    fn process_information_verification(&mut self) {
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Call the agent's lie detection processing
+            agent.process_information_verification(self.current_tick);
         }
     }
 

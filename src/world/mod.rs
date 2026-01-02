@@ -1390,6 +1390,87 @@ impl World {
             }
         }
     }
+
+    // ===== Building Production and Maintenance =====
+
+    /// Collect all pending production from buildings and return as a map of position -> resources
+    /// This allows agents to pick up resources from production buildings
+    pub fn collect_all_building_production(&mut self) -> HashMap<Position, Vec<resources::Resource>> {
+        let mut production_by_position = HashMap::new();
+
+        for building in &mut self.buildings {
+            if !building.is_completed() {
+                continue;
+            }
+
+            let resources = building.collect_production();
+            if !resources.is_empty() {
+                production_by_position.insert(building.position, resources);
+            }
+        }
+
+        production_by_position
+    }
+
+    /// Collect production from a specific building at a position
+    /// Returns the resources collected, or empty vec if no building or no production
+    pub fn collect_building_production_at(&mut self, position: Position) -> Vec<resources::Resource> {
+        for building in &mut self.buildings {
+            if building.position == position && building.is_completed() {
+                return building.collect_production();
+            }
+        }
+        Vec::new()
+    }
+
+    /// Get list of buildings that need maintenance (condition below 50%)
+    /// Returns tuples of (position, building_type, condition)
+    pub fn get_buildings_needing_maintenance(&self) -> Vec<(Position, BuildingType, f32)> {
+        self.buildings
+            .iter()
+            .filter(|b| b.needs_maintenance())
+            .map(|b| (b.position, b.building_type, b.condition))
+            .collect()
+    }
+
+    /// Get list of buildings in critical condition (below 25%)
+    /// Returns tuples of (position, building_type, condition)
+    pub fn get_critical_buildings(&self) -> Vec<(Position, BuildingType, f32)> {
+        self.buildings
+            .iter()
+            .filter(|b| b.is_critical_condition())
+            .map(|b| (b.position, b.building_type, b.condition))
+            .collect()
+    }
+
+    /// Perform maintenance on a building at a specific position
+    /// Returns true if maintenance was performed
+    pub fn maintain_building_at(&mut self, position: Position, repair_amount: f32) -> bool {
+        for building in &mut self.buildings {
+            if building.position == position {
+                building.maintain(repair_amount);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Get pending production info for display (without collecting)
+    /// Returns map of position -> (building_type, resource_count)
+    pub fn get_pending_production_info(&self) -> HashMap<Position, (BuildingType, usize)> {
+        let mut info = HashMap::new();
+
+        for building in &self.buildings {
+            if building.is_completed() && !building.pending_production.is_empty() {
+                info.insert(
+                    building.position,
+                    (building.building_type, building.pending_production.len())
+                );
+            }
+        }
+
+        info
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
