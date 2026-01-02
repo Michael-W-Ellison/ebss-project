@@ -612,6 +612,16 @@ pub struct Agent {
     pub plan_step_ticks: u32,
     /// Accumulated learning exposure for various knowledge/skills
     pub learning_exposure: crate::core::learning::LearningExposure,
+    /// Cached healing bonus from nearby medical buildings (updated each tick)
+    #[serde(default = "default_bonus")]
+    pub cached_healing_bonus: f32,
+    /// Cached defense bonus from nearby defensive buildings (updated each tick)
+    #[serde(default = "default_bonus")]
+    pub cached_defense_bonus: f32,
+}
+
+fn default_bonus() -> f32 {
+    1.0
 }
 
 impl Agent {
@@ -651,6 +661,8 @@ impl Agent {
             planner: Planner::new(),
             plan_step_ticks: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
+            cached_healing_bonus: 1.0,
+            cached_defense_bonus: 1.0,
         };
 
         // Initialize default behavior trees for each drive type
@@ -792,6 +804,151 @@ impl Agent {
         }
     }
 
+    /// Apply building proximity effects (morale, healing, defense awareness)
+    /// Called during tick to grant bonuses based on nearby buildings
+    pub fn apply_building_proximity_effects(&mut self) {
+        use super::EmotionSource;
+
+        let pos = self.state.position;
+
+        // Track cumulative effects
+        let mut total_morale_bonus: f32 = 0.0;
+        let mut healing_multiplier: f32 = 1.0;
+        let mut defense_multiplier: f32 = 1.0;
+
+        // Check all known buildings for proximity effects
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            let dx = (pos.0 - building_pos.x) as f32;
+            let dy = (pos.1 - building_pos.y) as f32;
+            let distance = (dx * dx + dy * dy).sqrt();
+
+            // Morale bonus from nearby buildings
+            let morale_radius = building_type.morale_radius();
+            if morale_radius > 0.0 && distance <= morale_radius {
+                let proximity_factor = 1.0 - (distance / morale_radius);
+                total_morale_bonus += building_type.morale_bonus() * proximity_factor;
+            }
+
+            // Healing bonus from medical buildings
+            let healing_radius = building_type.healing_radius();
+            if healing_radius > 0.0 && distance <= healing_radius {
+                let bonus = building_type.healing_bonus();
+                if bonus > healing_multiplier {
+                    healing_multiplier = bonus; // Use best healing bonus, don't stack
+                }
+            }
+
+            // Defense bonus from defensive buildings
+            let defense_radius = building_type.defense_radius();
+            if defense_radius > 0.0 && distance <= defense_radius {
+                let bonus = building_type.defense_bonus();
+                if bonus > defense_multiplier {
+                    defense_multiplier = bonus; // Use best defense bonus, don't stack
+                }
+            }
+        }
+
+        // Apply morale bonus (capped at 0.05 per tick to avoid runaway happiness)
+        if total_morale_bonus > 0.0 {
+            let capped_bonus = total_morale_bonus.min(0.05);
+            self.emotions.add_happiness(
+                EmotionSource::Event("building_comfort".to_string()),
+                capped_bonus
+            );
+        }
+
+        // Store building bonuses for use by other systems
+        // (healing bonus applied in regenerate_health, defense bonus applied in take_damage)
+        self.cached_healing_bonus = healing_multiplier;
+        self.cached_defense_bonus = defense_multiplier;
+    }
+
+    /// Get the current healing multiplier from nearby buildings
+    pub fn get_healing_bonus(&self) -> f32 {
+        self.cached_healing_bonus
+    }
+
+    /// Get the current defense multiplier from nearby buildings
+    pub fn get_defense_bonus(&self) -> f32 {
+        self.cached_defense_bonus
+    }
+
+    /// Get the productivity bonus for crafting/working based on nearby buildings
+    /// This considers the agent's current position and the buildings they're at
+    /// Returns the best productivity bonus from buildings within working distance (3 tiles)
+    pub fn get_productivity_bonus(&self) -> f32 {
+        const WORKING_DISTANCE_SQ: f32 = 9.0; // 3 tiles
+
+        let pos = self.state.position;
+        let mut best_bonus: f32 = 1.0;
+
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            let dx = (pos.0 - building_pos.x) as f32;
+            let dy = (pos.1 - building_pos.y) as f32;
+            let dist_sq = dx * dx + dy * dy;
+
+            // Only consider buildings within working distance
+            if dist_sq <= WORKING_DISTANCE_SQ {
+                let bonus = building_type.productivity_bonus();
+                if bonus > best_bonus {
+                    best_bonus = bonus;
+                }
+            }
+        }
+
+        best_bonus
+    }
+
+    /// Get the productivity bonus for a specific skill type based on nearby buildings
+    /// Different buildings give bonuses for different types of work
+    pub fn get_productivity_bonus_for_skill(&self, skill_type: super::SkillType) -> f32 {
+        use crate::world::BuildingType;
+        use super::SkillType;
+
+        const WORKING_DISTANCE_SQ: f32 = 9.0;
+
+        let pos = self.state.position;
+        let mut best_bonus: f32 = 1.0;
+
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            let dx = (pos.0 - building_pos.x) as f32;
+            let dy = (pos.1 - building_pos.y) as f32;
+            let dist_sq = dx * dx + dy * dy;
+
+            if dist_sq <= WORKING_DISTANCE_SQ {
+                // Check if this building provides bonus for this skill type
+                let provides_bonus = match (building_type, skill_type) {
+                    // Metalworking buildings
+                    (BuildingType::Smithy, SkillType::Metalworking | SkillType::Smelting) => true,
+                    (BuildingType::Forge, SkillType::Smelting) => true,
+                    // Crafting buildings
+                    (BuildingType::Workshop, SkillType::Crafting | SkillType::Carpentry) => true,
+                    // Cooking buildings
+                    (BuildingType::Bakery | BuildingType::Mill | BuildingType::Butchery |
+                     BuildingType::Brewery | BuildingType::Dairy, SkillType::Cooking) => true,
+                    // Textile buildings
+                    (BuildingType::WeaverHut | BuildingType::TailorShop, SkillType::Crafting) => true,
+                    // Leather buildings
+                    (BuildingType::Tannery | BuildingType::CobblerShop, SkillType::Leatherworking) => true,
+                    // Masonry buildings
+                    (BuildingType::PotteryKiln | BuildingType::Brickyard, SkillType::Masonry) => true,
+                    // Farming buildings
+                    (BuildingType::Farm | BuildingType::AnimalPen, SkillType::Farming) => true,
+                    _ => false,
+                };
+
+                if provides_bonus {
+                    let bonus = building_type.productivity_bonus();
+                    if bonus > best_bonus {
+                        best_bonus = bonus;
+                    }
+                }
+            }
+        }
+
+        best_bonus
+    }
+
     /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
         self.tick_with_percepts(0); // Default tick uses tick 0
@@ -808,6 +965,8 @@ impl Agent {
         self.emotions.apply_passive_trait_effects(&self.traits);
         // Apply location-based trait effects (e.g., Zealot near religious buildings)
         self.apply_location_trait_effects();
+        // Apply building proximity effects (morale, healing bonus, defense bonus)
+        self.apply_building_proximity_effects();
         self.memory.tick();
 
         // Check for stale storage knowledge and trigger curiosity
@@ -2444,23 +2603,56 @@ impl Agent {
     }
 
     /// Take damage (wrapper for AgentState method)
+    /// Defense bonus from nearby buildings reduces damage taken
     /// Masochist trait holders gain happiness from taking damage (up to 50% health)
     pub fn take_damage(&mut self, amount: f32) {
         use crate::core::traits::Trait;
         use super::EmotionSource;
 
+        // Apply defense bonus from nearby buildings (higher bonus = less damage)
+        // Defense bonus of 1.25 means 25% damage reduction (amount / 1.25)
+        let defense_bonus = self.cached_defense_bonus;
+        let reduced_amount = amount / defense_bonus;
+
         let health_before = self.state.health;
-        self.state.take_damage(amount);
+        self.state.take_damage(reduced_amount);
 
         // Masochist trait: happiness from taking damage while above 50% health
         if self.traits.has(Trait::Masochist) && health_before > 50.0 && self.state.health > 0.0 {
             // Scale happiness by damage taken, capped at 0.1 per hit
-            let happiness_amount = (amount / 20.0).min(0.1);
+            let happiness_amount = (reduced_amount / 20.0).min(0.1);
             self.emotions.add_happiness(
                 EmotionSource::Event("masochist_pleasure".to_string()),
                 happiness_amount
             );
         }
+    }
+
+    /// Heal the agent (wrapper for AgentState method)
+    /// Healing bonus from nearby medical buildings increases healing rate
+    pub fn heal(&mut self, amount: f32) {
+        // Apply healing bonus from nearby medical buildings
+        let healing_bonus = self.cached_healing_bonus;
+        let boosted_amount = amount * healing_bonus;
+        self.state.heal(boosted_amount);
+    }
+
+    /// Regenerate health naturally over time
+    /// Called during rest or when near medical facilities
+    /// Base regeneration rate is 0.1 health per tick when resting
+    pub fn regenerate_health(&mut self, is_resting: bool) {
+        if self.state.health >= 100.0 {
+            return; // Already at full health
+        }
+
+        // Base regeneration rate
+        let base_rate = if is_resting { 0.1 } else { 0.02 };
+
+        // Apply healing bonus from nearby medical buildings
+        let healing_bonus = self.cached_healing_bonus;
+        let regeneration = base_rate * healing_bonus;
+
+        self.state.heal(regeneration);
     }
 
     /// Check if agent is dead

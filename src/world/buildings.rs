@@ -669,6 +669,132 @@ impl BuildingType {
             _ => 0.0001,
         }
     }
+
+    /// Check if this is a defensive building (provides protection)
+    pub fn is_defensive(&self) -> bool {
+        matches!(self, BuildingType::GuardPost)
+    }
+
+    /// Get the defense bonus this building provides to nearby agents
+    /// Returns a multiplier (1.0 = no bonus, 1.2 = 20% defense bonus)
+    pub fn defense_bonus(&self) -> f32 {
+        match self {
+            BuildingType::GuardPost => 1.25, // 25% defense bonus
+            BuildingType::TownCenter => 1.1, // 10% defense bonus (administrative coordination)
+            _ => 1.0,
+        }
+    }
+
+    /// Get the effective defense radius of this building (in tiles)
+    pub fn defense_radius(&self) -> f32 {
+        match self {
+            BuildingType::GuardPost => 15.0,
+            BuildingType::TownCenter => 20.0,
+            _ => 0.0,
+        }
+    }
+
+    /// Check if this is a medical building (provides healing)
+    pub fn is_medical(&self) -> bool {
+        matches!(self, BuildingType::MedicalBuilding | BuildingType::BarberShop)
+    }
+
+    /// Get the healing rate bonus this building provides
+    /// Returns a multiplier (1.0 = normal healing, 2.0 = double healing)
+    pub fn healing_bonus(&self) -> f32 {
+        match self {
+            BuildingType::MedicalBuilding => 2.0, // Double healing rate
+            BuildingType::BarberShop => 1.3, // 30% healing bonus (basic care)
+            _ => 1.0,
+        }
+    }
+
+    /// Get the effective healing radius of this building (in tiles)
+    pub fn healing_radius(&self) -> f32 {
+        match self {
+            BuildingType::MedicalBuilding => 10.0,
+            BuildingType::BarberShop => 5.0,
+            _ => 0.0,
+        }
+    }
+
+    /// Get the productivity bonus for working in this building
+    /// Returns a multiplier for crafting/production speed
+    pub fn productivity_bonus(&self) -> f32 {
+        match self {
+            // Advanced production buildings give significant bonuses
+            BuildingType::Smithy => 1.4, // 40% faster metalworking
+            BuildingType::Forge => 1.25, // 25% faster smelting
+            BuildingType::Workshop => 1.2, // 20% faster crafting
+            // Specialized buildings give moderate bonuses for their specialty
+            BuildingType::Bakery => 1.3, // 30% faster cooking
+            BuildingType::Butchery => 1.25,
+            BuildingType::Mill => 1.3,
+            BuildingType::Brewery => 1.25,
+            BuildingType::Dairy => 1.25,
+            BuildingType::WeaverHut => 1.3, // 30% faster textile work
+            BuildingType::TailorShop => 1.35,
+            BuildingType::Tannery => 1.3,
+            BuildingType::PotteryKiln => 1.25,
+            BuildingType::Brickyard => 1.25,
+            BuildingType::Glassworks => 1.3,
+            BuildingType::Dyeworks => 1.2,
+            BuildingType::Ropewalk => 1.2,
+            BuildingType::PaperMill => 1.25,
+            BuildingType::CobblerShop => 1.3,
+            BuildingType::Scriptorium => 1.3,
+            // Farms give gathering bonus
+            BuildingType::Farm => 1.2,
+            BuildingType::AnimalPen => 1.15,
+            // No bonus for non-production buildings
+            _ => 1.0,
+        }
+    }
+
+    /// Get the morale/happiness bonus for being near this building
+    /// Returns happiness amount added per tick when nearby
+    pub fn morale_bonus(&self) -> f32 {
+        match self {
+            // Religious buildings provide passive morale boost
+            BuildingType::Temple => 0.02,
+            BuildingType::Shrine => 0.01,
+            // Civic buildings provide order and security feeling
+            BuildingType::TownCenter => 0.015,
+            BuildingType::GuardPost => 0.01, // Security feeling
+            // Service buildings provide comfort
+            BuildingType::BarberShop => 0.008,
+            BuildingType::MedicalBuilding => 0.005, // Being near healthcare is reassuring
+            // Quality housing provides comfort
+            BuildingType::Manor => 0.02,
+            BuildingType::LargeHouse => 0.015,
+            BuildingType::MediumHouse => 0.01,
+            _ => 0.0,
+        }
+    }
+
+    /// Get the morale bonus radius (in tiles)
+    pub fn morale_radius(&self) -> f32 {
+        match self {
+            BuildingType::Temple => 20.0,
+            BuildingType::Shrine => 12.0,
+            BuildingType::TownCenter => 25.0,
+            BuildingType::GuardPost => 15.0,
+            BuildingType::BarberShop => 8.0,
+            BuildingType::MedicalBuilding => 10.0,
+            BuildingType::Manor | BuildingType::LargeHouse | BuildingType::MediumHouse => 5.0,
+            _ => 0.0,
+        }
+    }
+
+    /// Get the storage capacity bonus this building provides
+    pub fn storage_capacity(&self) -> u32 {
+        match self {
+            BuildingType::TownStorage => 1000,
+            BuildingType::Storehouse => 500,
+            BuildingType::TownCenter => 200, // Some storage
+            _ => 0,
+        }
+    }
 }
 
 /// Building construction state

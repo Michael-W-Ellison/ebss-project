@@ -1156,15 +1156,39 @@ impl Population {
             BuildingType::Mill | BuildingType::Brewery | BuildingType::Dairy => {
                 vec![(SkillType::Cooking, 8)]
             }
+            // Specialized craft buildings
+            BuildingType::Glassworks | BuildingType::Dyeworks | BuildingType::Ropewalk | BuildingType::PaperMill => {
+                vec![(SkillType::Crafting, 8)]
+            }
+            BuildingType::CobblerShop => {
+                vec![(SkillType::Crafting, 5), (SkillType::Leatherworking, 5)]
+            }
+            BuildingType::Scriptorium => {
+                vec![(SkillType::Crafting, 5), (SkillType::Social, 5)]
+            }
+            BuildingType::BarberShop => vec![(SkillType::Social, 8)],
+            // Animal husbandry
+            BuildingType::AnimalPen => {
+                vec![(SkillType::Farming, 5), (SkillType::Hunting, 5)]
+            }
             // Housing teaches Construction
             BuildingType::SmallHouse | BuildingType::MediumHouse | BuildingType::LargeHouse
-            | BuildingType::Longhouse | BuildingType::Manor => {
+            | BuildingType::Longhouse | BuildingType::UpgradedLonghouse | BuildingType::Manor => {
                 vec![(SkillType::Construction, 10)]
             }
-            // Civic buildings teach Social
+            // Civic buildings
             BuildingType::TownCenter => vec![(SkillType::Social, 10), (SkillType::Construction, 5)],
-            // Other buildings give Navigation XP
-            _ => vec![(SkillType::Navigation, 5)],
+            BuildingType::TownStorage => vec![(SkillType::Navigation, 5), (SkillType::Construction, 5)],
+            BuildingType::GuardPost => vec![(SkillType::MeleeCombat, 10)],
+            // Storage buildings
+            BuildingType::Storehouse => vec![(SkillType::Navigation, 8)],
+            // Religious buildings teach social skills
+            BuildingType::Shrine => vec![(SkillType::Social, 8)],
+            BuildingType::Temple => vec![(SkillType::Social, 10)],
+            // Medical building teaches herbalism and cooking (medicine preparation)
+            BuildingType::MedicalBuilding => {
+                vec![(SkillType::Herbalism, 10), (SkillType::Cooking, 5)]
+            }
         }
     }
 
