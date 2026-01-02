@@ -336,11 +336,29 @@ impl Inventory {
             .unwrap_or(false)
     }
 
+    /// Check if inventory has food items (used by Survivalist trait)
+    /// Food items are identified by containing "food", "meat", "bread", etc. in their ID
+    pub fn has_food(&self, min_quantity: u32) -> bool {
+        let food_keywords = ["food", "meat", "bread", "fish", "fruit", "vegetable", "grain", "meal"];
+        self.items.iter()
+            .filter(|(id, _)| {
+                let lower_id = id.to_lowercase();
+                food_keywords.iter().any(|kw| lower_id.contains(kw))
+            })
+            .map(|(_, item)| item.quantity)
+            .sum::<u32>() >= min_quantity
+    }
+
     /// Count quantity of a specific item by id
     pub fn count_item(&self, item_id: &str) -> u32 {
         self.items.get(item_id)
             .map(|item| item.quantity)
             .unwrap_or(0)
+    }
+
+    /// Get total count of all items in inventory
+    pub fn total_items(&self) -> u32 {
+        self.items.values().map(|item| item.quantity).sum()
     }
 
     /// Get all items
@@ -649,6 +667,131 @@ impl Agent {
         agent
     }
 
+    /// Apply trait-based sensory and physical modifications
+    /// Should be called after traits are set/modified
+    pub fn apply_trait_sensory_modifications(&mut self) {
+        use crate::core::traits::Trait;
+
+        // Deaf trait: Set hearing sensitivity to 0
+        if self.traits.has(Trait::Deaf) {
+            self.senses.hearing.sensitivity = 0.0;
+            self.senses.hearing.set_impaired(true);
+        }
+
+        // Suspicious trait: Increase noise curiosity rate (already handled in emotion_modifiers)
+        // but we can also increase hearing sensitivity slightly
+        if self.traits.has(Trait::Suspicious) {
+            self.senses.hearing.sensitivity = (self.senses.hearing.sensitivity * 1.2).min(1.0);
+        }
+
+        // Uncaring trait: Reduce noise curiosity (reduce hearing sensitivity slightly)
+        if self.traits.has(Trait::Uncaring) && !self.traits.has(Trait::Deaf) {
+            self.senses.hearing.sensitivity *= 0.7;
+        }
+    }
+
+    /// Check if agent is near a known religious building
+    /// Returns the distance squared to the nearest religious building, or None if none known
+    pub fn distance_to_nearest_religious_building(&self) -> Option<f32> {
+        let pos = self.state.position;
+        let mut nearest_dist_sq: Option<f32> = None;
+
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            if building_type.is_religious() {
+                let dx = (pos.0 - building_pos.x) as f32;
+                let dy = (pos.1 - building_pos.y) as f32;
+                let dist_sq = dx * dx + dy * dy;
+
+                match nearest_dist_sq {
+                    Some(current) if dist_sq < current => nearest_dist_sq = Some(dist_sq),
+                    None => nearest_dist_sq = Some(dist_sq),
+                    _ => {}
+                }
+            }
+        }
+
+        nearest_dist_sq
+    }
+
+    /// Apply location-based trait effects
+    /// Called during tick to grant happiness based on agent's location
+    pub fn apply_location_trait_effects(&mut self) {
+        use crate::core::traits::Trait;
+        use super::EmotionSource;
+
+        const RELIGIOUS_PROXIMITY_SQ: f32 = 225.0; // 15 tiles squared
+
+        // Zealot/Believer traits: happiness near religious buildings
+        if self.traits.has(Trait::Zealot) || self.traits.has(Trait::Believer) {
+            if let Some(dist_sq) = self.distance_to_nearest_religious_building() {
+                if dist_sq <= RELIGIOUS_PROXIMITY_SQ {
+                    // Closer = more happiness (max 0.05 at building, 0.01 at 15 tiles)
+                    let proximity_factor = 1.0 - (dist_sq / RELIGIOUS_PROXIMITY_SQ);
+                    let base_happiness = if self.traits.has(Trait::Zealot) { 0.05 } else { 0.03 };
+                    let happiness = base_happiness * proximity_factor;
+
+                    self.emotions.add_happiness(
+                        EmotionSource::Event("religious_building_proximity".to_string()),
+                        happiness
+                    );
+                }
+            }
+        }
+
+        // Atheist trait: slight discomfort near religious buildings
+        if self.traits.has(Trait::Atheist) {
+            if let Some(dist_sq) = self.distance_to_nearest_religious_building() {
+                if dist_sq <= 100.0 { // 10 tiles - closer range for discomfort
+                    self.emotions.add_sadness(
+                        EmotionSource::Event("religious_discomfort".to_string()),
+                        0.01
+                    );
+                }
+            }
+        }
+
+        // Greedy trait: happiness from having large personal inventory
+        // "Happiness from supplies stored in home" - represented by personal inventory
+        if self.traits.has(Trait::Greedy) {
+            let item_count = self.inventory.total_items();
+            if item_count >= 20 {
+                // Scale happiness with inventory size (capped)
+                let happiness = (item_count as f32 / 100.0).min(0.05);
+                self.emotions.add_happiness(
+                    EmotionSource::Event("wealth_satisfaction".to_string()),
+                    happiness
+                );
+            }
+        }
+
+        // Survivalist trait: happiness when basic needs are well-met
+        if self.traits.has(Trait::Survivalist) {
+            // Check if energy, health, and food supplies are good
+            let has_food = self.inventory.has_food(5); // Has at least 5 food items
+            let well_fed = self.state.energy > 70.0;
+            let healthy = self.state.health > 80.0;
+
+            if has_food && well_fed && healthy {
+                self.emotions.add_happiness(
+                    EmotionSource::Event("self_sufficiency".to_string()),
+                    0.02
+                );
+            }
+        }
+
+        // Frugal trait: contentment from having stored goods nearby
+        if self.traits.has(Trait::Frugal) {
+            // Similar to greedy but more modest - happiness from savings
+            let item_count = self.inventory.total_items();
+            if item_count >= 10 {
+                self.emotions.add_happiness(
+                    EmotionSource::Event("savings_contentment".to_string()),
+                    0.01
+                );
+            }
+        }
+    }
+
     /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
         self.tick_with_percepts(0); // Default tick uses tick 0
@@ -663,6 +806,8 @@ impl Agent {
         self.emotions.tick_with_traits(&self.traits);
         // Apply passive trait effects (e.g., Melancholic slowly gains sadness)
         self.emotions.apply_passive_trait_effects(&self.traits);
+        // Apply location-based trait effects (e.g., Zealot near religious buildings)
+        self.apply_location_trait_effects();
         self.memory.tick();
 
         // Check for stale storage knowledge and trigger curiosity
@@ -1483,6 +1628,10 @@ impl Agent {
                 if self.traits.has(Trait::Proud) {
                     happiness_bonus += Trait::Proud.happiness_gain() * 0.01;
                 }
+                // Ascetic trait: slight discomfort crafting non-essential items
+                if self.traits.has(Trait::Ascetic) {
+                    happiness_bonus -= 0.02;
+                }
             }
 
             // Gathering/working actions reward Diligent trait, penalize Lazy
@@ -1494,6 +1643,11 @@ impl Agent {
                 // Lazy trait holders lose happiness from work
                 if self.traits.has(Trait::Lazy) {
                     happiness_bonus -= 0.03; // Constant happiness decrease when working
+                }
+                // Traditionalist trait: happiness from using primitive (wood/stone) tools
+                if self.traits.has(Trait::Traditionalist) && self.equipment.has_primitive_tool() {
+                    happiness_bonus += 0.04;
+                    reward_reason = "traditional_tools_satisfaction".to_string();
                 }
             }
 
@@ -1540,8 +1694,17 @@ impl Agent {
                     happiness_bonus += 0.05; // Extra happiness from eating
                     reward_reason = "food_enjoyment".to_string();
                 }
-                // Ascetic trait holders don't gain extra happiness from food
-                // but also don't lose happiness
+                // Ascetic trait: no extra happiness from food, slight penalty for elaborate meals
+                if self.traits.has(Trait::Ascetic) {
+                    // Negate glutton bonus if somehow both traits exist
+                    happiness_bonus -= 0.03; // Prefers simple sustenance
+                }
+                // Survivalist trait: happiness from eating own stored food
+                // (They're happy just knowing they're self-sufficient)
+                if self.traits.has(Trait::Survivalist) {
+                    happiness_bonus += 0.03;
+                    reward_reason = "self_sufficient_meal".to_string();
+                }
             }
 
             // Animal interactions reward AnimalLover, penalize Allergic
@@ -1605,6 +1768,26 @@ impl Agent {
             _ => {}
         }
 
+        // Copycat trait: happiness from mimicking recently observed actions
+        if self.traits.has(Trait::Copycat) {
+            if let Some(action_type) = self.action_to_observable_type(action) {
+                // Check if we've seen this action type recently (within 50 ticks)
+                // Note: current tick tracking would be needed, but we use a simpler approach
+                // by checking if any recent observations exist
+                let observation_count = self.observational_learning.count_recent_observations_of_type(
+                    action_type,
+                    50, // Within last 50 ticks
+                    0   // Will use recent count which doesn't need exact tick
+                );
+
+                if observation_count > 0 {
+                    // Bonus happiness for mimicking others
+                    happiness_bonus += 0.03 * (observation_count as f32).min(3.0);
+                    reward_reason = "copycat_satisfaction".to_string();
+                }
+            }
+        }
+
         // Apply the happiness bonus if any
         if happiness_bonus != 0.0 {
             let source = if reward_reason.is_empty() {
@@ -1624,6 +1807,44 @@ impl Agent {
 
 
     // Helper methods
+
+    /// Convert an environment Action to an ObservableActionType for Copycat trait
+    fn action_to_observable_type(&self, action: &crate::environment::Action) -> Option<super::ActionType> {
+        use crate::environment::Action;
+        use super::ActionType;
+
+        match action {
+            // Mining/gathering type actions
+            Action::Gather { .. } => Some(ActionType::Mining),
+
+            // Crafting actions
+            Action::Craft { .. } => Some(ActionType::Crafting),
+
+            // Building actions
+            Action::Build { .. } => Some(ActionType::Building),
+
+            // Combat actions
+            Action::Attack { .. } | Action::Hunt { .. } => Some(ActionType::Combat),
+
+            // Cooking and food preparation
+            Action::Eat { .. } => Some(ActionType::Cooking),
+
+            // Social interactions
+            Action::Socialize { .. } | Action::ShareInformation { .. } => Some(ActionType::Social),
+
+            // Exploration/navigation
+            Action::Move { .. } | Action::Explore { .. } => Some(ActionType::Navigation),
+
+            // Tool use (storing, retrieving, etc.)
+            Action::Store { .. } | Action::Retrieve { .. } => Some(ActionType::ToolUse),
+
+            // Animal interactions involve problem solving
+            Action::Tame { .. } | Action::CollectAnimalProduct { .. } => Some(ActionType::ProblemSolving),
+
+            // Other actions that don't fit categories
+            _ => None,
+        }
+    }
 
     /// Find the nearest known shelter (housing building) from the agent's exploration knowledge.
     /// Returns the position of the nearest shelter, or the agent's current position if no shelter is known.
@@ -2223,8 +2444,23 @@ impl Agent {
     }
 
     /// Take damage (wrapper for AgentState method)
+    /// Masochist trait holders gain happiness from taking damage (up to 50% health)
     pub fn take_damage(&mut self, amount: f32) {
+        use crate::core::traits::Trait;
+        use super::EmotionSource;
+
+        let health_before = self.state.health;
         self.state.take_damage(amount);
+
+        // Masochist trait: happiness from taking damage while above 50% health
+        if self.traits.has(Trait::Masochist) && health_before > 50.0 && self.state.health > 0.0 {
+            // Scale happiness by damage taken, capped at 0.1 per hit
+            let happiness_amount = (amount / 20.0).min(0.1);
+            self.emotions.add_happiness(
+                EmotionSource::Event("masochist_pleasure".to_string()),
+                happiness_amount
+            );
+        }
     }
 
     /// Check if agent is dead

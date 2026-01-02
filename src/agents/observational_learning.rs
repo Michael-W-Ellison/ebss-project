@@ -341,6 +341,25 @@ impl ObservationalLearning {
             .collect()
     }
 
+    /// Check if an action type was recently observed (for Copycat trait)
+    /// Returns true if this action type was observed within the last few ticks
+    pub fn was_action_type_recently_observed(&self, action_type: ActionType, tick_window: u32, current_tick: u32) -> bool {
+        self.recent_observations.iter().any(|obs| {
+            obs.action_type == action_type &&
+            current_tick.saturating_sub(obs.timestamp as u32) <= tick_window
+        })
+    }
+
+    /// Get count of recent observations of a specific action type
+    pub fn count_recent_observations_of_type(&self, action_type: ActionType, tick_window: u32, current_tick: u32) -> usize {
+        self.recent_observations.iter()
+            .filter(|obs| {
+                obs.action_type == action_type &&
+                current_tick.saturating_sub(obs.timestamp as u32) <= tick_window
+            })
+            .count()
+    }
+
     /// Set learning rate (for age-based changes)
     pub fn set_learning_rate(&mut self, rate: f32) {
         self.learning_rate = rate.clamp(0.1, 2.0);

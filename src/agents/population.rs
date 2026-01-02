@@ -1576,6 +1576,61 @@ impl Population {
                 }
             }
         }
+
+        // Process Envious trait - sadness when others have better equipment
+        for (i, _agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Envious) {
+                let my_equipment_value = self.agents[*i].equipment.total_value();
+
+                for (j, other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        let other_equipment_value = self.agents[*j].equipment.total_value();
+
+                        if other_equipment_value > my_equipment_value * 1.5 {
+                            // Others have significantly better equipment - feel envious
+                            self.agents[*i].emotions.add_sadness(
+                                EmotionSource::Agent(*other_id),
+                                0.02
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Greedy trait - happiness from having more inventory than others
+        for (i, _agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Greedy) {
+                let my_inventory_count = self.agents[*i].inventory.total_items();
+
+                for (j, _other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        let other_inventory_count = self.agents[*j].inventory.total_items();
+
+                        if my_inventory_count > other_inventory_count * 2 {
+                            // I have significantly more stuff - feel satisfied
+                            self.agents[*i].emotions.add_happiness(
+                                EmotionSource::Event("wealth_satisfaction".to_string()),
+                                0.01
+                            );
+                            break; // Only need one comparison
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Broadcast an action from one agent to all nearby observers
