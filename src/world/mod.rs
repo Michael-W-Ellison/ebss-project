@@ -412,10 +412,10 @@ impl World {
     }
 
     fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
-        use rand::Rng;
+        use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
 
-        // Try up to 100 times to find matching terrain
+        // First, try random sampling (efficient for common terrain types)
         for _ in 0..100 {
             let x = rng.gen_range(0..self.grid.width) as i32;
             let y = rng.gen_range(0..self.grid.height) as i32;
@@ -431,11 +431,46 @@ impl World {
             }
         }
 
-        // Fallback: return random position
-        Position::new(
-            rng.gen_range(0..self.grid.width) as i32,
-            rng.gen_range(0..self.grid.height) as i32,
-        )
+        // Fallback: collect ALL valid positions and randomly select
+        // This guarantees we find a valid position if one exists
+        let valid_positions: Vec<Position> = (0..self.grid.width)
+            .flat_map(|x| (0..self.grid.height).map(move |y| Position::new(x as i32, y as i32)))
+            .filter(|pos| {
+                if let Some(tile) = self.grid.get_tile(pos) {
+                    tile.terrain.terrain_type == terrain_type && !self.is_position_occupied(pos)
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        if let Some(pos) = valid_positions.choose(&mut rng) {
+            return *pos;
+        }
+
+        // Last resort: if no valid terrain exists, find ANY unoccupied position
+        // of the requested type, allowing overlap with resources
+        let any_matching: Vec<Position> = (0..self.grid.width)
+            .flat_map(|x| (0..self.grid.height).map(move |y| Position::new(x as i32, y as i32)))
+            .filter(|pos| {
+                if let Some(tile) = self.grid.get_tile(pos) {
+                    tile.terrain.terrain_type == terrain_type
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        if let Some(pos) = any_matching.choose(&mut rng) {
+            return *pos;
+        }
+
+        // Absolute last resort: return center position (should never happen in a valid world)
+        log::warn!(
+            "Could not find any {:?} terrain in world, placing resource at center",
+            terrain_type
+        );
+        Position::new(self.grid.width as i32 / 2, self.grid.height as i32 / 2)
     }
 
     pub fn is_position_occupied(&self, pos: &Position) -> bool {
