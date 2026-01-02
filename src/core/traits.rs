@@ -458,6 +458,11 @@ impl TraitSet {
         &self.traits
     }
 
+    /// Iterate over all traits
+    pub fn iter(&self) -> impl Iterator<Item = &Trait> {
+        self.traits.iter()
+    }
+
     /// Calculate combined trust modifier from all traits
     pub fn combined_trust_modifier(&self) -> f32 {
         self.traits

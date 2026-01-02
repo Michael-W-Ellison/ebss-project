@@ -194,6 +194,12 @@ impl Population {
             self.process_social_interactions();
         }
 
+        // Process trait-based proximity effects (every 10 ticks)
+        // Handles: Romantic partner happiness, Mediator calming, Intolerant stranger penalty
+        if current_tick % 10 == 0 {
+            self.process_trait_proximity_effects();
+        }
+
         // Process observational learning (every 20 ticks to reduce overhead)
         if current_tick % 20 == 0 {
             self.process_observational_learning();
@@ -1416,6 +1422,158 @@ impl Population {
 
                 // Log the learning event for debugging/analytics
                 let _ = action_type; // Action type available for logging if needed
+            }
+        }
+    }
+
+    /// Process passive trait effects that depend on proximity or relationships
+    /// This handles:
+    /// - Romantic: happiness from partner proximity
+    /// - Mediator: reduces nearby negative emotions
+    /// - Intolerant: affection penalty with strangers
+    /// - Insecure: anxiety when partner socializes with others
+    /// - Copycat: happiness from mimicking nearby agents
+    pub fn process_trait_proximity_effects(&mut self) {
+        use crate::core::traits::Trait;
+        use crate::agents::emotions::EmotionSource;
+        use crate::agents::emotions::RelationshipType;
+
+        const PROXIMITY_RANGE_SQ: f32 = 100.0; // 10 tiles squared
+
+        // Collect agent positions and traits first to avoid borrow issues
+        let agent_data: Vec<_> = self.agents.iter()
+            .enumerate()
+            .filter(|(_, a)| a.state.is_alive)
+            .map(|(i, a)| (i, a.id, a.state.position, a.traits.clone()))
+            .collect();
+
+        // Process Romantic trait - happiness from partner proximity
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Romantic) {
+                // Check if any romantic partner is nearby
+                for (j, other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    // Check if this is a romantic partner
+                    let is_partner = self.agents[*i].relationships
+                        .get_relationship(other_id)
+                        .map(|r| r.relationship_type == RelationshipType::Partner)
+                        .unwrap_or(false);
+
+                    if is_partner {
+                        let dx = (pos_i.0 - pos_j.0) as f32;
+                        let dy = (pos_i.1 - pos_j.1) as f32;
+                        let dist_sq = dx * dx + dy * dy;
+
+                        if dist_sq <= PROXIMITY_RANGE_SQ {
+                            // Partner is nearby - gain happiness
+                            self.agents[*i].emotions.add_happiness(
+                                EmotionSource::Agent(*other_id),
+                                0.02  // Small but constant happiness from partner proximity
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Mediator trait - reduces nearby negative emotions
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Mediator) {
+                // Find nearby agents and reduce their negative emotions
+                for (j, _, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        // Mediator calms nearby agents - reduce anger slightly
+                        let current_anger = self.agents[*j].emotions.anger;
+                        if current_anger > 0.1 {
+                            // Reduce anger by small amount
+                            for (_, amount) in self.agents[*j].emotions.anger_sources.iter_mut() {
+                                *amount = (*amount * 0.98).max(0.0); // 2% reduction per tick
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Intolerant trait - affection penalty with strangers
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Intolerant) {
+                // Check nearby agents for strangers
+                for (j, other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        // Check if this is a stranger (no relationship or weak bond)
+                        let is_stranger = self.agents[*i].relationships
+                            .get_relationship(other_id)
+                            .map(|r| r.bond_strength < 0.2)
+                            .unwrap_or(true);
+
+                        if is_stranger {
+                            // Intolerant agents lose happiness around strangers
+                            self.agents[*i].emotions.add_sadness(
+                                EmotionSource::Agent(*other_id),
+                                0.01
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Insecure trait - anxiety when partner socializes with others
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Insecure) {
+                // Find partner
+                let partner_id: Option<uuid::Uuid> = self.agents[*i].relationships
+                    .get_all()
+                    .values()
+                    .find(|r| r.relationship_type == RelationshipType::Partner)
+                    .map(|r| r.other_agent);
+
+                if let Some(partner) = partner_id {
+                    // Check if partner is socializing with someone else nearby
+                    let partner_idx = agent_data.iter()
+                        .find(|(_, id, _, _)| *id == partner)
+                        .map(|(idx, _, _, _)| *idx);
+
+                    if let Some(p_idx) = partner_idx {
+                        let partner_pos = agent_data.iter()
+                            .find(|(idx, _, _, _)| *idx == p_idx)
+                            .map(|(_, _, pos, _)| pos);
+
+                        if let Some(ppos) = partner_pos {
+                            // Check if partner is near other agents (not us)
+                            for (k, other_id, pos_k, _) in &agent_data {
+                                if *k == p_idx || *k == *i { continue; }
+
+                                let dx = (ppos.0 - pos_k.0) as f32;
+                                let dy = (ppos.1 - pos_k.1) as f32;
+                                let dist_sq = dx * dx + dy * dy;
+
+                                if dist_sq <= 25.0 { // Very close proximity (5 tiles)
+                                    // Partner is close to someone else - trigger insecurity
+                                    self.agents[*i].emotions.add_sadness(
+                                        EmotionSource::Event("partner_jealousy".to_string()),
+                                        0.02
+                                    );
+                                    break; // Only trigger once per tick
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

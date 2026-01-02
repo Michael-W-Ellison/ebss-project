@@ -551,6 +551,11 @@ impl Simulation {
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
 
+                // Apply trait-based happiness rewards for successful actions
+                if action_result.success {
+                    agent.apply_trait_action_rewards(&action);
+                }
+
                 // Update plan execution state if this was a plan action
                 if is_plan_action {
                     if action_result.success {

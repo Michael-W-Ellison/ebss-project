@@ -659,7 +659,10 @@ impl Agent {
         // Update subsystems
         self.senses.tick();
         self.body.tick();
-        self.emotions.tick();
+        // Use trait-aware emotion decay (traits affect how quickly emotions fade)
+        self.emotions.tick_with_traits(&self.traits);
+        // Apply passive trait effects (e.g., Melancholic slowly gains sadness)
+        self.emotions.apply_passive_trait_effects(&self.traits);
         self.memory.tick();
 
         // Check for stale storage knowledge and trigger curiosity
@@ -838,10 +841,10 @@ impl Agent {
 
         match emotion_type {
             super::EmotionType::Anger => {
-                self.emotions.add_anger(source, emotion_amount);
+                self.emotions.add_anger_with_traits(source, emotion_amount, &self.traits);
             }
             super::EmotionType::Fear => {
-                self.emotions.add_fear(source, emotion_amount);
+                self.emotions.add_fear_with_traits(source, emotion_amount, &self.traits);
             }
             _ => {}
         }
@@ -861,7 +864,7 @@ impl Agent {
             if relationship.is_loved_one() {
                 // Sadness scales with bond strength and harm severity
                 let sadness_amount = relationship.bond_strength * harm_severity * 0.8;
-                self.emotions.add_sadness(source.clone(), sadness_amount);
+                self.emotions.add_sadness_with_traits(source.clone(), sadness_amount, &self.traits);
 
                 // Also potentially add fear or anger based on agent's ability to protect
                 // Parents protecting children might feel anger if they can fight back
@@ -873,9 +876,9 @@ impl Agent {
                     let assessment = super::ThreatAssessment::assess(agent_strength, 0.7, source.clone());
 
                     if assessment.can_overcome {
-                        self.emotions.add_anger(source, 0.5);
+                        self.emotions.add_anger_with_traits(source, 0.5, &self.traits);
                     } else {
-                        self.emotions.add_fear(source, 0.3);
+                        self.emotions.add_fear_with_traits(source, 0.3, &self.traits);
                     }
                 }
             }
@@ -892,10 +895,10 @@ impl Agent {
         if let Some(relationship) = self.relationships.get_relationship(deceased_id) {
             if relationship.is_loved_one() {
                 let sadness_amount = relationship.bond_strength * 0.9;
-                self.emotions.add_sadness(EmotionSource::Agent(*deceased_id), sadness_amount);
+                self.emotions.add_sadness_with_traits(EmotionSource::Agent(*deceased_id), sadness_amount, &self.traits);
 
                 // Fear of the source that killed them
-                self.emotions.add_fear(source, 0.4);
+                self.emotions.add_fear_with_traits(source, 0.4, &self.traits);
             }
         }
     }
@@ -1437,6 +1440,184 @@ impl Agent {
                     // Positive value = increase drive
                     drive.increase(*change_amount);
                 }
+            }
+        }
+    }
+
+    /// Apply trait-based happiness rewards based on completed actions
+    /// This is called after successful actions to give trait holders bonus happiness
+    pub fn apply_trait_action_rewards(&mut self, action: &crate::environment::Action) {
+        use crate::core::traits::Trait;
+        use super::EmotionSource;
+
+        let mut happiness_bonus = 0.0;
+        let mut reward_reason = String::new();
+
+        match action {
+            // Building actions reward Builder trait
+            crate::environment::Action::Build { .. } => {
+                if self.traits.has(Trait::Builder) {
+                    happiness_bonus += Trait::Builder.happiness_gain() * 0.02;
+                    reward_reason = "building_satisfaction".to_string();
+                }
+                // Proud trait holders gain happiness from accomplishments
+                if self.traits.has(Trait::Proud) {
+                    happiness_bonus += Trait::Proud.happiness_gain() * 0.01;
+                }
+                // Ambitious trait holders gain happiness from external goals
+                if self.traits.has(Trait::Ambitious) {
+                    happiness_bonus += 0.05;
+                }
+            }
+
+            // Crafting actions reward CraftObsessed trait
+            crate::environment::Action::Craft { .. } => {
+                if self.traits.has(Trait::CraftObsessed) {
+                    happiness_bonus += 0.08; // Significant happiness from crafting
+                    reward_reason = "craft_satisfaction".to_string();
+                }
+                // Handy trait holders gain happiness from completing tasks
+                if self.traits.has(Trait::Handy) {
+                    happiness_bonus += Trait::Handy.happiness_gain() * 0.02;
+                }
+                if self.traits.has(Trait::Proud) {
+                    happiness_bonus += Trait::Proud.happiness_gain() * 0.01;
+                }
+            }
+
+            // Gathering/working actions reward Diligent trait, penalize Lazy
+            crate::environment::Action::Gather { .. } => {
+                if self.traits.has(Trait::Diligent) {
+                    happiness_bonus += Trait::Diligent.happiness_gain() * 0.02;
+                    reward_reason = "work_satisfaction".to_string();
+                }
+                // Lazy trait holders lose happiness from work
+                if self.traits.has(Trait::Lazy) {
+                    happiness_bonus -= 0.03; // Constant happiness decrease when working
+                }
+            }
+
+            // Exploring actions reward Explorer and Curious traits
+            crate::environment::Action::Move { .. } |
+            crate::environment::Action::Explore { .. } => {
+                if self.traits.has(Trait::Explorer) {
+                    happiness_bonus += Trait::Explorer.happiness_gain() * 0.01;
+                    reward_reason = "exploration_joy".to_string();
+                }
+                if self.traits.has(Trait::Curious) {
+                    happiness_bonus += Trait::Curious.happiness_gain() * 0.005;
+                }
+            }
+
+            // Social interactions reward Extrovert, penalize Introvert
+            crate::environment::Action::Socialize { .. } |
+            crate::environment::Action::ShareInformation { .. } => {
+                if self.traits.has(Trait::Extrovert) || self.traits.has(Trait::Sociable) {
+                    happiness_bonus += Trait::Extrovert.happiness_gain() * 0.03;
+                    reward_reason = "social_joy".to_string();
+                }
+                if self.traits.has(Trait::Charismatic) {
+                    happiness_bonus += 0.02;
+                }
+                // Introverts lose happiness from socializing
+                if self.traits.has(Trait::Introvert) || self.traits.has(Trait::Introverted) {
+                    happiness_bonus -= 0.02;
+                }
+            }
+
+            // Sleeping rewards introverts who enjoy solitude
+            crate::environment::Action::Sleep { .. } => {
+                // Introverts gain slight happiness from being alone/resting
+                if self.traits.has(Trait::Introvert) || self.traits.has(Trait::Introverted) {
+                    happiness_bonus += 0.01;
+                    reward_reason = "peaceful_solitude".to_string();
+                }
+            }
+
+            // Eating rewards Glutton trait
+            crate::environment::Action::Eat { .. } => {
+                if self.traits.has(Trait::Glutton) {
+                    happiness_bonus += 0.05; // Extra happiness from eating
+                    reward_reason = "food_enjoyment".to_string();
+                }
+                // Ascetic trait holders don't gain extra happiness from food
+                // but also don't lose happiness
+            }
+
+            // Animal interactions reward AnimalLover, penalize Allergic
+            crate::environment::Action::Tame { .. } |
+            crate::environment::Action::CollectAnimalProduct { .. } => {
+                if self.traits.has(Trait::AnimalLover) {
+                    happiness_bonus += 0.06;
+                    reward_reason = "animal_joy".to_string();
+                }
+                if self.traits.has(Trait::Allergic) {
+                    happiness_bonus -= 0.03; // Discomfort from animal proximity
+                }
+            }
+
+            // Hunting can reward Protector trait (protecting community from threats)
+            crate::environment::Action::Hunt { .. } => {
+                if self.traits.has(Trait::Protector) {
+                    happiness_bonus += 0.04;
+                    reward_reason = "protector_satisfaction".to_string();
+                }
+                // AnimalLover may feel conflicted about hunting
+                if self.traits.has(Trait::AnimalLover) {
+                    happiness_bonus -= 0.02;
+                }
+            }
+
+            // Attack actions - check for aggressive vs peaceful traits
+            crate::environment::Action::Attack { .. } => {
+                if self.traits.has(Trait::Aggressive) {
+                    happiness_bonus += 0.03;
+                    reward_reason = "combat_thrill".to_string();
+                }
+                if self.traits.has(Trait::Peaceful) || self.traits.has(Trait::Pacifist) {
+                    happiness_bonus -= 0.05; // Distress from violence
+                }
+            }
+
+            // Store/retrieve items - check for Frugal/Greedy
+            crate::environment::Action::Store { .. } => {
+                if self.traits.has(Trait::Frugal) {
+                    happiness_bonus += 0.02; // Satisfaction from saving
+                    reward_reason = "saving_satisfaction".to_string();
+                }
+            }
+
+            crate::environment::Action::Retrieve { .. } => {
+                if self.traits.has(Trait::Greedy) {
+                    happiness_bonus += 0.02; // Joy from acquiring
+                    reward_reason = "acquisition_joy".to_string();
+                }
+            }
+
+            // Mating rewards Romantic trait
+            crate::environment::Action::Mate { .. } => {
+                if self.traits.has(Trait::Romantic) {
+                    happiness_bonus += 0.1; // Significant happiness from romantic interaction
+                    reward_reason = "romantic_joy".to_string();
+                }
+            }
+
+            _ => {}
+        }
+
+        // Apply the happiness bonus if any
+        if happiness_bonus != 0.0 {
+            let source = if reward_reason.is_empty() {
+                EmotionSource::Event("trait_reward".to_string())
+            } else {
+                EmotionSource::Event(reward_reason)
+            };
+
+            if happiness_bonus > 0.0 {
+                self.emotions.add_happiness_with_traits(source, happiness_bonus, &self.traits);
+            } else {
+                // Negative bonus means we reduce happiness or add sadness
+                self.emotions.add_sadness_with_traits(source, happiness_bonus.abs(), &self.traits);
             }
         }
     }
@@ -2113,10 +2294,11 @@ impl Agent {
 
                 let curiosity_amount = base_curiosity * curiosity_bonus;
 
-                // Add curiosity about this specific storage location
-                self.emotions.add_curiosity(
+                // Add curiosity about this specific storage location (with trait modifiers)
+                self.emotions.add_curiosity_with_traits(
                     EmotionSource::Location(storage_memory.position),
-                    curiosity_amount
+                    curiosity_amount,
+                    &self.traits
                 );
             }
         }
@@ -2136,9 +2318,10 @@ impl Agent {
 
         // Curious trait holders gain happiness from learning/discovering
         if self.traits.has(crate::core::Trait::Curious) {
-            self.emotions.add_happiness(
+            self.emotions.add_happiness_with_traits(
                 EmotionSource::Event("satisfied curiosity".to_string()),
-                0.15 // Moderate happiness boost
+                0.15, // Moderate happiness boost
+                &self.traits
             );
         }
     }
@@ -2287,9 +2470,9 @@ impl Agent {
     fn process_gratitude(&mut self, helper_id: Uuid, help_amount: f32) {
         use super::EmotionSource;
 
-        // Happiness from receiving help (scaled by amount)
+        // Happiness from receiving help (scaled by amount, with trait modifiers)
         let gratitude_happiness = (help_amount * 0.3).min(0.4);
-        self.emotions.add_happiness(EmotionSource::Agent(helper_id), gratitude_happiness);
+        self.emotions.add_happiness_with_traits(EmotionSource::Agent(helper_id), gratitude_happiness, &self.traits);
 
         // Improve bond with helper
         if let Some(relationship) = self.relationships.get_relationship_mut(&helper_id) {
@@ -2309,18 +2492,30 @@ impl Agent {
 
     /// Process altruistic happiness when providing help to another agent
     /// Empathetic agents get extra happiness from helping
+    /// Altruist trait holders also get extra happiness from helping
     pub fn process_helper_happiness(&mut self, recipient_id: Uuid, help_amount: f32) {
         use super::EmotionSource;
+        use crate::core::traits::Trait;
 
         // Base happiness from helping (scaled by amount)
         let mut helper_happiness = (help_amount * 0.2).min(0.3);
 
         // Empathetic trait bonus: extra happiness from helping others
-        if self.traits.has_trait(&crate::core::traits::Trait::Empathetic) {
+        if self.traits.has_trait(&Trait::Empathetic) {
             helper_happiness += 0.15; // Significant bonus for empathetic helpers
         }
 
-        self.emotions.add_happiness(EmotionSource::Agent(recipient_id), helper_happiness);
+        // Altruist trait bonus: additional happiness from helping
+        if self.traits.has(Trait::Altruist) {
+            helper_happiness += Trait::Altruist.happiness_gain() * 0.02;
+        }
+
+        // Caretaker trait bonus: happiness from helping sick/injured/elderly
+        if self.traits.has(Trait::Caretaker) {
+            helper_happiness += Trait::Caretaker.happiness_gain() * 0.02;
+        }
+
+        self.emotions.add_happiness_with_traits(EmotionSource::Agent(recipient_id), helper_happiness, &self.traits);
     }
 
     /// Get all sources that satisfy a specific drive
@@ -2374,8 +2569,8 @@ impl Agent {
             }
         }
 
-        // Add sadness
-        self.emotions.add_sadness(EmotionSource::Agent(source_id), sadness);
+        // Add sadness (with trait modifiers)
+        self.emotions.add_sadness_with_traits(EmotionSource::Agent(source_id), sadness, &self.traits);
 
         // If there's a cause and it's an agent, add anger
         if let Some(cause_source) = cause {
@@ -2383,13 +2578,13 @@ impl Agent {
                 EmotionSource::Agent(_) | EmotionSource::Creature(_) => {
                     // Anger at whoever took away our satisfaction source
                     let anger = importance * 0.5; // 0.0 to 0.5 (stronger anger response)
-                    self.emotions.add_anger(cause_source, anger);
+                    self.emotions.add_anger_with_traits(cause_source, anger, &self.traits);
                 }
                 EmotionSource::Event(event) => {
                     // Natural causes - less anger, more sadness
                     if !event.contains("old age") && !event.contains("natural") {
                         // Accident or preventable - some anger
-                        self.emotions.add_anger(EmotionSource::Event(event.clone()), importance * 0.2);
+                        self.emotions.add_anger_with_traits(EmotionSource::Event(event.clone()), importance * 0.2, &self.traits);
                     }
                 }
                 _ => {}
