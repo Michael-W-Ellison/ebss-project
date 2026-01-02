@@ -4088,4 +4088,388 @@ impl Agent {
             })
         })
     }
+
+    // ===== Trust and Lie Detection System =====
+
+    /// Get lie detection chance based on agent's traits
+    /// Returns a multiplier (1.0 = normal, higher = better detection)
+    pub fn get_lie_detection_bonus(&self) -> f32 {
+        use crate::core::traits::Trait;
+
+        let mut bonus: f32 = 1.0;
+
+        // Suspicious trait: +50% lie detection
+        if self.traits.has(Trait::Suspicious) {
+            bonus += 0.5;
+        }
+
+        // Paranoid trait: +80% lie detection (assumes malice)
+        if self.traits.has(Trait::Paranoid) {
+            bonus += 0.8;
+        }
+
+        // Honest agents are better at spotting dishonesty (they know what truth looks like)
+        if self.traits.has(Trait::Honest) {
+            bonus += 0.3;
+        }
+
+        // Skeptic trait: +40% lie detection
+        if self.traits.has(Trait::Skeptic) {
+            bonus += 0.4;
+        }
+
+        // Trusting trait: -40% lie detection (easily fooled)
+        if self.traits.has(Trait::Trusting) {
+            bonus -= 0.4;
+        }
+
+        bonus.max(0.1) // Minimum 10% detection chance
+    }
+
+    /// Verify a resource location claim against what this agent actually knows
+    /// Returns Some(true) if verified correct, Some(false) if verified wrong, None if unverifiable
+    pub fn verify_resource_claim(
+        &self,
+        claimed_resource: &str,
+        claimed_location: (i32, i32, i32),
+    ) -> Option<bool> {
+        use crate::world::Position;
+
+        let claimed_pos = Position::new(claimed_location.0, claimed_location.1);
+
+        // Check if we've explored this location
+        if !self.exploration_knowledge.is_explored(&claimed_pos) {
+            return None; // Can't verify - haven't been there
+        }
+
+        // Check what we actually know about this location
+        if let Some(actual_resource) = self.exploration_knowledge.known_resources.get(&claimed_pos) {
+            // We know what's at this location
+            let actual_name = format!("{:?}", actual_resource).to_lowercase();
+            let claimed_lower = claimed_resource.to_lowercase();
+
+            // Check if the claimed resource matches what we found
+            if actual_name.contains(&claimed_lower) || claimed_lower.contains(&actual_name) {
+                return Some(true); // Verified correct
+            } else {
+                return Some(false); // Verified wrong - different resource type
+            }
+        }
+
+        // We've been there but didn't find any resource
+        // If they claimed a resource exists there, they're likely wrong
+        Some(false)
+    }
+
+    /// Attempt to detect lies in received information based on personal knowledge
+    /// Returns a list of (info_id, source_id, was_lie) for detected lies
+    pub fn detect_lies_in_knowledge(&self, _current_tick: u32) -> Vec<(uuid::Uuid, uuid::Uuid, bool)> {
+        use super::gossip::InformationType;
+
+        let mut detections = Vec::new();
+        let detection_bonus = self.get_lie_detection_bonus();
+
+        // Check each piece of information we've received
+        for (info_id, info) in &self.knowledge.known_information {
+            // Skip if this is our own information
+            if info.original_source == self.id {
+                continue;
+            }
+
+            // Find the belief for this info to get the source
+            let source = self.knowledge.beliefs
+                .iter()
+                .find(|b| b.info_id == *info_id)
+                .map(|b| b.source);
+
+            if let Some(source_id) = source {
+                // Try to verify different types of information
+                match &info.info_type {
+                    InformationType::ResourceLocation { resource, location } => {
+                        if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
+                            // Apply detection bonus - higher bonus means more likely to catch lies
+                            let base_detection_chance = if is_correct { 0.0 } else { 0.5 };
+                            let effective_chance = base_detection_chance * detection_bonus;
+
+                            // Simple probability check
+                            use rand::Rng;
+                            let roll: f32 = rand::thread_rng().gen();
+
+                            if roll < effective_chance || !is_correct {
+                                // We detected this information as incorrect
+                                if !info.ground_truth || !is_correct {
+                                    detections.push((*info_id, source_id, true)); // It was a lie
+                                } else {
+                                    detections.push((*info_id, source_id, false)); // It was true
+                                }
+                            }
+                        }
+                    }
+                    // Could add more verification types here (accusations, observations, etc.)
+                    _ => {}
+                }
+            }
+        }
+
+        detections
+    }
+
+    /// Process lie detection and update trust/relationships accordingly
+    /// Call this periodically (e.g., every 100 ticks) to verify information
+    pub fn process_information_verification(&mut self, current_tick: u32) {
+        use super::EmotionSource;
+
+        let detections = self.detect_lies_in_knowledge(current_tick);
+
+        for (info_id, source_id, was_lie) in detections {
+            // Calculate info age for trust update (used by SocialNetwork methods)
+            let _info_age = if let Some(info) = self.knowledge.known_information.get(&info_id) {
+                current_tick.saturating_sub(info.timestamp as u32)
+            } else {
+                1000 // Default to old if not found
+            };
+
+            // Update knowledge base trust
+            self.knowledge.verify_information(&info_id, !was_lie);
+
+            // Update relationship
+            if was_lie {
+                // Lie detected - penalize relationship and trust
+                let rel = self.relationships.get_or_create_relationship(source_id, current_tick);
+                rel.weaken(0.15); // Significant relationship damage
+
+                // Add negative emotion
+                self.emotions.add_anger(
+                    EmotionSource::Agent(source_id),
+                    0.2 // Anger at being lied to
+                );
+
+                // Trait-based response to being lied to
+                if self.traits.has(crate::core::traits::Trait::Vengeful) {
+                    // Vengeful agents remember and hold grudges
+                    rel.weaken(0.1); // Extra relationship damage
+                }
+
+                if self.traits.has(crate::core::traits::Trait::Forgiving) {
+                    // Forgiving agents don't hold it against them as much
+                    rel.strengthen(0.05); // Partial forgiveness
+                }
+            } else {
+                // Truth verified - strengthen trust and relationship
+                let rel = self.relationships.get_or_create_relationship(source_id, current_tick);
+                rel.strengthen(0.05); // Small positive reinforcement
+
+                // Small happiness from receiving accurate information
+                self.emotions.add_happiness(
+                    EmotionSource::Agent(source_id),
+                    0.02
+                );
+            }
+        }
+    }
+
+    /// Handle receiving information from another agent with lie detection
+    /// This wraps the knowledge base receive and adds immediate verification
+    pub fn receive_information_with_verification(
+        &mut self,
+        info: super::gossip::Information,
+        source: uuid::Uuid,
+        current_tick: u32,
+    ) {
+        use super::gossip::InformationType;
+
+        let info_id = info.id;
+        let info_type = info.info_type.clone();
+        let _ground_truth = info.ground_truth;
+
+        // Receive the information normally
+        self.knowledge.receive_information(
+            info,
+            source,
+            self.id,
+            &self.traits,
+            current_tick as u64,
+        );
+
+        // Immediate verification attempt for resource claims
+        if let InformationType::ResourceLocation { resource, location } = &info_type {
+            if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
+                // We can immediately verify this claim
+                let _detection_bonus = self.get_lie_detection_bonus();
+
+                if !is_correct {
+                    // They lied about a resource location we know about!
+                    self.on_lie_detected(source, &info_id, current_tick);
+                } else {
+                    // Verified correct
+                    self.on_truth_verified(source, &info_id, current_tick);
+                }
+            } else if self.traits.has(crate::core::traits::Trait::Suspicious) {
+                // Suspicious agents are wary of unverifiable claims
+                // Slightly reduce confidence in the belief
+                if let Some(belief) = self.knowledge.beliefs.iter_mut().find(|b| b.info_id == info_id) {
+                    belief.confidence *= 0.9;
+                }
+            }
+        }
+    }
+
+    /// Called when a lie is detected from a source
+    fn on_lie_detected(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
+        use super::EmotionSource;
+
+        // Update knowledge trust
+        self.knowledge.verify_information(info_id, false);
+
+        // Get relationship and apply penalty
+        let rel = self.relationships.get_or_create_relationship(source, current_tick);
+
+        // Calculate penalty based on relationship
+        let base_penalty = 0.15;
+        let penalty = if rel.bond_strength > 0.5 {
+            // Betrayal by a friend hurts more
+            base_penalty * 1.5
+        } else if rel.bond_strength < -0.3 {
+            // Expected from an enemy - less emotional impact
+            base_penalty * 0.7
+        } else {
+            base_penalty
+        };
+
+        rel.weaken(penalty);
+        rel.total_interactions += 1;
+        rel.last_interaction_tick = current_tick;
+
+        // Emotional response
+        self.emotions.add_anger(
+            EmotionSource::Agent(source),
+            0.15
+        );
+
+        // Paranoid agents become extra suspicious
+        if self.traits.has(crate::core::traits::Trait::Paranoid) {
+            self.emotions.add_fear(
+                EmotionSource::Agent(source),
+                0.1 // Fear of further deception
+            );
+        }
+
+        // Trusting agents feel hurt/sad when lied to
+        if self.traits.has(crate::core::traits::Trait::Trusting) {
+            self.emotions.add_sadness(
+                EmotionSource::Agent(source),
+                0.1
+            );
+        }
+    }
+
+    /// Called when truth is verified from a source
+    fn on_truth_verified(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
+        use super::EmotionSource;
+
+        // Update knowledge trust
+        self.knowledge.verify_information(info_id, true);
+
+        // Strengthen relationship slightly
+        let rel = self.relationships.get_or_create_relationship(source, current_tick);
+        rel.strengthen(0.03);
+        rel.total_interactions += 1;
+        rel.last_interaction_tick = current_tick;
+
+        // Small happiness from accurate information
+        self.emotions.add_happiness(
+            EmotionSource::Agent(source),
+            0.01
+        );
+    }
+
+    /// Check if this agent would lie when sharing information
+    /// Based on traits and relationship with the target
+    pub fn would_lie_to(&self, target_id: uuid::Uuid, _current_tick: u32) -> bool {
+        use crate::core::traits::Trait;
+        use rand::Rng;
+
+        let mut lie_chance: f32 = 0.0;
+
+        // Dishonest trait: 40% base lie chance
+        if self.traits.has(Trait::Dishonest) {
+            lie_chance += 0.4;
+        }
+
+        // Manipulative/Manipulator: 30% lie chance
+        if self.traits.has(Trait::Manipulative) || self.traits.has(Trait::Manipulator) {
+            lie_chance += 0.3;
+        }
+
+        // Honest trait: prevents lying (override)
+        if self.traits.has(Trait::Honest) {
+            return false;
+        }
+
+        // Relationship affects lying
+        if let Some(rel) = self.relationships.get_relationship(&target_id) {
+            if rel.bond_strength < -0.5 {
+                // More likely to lie to enemies
+                lie_chance += 0.2;
+            } else if rel.bond_strength > 0.6 {
+                // Less likely to lie to loved ones
+                lie_chance -= 0.3;
+            }
+        }
+
+        // KindHearted agents avoid harmful lies
+        if self.traits.has(Trait::KindHearted) {
+            lie_chance -= 0.2;
+        }
+
+        let roll: f32 = rand::thread_rng().gen();
+        roll < lie_chance.clamp(0.0, 0.8) // Max 80% chance to lie
+    }
+
+    /// Create information to share, potentially distorting based on traits
+    /// Returns the information (possibly distorted) and whether it's a lie
+    pub fn prepare_information_to_share(
+        &self,
+        info: super::gossip::Information,
+        target_id: uuid::Uuid,
+        current_tick: u32,
+    ) -> (super::gossip::Information, bool) {
+        // Check if we would lie to this target
+        if self.would_lie_to(target_id, current_tick) {
+            // Apply distortion based on traits
+            if let Some(distortion_trait) = self.traits.would_distort_info() {
+                let distorted = info.distort(distortion_trait, self.id);
+                return (distorted, true);
+            }
+        }
+
+        // No lying - share truthfully
+        (info, false)
+    }
+
+    /// Spread reputation damage when caught lying (gossip about the liar)
+    /// Other agents who witnessed or heard about the lie will also lose trust
+    pub fn spread_liar_reputation(
+        &mut self,
+        liar_id: uuid::Uuid,
+        _witness_ids: &[uuid::Uuid],
+        current_tick: u32,
+    ) {
+        // Create gossip information about the lie
+        let gossip_info = super::gossip::Information::new(
+            super::gossip::InformationType::AgentTrait {
+                agent: liar_id,
+                trait_name: "dishonest".to_string(),
+            },
+            self.id,
+            true, // This is true - they did lie
+            current_tick as u64,
+        );
+
+        // Store this information in our knowledge
+        self.knowledge.known_information.insert(gossip_info.id, gossip_info);
+
+        // Witnesses also get reputation update (handled by population system)
+        // This method just marks that we're spreading the word
+    }
 }
