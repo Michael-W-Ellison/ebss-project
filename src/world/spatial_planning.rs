@@ -225,6 +225,73 @@ impl<'a> SpatialPlanner<'a> {
         self.find_optimal_location_with_criteria(building_type, agent_pos, strategy, criteria)
     }
 
+    /// Find optimal location for an agent with territory bonus consideration.
+    ///
+    /// Similar to `find_optimal_location_for_agent` but includes a territory ownership bonus.
+    /// Agents prefer to build within their own territory.
+    ///
+    /// # Arguments
+    /// * `building_type` - The type of building to place
+    /// * `agent_pos` - The agent's current position
+    /// * `strategy` - The placement strategy to use
+    /// * `agent_id` - The agent's ID for territory ownership checking
+    ///
+    /// # Returns
+    /// The optimal position for the building, preferring owned territory.
+    pub fn find_optimal_location_with_territory(
+        &self,
+        building_type: BuildingType,
+        agent_pos: Position,
+        strategy: PlacementStrategy,
+        agent_id: u32,
+    ) -> Option<Position> {
+        let criteria = self.infer_criteria_from_building(building_type);
+        let mut best_pos: Option<Position> = None;
+        let mut best_score = f32::MIN;
+
+        let search_radius = match strategy {
+            PlacementStrategy::NearAgent => 15,
+            PlacementStrategy::NearestAvailable => 10,
+            _ => 30,
+        };
+
+        for x in (agent_pos.0 - search_radius)..=(agent_pos.0 + search_radius) {
+            for y in (agent_pos.1 - search_radius)..=(agent_pos.1 + search_radius) {
+                for z in [agent_pos.2] {
+                    let pos = (x, y, z);
+
+                    let grid_pos = crate::world::grid::Position::new(x, y);
+                    if self.world.is_position_occupied(&grid_pos) {
+                        continue;
+                    }
+                    if !self.world.is_terrain_passable(pos) {
+                        continue;
+                    }
+
+                    // Get base score from strategy
+                    let mut score = self.score_location_for_agent_with_criteria(
+                        pos,
+                        agent_pos,
+                        building_type,
+                        strategy,
+                        &criteria,
+                    );
+
+                    // Add territory bonus - strongly prefer building in owned territory
+                    let territory_bonus = self.world.territory_manager.get_territory_bonus(pos, agent_id);
+                    score += territory_bonus;
+
+                    if score > best_score {
+                        best_score = score;
+                        best_pos = Some(pos);
+                    }
+                }
+            }
+        }
+
+        best_pos
+    }
+
     /// Find optimal location with explicit criteria
     pub fn find_optimal_location_with_criteria(
         &self,

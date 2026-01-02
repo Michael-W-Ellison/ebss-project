@@ -1194,16 +1194,20 @@ impl Population {
             }
         }
 
-        // Knowledge sharing between nearby agents (simplified gossip about discoveries)
-        // Share random discoveries with nearby agents
+        // Knowledge sharing between nearby agents (gossip about discoveries)
+        // Agents share knowledge about buildings, resources, and terrain when in proximity
+        use rand::seq::SliceRandom;
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
         for i in 0..self.agents.len() {
-            let (_, pos_i, alive_i) = agent_positions[i];
+            let (agent_i_id, pos_i, alive_i) = agent_positions[i];
             if !alive_i {
                 continue;
             }
 
             for j in (i + 1)..self.agents.len() {
-                let (_, pos_j, alive_j) = agent_positions[j];
+                let (agent_j_id, pos_j, alive_j) = agent_positions[j];
                 if !alive_j {
                     continue;
                 }
@@ -1214,24 +1218,118 @@ impl Population {
                 let dist_sq = dx * dx + dy * dy;
 
                 if dist_sq <= EXPLORATION_SHARE_RANGE_SQ {
-                    // Share a random discovery from i to j and vice versa
-                    // This simulates agents telling each other about places they've been
                     let current_tick = self.current_tick;
 
-                    // Agent i shares with agent j
-                    if let Some((pos, building_type)) = self.agents[i].exploration_knowledge
-                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
-                    {
-                        self.agents[j].exploration_knowledge
-                            .discover_building(pos, building_type, current_tick);
+                    // Get actual agent UUIDs for relationship lookups
+                    let uuid_j = self.agents[j].id;
+
+                    // Calculate sharing probability based on relationship
+                    let relationship_i_to_j = self.agents[i].relationships
+                        .get_relationship(&uuid_j)
+                        .map(|r| r.bond_strength)
+                        .unwrap_or(0.0);
+                    let share_probability = 0.3 + (relationship_i_to_j * 0.5).max(0.0); // 30-80% based on relationship
+
+                    // Share buildings (prioritize recent discoveries)
+                    if rng.gen_bool(share_probability as f64) {
+                        // Agent i shares with agent j - prioritize recent discoveries
+                        let buildings_i: Vec<_> = self.agents[i].exploration_knowledge
+                            .known_buildings.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !buildings_i.is_empty() {
+                            // Share up to 3 buildings, prioritizing ones j doesn't know
+                            let mut shared = 0;
+                            for (pos, building_type) in buildings_i.choose_multiple(&mut rng, 5) {
+                                if !self.agents[j].exploration_knowledge.known_buildings.contains_key(pos) {
+                                    self.agents[j].exploration_knowledge
+                                        .discover_building(*pos, *building_type, current_tick);
+                                    shared += 1;
+                                    if shared >= 3 { break; }
+                                }
+                            }
+
+                            // Sharing satisfies social drive for agent i
+                            if shared > 0 {
+                                if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Social) {
+                                    drive.partial_satisfy(0.02 * shared as f32);
+                                }
+                            }
+                        }
                     }
 
                     // Agent j shares with agent i
-                    if let Some((pos, building_type)) = self.agents[j].exploration_knowledge
-                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
-                    {
-                        self.agents[i].exploration_knowledge
-                            .discover_building(pos, building_type, current_tick);
+                    if rng.gen_bool(share_probability as f64) {
+                        let buildings_j: Vec<_> = self.agents[j].exploration_knowledge
+                            .known_buildings.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !buildings_j.is_empty() {
+                            let mut shared = 0;
+                            for (pos, building_type) in buildings_j.choose_multiple(&mut rng, 5) {
+                                if !self.agents[i].exploration_knowledge.known_buildings.contains_key(pos) {
+                                    self.agents[i].exploration_knowledge
+                                        .discover_building(*pos, *building_type, current_tick);
+                                    shared += 1;
+                                    if shared >= 3 { break; }
+                                }
+                            }
+
+                            if shared > 0 {
+                                if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Social) {
+                                    drive.partial_satisfy(0.02 * shared as f32);
+                                }
+                            }
+                        }
+                    }
+
+                    // Share resources (important for survival)
+                    if rng.gen_bool((share_probability * 0.8) as f64) {
+                        // Agent i shares resource knowledge with agent j
+                        let resources_i: Vec<_> = self.agents[i].exploration_knowledge
+                            .known_resources.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !resources_i.is_empty() {
+                            let mut shared = 0;
+                            for (pos, resource_type) in resources_i.choose_multiple(&mut rng, 5) {
+                                if !self.agents[j].exploration_knowledge.known_resources.contains_key(pos) {
+                                    self.agents[j].exploration_knowledge
+                                        .discover_resource(*pos, *resource_type, current_tick);
+                                    shared += 1;
+                                    if shared >= 3 { break; }
+                                }
+                            }
+                        }
+
+                        // Agent j shares with agent i
+                        let resources_j: Vec<_> = self.agents[j].exploration_knowledge
+                            .known_resources.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !resources_j.is_empty() {
+                            for (pos, resource_type) in resources_j.choose_multiple(&mut rng, 5) {
+                                if !self.agents[i].exploration_knowledge.known_resources.contains_key(pos) {
+                                    self.agents[i].exploration_knowledge
+                                        .discover_resource(*pos, *resource_type, current_tick);
+                                }
+                            }
+                        }
+                    }
+
+                    // Strengthen relationship through gossip interaction
+                    let uuid_i = self.agents[i].id;
+                    if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&uuid_j) {
+                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        rel.total_interactions += 1;
+                    }
+                    if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&uuid_i) {
+                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        rel.total_interactions += 1;
                     }
                 }
             }

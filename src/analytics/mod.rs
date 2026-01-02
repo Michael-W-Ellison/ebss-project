@@ -3117,25 +3117,32 @@ impl Simulation {
     /// Process environmental damage for all agents
     pub fn process_environmental_damage(&mut self) {
         use crate::agents::body::{BodyPartType, InjuryType, CripplingType};
+        use crate::world::{Position, TerrainType};
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         for agent in &mut self.population.agents {
-            // 1. EXPOSURE DAMAGE - Cold/Heat based on environment
-            // Check if agent has adequate protection from equipment
+            let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+
+            // Get terrain at agent position
+            let terrain_type = self.world.grid.get_tile(&agent_pos)
+                .map(|tile| tile.terrain.terrain_type)
+                .unwrap_or(TerrainType::Plains);
+
+            // Get actual temperature from climate system (returns f32 in Celsius)
+            let temp_celsius = self.world.climate.get_temperature(agent_pos, terrain_type);
+
+            // 1. EXPOSURE DAMAGE - Cold/Heat based on actual environment temperature
             let cold_insulation = agent.body.total_cold_insulation();
             let heat_resistance = agent.body.total_heat_resistance();
 
-            // Simplified environmental model - can be enhanced with actual world temperature
-            // Assume baseline comfortable temperature, extreme cold/heat causes damage
-            // In a full implementation, this would check world.get_temperature_at(position)
+            // Cold exposure (temperature below 5°C with inadequate insulation)
+            if temp_celsius < 5.0 {
+                let cold_severity = ((5.0_f32 - temp_celsius) / 30.0).min(1.0); // Max severity at -25°C
+                let effective_cold = cold_severity * (1.0 - cold_insulation.min(1.0));
 
-            // Cold exposure (lack of insulation)
-            if cold_insulation < 1.0 {
-                // Missing adequate cold protection
-                let exposure_severity = 1.0 - cold_insulation;
-                if rng.gen_bool(exposure_severity as f64 * 0.01) { // 1% chance per severity point
-                    let cold_damage = rng.gen_range(1.0..5.0);
+                if effective_cold > 0.1 && rng.gen_bool((effective_cold * 0.02) as f64) {
+                    let cold_damage = rng.gen_range(1.0..5.0) * effective_cold;
                     // Cold affects extremities most
                     let affected_parts = [
                         BodyPartType::LeftArm,
@@ -3147,51 +3154,58 @@ impl Simulation {
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
                         body_part.apply_injury(InjuryType::Minor, cold_damage, self.current_tick as u64);
-                        debug!("Agent {} suffered cold exposure: {:.1} damage to {:?}",
-                            agent.id, cold_damage, part);
+                        debug!("Agent {} suffered cold exposure at {:.1}°C: {:.1} damage to {:?}",
+                            agent.id, temp_celsius, cold_damage, part);
                     }
                 }
             }
 
-            // Heat exposure (lack of heat resistance) - less common, more severe
-            if heat_resistance < 0.5 {
-                let exposure_severity = 0.5 - heat_resistance;
-                if rng.gen_bool(exposure_severity as f64 * 0.005) { // 0.5% chance per severity
-                    let heat_damage = rng.gen_range(2.0..8.0);
+            // Heat exposure (temperature above 35°C with inadequate heat resistance)
+            if temp_celsius > 35.0 {
+                let heat_severity = ((temp_celsius - 35.0) / 20.0).min(1.0); // Max severity at 55°C
+                let effective_heat = heat_severity * (1.0 - heat_resistance.min(1.0));
+
+                if effective_heat > 0.1 && rng.gen_bool((effective_heat * 0.01) as f64) {
+                    let heat_damage = rng.gen_range(2.0..8.0) * effective_heat;
                     // Heat affects torso and head
                     let affected_parts = [BodyPartType::Head, BodyPartType::Torso];
                     let part = affected_parts[rng.gen_range(0..affected_parts.len())];
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
                         body_part.apply_injury(InjuryType::Minor, heat_damage, self.current_tick as u64);
-                        debug!("Agent {} suffered heat exposure: {:.1} damage to {:?}",
-                            agent.id, heat_damage, part);
+                        debug!("Agent {} suffered heat exposure at {:.1}°C: {:.1} damage to {:?}",
+                            agent.id, temp_celsius, heat_damage, part);
                     }
                 }
             }
 
-            // 2. FALLING DAMAGE - Based on height/terrain
-            // In a full implementation, this would check for actual falls
-            // For now, simulate random accidents
-            if rng.gen_bool(0.0001) { // 0.01% chance per tick (~14 falls per million ticks)
-                let fall_height = rng.gen_range(1..=5); // Units of height
+            // 2. FALLING DAMAGE - Based on terrain type and elevation
+            // Higher fall risk on mountains, hills, and near water (slippery)
+            let fall_risk = match terrain_type {
+                TerrainType::Mountain => 0.001,    // 0.1% - steep terrain
+                TerrainType::Hills => 0.0003,      // 0.03% - uneven ground
+                TerrainType::Riverbank => 0.0002,  // 0.02% - slippery banks
+                TerrainType::Wetland => 0.0002,    // 0.02% - unstable footing
+                TerrainType::Beach => 0.0001,      // 0.01% - uneven sand
+                TerrainType::Forest => 0.00005,    // 0.005% - roots and obstacles
+                _ => 0.00002,                      // 0.002% - flat terrain
+            };
+
+            if rng.gen_bool(fall_risk) {
+                // Fall severity based on terrain
+                let max_fall_height = match terrain_type {
+                    TerrainType::Mountain => 5,
+                    TerrainType::Hills => 3,
+                    _ => 2,
+                };
+                let fall_height = rng.gen_range(1..=max_fall_height);
                 let fall_damage = (fall_height as f32) * rng.gen_range(3.0..8.0);
 
                 // Falls primarily affect legs, with chance of head/torso on severe falls
                 let injured_part = if fall_height >= 4 && rng.gen_bool(0.3) {
-                    // High fall with head/torso injury
-                    if rng.gen_bool(0.5) {
-                        BodyPartType::Head
-                    } else {
-                        BodyPartType::Torso
-                    }
+                    if rng.gen_bool(0.5) { BodyPartType::Head } else { BodyPartType::Torso }
                 } else {
-                    // Normal fall - legs
-                    if rng.gen_bool(0.5) {
-                        BodyPartType::LeftLeg
-                    } else {
-                        BodyPartType::RightLeg
-                    }
+                    if rng.gen_bool(0.5) { BodyPartType::LeftLeg } else { BodyPartType::RightLeg }
                 };
 
                 let injury_severity = if fall_damage >= 25.0 {
@@ -3204,11 +3218,10 @@ impl Simulation {
 
                 if let Some(body_part) = agent.body.get_part_mut(injured_part) {
                     body_part.apply_injury(injury_severity, fall_damage, self.current_tick as u64);
-                    debug!("Agent {} suffered fall damage: {:.1} damage to {:?} ({:?})",
-                        agent.id, fall_damage, injured_part, injury_severity);
+                    debug!("Agent {} fell on {:?} terrain: {:.1} damage to {:?} ({:?})",
+                        agent.id, terrain_type, fall_damage, injured_part, injury_severity);
                 }
 
-                // Also reduce overall health
                 agent.state.health = (agent.state.health - fall_damage * 0.15).max(0.0);
             }
 
