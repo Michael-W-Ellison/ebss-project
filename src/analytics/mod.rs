@@ -1039,6 +1039,7 @@ impl Simulation {
                     "stone" => Some(ResourceType::Stone),
                     "iron" => Some(ResourceType::Iron),
                     "food" => Some(ResourceType::Food),
+                    "water" => Some(ResourceType::Water),
                     "generic" => Some(ResourceType::Wood), // Default to wood for generic
                     _ => None,
                 };
@@ -1086,7 +1087,34 @@ impl Simulation {
                     let harvested = self.world.resources[resource_index].harvest(harvest_amount);
 
                     if harvested > 0 {
-                        // Add to agent inventory
+                        // Water is consumed immediately (drinking), not stored
+                        if resource_type_enum == ResourceType::Water {
+                            let agent = &mut self.population.agents[agent_index];
+
+                            // Satisfy thirst drive
+                            if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
+                                thirst.partial_satisfy(0.5);
+                            }
+
+                            // Reset dehydration counter
+                            agent.state.last_drank_tick = self.current_tick;
+                            agent.state.ticks_without_water = 0;
+
+                            // Fill containers if agent has any
+                            let filled = agent.inventory.fill_containers(harvested as f32);
+
+                            debug!(
+                                "Agent {} drank water and filled {:.1} units into containers",
+                                agent.id, filled
+                            );
+
+                            return ActionResult::success()
+                                .with_drive_change(DriveType::Thirst, -0.5)
+                                .with_energy_cost(5.0)
+                                .with_message(format!("Drank water, filled {:.1} into containers", filled));
+                        }
+
+                        // Add to agent inventory (non-water resources)
                         let item_id = match resource_type_enum {
                             ResourceType::Wood => "wood",
                             ResourceType::Stone => "stone",

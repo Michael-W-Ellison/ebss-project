@@ -12,6 +12,7 @@ pub enum ResourceType {
     Stone,
     Iron,
     Food, // Generic food (berries, generic edibles)
+    Water, // Fresh water from rivers, wells, springs
 
     // === Raw Materials (Agricultural) ===
     Grain,      // Wheat, barley, etc. - for flour, bread, beer
@@ -69,6 +70,7 @@ impl ResourceType {
             ResourceType::Stone => 's',
             ResourceType::Iron => 'i',
             ResourceType::Food => 'f',
+            ResourceType::Water => 'w',
 
             // Agricultural
             ResourceType::Grain => 'g',
@@ -126,6 +128,7 @@ impl ResourceType {
             ResourceType::Stone => "\x1b[37;1m",   // Bright White
             ResourceType::Iron => "\x1b[90m",      // Dark Gray
             ResourceType::Food => "\x1b[92m",      // Bright Green
+            ResourceType::Water => "\x1b[96m",     // Bright Cyan (water)
 
             // Agricultural - Green shades
             ResourceType::Grain => "\x1b[93m",     // Bright Yellow (wheat)
@@ -185,6 +188,7 @@ impl ResourceType {
             ResourceType::Stone => 30,
             ResourceType::Iron => 40,
             ResourceType::Food => 15,
+            ResourceType::Water => 5, // Very quick to drink/fill containers
 
             // Agricultural - farming/harvesting
             ResourceType::Grain => 25,
@@ -239,6 +243,7 @@ impl ResourceType {
         matches!(
             self,
             ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food |
+            ResourceType::Water | // Water from rivers, wells, springs
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton |
             ResourceType::Clay | ResourceType::Sand | ResourceType::Coal |
             ResourceType::Fish | ResourceType::Honey
@@ -286,7 +291,7 @@ impl ResourceType {
     /// Get category description
     pub fn category(&self) -> &'static str {
         match self {
-            ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food => "Basic Resource",
+            ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food | ResourceType::Water => "Basic Resource",
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",

@@ -143,6 +143,7 @@ pub struct ResourceConfig {
     pub stone_nodes: usize,
     pub iron_nodes: usize,
     pub food_nodes: usize,
+    pub water_sources: usize, // Rivers, wells, springs
 
     // Mineral resources (for technology progression)
     pub clay_clusters: usize,
@@ -171,6 +172,7 @@ impl Default for ResourceConfig {
             stone_nodes: 15,
             iron_nodes: 8,
             food_nodes: 25,
+            water_sources: 15, // Rivers, wells, springs - critical for survival
 
             // Minerals
             clay_clusters: 4,
@@ -364,6 +366,25 @@ impl World {
                 ResourceType::Food,
                 pos,
                 rng.gen_range(20..60),
+            ));
+        }
+
+        // Generate water sources (rivers, wells, springs)
+        // Water is critical for survival - place near various terrains
+        for _ in 0..config.water_sources {
+            // Water can be found in various locations
+            let terrain = match rng.gen_range(0..4) {
+                0 => TerrainType::Plains,   // River in plains
+                1 => TerrainType::Meadow,   // Stream in meadow
+                2 => TerrainType::Forest,   // Spring in forest
+                _ => TerrainType::Hills,    // Well in hills
+            };
+            let pos = self.find_random_terrain_position(terrain);
+            // Water sources are renewable and have high capacity
+            self.resources.push(ResourceNode::new(
+                ResourceType::Water,
+                pos,
+                rng.gen_range(200..500), // High capacity, water is abundant at source
             ));
         }
     }

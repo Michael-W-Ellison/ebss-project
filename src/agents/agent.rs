@@ -496,6 +496,8 @@ pub struct AgentState {
     pub is_alive: bool,
     pub last_ate_tick: u32, // Track when agent last ate
     pub ticks_without_food: u32, // Count starvation duration
+    pub last_drank_tick: u32, // Track when agent last drank water
+    pub ticks_without_water: u32, // Count dehydration duration
 }
 
 impl AgentState {
@@ -515,6 +517,8 @@ impl AgentState {
             is_alive: true,
             last_ate_tick: 0,
             ticks_without_food: 0,
+            last_drank_tick: 0,
+            ticks_without_water: 0,
         }
     }
 
@@ -530,6 +534,9 @@ impl AgentState {
         // === SURVIVAL MECHANICS ===
         // Track starvation
         self.ticks_without_food = current_tick.saturating_sub(self.last_ate_tick);
+
+        // Track dehydration (faster than starvation - 3 days vs 7 days)
+        self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
         // Energy depletion (normal metabolism)
         let base_energy_loss = 0.05; // Base energy loss per tick
@@ -552,6 +559,24 @@ impl AgentState {
             self.health = (self.health - severe_health_loss).max(0.0);
         }
 
+        // === DEHYDRATION MECHANICS (faster than starvation) ===
+        // After 12 hours (720 ticks) without water: energy depletes faster
+        if self.ticks_without_water > 720 {
+            energy_loss *= 1.5; // Additional 50% energy depletion
+        }
+
+        // After 1.5 days (2160 ticks) without water: health starts decreasing
+        if self.ticks_without_water > 2160 {
+            let health_loss = 0.15; // Moderate health degradation
+            self.health = (self.health - health_loss).max(0.0);
+        }
+
+        // After 3 days (4320 ticks) without water: rapid health loss (death imminent)
+        if self.ticks_without_water > 4320 {
+            let severe_health_loss = 1.5; // Rapid health loss (faster than starvation)
+            self.health = (self.health - severe_health_loss).max(0.0);
+        }
+
         // Apply energy loss
         self.energy = (self.energy - energy_loss).max(0.0);
 
@@ -565,7 +590,7 @@ impl AgentState {
             self.is_alive = false;
         }
 
-        // Check for death from injury/starvation
+        // Check for death from injury/starvation/dehydration
         if self.health <= 0.0 {
             self.is_alive = false;
         }
@@ -591,14 +616,26 @@ impl AgentState {
         self.ticks_without_food = 0;
     }
 
+    /// Drink water and reset dehydration
+    pub fn drink(&mut self, current_tick: u32) {
+        self.last_drank_tick = current_tick;
+        self.ticks_without_water = 0;
+    }
+
     /// Check if agent is starving (critical survival state)
     pub fn is_starving(&self) -> bool {
         self.ticks_without_food > 1440 || self.energy < 20.0
     }
 
+    /// Check if agent is dehydrated (critical survival state)
+    /// Dehydration is more urgent than starvation (720 ticks = 12 hours)
+    pub fn is_dehydrated(&self) -> bool {
+        self.ticks_without_water > 720
+    }
+
     /// Check if agent is in critical survival state
     pub fn is_survival_critical(&self) -> bool {
-        self.is_starving() || self.health < 30.0
+        self.is_starving() || self.is_dehydrated() || self.health < 30.0
     }
 }
 
