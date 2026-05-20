@@ -69,6 +69,7 @@ pub mod zoning;
 pub mod path_planning;
 pub mod territory;
 pub mod resource_spawning;
+pub mod nutrition;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -85,6 +86,10 @@ pub use climate::{ClimateManager, terrain_to_biome};
 pub use resource_spawning::{
     NaturalisticResourceConfig, NaturalisticSpawner, TerrainResourceMapper,
     AnimalResourceConfig, AnimalResourceMapper, TerrainGenerator,
+};
+pub use nutrition::{
+    NutrientType, NutritionalContent, PreparationState, FoodData,
+    FoodTemplate, FoodDatabase, NutritionalState, EatResult,
 };
 
 use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager, AnimalSpawnConfig};

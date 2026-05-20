@@ -15,6 +15,7 @@ use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
 use crate::environment::TechnologyKnowledge;
+use crate::world::nutrition::{FoodData, NutritionalState, NutritionalContent, PreparationState, EatResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -44,6 +45,8 @@ pub struct InventoryItem {
     pub max_durability: Option<f32>,
     /// Quality level of this item
     pub quality: Option<super::Quality>,
+    /// Food-specific data (nutrition, freshness, preparation state)
+    pub food_data: Option<FoodData>,
 }
 
 impl InventoryItem {
@@ -57,6 +60,7 @@ impl InventoryItem {
             current_durability: None,
             max_durability: None,
             quality: None,
+            food_data: None,
         }
     }
 
@@ -70,6 +74,7 @@ impl InventoryItem {
             current_durability: None,
             max_durability: None,
             quality: None,
+            food_data: None,
         }
     }
 
@@ -83,6 +88,7 @@ impl InventoryItem {
             current_durability: None,
             max_durability: None,
             quality: None,
+            food_data: None,
         }
     }
 
@@ -102,6 +108,44 @@ impl InventoryItem {
             current_durability: Some(durability),
             max_durability: Some(durability),
             quality: Some(quality),
+            food_data: None,
+        }
+    }
+
+    /// Create a food item with nutritional data
+    pub fn new_food(
+        item_id: String,
+        quantity: u32,
+        weight_per_unit: f32,
+        food_data: FoodData,
+    ) -> Self {
+        Self {
+            item_id,
+            quantity,
+            weight_per_unit,
+            fill_level: None,
+            max_capacity: None,
+            current_durability: None,
+            max_durability: None,
+            quality: None,
+            food_data: Some(food_data),
+        }
+    }
+
+    /// Check if this is a food item
+    pub fn is_food(&self) -> bool {
+        self.food_data.is_some()
+    }
+
+    /// Check if food is spoiled
+    pub fn is_spoiled(&self) -> bool {
+        self.food_data.as_ref().map(|f| f.is_spoiled()).unwrap_or(false)
+    }
+
+    /// Update food freshness based on current tick
+    pub fn update_food_freshness(&mut self, current_tick: u32) {
+        if let Some(ref mut food) = self.food_data {
+            food.update_freshness(current_tick);
         }
     }
 
@@ -258,6 +302,7 @@ impl Inventory {
                     current_durability: item.current_durability,
                     max_durability: item.max_durability,
                     quality: item.quality,
+                    food_data: item.food_data.clone(),
                 };
 
                 // Update weight
@@ -594,6 +639,8 @@ pub struct Agent {
     pub plan_step_ticks: u32,
     /// Accumulated learning exposure for various knowledge/skills
     pub learning_exposure: crate::core::learning::LearningExposure,
+    /// Nutritional state (energy, protein, micronutrients)
+    pub nutrition: NutritionalState,
 }
 
 impl Agent {
@@ -633,6 +680,7 @@ impl Agent {
             planner: Planner::new(),
             plan_step_ticks: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
+            nutrition: NutritionalState::new(),
         };
 
         // Initialize default behavior trees for each drive type
@@ -725,6 +773,60 @@ impl Agent {
 
         // Then handle aging and survival mechanics
         self.state.age_tick(current_tick);
+
+        // Process nutrition metabolism
+        self.tick_nutrition(current_tick);
+
+        // Process food spoilage in inventory
+        self.tick_food_spoilage(current_tick);
+    }
+
+    /// Tick nutrition metabolism and apply deficiency effects
+    pub fn tick_nutrition(&mut self, _current_tick: u32) {
+        // Calculate activity level from energy expenditure
+        let activity_level = if self.state.energy < 30.0 {
+            0.2 // Low energy = low activity
+        } else if self.state.energy > 70.0 {
+            0.8 // High energy = high activity
+        } else {
+            0.5 // Moderate
+        };
+
+        // Tick metabolism (depletes nutrients)
+        self.nutrition.tick_metabolism(activity_level);
+
+        // Apply deficiency health penalties
+        let penalty = self.nutrition.deficiency_health_penalty();
+        if penalty > 0.0 {
+            self.state.health = (self.state.health - penalty).max(0.0);
+        }
+
+        // Sync nutritional energy with agent state energy
+        // This connects the old energy system with the new nutrition system
+        let energy_sync = self.nutrition.energy_reserves * 0.5; // Scale 0-100 to 0-50 contribution
+        self.state.energy = ((self.state.energy * 0.5) + energy_sync).min(100.0);
+    }
+
+    /// Update food freshness in inventory and remove spoiled items
+    pub fn tick_food_spoilage(&mut self, current_tick: u32) {
+        // Update freshness for all food items
+        for item in self.inventory.items.values_mut() {
+            item.update_food_freshness(current_tick);
+        }
+
+        // Remove completely spoiled food (freshness <= 0)
+        let spoiled_items: Vec<String> = self.inventory.items.iter()
+            .filter(|(_, item)| {
+                item.food_data.as_ref()
+                    .map(|f| f.freshness <= 0.0)
+                    .unwrap_or(false)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for item_id in spoiled_items {
+            self.inventory.items.remove(&item_id);
+        }
     }
 
     /// Update body temperature based on environmental conditions
@@ -1945,17 +2047,31 @@ impl Agent {
 
     // ========== Survival API Methods (for TDD tests) ==========
 
-    /// Eat food from inventory and satisfy hunger drive
+    /// Eat food from inventory and satisfy hunger drive (legacy method)
     /// Returns true if food was consumed
+    /// Note: Use eat_food_item for nutrition-aware eating
     pub fn eat_food(&mut self, amount: u32) -> bool {
         // Try to get food from inventory
         if let Some(food_item) = self.inventory.get_item_mut("food") {
             if food_item.quantity >= amount {
                 food_item.quantity -= amount;
 
-                // Restore energy (each food unit restores 20 energy)
-                let energy_restored = (amount as f32) * 20.0;
-                self.state.energy = (self.state.energy + energy_restored).min(100.0);
+                // If food has nutrition data, use it
+                if let Some(ref food_data) = food_item.food_data {
+                    let nutrition = food_data.effective_nutrition();
+                    self.nutrition.consume(&nutrition.scale(amount as f32));
+
+                    // Also satisfy thirst from water content
+                    if nutrition.water_content > 0.3 {
+                        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                            thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
+                        }
+                    }
+                } else {
+                    // Legacy: no food data, use old flat rate
+                    let energy_restored = (amount as f32) * 20.0;
+                    self.state.energy = (self.state.energy + energy_restored).min(100.0);
+                }
 
                 // Reset starvation (use current age as approximation of tick)
                 self.state.last_ate_tick = self.state.age;
@@ -1971,6 +2087,113 @@ impl Agent {
             }
         }
         false
+    }
+
+    /// Eat a specific food item from inventory with full nutrition tracking
+    /// Returns the result of eating including nutrition gained or problems
+    pub fn eat_food_item(&mut self, item_id: &str, current_tick: u32) -> EatResult {
+        // Get food item from inventory
+        let food_item = match self.inventory.get_item_mut(item_id) {
+            Some(item) if item.quantity > 0 => item,
+            _ => return EatResult::NoFood,
+        };
+
+        // Check if item has food data
+        let food_data = match &food_item.food_data {
+            Some(data) => data.clone(),
+            None => {
+                // Not a tracked food item - consume 1 with flat nutrition
+                food_item.quantity -= 1;
+                let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
+                self.nutrition.consume(&flat_nutrition);
+                self.state.last_ate_tick = current_tick;
+                self.state.ticks_without_food = 0;
+                if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+                    hunger.decrease(0.2);
+                }
+                return EatResult::Success(flat_nutrition);
+            }
+        };
+
+        // Check if food is harmful (severely spoiled)
+        if food_data.is_harmful() {
+            food_item.quantity -= 1;
+            let damage = 10.0;
+            self.state.health = (self.state.health - damage).max(0.0);
+            return EatResult::MadeSick(damage);
+        }
+
+        // Check if food is spoiled (inedible)
+        if food_data.is_spoiled() {
+            return EatResult::Spoiled;
+        }
+
+        // Consume the food
+        food_item.quantity -= 1;
+
+        // Get effective nutrition (preparation + freshness factors applied)
+        let nutrition = food_data.effective_nutrition();
+
+        // Apply nutrition to agent
+        self.nutrition.consume(&nutrition);
+
+        // Satisfy thirst from water content
+        if nutrition.water_content > 0.3 {
+            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                thirst.decrease(nutrition.water_content * 0.1);
+            }
+        }
+
+        // Reset starvation timer
+        self.state.last_ate_tick = current_tick;
+        self.state.ticks_without_food = 0;
+
+        // Satisfy hunger based on total nutrition
+        let hunger_reduction = nutrition.total() / 100.0 * 0.3;
+        if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+            hunger.decrease(hunger_reduction);
+        }
+
+        EatResult::Success(nutrition)
+    }
+
+    /// Find the best food item to eat based on nutritional needs and freshness
+    pub fn find_best_food_to_eat(&self) -> Option<String> {
+        let needed = self.nutrition.most_needed_nutrient();
+
+        let mut best_item: Option<(String, f32)> = None;
+
+        for (item_id, item) in &self.inventory.items {
+            if let Some(ref food_data) = item.food_data {
+                // Skip spoiled food
+                if food_data.is_spoiled() {
+                    continue;
+                }
+
+                let nutrition = food_data.effective_nutrition();
+
+                // Score based on what we need most
+                let score = match needed {
+                    crate::world::NutrientType::Energy => nutrition.energy,
+                    crate::world::NutrientType::Protein => nutrition.protein,
+                    crate::world::NutrientType::Micronutrients => nutrition.micronutrients,
+                };
+
+                // Prefer fresher food (multiply by freshness)
+                let adjusted_score = score * food_data.freshness;
+
+                if best_item.is_none() || adjusted_score > best_item.as_ref().unwrap().1 {
+                    best_item = Some((item_id.clone(), adjusted_score));
+                }
+            }
+        }
+
+        best_item.map(|(id, _)| id)
+    }
+
+    /// Get summary of nutritional status
+    pub fn nutrition_status(&self) -> String {
+        self.nutrition.status_string()
     }
 
     /// Drink water from inventory and satisfy thirst drive
