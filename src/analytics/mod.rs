@@ -1109,6 +1109,15 @@ impl Simulation {
 
                         let agent = &mut self.population.agents[agent_index];
                         if agent.inventory.add_item(item) {
+                            // Grant skill XP based on resource type
+                            let skill_type = match resource_type_enum {
+                                ResourceType::Wood => crate::agents::skills::SkillType::Woodcutting,
+                                ResourceType::Stone | ResourceType::Iron => crate::agents::skills::SkillType::Mining,
+                                ResourceType::Food => crate::agents::skills::SkillType::Herbalism,
+                                _ => crate::agents::skills::SkillType::Mining,
+                            };
+                            agent.skills.gain_experience(skill_type, 2);
+
                             debug!(
                                 "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
                                 agent.id, harvested, item_id,
@@ -1220,6 +1229,19 @@ impl Simulation {
 
                 // Add building to world
                 self.world.add_building(building);
+
+                // Grant Construction XP (more XP for larger buildings)
+                let construction_xp = match building_type {
+                    BuildingType::SmallHouse => 5,
+                    BuildingType::MediumHouse => 10,
+                    BuildingType::LargeHouse => 15,
+                    BuildingType::Workshop => 12,
+                    BuildingType::Storehouse => 8,
+                    BuildingType::Farm => 10,
+                    _ => 5,
+                };
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.gain_experience(crate::agents::skills::SkillType::Construction, construction_xp);
 
                 debug!(
                     "Agent {} started construction of {:?} at ({}, {})",
@@ -1358,6 +1380,12 @@ impl Simulation {
                     if attacker_mounted { "yes" } else { "no" },
                     mount_bonus * 100.0
                 );
+
+                // Grant combat XP (more for kills, check weapon type for skill)
+                let attacker = &mut self.population.agents[agent_index];
+                let combat_xp = if !target_alive { 5 } else { 2 };
+                // TODO: Check weapon type for Archery vs MeleeCombat
+                attacker.skills.gain_experience(crate::agents::skills::SkillType::MeleeCombat, combat_xp);
 
                 if !target_alive {
                     ActionResult::success()
@@ -2166,9 +2194,9 @@ impl Simulation {
                             agent.inventory.add_item(item);
                         }
 
-                        // Practice industry skill
+                        // Practice animal husbandry (Farming skill)
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.gain_experience(crate::agents::skills::SkillType::Mining, 1);
+                        agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
 
                         let products_str = collected_products.iter()
                             .map(|p| format!("{} {}", p.quantity, p.material_id))
@@ -2602,6 +2630,10 @@ impl Simulation {
                 }
 
                 if success {
+                    // Grant Social skill XP
+                    let initiator = &mut self.population.agents[agent_index];
+                    initiator.skills.gain_experience(crate::agents::skills::SkillType::Social, 1);
+
                     // Record that this agent satisfied our social drive
                     let tick = self.current_tick;
                     let initiator = &mut self.population.agents[agent_index];
@@ -3015,6 +3047,11 @@ impl Simulation {
                     "Agent {} explored to ({}, {}, {}), discovered {} new tiles",
                     agent_id, target_x, target_y, target_z, newly_explored_count
                 );
+
+                // Grant Navigation XP for exploration (more for new discoveries)
+                let agent = &mut self.population.agents[agent_index];
+                let nav_xp = if newly_explored_count > 0 { 2 } else { 1 };
+                agent.skills.gain_experience(crate::agents::skills::SkillType::Navigation, nav_xp);
 
                 // Exploration is rewarding
                 let curiosity_satisfaction = if newly_explored_count > 0 { 0.3 } else { 0.1 };
