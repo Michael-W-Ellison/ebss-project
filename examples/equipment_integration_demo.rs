@@ -299,7 +299,6 @@ fn main() {
         } else {
             println!("  {:?}: (empty)", slot);
         }
-        Err(e) => println!("  ✗ Failed: {}", e),
     }
     println!();
 

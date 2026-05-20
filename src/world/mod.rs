@@ -1411,19 +1411,13 @@ pub struct WorldStats {
     pub stone_stored: u32,
     pub iron_stored: u32,
     pub food_stored: u32,
-    // Agricultural resources
-    pub grain_available: u32,
     pub grain_stored: u32,
+    // Agricultural resources
     pub flax_available: u32,
-    pub herbs_available: u32,
     // Animal resources
-    pub hides_available: u32,
     pub wool_available: u32,
     pub meat_available: u32,
     pub fish_available: u32,
-    // Mineral resources
-    pub clay_available: u32,
-    pub coal_available: u32,
     // Processed materials
     pub flour_stored: u32,
     pub leather_stored: u32,
@@ -1598,6 +1592,7 @@ mod tests {
                 stone_nodes: 20,
                 iron_nodes: 10,
                 food_nodes: 40,
+                ..Default::default()
             },
         };
         assert_eq!(config.size, (100, 80));

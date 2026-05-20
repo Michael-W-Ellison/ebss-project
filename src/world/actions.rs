@@ -152,7 +152,7 @@ impl World {
             }
 
             Action::ConstructBuilding { building_type, position } => {
-                self.execute_construct_building(agent_id, *building_type, position)
+                self.execute_construct_building(*building_type, position)
             }
 
             Action::SocialInteraction { target_agent_id, interaction_type } => {
@@ -413,6 +413,21 @@ impl World {
             relationship_change,
             trust_change,
             social_satisfaction,
+        }
+    }
+
+    fn execute_seek_social(
+        &self,
+        target_agent_id: Uuid,
+        _agent_position: &Position,
+        _occupied_positions: &[Position],
+    ) -> ActionResult {
+        // SeekSocialInteraction is a planning action - actual movement should use MoveTo
+        ActionResult::Failure {
+            reason: format!(
+                "SeekSocialInteraction with {} requires using MoveTo to approach target",
+                target_agent_id
+            ),
         }
     }
 
@@ -790,6 +805,10 @@ mod tests {
         let mut world = World::new(WorldConfig::default());
         let agent_id = Uuid::new_v4();
         let mut agent_pos = Position::new(10, 10);
+
+        // Add materials needed for stone axe (2 wood, 3 stone)
+        world.storehouse_inventory.add_item(ItemType::Wood, 10);
+        world.storehouse_inventory.add_item(ItemType::Stone, 10);
 
         let occupied = vec![];
 

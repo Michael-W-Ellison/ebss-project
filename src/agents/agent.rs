@@ -955,6 +955,32 @@ impl Agent {
         self.knowledge.get_trust(other_agent)
     }
 
+    /// Observe a resource at a position
+    /// Note: Resource knowledge is tracked separately from gossip knowledge
+    pub fn observe_resource(
+        &mut self,
+        _position: crate::world::Position,
+        _resource_type: crate::world::ResourceType,
+        _amount: u32,
+    ) {
+        // Resource observation is handled by the simulation tick loop
+        // This method exists for API compatibility
+    }
+
+    /// Record that information from another agent was verified as correct
+    pub fn verify_information_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
+        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
+            rel.positive_interaction(2, current_tick);
+        }
+    }
+
+    /// Record that information from another agent was incorrect
+    pub fn information_was_wrong_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
+        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
+            rel.negative_interaction(3, current_tick);
+        }
+    }
+
     /// React to learning about another agent's trait
     ///
     /// # Arguments
