@@ -192,6 +192,82 @@ impl Preferences {
 
         prefs
     }
+
+    /// Generate preferences based on agent traits
+    ///
+    /// This derives the favorite job from the agent's personality traits,
+    /// ensuring agents naturally gravitate toward work that makes them happy.
+    pub fn from_traits(traits: &crate::core::traits::TraitSet) -> Self {
+        use crate::agents::job_happiness::{find_preferred_job, JobCategory};
+        use rand::Rng;
+        use rand::seq::SliceRandom;
+
+        let mut rng = rand::thread_rng();
+        let mut prefs = Preferences::new();
+
+        // Derive favorite job from traits
+        let (preferred_job, happiness) = find_preferred_job(traits);
+
+        // Only set favorite job if there's positive happiness from it
+        if happiness > 0.0 {
+            prefs.favorite_job = Some(preferred_job.name().to_string());
+        } else {
+            // Fall back to random if no trait provides happiness
+            let jobs = ["mining", "farming", "fishing", "building", "crafting", "hunting", "cooking"];
+            if rng.gen_bool(0.4) {
+                prefs.favorite_job = jobs.choose(&mut rng).map(|s| s.to_string());
+            }
+        }
+
+        // Foods - random for now, could be trait-influenced later
+        let foods = ["bread", "meat", "fish", "vegetables", "fruit", "cheese", "soup"];
+        if rng.gen_bool(0.7) {
+            prefs.favorite_food = foods.choose(&mut rng).map(|s| s.to_string());
+        }
+
+        // Animals - influenced by AnimalLover trait
+        let animals = ["cow", "sheep", "chicken", "pig", "horse", "dog", "cat"];
+        if traits.has(crate::core::traits::Trait::AnimalLover) {
+            prefs.favorite_animal = animals.choose(&mut rng).map(|s| s.to_string());
+        } else if rng.gen_bool(0.3) {
+            prefs.favorite_animal = animals.choose(&mut rng).map(|s| s.to_string());
+        }
+
+        // Tools - Handy trait more likely to have favorite tool
+        let tools = ["pickaxe", "axe", "hoe", "sword", "hammer", "shovel"];
+        let tool_chance = if traits.has(crate::core::traits::Trait::Handy) { 0.8 } else { 0.4 };
+        if rng.gen_bool(tool_chance) {
+            prefs.favorite_tool = tools.choose(&mut rng).map(|s| s.to_string());
+        }
+
+        prefs
+    }
+
+    /// Calculate happiness modifier for doing a specific job
+    ///
+    /// Returns a value from -1.0 to 1.0:
+    /// - Positive if this is the favorite job
+    /// - Zero for neutral jobs
+    /// - Negative for disliked jobs (based on traits)
+    pub fn job_happiness_modifier(&self, job: &str, traits: &crate::core::traits::TraitSet) -> f32 {
+        use crate::agents::job_happiness::{calculate_job_happiness, JobCategory};
+
+        let mut modifier = 0.0;
+
+        // Bonus for favorite job
+        if self.is_favorite_job(job) {
+            modifier += 0.3;
+        }
+
+        // Add trait-based happiness
+        if let Some(job_category) = JobCategory::from_name(job) {
+            let trait_happiness = calculate_job_happiness(traits, job_category);
+            // Normalize to -0.5 to 0.5 range
+            modifier += (trait_happiness / 20.0).clamp(-0.5, 0.5);
+        }
+
+        modifier.clamp(-1.0, 1.0)
+    }
 }
 
 impl Default for Preferences {

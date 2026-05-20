@@ -296,9 +296,18 @@ impl Simulation {
             let agent_index = agent_index.unwrap();
 
             // Get agent data we need
+            // Use happiness-aware drive selection so agents prefer enjoyable work
+            // when survival needs are met
             let (drive_type, drive_value, agent_position) = {
                 let agent = &self.population.agents[agent_index];
-                if let Some(urgent_drive) = agent.drives.most_urgent() {
+                // Use happiness-aware selection for non-survival situations
+                if let Some(selected_drive) = agent.select_drive_with_happiness() {
+                    let value = agent.drives.get(selected_drive)
+                        .map(|d| d.value)
+                        .unwrap_or(0.0);
+                    (Some(selected_drive), value, agent.state.position)
+                } else if let Some(urgent_drive) = agent.drives.most_urgent() {
+                    // Fallback to most urgent if no drive selected
                     (Some(urgent_drive.drive_type), urgent_drive.value, agent.state.position)
                 } else {
                     (None, 0.0, agent.state.position)

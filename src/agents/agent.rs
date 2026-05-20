@@ -1012,6 +1012,122 @@ impl Agent {
         }
     }
 
+    /// Regenerate preferences based on current traits
+    ///
+    /// Call this after modifying agent traits to update their job preferences
+    pub fn update_preferences_from_traits(&mut self) {
+        self.preferences = Preferences::from_traits(&self.traits);
+        // Also update storage preferences
+        let trait_vec: Vec<_> = self.traits.get_traits().iter().copied().collect();
+        self.storage_preferences = super::storage_management::StoragePreferences::from_traits(&trait_vec);
+    }
+
+    /// Calculate happiness for doing a specific job category
+    pub fn get_job_happiness(&self, job: super::job_happiness::JobCategory) -> f32 {
+        super::job_happiness::calculate_job_happiness(&self.traits, job)
+    }
+
+    /// Get the job that would make this agent happiest
+    pub fn get_preferred_job(&self) -> (super::job_happiness::JobCategory, f32) {
+        super::job_happiness::find_preferred_job(&self.traits)
+    }
+
+    /// Get all jobs ranked by happiness preference
+    pub fn get_job_rankings(&self) -> Vec<(super::job_happiness::JobCategory, f32)> {
+        super::job_happiness::rank_jobs_by_happiness(&self.traits)
+    }
+
+    /// Check if survival needs should override happiness-based job selection
+    pub fn should_prioritize_survival(&self) -> bool {
+        let hunger = self.drives.get(crate::core::DriveType::Hunger)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+        let thirst = self.drives.get(crate::core::DriveType::Thirst)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+        let health_percent = self.state.health / 100.0;
+
+        super::job_happiness::should_override_happiness(hunger, thirst, health_percent)
+    }
+
+    /// Calculate effective priority for an action considering both drive urgency and happiness
+    ///
+    /// This is used when selecting between multiple possible work actions.
+    /// Higher values = more preferred action.
+    pub fn calculate_action_priority(
+        &self,
+        drive_urgency: f32,
+        job: super::job_happiness::JobCategory,
+    ) -> f32 {
+        // If survival is threatened, ignore happiness
+        if self.should_prioritize_survival() {
+            return drive_urgency;
+        }
+
+        let job_happiness = self.get_job_happiness(job);
+        // Use 0.3 weight - happiness is noticeable but doesn't dominate
+        super::job_happiness::calculate_effective_priority(drive_urgency, job_happiness, 0.3)
+    }
+
+    /// Map a drive type to a job category for happiness calculation
+    fn drive_to_job_category(drive_type: crate::core::DriveType) -> Option<super::job_happiness::JobCategory> {
+        use crate::core::DriveType;
+        use super::job_happiness::JobCategory;
+
+        match drive_type {
+            DriveType::Industry => Some(JobCategory::Mining),
+            DriveType::Construction => Some(JobCategory::Building),
+            DriveType::Utility => Some(JobCategory::Crafting),
+            DriveType::Sustenance => Some(JobCategory::Gathering),
+            DriveType::Social => Some(JobCategory::Social),
+            DriveType::Curiosity => Some(JobCategory::Exploring),
+            DriveType::Preparedness => Some(JobCategory::Labor),
+            // Survival drives don't map to happiness-influenced jobs
+            DriveType::Hunger | DriveType::Thirst | DriveType::Rest |
+            DriveType::Safety | DriveType::Shelter | DriveType::Reproduction |
+            DriveType::Luxury => None,
+        }
+    }
+
+    /// Select the best drive considering both urgency and happiness
+    ///
+    /// For survival-critical drives (hunger, thirst, rest, safety), returns the most urgent.
+    /// For work-related drives, considers happiness when drives are similarly urgent.
+    pub fn select_drive_with_happiness(&self) -> Option<crate::core::DriveType> {
+        use crate::core::DriveType;
+
+        // First check if survival is threatened - if so, use pure urgency
+        if self.should_prioritize_survival() {
+            return self.drives.most_urgent().map(|d| d.drive_type);
+        }
+
+        // Get all active drives
+        let mut drive_scores: Vec<(DriveType, f32)> = Vec::new();
+
+        for drive_type in DriveType::all() {
+            if let Some(drive) = self.drives.get(drive_type) {
+                if drive.is_active() {
+                    let base_urgency = drive.value * drive.weight;
+
+                    // For work-related drives, factor in happiness
+                    let effective_priority = if let Some(job) = Self::drive_to_job_category(drive_type) {
+                        self.calculate_action_priority(base_urgency, job)
+                    } else {
+                        // Survival drives use pure urgency
+                        base_urgency
+                    };
+
+                    drive_scores.push((drive_type, effective_priority));
+                }
+            }
+        }
+
+        // Sort by effective priority (descending)
+        drive_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        drive_scores.first().map(|(drive_type, _)| *drive_type)
+    }
+
     /// Observe another agent performing an action
     ///
     /// # Arguments
