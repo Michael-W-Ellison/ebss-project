@@ -31,6 +31,9 @@ pub use performance::{PerformanceMonitor, PerformanceSnapshot};
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
+use crate::agents::religious_effects::{
+    calculate_religious_effects, total_happiness_modifier, RELIGIOUS_EFFECT_RADIUS,
+};
 use log::{info, debug, warn};
 use serde::{Serialize, Deserialize};
 use std::path::{Path, PathBuf};
@@ -682,6 +685,9 @@ impl Simulation {
 
         // Tick world (building construction progress, etc.)
         self.world.tick();
+
+        // Apply religious building effects to agent happiness
+        self.apply_religious_effects();
 
         // Log statistics every 10 ticks
         if self.current_tick % 10 == 0 {
@@ -3590,6 +3596,86 @@ impl Simulation {
         checkpoint_files.reverse();
 
         Ok(checkpoint_files[0].clone())
+    }
+
+    /// Apply religious building effects to agent happiness
+    /// Believers gain happiness near Shrines/Temples, Atheists feel uncomfortable
+    fn apply_religious_effects(&mut self) {
+        use crate::world::{BuildingType, Position};
+        use crate::agents::Trait;
+
+        // Collect religious buildings (position, type, is_completed)
+        let religious_buildings: Vec<(Position, BuildingType, bool)> = self.world.buildings
+            .iter()
+            .filter(|b| b.building_type.is_religious())
+            .map(|b| (b.position, b.building_type, b.is_completed()))
+            .collect();
+
+        // If no religious buildings, skip processing
+        if religious_buildings.is_empty() {
+            return;
+        }
+
+        // First, count believers near each agent for zealot community bonuses
+        // Pre-calculate positions and traits
+        let agent_data: Vec<_> = self.population.agents.iter()
+            .filter(|a| a.state.is_alive)
+            .map(|a| {
+                let pos = Position::new(a.state.position.0, a.state.position.1);
+                let is_believer = a.traits.has(Trait::Believer) || a.traits.has(Trait::Zealot);
+                (a.id, pos, is_believer)
+            })
+            .collect();
+
+        // Calculate nearby believers for each agent
+        let nearby_believers: std::collections::HashMap<_, _> = agent_data.iter()
+            .map(|(id, pos, _)| {
+                let count = agent_data.iter()
+                    .filter(|(other_id, other_pos, is_believer)| {
+                        *is_believer
+                            && other_id != id
+                            && pos.distance_to(other_pos) <= RELIGIOUS_EFFECT_RADIUS
+                    })
+                    .count() as u32;
+                (*id, count)
+            })
+            .collect();
+
+        // Apply religious effects to each agent
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+            let believers_nearby = *nearby_believers.get(&agent.id).unwrap_or(&0);
+
+            // Calculate religious effects for this agent
+            let effects = calculate_religious_effects(
+                agent_pos,
+                &agent.traits,
+                &religious_buildings,
+                believers_nearby,
+            );
+
+            // Apply effects
+            let total_modifier = total_happiness_modifier(&effects);
+            if total_modifier.abs() > 0.001 {
+                // Generate a combined source description
+                let source = if total_modifier > 0.0 {
+                    format!("Religious fulfillment ({})", effects.len())
+                } else {
+                    format!("Religious discomfort ({})", effects.len())
+                };
+
+                agent.apply_religious_happiness(total_modifier, &source);
+
+                debug!(
+                    "Agent {} received religious effect: {:.3} happiness from {} sources",
+                    agent.id, total_modifier, effects.len()
+                );
+            }
+        }
     }
 }
 

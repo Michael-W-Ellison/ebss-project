@@ -2293,6 +2293,27 @@ impl Agent {
         self.emotions.add_happiness(EmotionSource::Agent(recipient_id), helper_happiness);
     }
 
+    /// Apply religious happiness effects from nearby religious buildings
+    /// Called by simulation tick with pre-calculated effects
+    pub fn apply_religious_happiness(&mut self, happiness_modifier: f32, source_description: &str) {
+        use super::EmotionSource;
+
+        if happiness_modifier.abs() < 0.001 {
+            return; // No effect to apply
+        }
+
+        if happiness_modifier > 0.0 {
+            self.emotions.add_happiness(
+                EmotionSource::Event(source_description.to_string()),
+                happiness_modifier,
+            );
+        } else {
+            // Negative effects reduce happiness (or could add sadness/discomfort)
+            // For religious discomfort, we reduce happiness rather than add sadness
+            self.emotions.happiness = (self.emotions.happiness + happiness_modifier).max(0.0);
+        }
+    }
+
     /// Get all sources that satisfy a specific drive
     pub fn get_drive_satisfaction_sources(&self, drive_type: DriveType) -> Vec<Uuid> {
         self.satisfaction_tracker.get_sources(drive_type)

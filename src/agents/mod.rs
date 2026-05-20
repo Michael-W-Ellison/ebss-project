@@ -67,6 +67,7 @@ pub mod storage_integration;
 pub mod sensory_processing;
 pub mod observation_processing;
 pub mod job_happiness;
+pub mod religious_effects;
 
 pub use population::{Population, PopulationConfig, PopulationLearningStats};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
@@ -111,4 +112,10 @@ pub use job_happiness::{
     JobCategory, calculate_job_happiness, find_preferred_job,
     rank_jobs_by_happiness, calculate_effective_priority,
     should_override_happiness, trait_job_happiness,
+};
+pub use religious_effects::{
+    ReligiousEffect, RELIGIOUS_EFFECT_RADIUS,
+    calculate_religious_effects, total_happiness_modifier,
+    should_seek_religious_building, should_avoid_religious_building,
+    secular_knowledge_bonus,
 };
