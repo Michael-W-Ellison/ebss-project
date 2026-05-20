@@ -185,6 +185,11 @@ impl Population {
             self.process_social_interactions();
         }
 
+        // Process gossip spreading (every 15 ticks)
+        if current_tick % 15 == 0 {
+            self.process_gossip();
+        }
+
         // Process observational learning (every 20 ticks to reduce overhead)
         if current_tick % 20 == 0 {
             self.process_observational_learning();
@@ -1008,6 +1013,222 @@ impl Population {
                 drive.partial_satisfy(satisfaction_2);
             }
         }
+    }
+
+    /// Process gossip spreading between nearby agents
+    ///
+    /// Agents share information from their knowledge base with nearby agents.
+    /// Information is distorted based on the sharer's personality traits.
+    /// Trust ratings affect how much weight the receiver gives to information.
+    pub fn process_gossip(&mut self) {
+        use crate::agents::gossip::{Information, InformationType};
+        use crate::core::DriveType;
+        use rand::seq::SliceRandom;
+        use rand::Rng;
+
+        const GOSSIP_RANGE_SQUARED: f32 = 36.0; // 6 tiles - slightly further than social range
+
+        let mut rng = rand::thread_rng();
+        let current_tick = self.current_tick;
+
+        // Collect gossip pairs and what info to share
+        let mut gossip_events: Vec<(usize, usize, Information)> = Vec::new();
+
+        // Find nearby agent pairs who might gossip
+        for i in 0..self.agents.len() {
+            if !self.agents[i].state.is_alive {
+                continue;
+            }
+
+            // Skip agents with active survival drives
+            let hunger_active = self.agents[i].drives.get(DriveType::Hunger)
+                .map(|d| d.value > 0.7)
+                .unwrap_or(false);
+            let thirst_active = self.agents[i].drives.get(DriveType::Thirst)
+                .map(|d| d.value > 0.7)
+                .unwrap_or(false);
+            if hunger_active || thirst_active {
+                continue;
+            }
+
+            // Calculate gossip probability based on traits
+            let gossip_probability = self.calculate_gossip_probability(&self.agents[i]);
+            if gossip_probability <= 0.0 {
+                continue;
+            }
+
+            // Check if agent has any information to share
+            if self.agents[i].knowledge.known_information.is_empty() {
+                continue;
+            }
+
+            let agent1_pos = self.agents[i].state.position;
+
+            for j in (i + 1)..self.agents.len() {
+                if !self.agents[j].state.is_alive {
+                    continue;
+                }
+
+                // Skip agents with active survival drives
+                let hunger_active_2 = self.agents[j].drives.get(DriveType::Hunger)
+                    .map(|d| d.value > 0.7)
+                    .unwrap_or(false);
+                let thirst_active_2 = self.agents[j].drives.get(DriveType::Thirst)
+                    .map(|d| d.value > 0.7)
+                    .unwrap_or(false);
+                if hunger_active_2 || thirst_active_2 {
+                    continue;
+                }
+
+                let agent2_pos = self.agents[j].state.position;
+
+                // Calculate squared distance
+                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
+                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
+                let distance_squared = dx * dx + dy * dy;
+
+                if distance_squared > GOSSIP_RANGE_SQUARED {
+                    continue;
+                }
+
+                // Roll for gossip attempt
+                if rng.gen::<f32>() > gossip_probability {
+                    continue;
+                }
+
+                // Select random information to share from agent i
+                let info_ids: Vec<_> = self.agents[i].knowledge.known_information.keys().cloned().collect();
+                if let Some(info_id) = info_ids.choose(&mut rng) {
+                    if let Some(info) = self.agents[i].knowledge.known_information.get(info_id) {
+                        // Don't share very old information (older than 10000 ticks)
+                        if current_tick as u64 - info.timestamp < 10000 {
+                            // Filter: don't share information about the recipient
+                            let is_about_recipient = match &info.info_type {
+                                InformationType::Death { agent, .. } => *agent == self.agents[j].id,
+                                InformationType::Conflict { agent1, agent2 } => {
+                                    *agent1 == self.agents[j].id || *agent2 == self.agents[j].id
+                                }
+                                InformationType::EmotionalOutburst { agent, .. } => *agent == self.agents[j].id,
+                                InformationType::Accusation { accused, .. } => *accused == self.agents[j].id,
+                                InformationType::AgentTrait { agent, .. } => *agent == self.agents[j].id,
+                                _ => false,
+                            };
+
+                            if !is_about_recipient {
+                                gossip_events.push((i, j, info.clone()));
+                            }
+                        }
+                    }
+                }
+
+                // Agent j might also share with agent i (bidirectional gossip)
+                let gossip_probability_j = self.calculate_gossip_probability(&self.agents[j]);
+                if gossip_probability_j > 0.0 && rng.gen::<f32>() < gossip_probability_j {
+                    if !self.agents[j].knowledge.known_information.is_empty() {
+                        let info_ids_j: Vec<_> = self.agents[j].knowledge.known_information.keys().cloned().collect();
+                        if let Some(info_id) = info_ids_j.choose(&mut rng) {
+                            if let Some(info) = self.agents[j].knowledge.known_information.get(info_id) {
+                                if current_tick as u64 - info.timestamp < 10000 {
+                                    let is_about_recipient = match &info.info_type {
+                                        InformationType::Death { agent, .. } => *agent == self.agents[i].id,
+                                        InformationType::Conflict { agent1, agent2 } => {
+                                            *agent1 == self.agents[i].id || *agent2 == self.agents[i].id
+                                        }
+                                        InformationType::EmotionalOutburst { agent, .. } => *agent == self.agents[i].id,
+                                        InformationType::Accusation { accused, .. } => *accused == self.agents[i].id,
+                                        InformationType::AgentTrait { agent, .. } => *agent == self.agents[i].id,
+                                        _ => false,
+                                    };
+
+                                    if !is_about_recipient {
+                                        gossip_events.push((j, i, info.clone()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process all gossip events (share information with distortion)
+        for (sharer_idx, receiver_idx, info) in gossip_events {
+            let sharer_id = self.agents[sharer_idx].id;
+            let sharer_traits = self.agents[sharer_idx].traits.clone();
+
+            // Apply distortion based on sharer's traits
+            let distorted_info = if let Some(distortion_trait) = sharer_traits.would_distort_info() {
+                info.distort(distortion_trait, sharer_id)
+            } else if self.agents[sharer_idx].traits.has(Trait::Gossip) {
+                // Gossip trait also causes exaggeration
+                info.distort(Trait::Gossip, sharer_id)
+            } else {
+                info.clone()
+            };
+
+            // Check if receiver already knows this exact information
+            let already_knows = self.agents[receiver_idx].knowledge
+                .known_information
+                .values()
+                .any(|existing| existing.info_type == distorted_info.info_type);
+
+            if !already_knows {
+                // Receiver processes the information
+                let receiver_id = self.agents[receiver_idx].id;
+                let receiver_traits = self.agents[receiver_idx].traits.clone();
+
+                self.agents[receiver_idx].knowledge.receive_information(
+                    distorted_info,
+                    sharer_id,
+                    receiver_id,
+                    &receiver_traits,
+                    current_tick as u64,
+                );
+
+                // Gossip trait agents get happiness from sharing
+                if self.agents[sharer_idx].traits.has(Trait::Gossip) {
+                    self.agents[sharer_idx].emotions.happiness =
+                        (self.agents[sharer_idx].emotions.happiness + 0.02).min(1.0);
+                }
+            }
+        }
+    }
+
+    /// Calculate gossip probability for an agent based on traits
+    pub fn calculate_gossip_probability(&self, agent: &Agent) -> f32 {
+        let mut probability: f32 = 0.15; // Base 15% chance to gossip when nearby
+
+        // Gossip trait: much more likely to share
+        if agent.traits.has(Trait::Gossip) {
+            probability += 0.35;
+        }
+
+        // Extrovert: more likely to share
+        if agent.traits.has(Trait::Extrovert) {
+            probability += 0.15;
+        }
+
+        // Charismatic: more likely to engage
+        if agent.traits.has(Trait::Charismatic) {
+            probability += 0.10;
+        }
+
+        // Introvert: less likely to share
+        if agent.traits.has(Trait::Introvert) || agent.traits.has(Trait::Introverted) {
+            probability -= 0.20;
+        }
+
+        // Stoic: less chatty
+        if agent.traits.has(Trait::Stoic) {
+            probability -= 0.10;
+        }
+
+        // Honest: won't spread unverified info as freely
+        if agent.traits.has(Trait::Honest) {
+            probability -= 0.05;
+        }
+
+        probability.max(0.0).min(0.8) // Clamp between 0% and 80%
     }
 
     /// Process exploration for all living agents
