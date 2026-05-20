@@ -151,12 +151,37 @@ fn inherit_behavior_trees(trees1: &[BehaviorTree], trees2: &[BehaviorTree]) -> V
     offspring_trees
 }
 
-/// Inherit traits from two parents
+/// Inherit traits from two parents with 10% mutation chance
+/// Each inherited trait has a 10% chance of being replaced by a completely new trait
 fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::TraitSet) -> crate::agents::TraitSet {
+    use crate::agents::Trait;
+    use rand::seq::SliceRandom;
     use rand::Rng;
     let mut rng = rand::thread_rng();
 
     let mut offspring_traits = crate::agents::TraitSet::new();
+
+    // All available traits for mutation
+    let all_traits = [
+        Trait::Anxious, Trait::Brave, Trait::HotHeaded, Trait::Calm,
+        Trait::Pacifist, Trait::Empathic, Trait::ColdHearted, Trait::Resilient,
+        Trait::Clown, Trait::Goth, Trait::Melancholic, Trait::Stoic,
+        Trait::Extrovert, Trait::Introvert, Trait::KindHearted, Trait::Cruel,
+        Trait::Charismatic, Trait::Gossip, Trait::Intolerant, Trait::Mediator,
+        Trait::Romantic, Trait::Insecure, Trait::Handy, Trait::Lazy,
+        Trait::Proud, Trait::Ambitious, Trait::Pragmatist, Trait::Stubborn,
+        Trait::Traditionalist, Trait::Rebel, Trait::Builder, Trait::CraftObsessed,
+        Trait::Greedy, Trait::Ascetic, Trait::Envious, Trait::Frugal,
+        Trait::Survivalist, Trait::Altruist, Trait::Glutton, Trait::Believer,
+        Trait::Atheist, Trait::Zealot, Trait::Skeptic, Trait::Bookworm,
+        Trait::Curious, Trait::Suspicious, Trait::Uncaring, Trait::Vengeful,
+        Trait::Forgiving, Trait::Coward, Trait::Protector, Trait::AnimalLover,
+        Trait::Allergic, Trait::Explorer, Trait::Caretaker, Trait::Aggressive,
+        Trait::Peaceful, Trait::Trusting, Trait::Honest, Trait::Dishonest,
+        Trait::Callous, Trait::Diligent, Trait::Manipulator, Trait::Imaginative,
+        Trait::Paranoid, Trait::Archivist, Trait::Masochist, Trait::Copycat,
+        Trait::Repressed, Trait::Mute, Trait::Deaf, Trait::Ignorant,
+    ];
 
     // Collect all parent traits
     let parent1_traits: Vec<_> = traits1.get_traits().iter().copied().collect();
@@ -165,34 +190,35 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
     // Inherit traits from parent 1 (50% chance for each trait)
     for &trait_item in &parent1_traits {
         if rng.gen_bool(0.5) {
-            // Try to add trait (will fail if incompatible with already inherited traits)
-            offspring_traits.add_trait(trait_item);
+            // 10% chance: mutate to a completely new trait instead
+            if rng.gen_bool(0.10) {
+                // Pick a random trait that isn't from either parent
+                let new_trait = all_traits.choose(&mut rng).copied();
+                if let Some(t) = new_trait {
+                    offspring_traits.add_trait(t);
+                }
+            } else {
+                // Normal inheritance
+                offspring_traits.add_trait(trait_item);
+            }
         }
     }
 
     // Inherit traits from parent 2 (50% chance for each trait)
     for &trait_item in &parent2_traits {
         if rng.gen_bool(0.5) {
-            // Try to add trait (will fail if incompatible with already inherited traits)
-            offspring_traits.add_trait(trait_item);
+            // 10% chance: mutate to a completely new trait instead
+            if rng.gen_bool(0.10) {
+                // Pick a random trait that isn't from either parent
+                let new_trait = all_traits.choose(&mut rng).copied();
+                if let Some(t) = new_trait {
+                    offspring_traits.add_trait(t);
+                }
+            } else {
+                // Normal inheritance
+                offspring_traits.add_trait(trait_item);
+            }
         }
-    }
-
-    // Small chance of mutation: randomly gain a new trait (5% chance)
-    if rng.gen_bool(0.05) {
-        use crate::agents::Trait;
-
-        let all_traits = vec![
-            Trait::Imaginative, Trait::Manipulative, Trait::Forgiving,
-            Trait::Trusting, Trait::Suspicious, Trait::Believer, Trait::Atheist,
-            Trait::Diligent, Trait::Lazy, Trait::Sociable, Trait::Introverted,
-            Trait::Aggressive, Trait::Peaceful, Trait::Honest, Trait::Dishonest,
-            Trait::Hottempered, Trait::Calm, Trait::Empathetic, Trait::Callous,
-        ];
-
-        // Try to add a random trait (may fail if incompatible)
-        let random_trait = all_traits[rng.gen_range(0..all_traits.len())];
-        offspring_traits.add_trait(random_trait);
     }
 
     offspring_traits
@@ -401,5 +427,94 @@ mod tests {
             thirst.value = 0.9; // Above threshold
         }
         assert!(!agent.should_attempt_reproduction());
+    }
+
+    #[test]
+    fn test_trait_inheritance_from_parents() {
+        use crate::agents::Trait;
+
+        // Create parents with specific traits
+        let mut parent1 = Agent::new(AgentConfig::default());
+        let mut parent2 = Agent::new(AgentConfig::default());
+
+        parent1.state.age = 3000;
+        parent1.state.life_stage = crate::agents::LifeStage::Adult;
+        parent2.state.age = 3000;
+        parent2.state.life_stage = crate::agents::LifeStage::Adult;
+
+        // Give parent1 specific traits
+        parent1.traits = crate::agents::TraitSet::new();
+        parent1.traits.add_trait(Trait::Brave);
+        parent1.traits.add_trait(Trait::Diligent);
+
+        // Give parent2 different traits
+        parent2.traits = crate::agents::TraitSet::new();
+        parent2.traits.add_trait(Trait::Curious);
+        parent2.traits.add_trait(Trait::Builder);
+
+        // Reproduce multiple times to test inheritance patterns
+        let mut inherited_parental_traits = 0;
+        let mut total_traits = 0;
+
+        for _ in 0..100 {
+            let offspring = reproduce(&parent1, &parent2, 100);
+            for trait_item in offspring.traits.get_traits() {
+                total_traits += 1;
+                // Check if trait came from either parent
+                if parent1.traits.has(*trait_item) || parent2.traits.has(*trait_item) {
+                    inherited_parental_traits += 1;
+                }
+            }
+        }
+
+        // Most traits should come from parents (accounting for 10% mutation rate)
+        // With 10% mutation, ~90% should be parental traits
+        let parental_ratio = inherited_parental_traits as f32 / total_traits as f32;
+        assert!(
+            parental_ratio > 0.7,
+            "Expected most traits to be inherited from parents, got {}%",
+            parental_ratio * 100.0
+        );
+    }
+
+    #[test]
+    fn test_trait_mutation_occurs() {
+        use crate::agents::Trait;
+
+        // Create parents with limited traits
+        let mut parent1 = Agent::new(AgentConfig::default());
+        let mut parent2 = Agent::new(AgentConfig::default());
+
+        parent1.state.age = 3000;
+        parent1.state.life_stage = crate::agents::LifeStage::Adult;
+        parent2.state.age = 3000;
+        parent2.state.life_stage = crate::agents::LifeStage::Adult;
+
+        // Give parents just one trait each (non-overlapping)
+        parent1.traits = crate::agents::TraitSet::new();
+        parent1.traits.add_trait(Trait::Brave);
+
+        parent2.traits = crate::agents::TraitSet::new();
+        parent2.traits.add_trait(Trait::Curious);
+
+        // Reproduce many times and check for mutations (new traits)
+        let mut mutation_occurred = false;
+
+        for _ in 0..200 {
+            let offspring = reproduce(&parent1, &parent2, 100);
+            for trait_item in offspring.traits.get_traits() {
+                // A mutation is a trait not from either parent
+                if !parent1.traits.has(*trait_item) && !parent2.traits.has(*trait_item) {
+                    mutation_occurred = true;
+                    break;
+                }
+            }
+            if mutation_occurred {
+                break;
+            }
+        }
+
+        // With 10% mutation rate over 200 reproductions, we should see at least one mutation
+        assert!(mutation_occurred, "Expected at least one trait mutation to occur over 200 reproductions");
     }
 }
