@@ -249,6 +249,137 @@ pub struct SelectedResourceData {
     pub uses: Vec<String>,
 }
 
+/// History data point for graphs
+#[derive(Debug, Clone, Default)]
+pub struct HistoryPoint {
+    pub tick: u32,
+    pub population: usize,
+    pub infants: usize,
+    pub children: usize,
+    pub adolescents: usize,
+    pub adults: usize,
+    pub elderly: usize,
+    pub births: u64,
+    pub deaths: u64,
+    pub avg_health: f32,
+    pub avg_energy: f32,
+    pub avg_happiness: f32,
+    pub total_resources: u32,
+    pub buildings_completed: usize,
+    pub buildings_construction: usize,
+}
+
+/// Statistics history for graphs
+#[derive(Debug, Clone)]
+pub struct StatisticsHistory {
+    pub points: Vec<HistoryPoint>,
+    pub max_points: usize,
+    pub sample_interval: u32,
+    pub last_sample_tick: u32,
+}
+
+impl Default for StatisticsHistory {
+    fn default() -> Self {
+        Self {
+            points: Vec::with_capacity(500),
+            max_points: 500,
+            sample_interval: 10, // Sample every 10 ticks
+            last_sample_tick: 0,
+        }
+    }
+}
+
+impl StatisticsHistory {
+    pub fn should_sample(&self, current_tick: u32) -> bool {
+        current_tick >= self.last_sample_tick + self.sample_interval
+    }
+
+    pub fn add_point(&mut self, point: HistoryPoint) {
+        if self.points.len() >= self.max_points {
+            self.points.remove(0);
+        }
+        self.last_sample_tick = point.tick;
+        self.points.push(point);
+    }
+
+    pub fn population_data(&self) -> Vec<[f64; 2]> {
+        self.points.iter()
+            .map(|p| [p.tick as f64, p.population as f64])
+            .collect()
+    }
+
+    pub fn life_stage_data(&self, stage: &str) -> Vec<[f64; 2]> {
+        self.points.iter()
+            .map(|p| {
+                let value = match stage {
+                    "infants" => p.infants,
+                    "children" => p.children,
+                    "adolescents" => p.adolescents,
+                    "adults" => p.adults,
+                    "elderly" => p.elderly,
+                    _ => 0,
+                };
+                [p.tick as f64, value as f64]
+            })
+            .collect()
+    }
+
+    pub fn health_data(&self) -> Vec<[f64; 2]> {
+        self.points.iter()
+            .map(|p| [p.tick as f64, p.avg_health as f64])
+            .collect()
+    }
+
+    pub fn energy_data(&self) -> Vec<[f64; 2]> {
+        self.points.iter()
+            .map(|p| [p.tick as f64, p.avg_energy as f64])
+            .collect()
+    }
+
+    pub fn happiness_data(&self) -> Vec<[f64; 2]> {
+        self.points.iter()
+            .map(|p| [p.tick as f64, p.avg_happiness as f64 * 100.0])
+            .collect()
+    }
+
+    pub fn births_deaths_data(&self) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
+        let births: Vec<[f64; 2]> = self.points.iter()
+            .map(|p| [p.tick as f64, p.births as f64])
+            .collect();
+        let deaths: Vec<[f64; 2]> = self.points.iter()
+            .map(|p| [p.tick as f64, p.deaths as f64])
+            .collect();
+        (births, deaths)
+    }
+
+    pub fn resources_data(&self) -> Vec<[f64; 2]> {
+        self.points.iter()
+            .map(|p| [p.tick as f64, p.total_resources as f64])
+            .collect()
+    }
+
+    pub fn buildings_data(&self) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
+        let completed: Vec<[f64; 2]> = self.points.iter()
+            .map(|p| [p.tick as f64, p.buildings_completed as f64])
+            .collect();
+        let construction: Vec<[f64; 2]> = self.points.iter()
+            .map(|p| [p.tick as f64, p.buildings_construction as f64])
+            .collect();
+        (completed, construction)
+    }
+}
+
+/// Statistics tab selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StatisticsTab {
+    #[default]
+    Overview,
+    Population,
+    Vitals,
+    Resources,
+    Buildings,
+}
+
 /// Map layer visibility settings
 #[derive(Debug, Clone)]
 pub struct MapLayers {
@@ -295,6 +426,10 @@ pub struct GuiState {
 
     // Inspector state
     pub inspector_tab: InspectorTab,
+
+    // Statistics state
+    pub statistics_tab: StatisticsTab,
+    pub statistics_history: StatisticsHistory,
 }
 
 /// Inspector tab selection
@@ -328,6 +463,8 @@ impl Default for GuiState {
             show_statistics: true,
             show_legend: false,
             inspector_tab: InspectorTab::default(),
+            statistics_tab: StatisticsTab::default(),
+            statistics_history: StatisticsHistory::default(),
         }
     }
 }
@@ -340,6 +477,41 @@ impl GuiState {
     pub fn update_from_snapshot(&mut self, snapshot: SimulationSnapshot) {
         self.simulation_state = snapshot.state;
         self.speed = snapshot.speed;
+
+        // Record history point if interval elapsed
+        if self.statistics_history.should_sample(snapshot.tick) {
+            let stats = &snapshot.population.stats;
+            let world = &snapshot.world;
+
+            let total_resources: u32 = world.resources.iter()
+                .map(|r| r.amount)
+                .sum();
+
+            let buildings_completed = world.buildings.iter()
+                .filter(|b| b.completed)
+                .count();
+
+            let point = HistoryPoint {
+                tick: snapshot.tick,
+                population: stats.total_agents,
+                infants: stats.infants,
+                children: stats.children,
+                adolescents: stats.adolescents,
+                adults: stats.adults,
+                elderly: stats.elderly,
+                births: stats.total_births,
+                deaths: stats.total_deaths,
+                avg_health: stats.average_health,
+                avg_energy: stats.average_energy,
+                avg_happiness: stats.average_happiness,
+                total_resources,
+                buildings_completed,
+                buildings_construction: world.buildings.len() - buildings_completed,
+            };
+
+            self.statistics_history.add_point(point);
+        }
+
         self.latest_snapshot = Some(snapshot);
     }
 

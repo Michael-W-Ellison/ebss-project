@@ -193,9 +193,10 @@ impl eframe::App for EbssApp {
         // Left panel with statistics (if enabled)
         if self.state.show_statistics {
             egui::SidePanel::left("statistics_panel")
-                .default_width(220.0)
+                .default_width(280.0)
+                .min_width(250.0)
                 .show(ctx, |ui| {
-                    panels::statistics::render_statistics(ui, &self.state);
+                    panels::statistics::render_statistics(ui, &mut self.state);
                 });
         }
 
