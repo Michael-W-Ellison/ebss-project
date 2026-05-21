@@ -5,6 +5,7 @@ use eframe::egui;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
+use crate::world::Position;
 use super::state::*;
 use super::panels;
 
@@ -22,9 +23,23 @@ pub struct EbssApp {
     /// Selected agent detailed data (fetched on demand)
     pub selected_agent_data: Option<SelectedAgentData>,
 
+    /// Selected building detailed data
+    pub selected_building_data: Option<SelectedBuildingData>,
+
+    /// Selected resource detailed data
+    pub selected_resource_data: Option<SelectedResourceData>,
+
     /// Shared agent data for fetching selected agent details
     pub agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
     pub agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
+
+    /// Shared building data for fetching selected building details
+    pub building_data_request: Arc<Mutex<Option<Position>>>,
+    pub building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
+
+    /// Shared resource data for fetching selected resource details
+    pub resource_data_request: Arc<Mutex<Option<Position>>>,
+    pub resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
 }
 
 impl EbssApp {
@@ -34,14 +49,24 @@ impl EbssApp {
         snapshot_rx: Receiver<SimulationSnapshot>,
         agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
         agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
+        building_data_request: Arc<Mutex<Option<Position>>>,
+        building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
+        resource_data_request: Arc<Mutex<Option<Position>>>,
+        resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
     ) -> Self {
         Self {
             state: GuiState::new(),
             command_tx,
             snapshot_rx,
             selected_agent_data: None,
+            selected_building_data: None,
+            selected_resource_data: None,
             agent_data_request,
             agent_data_response,
+            building_data_request,
+            building_data_response,
+            resource_data_request,
+            resource_data_response,
         }
     }
 
@@ -58,11 +83,51 @@ impl EbssApp {
     }
 
     /// Check for selected agent data response
-    fn check_agent_data(&mut self) {
+    fn check_entity_data(&mut self) {
+        // Check agent data
         if let Ok(mut response) = self.agent_data_response.try_lock() {
             if response.is_some() {
                 self.selected_agent_data = response.take();
+                self.state.selected_agent_data = self.selected_agent_data.clone();
             }
+        }
+
+        // Check building data
+        if let Ok(mut response) = self.building_data_response.try_lock() {
+            if response.is_some() {
+                self.selected_building_data = response.take();
+                self.state.selected_building_data = self.selected_building_data.clone();
+            }
+        }
+
+        // Check resource data
+        if let Ok(mut response) = self.resource_data_response.try_lock() {
+            if response.is_some() {
+                self.selected_resource_data = response.take();
+                self.state.selected_resource_data = self.selected_resource_data.clone();
+            }
+        }
+    }
+
+    /// Request data for currently selected entity
+    fn request_selected_entity_data(&mut self) {
+        match &self.state.selected {
+            EntitySelection::Agent(id) => {
+                if let Ok(mut request) = self.agent_data_request.try_lock() {
+                    *request = Some(*id);
+                }
+            }
+            EntitySelection::Building(pos) => {
+                if let Ok(mut request) = self.building_data_request.try_lock() {
+                    *request = Some(*pos);
+                }
+            }
+            EntitySelection::Resource(pos) => {
+                if let Ok(mut request) = self.resource_data_request.try_lock() {
+                    *request = Some(*pos);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -72,13 +137,16 @@ impl eframe::App for EbssApp {
         // Process incoming snapshots
         self.process_snapshots();
 
-        // Check for agent data response
-        self.check_agent_data();
+        // Check for entity data responses
+        self.check_entity_data();
+
+        // Request data for selected entity periodically
+        self.request_selected_entity_data();
 
         // Request repaint for animation
         ctx.request_repaint();
 
-        // Top panel with controls
+        // Top panel with menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -90,6 +158,19 @@ impl eframe::App for EbssApp {
                     ui.checkbox(&mut self.state.show_inspector, "Inspector Panel");
                     ui.checkbox(&mut self.state.show_statistics, "Statistics Panel");
                     ui.checkbox(&mut self.state.show_legend, "Legend");
+                    ui.checkbox(&mut self.state.show_minimap, "Minimap");
+                });
+                ui.menu_button("Map", |ui| {
+                    ui.checkbox(&mut self.state.map_layers.terrain, "Show Terrain");
+                    ui.checkbox(&mut self.state.map_layers.resources, "Show Resources");
+                    ui.checkbox(&mut self.state.map_layers.buildings, "Show Buildings");
+                    ui.checkbox(&mut self.state.map_layers.agents, "Show Agents");
+                    ui.checkbox(&mut self.state.map_layers.grid, "Show Grid");
+                    ui.separator();
+                    if ui.button("Reset View").clicked() {
+                        self.state.map_zoom = 1.0;
+                        self.state.map_offset = (0.0, 0.0);
+                    }
                 });
             });
         });
@@ -102,13 +183,10 @@ impl eframe::App for EbssApp {
         // Right panel with inspector (if enabled)
         if self.state.show_inspector {
             egui::SidePanel::right("inspector_panel")
-                .default_width(280.0)
+                .default_width(300.0)
+                .min_width(250.0)
                 .show(ctx, |ui| {
-                    panels::inspector::render_inspector(
-                        ui,
-                        &self.state,
-                        &self.selected_agent_data,
-                    );
+                    panels::inspector::render_inspector(ui, &mut self.state);
                 });
         }
 

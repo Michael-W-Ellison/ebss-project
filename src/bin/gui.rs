@@ -12,8 +12,8 @@ use ebss::prelude::*;
 use ebss::agents::PopulationConfig;
 use ebss::gui::{
     EbssApp, SimulationCommand, SimulationSnapshot, SimState,
-    EntitySelection, SelectedAgentData,
-    simulation_to_snapshot, agent_to_detailed,
+    EntitySelection, SelectedAgentData, SelectedBuildingData, SelectedResourceData,
+    simulation_to_snapshot, agent_to_detailed, building_to_detailed, resource_to_detailed,
 };
 
 fn main() -> Result<(), eframe::Error> {
@@ -28,12 +28,20 @@ fn main() -> Result<(), eframe::Error> {
     let (command_tx, command_rx): (Sender<SimulationCommand>, Receiver<SimulationCommand>) = channel();
     let (snapshot_tx, snapshot_rx): (Sender<SimulationSnapshot>, Receiver<SimulationSnapshot>) = channel();
 
-    // Shared state for agent data requests
+    // Shared state for entity data requests
     let agent_data_request: Arc<Mutex<Option<uuid::Uuid>>> = Arc::new(Mutex::new(None));
     let agent_data_response: Arc<Mutex<Option<SelectedAgentData>>> = Arc::new(Mutex::new(None));
+    let building_data_request: Arc<Mutex<Option<ebss::world::Position>>> = Arc::new(Mutex::new(None));
+    let building_data_response: Arc<Mutex<Option<SelectedBuildingData>>> = Arc::new(Mutex::new(None));
+    let resource_data_request: Arc<Mutex<Option<ebss::world::Position>>> = Arc::new(Mutex::new(None));
+    let resource_data_response: Arc<Mutex<Option<SelectedResourceData>>> = Arc::new(Mutex::new(None));
 
     let agent_request_clone = Arc::clone(&agent_data_request);
     let agent_response_clone = Arc::clone(&agent_data_response);
+    let building_request_clone = Arc::clone(&building_data_request);
+    let building_response_clone = Arc::clone(&building_data_response);
+    let resource_request_clone = Arc::clone(&resource_data_request);
+    let resource_response_clone = Arc::clone(&resource_data_response);
 
     // Spawn simulation thread
     thread::spawn(move || {
@@ -42,6 +50,10 @@ fn main() -> Result<(), eframe::Error> {
             snapshot_tx,
             agent_request_clone,
             agent_response_clone,
+            building_request_clone,
+            building_response_clone,
+            resource_request_clone,
+            resource_response_clone,
         );
     });
 
@@ -64,6 +76,10 @@ fn main() -> Result<(), eframe::Error> {
                 snapshot_rx,
                 agent_data_request,
                 agent_data_response,
+                building_data_request,
+                building_data_response,
+                resource_data_request,
+                resource_data_response,
             )))
         }),
     )
@@ -75,6 +91,10 @@ fn run_simulation_thread(
     snapshot_tx: Sender<SimulationSnapshot>,
     agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
     agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
+    building_data_request: Arc<Mutex<Option<ebss::world::Position>>>,
+    building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
+    resource_data_request: Arc<Mutex<Option<ebss::world::Position>>>,
+    resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
 ) {
     log::info!("Simulation thread starting...");
 
@@ -135,10 +155,33 @@ fn run_simulation_thread(
         // Process agent data requests
         if let Ok(mut request) = agent_data_request.try_lock() {
             if let Some(agent_id) = request.take() {
-                // Find the agent and generate detailed data
                 if let Some(agent) = simulation.population.agents.iter().find(|a| a.id == agent_id) {
                     let detailed = agent_to_detailed(agent);
                     if let Ok(mut response) = agent_data_response.try_lock() {
+                        *response = Some(detailed);
+                    }
+                }
+            }
+        }
+
+        // Process building data requests
+        if let Ok(mut request) = building_data_request.try_lock() {
+            if let Some(pos) = request.take() {
+                if let Some(building) = simulation.world.buildings.iter().find(|b| b.position == pos) {
+                    let detailed = building_to_detailed(building);
+                    if let Ok(mut response) = building_data_response.try_lock() {
+                        *response = Some(detailed);
+                    }
+                }
+            }
+        }
+
+        // Process resource data requests
+        if let Ok(mut request) = resource_data_request.try_lock() {
+            if let Some(pos) = request.take() {
+                if let Some(resource) = simulation.world.resources.iter().find(|r| r.position == pos) {
+                    let detailed = resource_to_detailed(resource);
+                    if let Ok(mut response) = resource_data_response.try_lock() {
                         *response = Some(detailed);
                     }
                 }

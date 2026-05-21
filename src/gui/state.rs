@@ -145,9 +145,14 @@ pub struct SelectedAgentData {
     pub life_stage: LifeStage,
     pub drives: Vec<DriveData>,
     pub traits: Vec<String>,
-    pub skills: HashMap<String, i32>,
-    pub inventory_count: usize,
-    pub relationship_count: usize,
+    pub skills: HashMap<String, SkillData>,
+    pub inventory: Vec<InventoryItemData>,
+    pub relationships: Vec<RelationshipData>,
+    pub emotions: EmotionData,
+    pub goals: Vec<GoalData>,
+    pub current_activity: Option<String>,
+    pub survival_status: SurvivalStatus,
+    pub parent_ids: Vec<Uuid>,
 }
 
 /// Drive data for display
@@ -157,6 +162,91 @@ pub struct DriveData {
     pub value: f32,
     pub weight: f32,
     pub urgency: f32,
+}
+
+/// Skill data for display
+#[derive(Debug, Clone)]
+pub struct SkillData {
+    pub name: String,
+    pub level: i32,
+    pub experience: u32,
+    pub category: String,
+}
+
+/// Inventory item data for display
+#[derive(Debug, Clone)]
+pub struct InventoryItemData {
+    pub item_id: String,
+    pub quantity: u32,
+    pub quality: Option<String>,
+    pub durability: Option<(f32, f32)>, // (current, max)
+    pub fill_level: Option<(f32, f32)>, // (current, max) for containers
+}
+
+/// Relationship data for display
+#[derive(Debug, Clone)]
+pub struct RelationshipData {
+    pub other_agent_id: Uuid,
+    pub relationship_type: String,
+    pub bond_strength: f32,
+    pub total_interactions: u32,
+}
+
+/// Emotion data for display
+#[derive(Debug, Clone)]
+pub struct EmotionData {
+    pub happiness: f32,
+    pub anger: f32,
+    pub fear: f32,
+    pub sadness: f32,
+    pub curiosity: f32,
+}
+
+/// Goal data for display
+#[derive(Debug, Clone)]
+pub struct GoalData {
+    pub description: String,
+    pub priority: f32,
+    pub progress: f32,
+    pub completed: bool,
+}
+
+/// Survival status for display
+#[derive(Debug, Clone)]
+pub struct SurvivalStatus {
+    pub is_starving: bool,
+    pub is_dehydrated: bool,
+    pub ticks_without_food: u32,
+    pub ticks_without_water: u32,
+    pub is_critical: bool,
+}
+
+/// Building detailed data
+#[derive(Debug, Clone)]
+pub struct SelectedBuildingData {
+    pub building_type: BuildingType,
+    pub position: Position,
+    pub completed: bool,
+    pub progress: f32,
+    pub owner_id: Option<Uuid>,
+    pub occupant_ids: Vec<Uuid>,
+    pub resources_needed: Vec<(String, u32, u32)>, // (resource_type, delivered, required)
+    pub worker_ids: Vec<Uuid>,
+    pub description: String,
+    pub benefits: Vec<String>,
+}
+
+/// Resource detailed data
+#[derive(Debug, Clone)]
+pub struct SelectedResourceData {
+    pub resource_type: ResourceType,
+    pub position: Position,
+    pub amount: u32,
+    pub max_amount: u32,
+    pub percentage: f32,
+    pub is_depleted: bool,
+    pub description: String,
+    pub uses: Vec<String>,
 }
 
 /// Map layer visibility settings
@@ -187,6 +277,8 @@ pub struct GuiState {
     pub speed: f32,
     pub selected: EntitySelection,
     pub selected_agent_data: Option<SelectedAgentData>,
+    pub selected_building_data: Option<SelectedBuildingData>,
+    pub selected_resource_data: Option<SelectedResourceData>,
     pub latest_snapshot: Option<SimulationSnapshot>,
 
     // Map view state
@@ -200,6 +292,21 @@ pub struct GuiState {
     pub show_inspector: bool,
     pub show_statistics: bool,
     pub show_legend: bool,
+
+    // Inspector state
+    pub inspector_tab: InspectorTab,
+}
+
+/// Inspector tab selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InspectorTab {
+    #[default]
+    Overview,
+    Drives,
+    Skills,
+    Inventory,
+    Relationships,
+    Goals,
 }
 
 impl Default for GuiState {
@@ -209,6 +316,8 @@ impl Default for GuiState {
             speed: 1.0,
             selected: EntitySelection::None,
             selected_agent_data: None,
+            selected_building_data: None,
+            selected_resource_data: None,
             latest_snapshot: None,
             map_zoom: 1.0,
             map_offset: (0.0, 0.0),
@@ -218,6 +327,7 @@ impl Default for GuiState {
             show_inspector: true,
             show_statistics: true,
             show_legend: false,
+            inspector_tab: InspectorTab::default(),
         }
     }
 }

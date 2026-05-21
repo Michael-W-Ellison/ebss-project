@@ -18,3 +18,11 @@ pub mod panels;
 pub use state::*;
 pub use snapshot::*;
 pub use app::EbssApp;
+
+// Re-export snapshot functions for binary
+pub use snapshot::{
+    simulation_to_snapshot,
+    agent_to_detailed,
+    building_to_detailed,
+    resource_to_detailed,
+};
