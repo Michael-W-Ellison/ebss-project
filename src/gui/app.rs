@@ -40,6 +40,10 @@ pub struct EbssApp {
     /// Shared resource data for fetching selected resource details
     pub resource_data_request: Arc<Mutex<Option<Position>>>,
     pub resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
+
+    /// Tech tree snapshot data (updated periodically)
+    pub tech_tree_request: Arc<Mutex<bool>>,
+    pub tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
 }
 
 impl EbssApp {
@@ -53,6 +57,8 @@ impl EbssApp {
         building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
         resource_data_request: Arc<Mutex<Option<Position>>>,
         resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
+        tech_tree_request: Arc<Mutex<bool>>,
+        tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
     ) -> Self {
         Self {
             state: GuiState::new(),
@@ -67,6 +73,8 @@ impl EbssApp {
             building_data_response,
             resource_data_request,
             resource_data_response,
+            tech_tree_request,
+            tech_tree_response,
         }
     }
 
@@ -107,6 +115,13 @@ impl EbssApp {
                 self.state.selected_resource_data = self.selected_resource_data.clone();
             }
         }
+
+        // Check tech tree data
+        if let Ok(mut response) = self.tech_tree_response.try_lock() {
+            if response.is_some() {
+                self.state.tech_tree_snapshot = response.take();
+            }
+        }
     }
 
     /// Request data for currently selected entity
@@ -128,6 +143,13 @@ impl EbssApp {
                 }
             }
             _ => {}
+        }
+
+        // Request tech tree data when tech tree panel is visible
+        if self.state.show_tech_tree {
+            if let Ok(mut request) = self.tech_tree_request.try_lock() {
+                *request = true;
+            }
         }
     }
 }
@@ -157,6 +179,7 @@ impl eframe::App for EbssApp {
                 ui.menu_button("View", |ui| {
                     ui.checkbox(&mut self.state.show_inspector, "Inspector Panel");
                     ui.checkbox(&mut self.state.show_statistics, "Statistics Panel");
+                    ui.checkbox(&mut self.state.show_tech_tree, "Technology Tree");
                     ui.checkbox(&mut self.state.show_legend, "Legend");
                     ui.checkbox(&mut self.state.show_minimap, "Minimap");
                 });
@@ -217,6 +240,17 @@ impl eframe::App for EbssApp {
                 .resizable(true)
                 .show(ctx, |ui| {
                     panels::legend::render_legend(ui);
+                });
+        }
+
+        // Tech tree window (if enabled)
+        if self.state.show_tech_tree {
+            egui::Window::new("Technology Tree")
+                .collapsible(true)
+                .resizable(true)
+                .default_size([900.0, 600.0])
+                .show(ctx, |ui| {
+                    panels::tech_tree::render_tech_tree(ui, &mut self.state);
                 });
         }
     }

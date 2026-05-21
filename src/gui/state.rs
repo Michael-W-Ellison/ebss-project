@@ -380,6 +380,42 @@ pub enum StatisticsTab {
     Buildings,
 }
 
+/// Technology status for display
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TechStatus {
+    Unknown,
+    Discoverable,
+    InProgress,
+    Discovered,
+}
+
+/// Technology node data for visualization
+#[derive(Debug, Clone)]
+pub struct TechNodeData {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub era: String,
+    pub era_index: usize,
+    pub status: TechStatus,
+    pub discovery_progress: u8,
+    pub agents_with_knowledge: usize,
+    pub prerequisites: Vec<String>,
+    pub unlocks: Vec<String>,
+    pub first_discoverer: Option<uuid::Uuid>,
+    pub discovery_tick: Option<u32>,
+}
+
+/// Technology tree snapshot for GUI
+#[derive(Debug, Clone, Default)]
+pub struct TechTreeSnapshot {
+    pub nodes: Vec<TechNodeData>,
+    pub current_era: String,
+    pub total_discovered: usize,
+    pub total_technologies: usize,
+    pub discovery_history: Vec<(u32, String)>, // (tick, tech_id)
+}
+
 /// Map layer visibility settings
 #[derive(Debug, Clone)]
 pub struct MapLayers {
@@ -430,6 +466,11 @@ pub struct GuiState {
     // Statistics state
     pub statistics_tab: StatisticsTab,
     pub statistics_history: StatisticsHistory,
+
+    // Tech tree state
+    pub show_tech_tree: bool,
+    pub tech_tree_snapshot: Option<TechTreeSnapshot>,
+    pub selected_tech: Option<String>,
 }
 
 /// Inspector tab selection
@@ -465,6 +506,9 @@ impl Default for GuiState {
             inspector_tab: InspectorTab::default(),
             statistics_tab: StatisticsTab::default(),
             statistics_history: StatisticsHistory::default(),
+            show_tech_tree: false,
+            tech_tree_snapshot: None,
+            selected_tech: None,
         }
     }
 }

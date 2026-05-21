@@ -25,4 +25,5 @@ pub use snapshot::{
     agent_to_detailed,
     building_to_detailed,
     resource_to_detailed,
+    tech_tree_to_snapshot,
 };

@@ -4,7 +4,7 @@
 use crate::agents::{Agent, Population};
 use crate::analytics::Simulation;
 use crate::core::DriveType;
-use crate::world::{World, Position, BuildingState, Building, ResourceNode};
+use crate::world::{World, Position, BuildingState, Building, ResourceNode, TechEra, TechnologyTree};
 use super::state::*;
 
 /// Generate a world snapshot for GUI rendering
@@ -467,5 +467,95 @@ fn resource_uses(resource_type: crate::world::ResourceType) -> Vec<String> {
             "High-heat forge work".to_string(),
         ],
         _ => vec!["Various uses".to_string()],
+    }
+}
+
+/// Generate technology tree snapshot for GUI
+pub fn tech_tree_to_snapshot(
+    tech_tree: &TechnologyTree,
+    population: &Population,
+    discovery_history: &[(u32, String)],
+) -> TechTreeSnapshot {
+    let mut nodes = Vec::new();
+    let mut total_discovered = 0;
+    let mut highest_era = TechEra::StoneAge;
+
+    for tech in tech_tree.all() {
+        let era_index = match tech.era {
+            TechEra::StoneAge => 0,
+            TechEra::CopperAge => 1,
+            TechEra::BronzeAge => 2,
+            TechEra::IronAge => 3,
+            TechEra::Medieval => 4,
+        };
+
+        // Count agents who know this tech (using technology_knowledge from environment module)
+        let agents_with_knowledge = population.agents.iter()
+            .filter(|a| a.state.is_alive && a.technology_knowledge.known_technologies.contains_key(tech.id))
+            .count();
+
+        // Check if any agent can discover this (has all prerequisites)
+        let can_be_discovered = population.agents.iter()
+            .filter(|a| a.state.is_alive)
+            .any(|a| {
+                // Check if agent has all prerequisites
+                let has_all_prereqs = tech.prerequisites.iter()
+                    .all(|prereq| a.technology_knowledge.known_technologies.contains_key(*prereq));
+                has_all_prereqs && !a.technology_knowledge.known_technologies.contains_key(tech.id)
+            });
+
+        // Determine status
+        let any_agent_knows = agents_with_knowledge > 0;
+
+        let status = if any_agent_knows {
+            total_discovered += 1;
+            if tech.era > highest_era {
+                highest_era = tech.era;
+            }
+            TechStatus::Discovered
+        } else if can_be_discovered {
+            TechStatus::Discoverable
+        } else {
+            TechStatus::Unknown
+        };
+
+        // Find first discoverer and tick from history
+        let (first_discoverer, discovery_tick) = discovery_history.iter()
+            .find(|(_, id)| id == tech.id)
+            .map(|(tick, _)| {
+                let discoverer = population.agents.iter()
+                    .find(|a| a.technology_knowledge.known_technologies.contains_key(tech.id))
+                    .map(|a| a.id);
+                (discoverer, Some(*tick))
+            })
+            .unwrap_or((None, None));
+
+        // Build unlocks list
+        let unlocks: Vec<String> = tech.unlocks_recipes.iter()
+            .map(|item| format!("{:?}", item))
+            .collect();
+
+        nodes.push(TechNodeData {
+            id: tech.id.to_string(),
+            name: tech.name.to_string(),
+            description: tech.description.to_string(),
+            era: tech.era.name().to_string(),
+            era_index,
+            status,
+            discovery_progress: 0, // Progress tracking not used in current implementation
+            agents_with_knowledge,
+            prerequisites: tech.prerequisites.iter().map(|s| s.to_string()).collect(),
+            unlocks,
+            first_discoverer,
+            discovery_tick,
+        });
+    }
+
+    TechTreeSnapshot {
+        nodes,
+        current_era: highest_era.name().to_string(),
+        total_discovered,
+        total_technologies: tech_tree.all().len(),
+        discovery_history: discovery_history.to_vec(),
     }
 }
