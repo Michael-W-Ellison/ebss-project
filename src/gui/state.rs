@@ -454,11 +454,16 @@ pub struct GuiState {
     pub map_layers: MapLayers,
     pub show_minimap: bool,
     pub follow_selected: bool,
+    pub minimap_settings: MinimapSettings,
 
     // UI state
     pub show_inspector: bool,
     pub show_statistics: bool,
     pub show_legend: bool,
+    pub show_keyboard_help: bool,
+    pub show_search: bool,
+    pub show_save_dialog: bool,
+    pub show_load_dialog: bool,
 
     // Inspector state
     pub inspector_tab: InspectorTab,
@@ -471,6 +476,123 @@ pub struct GuiState {
     pub show_tech_tree: bool,
     pub tech_tree_snapshot: Option<TechTreeSnapshot>,
     pub selected_tech: Option<String>,
+
+    // Search state
+    pub search_state: SearchState,
+
+    // Save/Load state
+    pub save_load_state: SaveLoadState,
+
+    // Notifications
+    pub notifications: Vec<Notification>,
+}
+
+/// Minimap display settings
+#[derive(Debug, Clone)]
+pub struct MinimapSettings {
+    pub size: f32,
+    pub show_resources: bool,
+    pub show_buildings: bool,
+    pub opacity: f32,
+}
+
+impl Default for MinimapSettings {
+    fn default() -> Self {
+        Self {
+            size: 150.0,
+            show_resources: true,
+            show_buildings: true,
+            opacity: 0.85,
+        }
+    }
+}
+
+/// Search filter and results
+#[derive(Debug, Clone, Default)]
+pub struct SearchState {
+    pub query: String,
+    pub search_type: SearchType,
+    pub results: Vec<SearchResult>,
+    pub selected_result: Option<usize>,
+    pub life_stage_filter: Option<LifeStage>,
+    pub health_filter: HealthFilter,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SearchType {
+    #[default]
+    All,
+    Agents,
+    Buildings,
+    Resources,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HealthFilter {
+    #[default]
+    Any,
+    Critical,
+    Low,
+    Healthy,
+}
+
+#[derive(Debug, Clone)]
+pub enum SearchResult {
+    Agent {
+        id: Uuid,
+        position: (i32, i32),
+        life_stage: LifeStage,
+        health: f32,
+        energy: f32,
+    },
+    Building {
+        position: Position,
+        building_type: BuildingType,
+        completed: bool,
+    },
+    Resource {
+        position: Position,
+        resource_type: ResourceType,
+        amount: u32,
+        max_amount: u32,
+    },
+}
+
+/// Save/Load dialog state
+#[derive(Debug, Clone, Default)]
+pub struct SaveLoadState {
+    pub filename: String,
+    pub save_directory: String,
+    pub available_saves: Vec<SaveFileInfo>,
+    pub selected_save: Option<usize>,
+    pub last_error: Option<String>,
+    pub last_success: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SaveFileInfo {
+    pub filename: String,
+    pub path: String,
+    pub tick: u32,
+    pub agent_count: usize,
+    pub modified: String,
+}
+
+/// Notification/toast message
+#[derive(Debug, Clone)]
+pub struct Notification {
+    pub message: String,
+    pub notification_type: NotificationType,
+    pub created_at: f64,
+    pub duration: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotificationType {
+    Info,
+    Success,
+    Warning,
+    Error,
 }
 
 /// Inspector tab selection
@@ -500,15 +622,23 @@ impl Default for GuiState {
             map_layers: MapLayers::default(),
             show_minimap: true,
             follow_selected: false,
+            minimap_settings: MinimapSettings::default(),
             show_inspector: true,
             show_statistics: true,
             show_legend: false,
+            show_keyboard_help: false,
+            show_search: false,
+            show_save_dialog: false,
+            show_load_dialog: false,
             inspector_tab: InspectorTab::default(),
             statistics_tab: StatisticsTab::default(),
             statistics_history: StatisticsHistory::default(),
             show_tech_tree: false,
             tech_tree_snapshot: None,
             selected_tech: None,
+            search_state: SearchState::default(),
+            save_load_state: SaveLoadState::default(),
+            notifications: Vec::new(),
         }
     }
 }
@@ -588,6 +718,216 @@ impl GuiState {
                     self.center_on_position(pos.x, pos.y, tile_size, view_size);
                 }
                 EntitySelection::None => {}
+            }
+        }
+    }
+
+    /// Add a notification message
+    pub fn notify(&mut self, message: impl Into<String>, notification_type: NotificationType, current_time: f64) {
+        self.notifications.push(Notification {
+            message: message.into(),
+            notification_type,
+            created_at: current_time,
+            duration: 3.0,
+        });
+    }
+
+    /// Update notifications, removing expired ones
+    pub fn update_notifications(&mut self, current_time: f64) {
+        self.notifications.retain(|n| current_time - n.created_at < n.duration);
+    }
+
+    /// Perform search based on current search state
+    pub fn perform_search(&mut self) {
+        self.search_state.results.clear();
+
+        let Some(snapshot) = &self.latest_snapshot else {
+            return;
+        };
+
+        let query_lower = self.search_state.query.to_lowercase();
+
+        // Search agents
+        if matches!(self.search_state.search_type, SearchType::All | SearchType::Agents) {
+            for agent in &snapshot.population.agents {
+                if !agent.is_alive {
+                    continue;
+                }
+
+                // Filter by life stage
+                if let Some(stage) = self.search_state.life_stage_filter {
+                    if agent.life_stage != stage {
+                        continue;
+                    }
+                }
+
+                // Filter by health
+                match self.search_state.health_filter {
+                    HealthFilter::Critical if agent.health >= 25.0 => continue,
+                    HealthFilter::Low if agent.health >= 50.0 || agent.health < 25.0 => continue,
+                    HealthFilter::Healthy if agent.health < 50.0 => continue,
+                    _ => {}
+                }
+
+                // Match query against ID or life stage name
+                let id_str = format!("{:?}", agent.id).to_lowercase();
+                let stage_str = format!("{:?}", agent.life_stage).to_lowercase();
+
+                if query_lower.is_empty() || id_str.contains(&query_lower) || stage_str.contains(&query_lower) {
+                    self.search_state.results.push(SearchResult::Agent {
+                        id: agent.id,
+                        position: (agent.position.0, agent.position.1),
+                        life_stage: agent.life_stage,
+                        health: agent.health,
+                        energy: agent.energy,
+                    });
+                }
+            }
+        }
+
+        // Search buildings
+        if matches!(self.search_state.search_type, SearchType::All | SearchType::Buildings) {
+            for building in &snapshot.world.buildings {
+                let type_str = format!("{:?}", building.building_type).to_lowercase();
+
+                if query_lower.is_empty() || type_str.contains(&query_lower) {
+                    self.search_state.results.push(SearchResult::Building {
+                        position: building.position,
+                        building_type: building.building_type,
+                        completed: building.completed,
+                    });
+                }
+            }
+        }
+
+        // Search resources
+        if matches!(self.search_state.search_type, SearchType::All | SearchType::Resources) {
+            for resource in &snapshot.world.resources {
+                let type_str = format!("{:?}", resource.resource_type).to_lowercase();
+
+                if query_lower.is_empty() || type_str.contains(&query_lower) {
+                    self.search_state.results.push(SearchResult::Resource {
+                        position: resource.position,
+                        resource_type: resource.resource_type,
+                        amount: resource.amount,
+                        max_amount: resource.max_amount,
+                    });
+                }
+            }
+        }
+
+        // Sort results by relevance (agents first, then by position)
+        self.search_state.results.sort_by(|a, b| {
+            let type_order = |r: &SearchResult| match r {
+                SearchResult::Agent { .. } => 0,
+                SearchResult::Building { .. } => 1,
+                SearchResult::Resource { .. } => 2,
+            };
+            type_order(a).cmp(&type_order(b))
+        });
+
+        self.search_state.selected_result = if self.search_state.results.is_empty() {
+            None
+        } else {
+            Some(0)
+        };
+    }
+
+    /// Select and center on a search result
+    pub fn select_search_result(&mut self, index: usize, tile_size: f32, view_size: (f32, f32)) {
+        if let Some(result) = self.search_state.results.get(index) {
+            match result {
+                SearchResult::Agent { id, position, .. } => {
+                    self.selected = EntitySelection::Agent(*id);
+                    self.center_on_position(position.0, position.1, tile_size, view_size);
+                }
+                SearchResult::Building { position, .. } => {
+                    self.selected = EntitySelection::Building(*position);
+                    self.center_on_position(position.x, position.y, tile_size, view_size);
+                }
+                SearchResult::Resource { position, .. } => {
+                    self.selected = EntitySelection::Resource(*position);
+                    self.center_on_position(position.x, position.y, tile_size, view_size);
+                }
+            }
+            self.search_state.selected_result = Some(index);
+        }
+    }
+
+    /// Cycle to next entity of same type as currently selected
+    pub fn select_next_entity(&mut self) {
+        let Some(snapshot) = &self.latest_snapshot else {
+            return;
+        };
+
+        match &self.selected {
+            EntitySelection::Agent(current_id) => {
+                let agents: Vec<_> = snapshot.population.agents.iter()
+                    .filter(|a| a.is_alive)
+                    .collect();
+                if let Some(idx) = agents.iter().position(|a| a.id == *current_id) {
+                    let next_idx = (idx + 1) % agents.len();
+                    self.selected = EntitySelection::Agent(agents[next_idx].id);
+                }
+            }
+            EntitySelection::Building(current_pos) => {
+                let buildings = &snapshot.world.buildings;
+                if let Some(idx) = buildings.iter().position(|b| b.position == *current_pos) {
+                    let next_idx = (idx + 1) % buildings.len();
+                    self.selected = EntitySelection::Building(buildings[next_idx].position);
+                }
+            }
+            EntitySelection::Resource(current_pos) => {
+                let resources = &snapshot.world.resources;
+                if let Some(idx) = resources.iter().position(|r| r.position == *current_pos) {
+                    let next_idx = (idx + 1) % resources.len();
+                    self.selected = EntitySelection::Resource(resources[next_idx].position);
+                }
+            }
+            EntitySelection::None | EntitySelection::Terrain(_) => {
+                // Select first alive agent
+                if let Some(agent) = snapshot.population.agents.iter().find(|a| a.is_alive) {
+                    self.selected = EntitySelection::Agent(agent.id);
+                }
+            }
+        }
+    }
+
+    /// Cycle to previous entity of same type
+    pub fn select_previous_entity(&mut self) {
+        let Some(snapshot) = &self.latest_snapshot else {
+            return;
+        };
+
+        match &self.selected {
+            EntitySelection::Agent(current_id) => {
+                let agents: Vec<_> = snapshot.population.agents.iter()
+                    .filter(|a| a.is_alive)
+                    .collect();
+                if let Some(idx) = agents.iter().position(|a| a.id == *current_id) {
+                    let prev_idx = if idx == 0 { agents.len() - 1 } else { idx - 1 };
+                    self.selected = EntitySelection::Agent(agents[prev_idx].id);
+                }
+            }
+            EntitySelection::Building(current_pos) => {
+                let buildings = &snapshot.world.buildings;
+                if let Some(idx) = buildings.iter().position(|b| b.position == *current_pos) {
+                    let prev_idx = if idx == 0 { buildings.len() - 1 } else { idx - 1 };
+                    self.selected = EntitySelection::Building(buildings[prev_idx].position);
+                }
+            }
+            EntitySelection::Resource(current_pos) => {
+                let resources = &snapshot.world.resources;
+                if let Some(idx) = resources.iter().position(|r| r.position == *current_pos) {
+                    let prev_idx = if idx == 0 { resources.len() - 1 } else { idx - 1 };
+                    self.selected = EntitySelection::Resource(resources[prev_idx].position);
+                }
+            }
+            EntitySelection::None | EntitySelection::Terrain(_) => {
+                // Select last alive agent
+                if let Some(agent) = snapshot.population.agents.iter().filter(|a| a.is_alive).last() {
+                    self.selected = EntitySelection::Agent(agent.id);
+                }
             }
         }
     }

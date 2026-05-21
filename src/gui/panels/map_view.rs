@@ -468,14 +468,16 @@ fn draw_minimap(
     snapshot: &crate::gui::state::SimulationSnapshot,
 ) -> Option<(i32, i32)> {
     let world = &snapshot.world;
-    let minimap_size = 120.0;
+    let minimap_size = state.minimap_settings.size;
+    let opacity = (state.minimap_settings.opacity * 255.0) as u8;
+
     let minimap_rect = Rect::from_min_size(
         Pos2::new(view_rect.max.x - minimap_size - 10.0, view_rect.min.y + 10.0),
         Vec2::new(minimap_size, minimap_size),
     );
 
-    // Background
-    painter.rect_filled(minimap_rect, 4.0, Color32::from_rgba_unmultiplied(0, 0, 0, 180));
+    // Background with configurable opacity
+    painter.rect_filled(minimap_rect, 4.0, Color32::from_rgba_unmultiplied(0, 0, 0, opacity));
     painter.rect_stroke(minimap_rect, 4.0, Stroke::new(1.0, Color32::from_rgb(100, 100, 100)));
 
     let scale_x = minimap_size / world.width as f32;
@@ -493,6 +495,35 @@ fn draw_minimap(
         painter.rect_filled(tile_rect, 0.0, color);
     }
 
+    // Draw resources on minimap (if enabled)
+    if state.minimap_settings.show_resources {
+        for resource in &world.resources {
+            let x = minimap_rect.min.x + resource.position.x as f32 * scale + scale / 2.0;
+            let y = minimap_rect.min.y + resource.position.y as f32 * scale + scale / 2.0;
+            let color = resource_color(resource.resource_type);
+            painter.circle_filled(Pos2::new(x, y), 1.5, color);
+        }
+    }
+
+    // Draw buildings on minimap (if enabled)
+    if state.minimap_settings.show_buildings {
+        for building in &world.buildings {
+            let x = minimap_rect.min.x + building.position.x as f32 * scale;
+            let y = minimap_rect.min.y + building.position.y as f32 * scale;
+            let size = scale.max(2.0);
+            let color = if building.completed {
+                Color32::from_rgb(139, 90, 43)
+            } else {
+                Color32::from_rgb(180, 150, 100)
+            };
+            painter.rect_filled(
+                Rect::from_min_size(Pos2::new(x, y), Vec2::new(size, size)),
+                0.0,
+                color,
+            );
+        }
+    }
+
     // Draw agents as dots
     for agent in &snapshot.population.agents {
         if !agent.is_alive {
@@ -502,6 +533,17 @@ fn draw_minimap(
         let y = minimap_rect.min.y + agent.position.1 as f32 * scale;
         let color = life_stage_color(agent.life_stage);
         painter.circle_filled(Pos2::new(x + scale / 2.0, y + scale / 2.0), 2.0, color);
+
+        // Highlight selected agent on minimap
+        if let crate::gui::state::EntitySelection::Agent(selected_id) = &state.selected {
+            if *selected_id == agent.id {
+                painter.circle_stroke(
+                    Pos2::new(x + scale / 2.0, y + scale / 2.0),
+                    4.0,
+                    Stroke::new(1.0, Color32::WHITE),
+                );
+            }
+        }
     }
 
     // Draw viewport rectangle
@@ -511,7 +553,16 @@ fn draw_minimap(
     let vp_h = (view_rect.height() / (TILE_SIZE * state.map_zoom)) * scale;
 
     let viewport_rect = Rect::from_min_size(Pos2::new(vp_x, vp_y), Vec2::new(vp_w, vp_h));
-    painter.rect_stroke(viewport_rect, 0.0, Stroke::new(1.0, Color32::WHITE));
+    painter.rect_stroke(viewport_rect, 0.0, Stroke::new(2.0, Color32::WHITE));
+
+    // Minimap title
+    painter.text(
+        Pos2::new(minimap_rect.min.x + 4.0, minimap_rect.min.y + 2.0),
+        egui::Align2::LEFT_TOP,
+        "Minimap",
+        egui::FontId::proportional(10.0),
+        Color32::from_rgba_unmultiplied(200, 200, 200, opacity),
+    );
 
     // Click on minimap to pan - return position instead of modifying state
     let minimap_response = ui.interact(minimap_rect, ui.id().with("minimap"), Sense::click_and_drag());
@@ -568,8 +619,22 @@ fn render_map_controls(ui: &mut Ui, state: &mut GuiState, view_rect: Rect) {
 
         ui.separator();
 
-        // Minimap toggle
-        ui.checkbox(&mut state.show_minimap, "Minimap");
+        // Minimap toggle with submenu
+        ui.menu_button(if state.show_minimap { "Minimap [ON]" } else { "Minimap [OFF]" }, |ui| {
+            ui.checkbox(&mut state.show_minimap, "Show Minimap (M)");
+            ui.separator();
+            ui.checkbox(&mut state.minimap_settings.show_resources, "Show Resources");
+            ui.checkbox(&mut state.minimap_settings.show_buildings, "Show Buildings");
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Size:");
+                ui.add(egui::Slider::new(&mut state.minimap_settings.size, 80.0..=200.0).suffix("px"));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Opacity:");
+                ui.add(egui::Slider::new(&mut state.minimap_settings.opacity, 0.3..=1.0));
+            });
+        });
     });
 }
 

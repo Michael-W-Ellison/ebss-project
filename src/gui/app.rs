@@ -1,7 +1,7 @@
 // src/gui/app.rs
 //! Main GUI application implementing eframe::App.
 
-use eframe::egui;
+use eframe::egui::{self, Key};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
@@ -168,31 +168,76 @@ impl eframe::App for EbssApp {
         // Request repaint for animation
         ctx.request_repaint();
 
+        let current_time = ctx.input(|i| i.time);
+
+        // Handle global keyboard shortcuts
+        self.handle_global_shortcuts(ctx, current_time);
+
         // Top panel with menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    if ui.button("Save... (Ctrl+S)").clicked() {
+                        self.state.show_save_dialog = true;
+                        ui.close_menu();
+                    }
+                    if ui.button("Load... (Ctrl+O)").clicked() {
+                        self.state.show_load_dialog = true;
+                        ui.close_menu();
+                    }
+                    ui.separator();
                     if ui.button("Quit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
+                ui.menu_button("Edit", |ui| {
+                    if ui.button("Search... (Ctrl+F)").clicked() {
+                        self.state.show_search = true;
+                        ui.close_menu();
+                    }
+                });
                 ui.menu_button("View", |ui| {
-                    ui.checkbox(&mut self.state.show_inspector, "Inspector Panel");
-                    ui.checkbox(&mut self.state.show_statistics, "Statistics Panel");
-                    ui.checkbox(&mut self.state.show_tech_tree, "Technology Tree");
-                    ui.checkbox(&mut self.state.show_legend, "Legend");
-                    ui.checkbox(&mut self.state.show_minimap, "Minimap");
+                    ui.checkbox(&mut self.state.show_inspector, "Inspector Panel (I)");
+                    ui.checkbox(&mut self.state.show_statistics, "Statistics Panel (P)");
+                    ui.checkbox(&mut self.state.show_tech_tree, "Technology Tree (T)");
+                    ui.checkbox(&mut self.state.show_legend, "Legend (L)");
+                    ui.checkbox(&mut self.state.show_minimap, "Minimap (M)");
+                    ui.separator();
+                    ui.checkbox(&mut self.state.show_keyboard_help, "Keyboard Shortcuts (H)");
                 });
                 ui.menu_button("Map", |ui| {
                     ui.checkbox(&mut self.state.map_layers.terrain, "Show Terrain");
                     ui.checkbox(&mut self.state.map_layers.resources, "Show Resources");
                     ui.checkbox(&mut self.state.map_layers.buildings, "Show Buildings");
                     ui.checkbox(&mut self.state.map_layers.agents, "Show Agents");
-                    ui.checkbox(&mut self.state.map_layers.grid, "Show Grid");
+                    ui.checkbox(&mut self.state.map_layers.grid, "Show Grid (G)");
                     ui.separator();
-                    if ui.button("Reset View").clicked() {
+                    if ui.button("Reset View (Home)").clicked() {
                         self.state.map_zoom = 1.0;
                         self.state.map_offset = (0.0, 0.0);
+                    }
+                });
+                ui.menu_button("Help", |ui| {
+                    if ui.button("Keyboard Shortcuts (H)").clicked() {
+                        self.state.show_keyboard_help = true;
+                        ui.close_menu();
+                    }
+                });
+
+                // Status info on the right side
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if let Some(snapshot) = &self.state.latest_snapshot {
+                        let status = match self.state.simulation_state {
+                            SimState::Running => "Running",
+                            SimState::Paused => "Paused",
+                            SimState::Stepping => "Stepping",
+                        };
+                        ui.label(format!(
+                            "Tick: {} | Agents: {} | {}",
+                            snapshot.tick,
+                            snapshot.population.agents.iter().filter(|a| a.is_alive).count(),
+                            status
+                        ));
                     }
                 });
             });
@@ -231,6 +276,9 @@ impl eframe::App for EbssApp {
                 &self.command_tx,
                 &self.agent_data_request,
             );
+
+            // Render notifications overlay
+            panels::save_load::render_notifications(ui, &mut self.state, current_time);
         });
 
         // Legend window (if enabled)
@@ -253,5 +301,159 @@ impl eframe::App for EbssApp {
                     panels::tech_tree::render_tech_tree(ui, &mut self.state);
                 });
         }
+
+        // Search window (if enabled)
+        if self.state.show_search {
+            egui::Window::new("Search")
+                .collapsible(false)
+                .resizable(true)
+                .default_size([400.0, 450.0])
+                .show(ctx, |ui| {
+                    panels::search::render_search_panel(ui, &mut self.state);
+                });
+        }
+
+        // Keyboard help window (if enabled)
+        if self.state.show_keyboard_help {
+            egui::Window::new("Keyboard Shortcuts")
+                .collapsible(false)
+                .resizable(false)
+                .default_size([350.0, 500.0])
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    panels::keyboard_help::render_keyboard_help(ui);
+                });
+        }
+
+        // Save dialog (if enabled)
+        if self.state.show_save_dialog {
+            egui::Window::new("Save Simulation")
+                .collapsible(false)
+                .resizable(false)
+                .default_size([400.0, 300.0])
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    panels::save_load::render_save_dialog(ui, &mut self.state, current_time);
+                });
+        }
+
+        // Load dialog (if enabled)
+        if self.state.show_load_dialog {
+            egui::Window::new("Load Simulation")
+                .collapsible(false)
+                .resizable(true)
+                .default_size([500.0, 400.0])
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    panels::save_load::render_load_dialog(ui, &mut self.state, current_time);
+                });
+        }
+    }
+}
+
+impl EbssApp {
+    fn handle_global_shortcuts(&mut self, ctx: &egui::Context, current_time: f64) {
+        ctx.input(|i| {
+            let ctrl = i.modifiers.ctrl || i.modifiers.mac_cmd;
+            let shift = i.modifiers.shift;
+
+            // Escape - close dialogs or deselect
+            if i.key_pressed(Key::Escape) {
+                if self.state.show_keyboard_help {
+                    self.state.show_keyboard_help = false;
+                } else if self.state.show_search {
+                    self.state.show_search = false;
+                } else if self.state.show_save_dialog {
+                    self.state.show_save_dialog = false;
+                } else if self.state.show_load_dialog {
+                    self.state.show_load_dialog = false;
+                } else if self.state.show_tech_tree {
+                    self.state.show_tech_tree = false;
+                } else {
+                    self.state.selected = EntitySelection::None;
+                    self.state.follow_selected = false;
+                }
+            }
+
+            // Simulation controls
+            if i.key_pressed(Key::Space) && !ctrl {
+                match self.state.simulation_state {
+                    SimState::Running => {
+                        let _ = self.command_tx.send(SimulationCommand::Pause);
+                        self.state.notify("Paused", NotificationType::Info, current_time);
+                    }
+                    SimState::Paused | SimState::Stepping => {
+                        let _ = self.command_tx.send(SimulationCommand::Play);
+                        self.state.notify("Playing", NotificationType::Info, current_time);
+                    }
+                }
+            }
+
+            if i.key_pressed(Key::N) && !ctrl {
+                let _ = self.command_tx.send(SimulationCommand::Step);
+            }
+
+            // Speed controls (1-5 for 1x-5x, 0 for 10x)
+            for (key, speed) in [
+                (Key::Num1, 1.0),
+                (Key::Num2, 2.0),
+                (Key::Num3, 3.0),
+                (Key::Num4, 4.0),
+                (Key::Num5, 5.0),
+                (Key::Num0, 10.0),
+            ] {
+                if i.key_pressed(key) && !ctrl {
+                    let _ = self.command_tx.send(SimulationCommand::SetSpeed(speed));
+                    self.state.notify(format!("Speed: {}x", speed), NotificationType::Info, current_time);
+                }
+            }
+
+            // Panel toggles
+            if i.key_pressed(Key::H) && !ctrl {
+                self.state.show_keyboard_help = !self.state.show_keyboard_help;
+            }
+            if i.key_pressed(Key::I) && !ctrl {
+                self.state.show_inspector = !self.state.show_inspector;
+            }
+            if i.key_pressed(Key::P) && !ctrl {
+                self.state.show_statistics = !self.state.show_statistics;
+            }
+            if i.key_pressed(Key::T) && !ctrl {
+                self.state.show_tech_tree = !self.state.show_tech_tree;
+            }
+            if i.key_pressed(Key::L) && !ctrl {
+                self.state.show_legend = !self.state.show_legend;
+            }
+            if i.key_pressed(Key::M) && !ctrl {
+                self.state.show_minimap = !self.state.show_minimap;
+            }
+
+            // Ctrl shortcuts
+            if ctrl {
+                if i.key_pressed(Key::F) {
+                    self.state.show_search = true;
+                    self.state.perform_search();
+                }
+                if i.key_pressed(Key::S) {
+                    self.state.show_save_dialog = true;
+                }
+                if i.key_pressed(Key::O) {
+                    self.state.show_load_dialog = true;
+                }
+            }
+
+            // Entity cycling with Tab
+            if i.key_pressed(Key::Tab) {
+                if shift {
+                    self.state.select_previous_entity();
+                } else {
+                    self.state.select_next_entity();
+                }
+
+                // Center on new selection
+                let view_size = (400.0, 300.0);
+                self.state.center_on_selected(12.0, view_size);
+            }
+        });
     }
 }
