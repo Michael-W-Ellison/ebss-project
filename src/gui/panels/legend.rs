@@ -69,10 +69,33 @@ pub fn render_legend(ui: &mut Ui) {
         ui.label("  - Click: Select entity");
         ui.label("  - Scroll: Zoom in/out");
         ui.label("  - Drag: Pan map");
+        ui.label("  - Click minimap: Jump to location");
         ui.add_space(5.0);
         ui.label("Keyboard:");
         ui.label("  - Space: Play/Pause");
         ui.label("  - N: Step one tick");
+        ui.label("  - Arrows/WASD: Pan map");
+        ui.label("  - +/-: Zoom in/out");
+        ui.label("  - C: Center on selection");
+        ui.label("  - F: Toggle follow mode");
+        ui.label("  - G: Toggle grid");
+        ui.label("  - Home: Reset view");
+        ui.label("  - Escape: Deselect");
+    });
+
+    ui.add_space(5.0);
+
+    ui.collapsing("Agent Indicators", |ui| {
+        ui.label("Above agent (triangle):");
+        ui.label("  Most urgent drive");
+        ui.add_space(3.0);
+        ui.label("Ring around agent:");
+        ui.label("  - Red: Critical health");
+        ui.label("  - Yellow: Low health");
+        ui.label("  - White pulse: Selected");
+        ui.add_space(3.0);
+        ui.label("Below agent (blue dot):");
+        ui.label("  Low energy");
     });
 }
 

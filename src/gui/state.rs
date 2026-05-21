@@ -159,6 +159,28 @@ pub struct DriveData {
     pub urgency: f32,
 }
 
+/// Map layer visibility settings
+#[derive(Debug, Clone)]
+pub struct MapLayers {
+    pub terrain: bool,
+    pub resources: bool,
+    pub buildings: bool,
+    pub agents: bool,
+    pub grid: bool,
+}
+
+impl Default for MapLayers {
+    fn default() -> Self {
+        Self {
+            terrain: true,
+            resources: true,
+            buildings: true,
+            agents: true,
+            grid: false,
+        }
+    }
+}
+
 /// GUI application state
 pub struct GuiState {
     pub simulation_state: SimState,
@@ -170,6 +192,9 @@ pub struct GuiState {
     // Map view state
     pub map_zoom: f32,
     pub map_offset: (f32, f32),
+    pub map_layers: MapLayers,
+    pub show_minimap: bool,
+    pub follow_selected: bool,
 
     // UI state
     pub show_inspector: bool,
@@ -187,6 +212,9 @@ impl Default for GuiState {
             latest_snapshot: None,
             map_zoom: 1.0,
             map_offset: (0.0, 0.0),
+            map_layers: MapLayers::default(),
+            show_minimap: true,
+            follow_selected: false,
             show_inspector: true,
             show_statistics: true,
             show_legend: false,
@@ -203,5 +231,38 @@ impl GuiState {
         self.simulation_state = snapshot.state;
         self.speed = snapshot.speed;
         self.latest_snapshot = Some(snapshot);
+    }
+
+    /// Center the map on a specific world position
+    pub fn center_on_position(&mut self, x: i32, y: i32, tile_size: f32, view_size: (f32, f32)) {
+        let world_x = x as f32 * tile_size * self.map_zoom;
+        let world_y = y as f32 * tile_size * self.map_zoom;
+        self.map_offset = (
+            world_x - view_size.0 / 2.0,
+            world_y - view_size.1 / 2.0,
+        );
+    }
+
+    /// Center on the currently selected entity
+    pub fn center_on_selected(&mut self, tile_size: f32, view_size: (f32, f32)) {
+        if let Some(snapshot) = &self.latest_snapshot {
+            match &self.selected {
+                EntitySelection::Agent(id) => {
+                    if let Some(agent) = snapshot.population.agents.iter().find(|a| a.id == *id) {
+                        self.center_on_position(agent.position.0, agent.position.1, tile_size, view_size);
+                    }
+                }
+                EntitySelection::Building(pos) => {
+                    self.center_on_position(pos.x, pos.y, tile_size, view_size);
+                }
+                EntitySelection::Resource(pos) => {
+                    self.center_on_position(pos.x, pos.y, tile_size, view_size);
+                }
+                EntitySelection::Terrain(pos) => {
+                    self.center_on_position(pos.x, pos.y, tile_size, view_size);
+                }
+                EntitySelection::None => {}
+            }
+        }
     }
 }
