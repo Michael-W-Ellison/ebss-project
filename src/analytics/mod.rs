@@ -691,6 +691,12 @@ impl Simulation {
         // Process environmental damage (exposure, falling, disease)
         self.process_environmental_damage();
 
+        // Process pregnancies and births
+        self.process_pregnancies_and_births();
+
+        // Process nursing for infants
+        self.process_nursing();
+
         // Tick world (building construction progress, etc.)
         self.world.tick();
 
@@ -2907,7 +2913,7 @@ impl Simulation {
             },
 
             Action::Mate { target_agent_id } => {
-                use crate::agents::reproduction::{can_mate, reproduce, MateSelectionCriteria};
+                use crate::agents::reproduction::{can_mate, MateSelectionCriteria};
                 use crate::agents::gossip::{Information, InformationType};
 
                 // Find the target agent
@@ -2971,76 +2977,109 @@ impl Simulation {
 
                 // Attempt mating
                 if rng.gen_bool(success_probability as f64) {
-                    // Mating successful - create offspring
-                    // Clone parent positions before creating offspring to avoid borrow issues
-                    let parent1_pos = self.population.agents[agent_index].state.position;
-                    let offspring = {
-                        let parent1 = &self.population.agents[agent_index];
-                        let parent2 = &self.population.agents[target_index];
-                        let current_tick = self.current_tick;
-                        reproduce(parent1, parent2, current_tick)
+                    // Mating successful - determine male/female and attempt impregnation
+                    use crate::agents::reproduction::attempt_impregnation;
+                    use crate::agents::Gender;
+
+                    let initiator = &self.population.agents[agent_index];
+                    let target = &self.population.agents[target_index];
+
+                    // Get male and female from the pair
+                    let (male_index, female_index) = match (initiator.gender, target.gender) {
+                        (Gender::Male, Gender::Female) => (agent_index, target_index),
+                        (Gender::Female, Gender::Male) => (target_index, agent_index),
+                        _ => {
+                            return ActionResult::failure("Same-gender mating not possible".to_string());
+                        }
                     };
-                    let offspring_id = offspring.id;
 
-                    // Add offspring to population
-                    self.population.agents.push(offspring);
-
-                    debug!(
-                        "Agent {} and agent {} successfully mated! Offspring: {}",
-                        initiator_id, target_id, offspring_id
-                    );
-
-                    // Generate gossip about the birth
+                    // Attempt impregnation
+                    let male = &self.population.agents[male_index];
+                    let female = &self.population.agents[female_index];
                     let current_tick = self.current_tick;
-                    let birth_info = Information::new(
-                        InformationType::Childbirth {
-                            agent: initiator_id,
-                            child: offspring_id,
-                        },
-                        initiator_id,
-                        true, // This is true information
-                        current_tick as u64,
-                    );
 
-                    // Share birth information with nearby agents
-                    for other_agent in &mut self.population.agents {
-                        if other_agent.id != initiator_id && other_agent.id != target_id && other_agent.id != offspring_id {
-                            // Calculate distance
-                            let distance = {
-                                let dx = (other_agent.state.position.0 - parent1_pos.0) as f32;
-                                let dy = (other_agent.state.position.1 - parent1_pos.1) as f32;
-                                (dx * dx + dy * dy).sqrt()
-                            };
+                    if let Some(pregnancy) = attempt_impregnation(male, female, current_tick) {
+                        // Pregnancy started!
+                        let female = &mut self.population.agents[female_index];
+                        female.pregnancy = Some(pregnancy);
 
-                            // Share with agents within 20 tiles
-                            if distance <= 20.0 {
-                                other_agent.knowledge.receive_information(
-                                    birth_info.clone(),
-                                    initiator_id,
-                                    other_agent.id,
-                                    &other_agent.traits,
-                                    current_tick as u64,
-                                );
+                        debug!(
+                            "Agent {} (male) and agent {} (female) mated - pregnancy started!",
+                            self.population.agents[male_index].id,
+                            self.population.agents[female_index].id
+                        );
+
+                        // Generate gossip about the pregnancy
+                        let female_id = self.population.agents[female_index].id;
+                        let female_pos = self.population.agents[female_index].state.position;
+                        let pregnancy_info = Information::new(
+                            InformationType::Pregnancy {
+                                agent: female_id,
+                            },
+                            female_id,
+                            true,
+                            current_tick as u64,
+                        );
+
+                        // Share pregnancy information with nearby agents
+                        for other_agent in &mut self.population.agents {
+                            if other_agent.id != initiator_id && other_agent.id != target_id {
+                                let distance = {
+                                    let dx = (other_agent.state.position.0 - female_pos.0) as f32;
+                                    let dy = (other_agent.state.position.1 - female_pos.1) as f32;
+                                    (dx * dx + dy * dy).sqrt()
+                                };
+
+                                if distance <= 15.0 {
+                                    other_agent.knowledge.receive_information(
+                                        pregnancy_info.clone(),
+                                        female_id,
+                                        other_agent.id,
+                                        &other_agent.traits,
+                                        current_tick as u64,
+                                    );
+                                }
                             }
                         }
-                    }
 
-                    // Update relationships - parents bond with child
-                    // Update reproduction drives for both parents
-                    let agent = &mut self.population.agents[agent_index];
-                    if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
-                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
-                    }
+                        // Update reproduction drives for both parents
+                        let male = &mut self.population.agents[male_index];
+                        if let Some(repro_drive) = male.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.5); // Male drive reduces moderately
+                        }
 
-                    let target = &mut self.population.agents[target_index];
-                    if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
-                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
-                    }
+                        let female = &mut self.population.agents[female_index];
+                        if let Some(repro_drive) = female.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.9); // Female drive significantly reduces (pregnant)
+                        }
 
-                    ActionResult::success()
-                        .with_drive_change(DriveType::Reproduction, -0.8)
-                        .with_energy_cost(15.0) // Mating is energy-intensive
-                        .with_message(format!("Successfully mated with agent, offspring: {}", offspring_id))
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Reproduction, -0.7)
+                            .with_energy_cost(15.0)
+                            .with_message("Mating successful - pregnancy started!".to_string())
+                    } else {
+                        // Conception failed (fertility roll failed)
+                        debug!(
+                            "Agent {} and agent {} mated but conception failed",
+                            initiator_id, target_id
+                        );
+
+                        // Still reduce drives somewhat
+                        let agent = &mut self.population.agents[agent_index];
+                        if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.3);
+                        }
+
+                        let target = &mut self.population.agents[target_index];
+                        if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.3);
+                        }
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Reproduction, -0.3)
+                            .with_energy_cost(10.0)
+                            .with_message("Mating occurred but no conception".to_string())
+                    }
                 } else {
                     // Mating attempt rejected
                     debug!(
@@ -3318,6 +3357,221 @@ impl Simulation {
 
             // 4. NATURAL HEALING - Process body tick (handles conditions, bleeding, etc.)
             agent.body.tick();
+        }
+    }
+
+    /// Process pregnancies and handle births
+    fn process_pregnancies_and_births(&mut self) {
+        use crate::agents::reproduction::give_birth;
+        use crate::agents::gossip::{Information, InformationType};
+
+        let current_tick = self.current_tick;
+
+        // Collect births to process (to avoid borrowing issues)
+        let mut births_to_process: Vec<(usize, uuid::Uuid)> = Vec::new();
+
+        // First pass: update pregnancies and collect due births
+        for (idx, agent) in self.population.agents.iter_mut().enumerate() {
+            if let Some(ref mut pregnancy) = agent.pregnancy {
+                // Update prenatal nutrition based on mother's current state
+                let hunger_drive = agent.drives.get(DriveType::Hunger)
+                    .map(|d| d.value)
+                    .unwrap_or(0.0);
+                pregnancy.update_nutrition(hunger_drive, agent.state.health);
+
+                // Check if due
+                if pregnancy.is_due(current_tick) {
+                    births_to_process.push((idx, pregnancy.father_id));
+                }
+            }
+        }
+
+        // Second pass: process births
+        for (mother_idx, father_id) in births_to_process {
+            // Find the father
+            let father_idx = self.population.agents.iter()
+                .position(|a| a.id == father_id);
+
+            // Get pregnancy data before clearing it
+            let pregnancy = self.population.agents[mother_idx].pregnancy.take();
+
+            if let Some(preg) = pregnancy {
+                // Create offspring
+                let offspring = if let Some(f_idx) = father_idx {
+                    let mother = &self.population.agents[mother_idx];
+                    let father = &self.population.agents[f_idx];
+                    give_birth(mother, father, &preg, current_tick)
+                } else {
+                    // Father not found (dead?), use mother twice (not ideal but handles edge case)
+                    let mother = &self.population.agents[mother_idx];
+                    give_birth(mother, mother, &preg, current_tick)
+                };
+
+                let offspring_id = offspring.id;
+                let mother_id = self.population.agents[mother_idx].id;
+                let mother_pos = self.population.agents[mother_idx].state.position;
+
+                // Add offspring to population
+                self.population.agents.push(offspring);
+                self.population.stats.total_births += 1;
+
+                debug!(
+                    "Agent {} gave birth to {}! Prenatal nutrition: {:.2}",
+                    mother_id, offspring_id, preg.nutrition_quality
+                );
+
+                // Generate gossip about the birth
+                let birth_info = Information::new(
+                    InformationType::Childbirth {
+                        agent: mother_id,
+                        child: offspring_id,
+                    },
+                    mother_id,
+                    true,
+                    current_tick as u64,
+                );
+
+                // Share birth information with nearby agents
+                for other_agent in &mut self.population.agents {
+                    if other_agent.id != mother_id && other_agent.id != offspring_id {
+                        let distance = {
+                            let dx = (other_agent.state.position.0 - mother_pos.0) as f32;
+                            let dy = (other_agent.state.position.1 - mother_pos.1) as f32;
+                            (dx * dx + dy * dy).sqrt()
+                        };
+
+                        if distance <= 20.0 {
+                            other_agent.knowledge.receive_information(
+                                birth_info.clone(),
+                                mother_id,
+                                other_agent.id,
+                                &other_agent.traits,
+                                current_tick as u64,
+                            );
+                        }
+                    }
+                }
+
+                // Add parent-child relationships
+                let offspring_idx = self.population.agents.len() - 1;
+
+                // Mother bonds with child
+                use crate::agents::emotions::{Relationship, RelationshipType};
+                self.population.agents[mother_idx].relationships.add_relationship(
+                    Relationship::new(offspring_id, RelationshipType::Child)
+                );
+
+                // Father bonds with child (if alive)
+                if let Some(f_idx) = father_idx {
+                    self.population.agents[f_idx].relationships.add_relationship(
+                        Relationship::new(offspring_id, RelationshipType::Child)
+                    );
+                }
+            }
+        }
+    }
+
+    /// Process nursing for infants
+    fn process_nursing(&mut self) {
+        use crate::agents::childcare::{MAX_CAREGIVER_DISTANCE, NURSING_ENERGY_GAIN};
+        use crate::agents::LifeStage;
+
+        let current_tick = self.current_tick;
+
+        // Collect caregiver positions for distance checks
+        let caregiver_positions: std::collections::HashMap<uuid::Uuid, (i32, i32, i32)> =
+            self.population.agents.iter()
+                .filter(|a| a.state.is_alive)
+                .map(|a| (a.id, a.state.position))
+                .collect();
+
+        for agent in &mut self.population.agents {
+            // Only process living infants with nursing state
+            if !agent.state.is_alive || agent.state.life_stage != LifeStage::Infant {
+                continue;
+            }
+
+            if let Some(ref mut nursing) = agent.nursing {
+                // Check if still in nursing period
+                if !nursing.needs_nursing(current_tick) {
+                    // Nursing period ended
+                    agent.nursing = None;
+                    continue;
+                }
+
+                // Check if caregiver is nearby
+                let agent_pos = agent.state.position;
+                let caregiver_nearby = nursing.is_caregiver(nursing.primary_caregiver)
+                    && caregiver_positions.get(&nursing.primary_caregiver)
+                        .map(|&pos| {
+                            let dx = (pos.0 - agent_pos.0) as f32;
+                            let dy = (pos.1 - agent_pos.1) as f32;
+                            (dx * dx + dy * dy).sqrt() <= MAX_CAREGIVER_DISTANCE
+                        })
+                        .unwrap_or(false);
+
+                // Also check secondary caregivers
+                let secondary_nearby = nursing.secondary_caregivers.iter()
+                    .any(|&cg_id| {
+                        caregiver_positions.get(&cg_id)
+                            .map(|&pos| {
+                                let dx = (pos.0 - agent_pos.0) as f32;
+                                let dy = (pos.1 - agent_pos.1) as f32;
+                                (dx * dx + dy * dy).sqrt() <= MAX_CAREGIVER_DISTANCE
+                            })
+                            .unwrap_or(false)
+                    });
+
+                if caregiver_nearby || secondary_nearby {
+                    // Being nursed
+                    nursing.nurse();
+
+                    // Gain energy from nursing
+                    agent.state.energy = (agent.state.energy + NURSING_ENERGY_GAIN).min(100.0);
+
+                    // Update developmental nutrition (well nursed)
+                    let hunger_satisfaction = 1.0 - agent.drives.get(DriveType::Hunger)
+                        .map(|d| d.value)
+                        .unwrap_or(0.0);
+                    agent.developmental_nutrition.update_infant_nutrition(hunger_satisfaction, true);
+                } else {
+                    // Not being nursed
+                    nursing.tick_without_nursing();
+
+                    // Apply health penalty if suffering
+                    let penalty = nursing.health_penalty();
+                    if penalty > 0.0 {
+                        agent.state.health = (agent.state.health - penalty).max(0.0);
+                        debug!(
+                            "Infant {} suffering from lack of nursing: -{:.1} health",
+                            agent.id, penalty
+                        );
+                    }
+
+                    // Update developmental nutrition (not nursed)
+                    let hunger_satisfaction = 1.0 - agent.drives.get(DriveType::Hunger)
+                        .map(|d| d.value)
+                        .unwrap_or(0.0);
+                    agent.developmental_nutrition.update_infant_nutrition(hunger_satisfaction, false);
+                }
+            }
+
+            // Update child nutrition for children
+            if agent.state.life_stage == LifeStage::Child {
+                let hunger_satisfaction = 1.0 - agent.drives.get(DriveType::Hunger)
+                    .map(|d| d.value)
+                    .unwrap_or(0.0);
+                agent.developmental_nutrition.update_child_nutrition(hunger_satisfaction, agent.state.health);
+            }
+
+            // Finalize developmental stats when transitioning to adult
+            if agent.state.life_stage == LifeStage::Adult && !agent.developmental_nutrition.finalized {
+                agent.developmental_nutrition.finalize();
+                debug!(
+                    "Agent {} reached adulthood with development: {:?}",
+                    agent.id, agent.developmental_nutrition.stat_modifiers
+                );
+            }
         }
     }
 

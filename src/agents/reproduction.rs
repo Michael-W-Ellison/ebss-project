@@ -1,8 +1,11 @@
 // src/agents/reproduction.rs
-//! Reproduction and genetic inheritance system.
+//! Reproduction and genetic inheritance system with gender, pregnancy, and nursing.
 
 use rand::Rng;
+use uuid::Uuid;
 use crate::agents::{Agent, AgentConfig};
+use crate::agents::gender::Gender;
+use crate::agents::pregnancy::PregnancyState;
 use crate::core::{DriveState, DriveType, BehaviorTree};
 
 /// Mate selection criteria
@@ -26,18 +29,42 @@ impl Default for MateSelectionCriteria {
     }
 }
 
+/// Result of a mating attempt
+#[derive(Debug)]
+pub enum MatingResult {
+    /// Mating successful, female is now pregnant
+    PregnancyStarted { mother_id: Uuid, father_id: Uuid },
+    /// Mating failed due to infertility or chance
+    Failed(String),
+}
+
 /// Check if two agents can mate
 ///
-/// Both agents must be capable of reproduction AND have their survival needs met.
-/// Agents that are hungry or thirsty will not attempt reproduction.
+/// Requirements:
+/// - One must be male, one must be female
+/// - Female must not already be pregnant
+/// - Both must be capable of reproduction AND have their survival needs met
+/// - Agents that are hungry or thirsty will not attempt reproduction
 pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria) -> bool {
     // Both must be alive, able to reproduce, AND have survival needs met
     if !agent1.should_attempt_reproduction() || !agent2.should_attempt_reproduction() {
         return false;
     }
 
+    // One must be male, one must be female
+    let (male, female) = match (agent1.gender, agent2.gender) {
+        (Gender::Male, Gender::Female) => (agent1, agent2),
+        (Gender::Female, Gender::Male) => (agent2, agent1),
+        _ => return false, // Same gender cannot mate
+    };
+
+    // Female must not be pregnant
+    if female.is_pregnant() {
+        return false;
+    }
+
     // Check fertility levels
-    if agent1.fertility() < criteria.min_fertility || agent2.fertility() < criteria.min_fertility {
+    if male.fertility() < criteria.min_fertility || female.fertility() < criteria.min_fertility {
         return false;
     }
 
@@ -60,6 +87,48 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
     true
 }
 
+/// Get the female agent from a mating pair (returns None if no valid pair)
+pub fn get_female<'a>(agent1: &'a Agent, agent2: &'a Agent) -> Option<&'a Agent> {
+    match (agent1.gender, agent2.gender) {
+        (Gender::Female, Gender::Male) => Some(agent1),
+        (Gender::Male, Gender::Female) => Some(agent2),
+        _ => None,
+    }
+}
+
+/// Get the male agent from a mating pair (returns None if no valid pair)
+pub fn get_male<'a>(agent1: &'a Agent, agent2: &'a Agent) -> Option<&'a Agent> {
+    match (agent1.gender, agent2.gender) {
+        (Gender::Male, Gender::Female) => Some(agent1),
+        (Gender::Female, Gender::Male) => Some(agent2),
+        _ => None,
+    }
+}
+
+/// Attempt to impregnate the female agent
+/// Returns the pregnancy state if successful
+pub fn attempt_impregnation(
+    male: &Agent,
+    female: &Agent,
+    current_tick: u32,
+) -> Option<PregnancyState> {
+    let mut rng = rand::thread_rng();
+
+    // Check basic requirements
+    if !male.can_impregnate() || !female.can_become_pregnant() {
+        return None;
+    }
+
+    // Calculate conception probability based on fertility
+    let conception_chance = male.fertility() * female.fertility();
+
+    if rng.gen_bool(conception_chance as f64) {
+        Some(PregnancyState::new(current_tick, male.id))
+    } else {
+        None
+    }
+}
+
 /// Calculate Euclidean distance between two positions
 fn calculate_distance(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> f32 {
     let dx = (pos1.0 - pos2.0) as f32;
@@ -68,12 +137,49 @@ fn calculate_distance(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> f32 {
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
-/// Create offspring from two parent agents
+/// Create offspring from two parent agents (used for immediate birth in legacy code)
 pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
+    // Determine which parent is mother for prenatal nutrition
+    let prenatal_nutrition = match (parent1.gender, parent2.gender) {
+        (Gender::Female, _) => parent1.pregnancy.as_ref()
+            .map(|p| p.nutrition_quality)
+            .unwrap_or(0.8),
+        (_, Gender::Female) => parent2.pregnancy.as_ref()
+            .map(|p| p.nutrition_quality)
+            .unwrap_or(0.8),
+        _ => 0.8, // Default if no clear mother
+    };
+
+    give_birth_internal(parent1, parent2, current_tick, prenatal_nutrition)
+}
+
+/// Create offspring when pregnancy reaches term
+/// This is the proper way to create offspring - from a completed pregnancy
+pub fn give_birth(
+    mother: &Agent,
+    father: &Agent,
+    pregnancy: &PregnancyState,
+    current_tick: u32,
+) -> Agent {
+    give_birth_internal(mother, father, current_tick, pregnancy.nutrition_quality)
+}
+
+/// Internal function to create offspring with specified prenatal nutrition
+fn give_birth_internal(
+    parent1: &Agent,
+    parent2: &Agent,
+    current_tick: u32,
+    prenatal_nutrition: f32,
+) -> Agent {
     let parent_ids = vec![parent1.id, parent2.id];
 
-    // Create offspring with inherited traits
-    let mut offspring = Agent::with_parents(AgentConfig { random_weights: false }, parent_ids, current_tick);
+    // Create offspring with inherited traits and prenatal nutrition data
+    let mut offspring = Agent::with_parents_and_prenatal(
+        AgentConfig { random_weights: false },
+        parent_ids,
+        current_tick,
+        prenatal_nutrition,
+    );
 
     // Inherit drives from parents with mutation
     offspring.drives = inherit_drives(&parent1.drives, &parent2.drives);
@@ -84,14 +190,29 @@ pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
     // Inherit traits from parents (mix of both with mutation)
     offspring.traits = inherit_traits(&parent1.traits, &parent2.traits);
 
+    // Inherit reproduction drive modifier from parents with mutation
+    offspring.reproduction_drive_modifier = inherit_reproduction_modifier(
+        parent1.reproduction_drive_modifier,
+        parent2.reproduction_drive_modifier,
+    );
+
     // Start with neutral emotions
     offspring.emotions = crate::agents::EmotionState::default();
 
     // Generate random preferences
     offspring.preferences = crate::core::Preferences::default();
 
-    // Place offspring near parents
-    offspring.state.position = offspring_position(parent1.state.position, parent2.state.position);
+    // Place offspring near mother (parent1 if female, otherwise parent2)
+    let mother_pos = if parent1.gender == Gender::Female {
+        parent1.state.position
+    } else {
+        parent2.state.position
+    };
+    offspring.state.position = (
+        mother_pos.0 + rand::thread_rng().gen_range(-1..=1),
+        mother_pos.1 + rand::thread_rng().gen_range(-1..=1),
+        mother_pos.2,
+    );
 
     // Establish family relationships
     use crate::agents::emotions::{Relationship, RelationshipType};
@@ -103,6 +224,18 @@ pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
     );
 
     offspring
+}
+
+/// Inherit reproduction drive modifier from parents with mutation
+fn inherit_reproduction_modifier(parent1_mod: f32, parent2_mod: f32) -> f32 {
+    let mut rng = rand::thread_rng();
+
+    // Average parent modifiers
+    let base = (parent1_mod + parent2_mod) / 2.0;
+
+    // Add mutation: ±30% variation
+    let mutation = rng.gen_range(-0.3..0.3);
+    (base * (1.0 + mutation)).clamp(0.3, 1.8)
 }
 
 /// Inherit drives from two parents with genetic variation
@@ -246,23 +379,70 @@ mod tests {
     use super::*;
     use crate::agents::AgentConfig;
 
+    /// Helper to create a mating-ready agent pair (male and female)
+    fn create_mating_pair() -> (Agent, Agent) {
+        use crate::core::DriveType;
+
+        let mut male = Agent::new(AgentConfig::default());
+        let mut female = Agent::new(AgentConfig::default());
+
+        // Set genders
+        male.gender = Gender::Male;
+        female.gender = Gender::Female;
+
+        // Set to adult stage
+        male.state.age = 3000;
+        male.state.life_stage = crate::agents::LifeStage::Adult;
+        female.state.age = 3000;
+        female.state.life_stage = crate::agents::LifeStage::Adult;
+
+        // Set positions close together
+        male.state.position = (0, 0, 0);
+        female.state.position = (10, 10, 0);
+
+        // Ensure both are well-fed (low survival drives)
+        for agent in [&mut male, &mut female] {
+            if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
+                hunger.value = 0.2;
+            }
+            if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
+                thirst.value = 0.2;
+            }
+        }
+
+        (male, female)
+    }
+
     #[test]
     fn test_can_mate_basic() {
+        let (male, female) = create_mating_pair();
+
+        let criteria = MateSelectionCriteria::default();
+        assert!(can_mate(&male, &female, &criteria));
+    }
+
+    #[test]
+    fn test_cannot_mate_same_gender() {
         let mut agent1 = Agent::new(AgentConfig::default());
         let mut agent2 = Agent::new(AgentConfig::default());
 
-        // Set to adult stage
+        // Both male
+        agent1.gender = Gender::Male;
+        agent2.gender = Gender::Male;
         agent1.state.age = 3000;
         agent1.state.life_stage = crate::agents::LifeStage::Adult;
         agent2.state.age = 3000;
         agent2.state.life_stage = crate::agents::LifeStage::Adult;
-
-        // Set positions close together
         agent1.state.position = (0, 0, 0);
         agent2.state.position = (10, 10, 0);
 
         let criteria = MateSelectionCriteria::default();
-        assert!(can_mate(&agent1, &agent2, &criteria));
+        assert!(!can_mate(&agent1, &agent2, &criteria));
+
+        // Both female
+        agent1.gender = Gender::Female;
+        agent2.gender = Gender::Female;
+        assert!(!can_mate(&agent1, &agent2, &criteria));
     }
 
     #[test]
@@ -277,13 +457,27 @@ mod tests {
 
     #[test]
     fn test_cannot_mate_infant() {
-        let agent1 = Agent::new(AgentConfig::default()); // Infant by default
-        let mut agent2 = Agent::new(AgentConfig::default());
-        agent2.state.age = 3000;
-        agent2.state.life_stage = crate::agents::LifeStage::Adult;
+        let mut infant = Agent::new(AgentConfig::default());
+        infant.gender = Gender::Male;
+
+        let mut adult = Agent::new(AgentConfig::default());
+        adult.gender = Gender::Female;
+        adult.state.age = 3000;
+        adult.state.life_stage = crate::agents::LifeStage::Adult;
 
         let criteria = MateSelectionCriteria::default();
-        assert!(!can_mate(&agent1, &agent2, &criteria));
+        assert!(!can_mate(&infant, &adult, &criteria));
+    }
+
+    #[test]
+    fn test_cannot_mate_when_pregnant() {
+        let (male, mut female) = create_mating_pair();
+
+        // Female is pregnant
+        female.pregnancy = Some(PregnancyState::new(0, male.id));
+
+        let criteria = MateSelectionCriteria::default();
+        assert!(!can_mate(&male, &female, &criteria));
     }
 
     #[test]
@@ -291,6 +485,8 @@ mod tests {
         let mut parent1 = Agent::new(AgentConfig::default());
         let mut parent2 = Agent::new(AgentConfig::default());
 
+        parent1.gender = Gender::Male;
+        parent2.gender = Gender::Female;
         parent1.state.age = 3000;
         parent1.state.life_stage = crate::agents::LifeStage::Adult;
         parent2.state.age = 3000;
@@ -302,6 +498,7 @@ mod tests {
         assert!(offspring.parent_ids.contains(&parent1.id));
         assert!(offspring.parent_ids.contains(&parent2.id));
         assert_eq!(offspring.state.age, 0);
+        assert!(offspring.nursing.is_some()); // Newborn should have nursing state
     }
 
     #[test]
@@ -316,90 +513,74 @@ mod tests {
     fn test_cannot_mate_when_hungry() {
         use crate::core::DriveType;
 
-        let mut agent1 = Agent::new(AgentConfig::default());
-        let mut agent2 = Agent::new(AgentConfig::default());
+        let (mut male, female) = create_mating_pair();
 
-        // Set to adult stage
-        agent1.state.age = 3000;
-        agent1.state.life_stage = crate::agents::LifeStage::Adult;
-        agent2.state.age = 3000;
-        agent2.state.life_stage = crate::agents::LifeStage::Adult;
-
-        // Set positions close together
-        agent1.state.position = (0, 0, 0);
-        agent2.state.position = (10, 10, 0);
-
-        // Set agent1 as hungry (drive active)
-        if let Some(hunger) = agent1.drives.get_mut(DriveType::Hunger) {
+        // Set male as hungry (drive active)
+        if let Some(hunger) = male.drives.get_mut(DriveType::Hunger) {
             hunger.value = 0.9; // Above threshold (0.7)
         }
 
         let criteria = MateSelectionCriteria::default();
-        // Should NOT be able to mate - agent1 is hungry
-        assert!(!can_mate(&agent1, &agent2, &criteria));
+        // Should NOT be able to mate - male is hungry
+        assert!(!can_mate(&male, &female, &criteria));
     }
 
     #[test]
     fn test_cannot_mate_when_thirsty() {
         use crate::core::DriveType;
 
-        let mut agent1 = Agent::new(AgentConfig::default());
-        let mut agent2 = Agent::new(AgentConfig::default());
+        let (male, mut female) = create_mating_pair();
 
-        // Set to adult stage
-        agent1.state.age = 3000;
-        agent1.state.life_stage = crate::agents::LifeStage::Adult;
-        agent2.state.age = 3000;
-        agent2.state.life_stage = crate::agents::LifeStage::Adult;
-
-        // Set positions close together
-        agent1.state.position = (0, 0, 0);
-        agent2.state.position = (10, 10, 0);
-
-        // Set agent2 as thirsty (drive active)
-        if let Some(thirst) = agent2.drives.get_mut(DriveType::Thirst) {
+        // Set female as thirsty (drive active)
+        if let Some(thirst) = female.drives.get_mut(DriveType::Thirst) {
             thirst.value = 0.9; // Above threshold (0.75)
         }
 
         let criteria = MateSelectionCriteria::default();
-        // Should NOT be able to mate - agent2 is thirsty
-        assert!(!can_mate(&agent1, &agent2, &criteria));
+        // Should NOT be able to mate - female is thirsty
+        assert!(!can_mate(&male, &female, &criteria));
     }
 
     #[test]
     fn test_can_mate_when_well_fed() {
         use crate::core::DriveType;
 
-        let mut agent1 = Agent::new(AgentConfig::default());
-        let mut agent2 = Agent::new(AgentConfig::default());
-
-        // Set to adult stage
-        agent1.state.age = 3000;
-        agent1.state.life_stage = crate::agents::LifeStage::Adult;
-        agent2.state.age = 3000;
-        agent2.state.life_stage = crate::agents::LifeStage::Adult;
-
-        // Set positions close together
-        agent1.state.position = (0, 0, 0);
-        agent2.state.position = (10, 10, 0);
+        let (mut male, mut female) = create_mating_pair();
 
         // Ensure both are well-fed (low hunger/thirst)
-        if let Some(hunger) = agent1.drives.get_mut(DriveType::Hunger) {
+        if let Some(hunger) = male.drives.get_mut(DriveType::Hunger) {
             hunger.value = 0.2; // Well below threshold
         }
-        if let Some(thirst) = agent1.drives.get_mut(DriveType::Thirst) {
+        if let Some(thirst) = male.drives.get_mut(DriveType::Thirst) {
             thirst.value = 0.2;
         }
-        if let Some(hunger) = agent2.drives.get_mut(DriveType::Hunger) {
+        if let Some(hunger) = female.drives.get_mut(DriveType::Hunger) {
             hunger.value = 0.2;
         }
-        if let Some(thirst) = agent2.drives.get_mut(DriveType::Thirst) {
+        if let Some(thirst) = female.drives.get_mut(DriveType::Thirst) {
             thirst.value = 0.2;
         }
 
         let criteria = MateSelectionCriteria::default();
         // Should be able to mate - both are well-fed
-        assert!(can_mate(&agent1, &agent2, &criteria));
+        assert!(can_mate(&male, &female, &criteria));
+    }
+
+    #[test]
+    fn test_impregnation() {
+        let (male, female) = create_mating_pair();
+
+        // Try multiple times since it's probabilistic
+        let mut success = false;
+        for _ in 0..100 {
+            if let Some(pregnancy) = attempt_impregnation(&male, &female, 100) {
+                assert_eq!(pregnancy.father_id, male.id);
+                assert_eq!(pregnancy.conception_tick, 100);
+                success = true;
+                break;
+            }
+        }
+        assert!(success, "Impregnation should succeed at least once in 100 tries");
     }
 
     #[test]

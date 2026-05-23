@@ -13,6 +13,9 @@ pub mod temperature;
 pub mod observational_learning;
 pub mod transport;
 pub mod drive_satisfaction;
+pub mod gender;
+pub mod pregnancy;
+pub mod childcare;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};
@@ -52,6 +55,9 @@ pub use transport::{
 pub use drive_satisfaction::{
     SatisfactionTracker, DriveSatisfactionTracker, SatisfactionRecord,
 };
+pub use gender::Gender;
+pub use pregnancy::PregnancyState;
+pub use childcare::{DevelopmentalNutrition, NursingState, StatModifiers};
 
 #[cfg(test)]
 mod tests;

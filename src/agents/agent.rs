@@ -678,6 +678,16 @@ pub struct Agent {
     pub learning_exposure: crate::core::learning::LearningExposure,
     /// Nutritional state (energy, protein, micronutrients)
     pub nutrition: NutritionalState,
+    /// Biological gender
+    pub gender: super::gender::Gender,
+    /// Pregnancy state (for females)
+    pub pregnancy: Option<super::pregnancy::PregnancyState>,
+    /// Nursing state (for infants)
+    pub nursing: Option<super::childcare::NursingState>,
+    /// Developmental nutrition tracking (affects adult stats)
+    pub developmental_nutrition: super::childcare::DevelopmentalNutrition,
+    /// Base reproduction drive modifier (personality-based, 0.5 to 1.5)
+    pub reproduction_drive_modifier: f32,
 }
 
 impl Agent {
@@ -718,6 +728,11 @@ impl Agent {
             plan_step_ticks: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
             nutrition: NutritionalState::new(),
+            gender: super::gender::Gender::random(),
+            pregnancy: None,
+            nursing: None,
+            developmental_nutrition: super::childcare::DevelopmentalNutrition::default(),
+            reproduction_drive_modifier: Self::generate_reproduction_modifier(),
         };
 
         // Initialize default behavior trees for each drive type
@@ -726,11 +741,50 @@ impl Agent {
         agent
     }
 
+    /// Generate a personality-based reproduction drive modifier
+    fn generate_reproduction_modifier() -> f32 {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        // Range from 0.5 (low drive) to 1.5 (high drive)
+        // Normal distribution centered at 1.0
+        let base: f32 = rng.gen_range(0.5..1.5);
+        // Add some variance
+        (base + rng.gen_range(-0.2_f32..0.2_f32)).clamp(0.3, 1.8)
+    }
+
     /// Create an agent with specified parents
     pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, current_tick: u32) -> Self {
         let mut agent = Self::new(config);
-        agent.parent_ids = parent_ids;
+        agent.parent_ids = parent_ids.clone();
         agent.state.last_ate_tick = current_tick;
+
+        // Set up infant as newborn
+        agent.state.life_stage = LifeStage::Infant;
+        agent.state.age = 0;
+
+        // Set up nursing - primary caregiver is first parent (usually mother)
+        if let Some(&mother_id) = parent_ids.first() {
+            agent.nursing = Some(super::childcare::NursingState::new(current_tick, mother_id));
+            // Add second parent as secondary caregiver
+            if let Some(&father_id) = parent_ids.get(1) {
+                if let Some(ref mut nursing) = agent.nursing {
+                    nursing.add_caregiver(father_id);
+                }
+            }
+        }
+
+        agent
+    }
+
+    /// Create a newborn with prenatal nutrition data from mother's pregnancy
+    pub fn with_parents_and_prenatal(
+        config: AgentConfig,
+        parent_ids: Vec<Uuid>,
+        current_tick: u32,
+        prenatal_nutrition: f32,
+    ) -> Self {
+        let mut agent = Self::with_parents(config, parent_ids, current_tick);
+        agent.developmental_nutrition = super::childcare::DevelopmentalNutrition::with_prenatal(prenatal_nutrition);
         agent
     }
 
@@ -1533,7 +1587,31 @@ impl Agent {
 
     /// Check if agent can reproduce (basic capability check)
     pub fn can_reproduce(&self) -> bool {
-        self.state.is_alive && self.state.life_stage.can_reproduce()
+        if !self.state.is_alive || !self.state.life_stage.can_reproduce() {
+            return false;
+        }
+
+        // Females cannot reproduce while pregnant
+        if self.gender.can_become_pregnant() && self.pregnancy.is_some() {
+            return false;
+        }
+
+        true
+    }
+
+    /// Check if female agent can become pregnant
+    pub fn can_become_pregnant(&self) -> bool {
+        self.can_reproduce() && self.gender.can_become_pregnant() && self.pregnancy.is_none()
+    }
+
+    /// Check if male agent can impregnate
+    pub fn can_impregnate(&self) -> bool {
+        self.can_reproduce() && self.gender.can_impregnate()
+    }
+
+    /// Check if this agent is currently pregnant
+    pub fn is_pregnant(&self) -> bool {
+        self.pregnancy.is_some()
     }
 
     /// Check if agent should attempt reproduction given current survival state
@@ -1573,12 +1651,27 @@ impl Agent {
         // Modified by health
         let health_factor = self.state.health / 100.0;
 
-        // Modified by reproduction drive
+        // Modified by reproduction drive and personal modifier
         let reproduction_drive = self.drives.get(crate::core::DriveType::Reproduction)
             .map(|d| d.value)
             .unwrap_or(0.0);
 
-        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5)
+        // Apply developmental nutrition modifier if finalized
+        let dev_modifier = if self.developmental_nutrition.finalized {
+            self.developmental_nutrition.stat_modifiers.fertility
+        } else {
+            1.0
+        };
+
+        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5) * self.reproduction_drive_modifier * dev_modifier
+    }
+
+    /// Get effective reproduction drive (base drive * personal modifier)
+    pub fn effective_reproduction_drive(&self) -> f32 {
+        let base_drive = self.drives.get(DriveType::Reproduction)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+        (base_drive * self.reproduction_drive_modifier).clamp(0.0, 1.0)
     }
 
     /// Create a default behavior tree for a specific drive
