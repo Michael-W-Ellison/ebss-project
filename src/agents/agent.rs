@@ -754,6 +754,8 @@ impl Agent {
 
     /// Create an agent with specified parents
     pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, current_tick: u32) -> Self {
+        use rand::Rng;
+
         let mut agent = Self::new(config);
         agent.parent_ids = parent_ids.clone();
         agent.state.last_ate_tick = current_tick;
@@ -761,6 +763,12 @@ impl Agent {
         // Set up infant as newborn
         agent.state.life_stage = LifeStage::Infant;
         agent.state.age = 0;
+
+        // Rare chance of congenital infertility (~1.5% chance)
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.015) {
+            agent.traits.add_trait(crate::core::traits::Trait::Infertile);
+        }
 
         // Set up nursing - primary caregiver is first parent (usually mother)
         if let Some(&mother_id) = parent_ids.first() {
@@ -1591,12 +1599,22 @@ impl Agent {
             return false;
         }
 
+        // Infertile agents cannot reproduce
+        if self.traits.has(crate::core::traits::Trait::Infertile) {
+            return false;
+        }
+
         // Females cannot reproduce while pregnant
         if self.gender.can_become_pregnant() && self.pregnancy.is_some() {
             return false;
         }
 
         true
+    }
+
+    /// Check if agent is infertile
+    pub fn is_infertile(&self) -> bool {
+        self.traits.has(crate::core::traits::Trait::Infertile)
     }
 
     /// Check if female agent can become pregnant

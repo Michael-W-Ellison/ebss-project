@@ -112,6 +112,9 @@ pub enum Trait {
 
     // Obsession Trait
     Obsessive,      // Gains/loses happiness based on proximity to obsession
+
+    // Reproductive Traits
+    Infertile,      // Cannot reproduce (rare, ~1-2% at birth or from severe malnutrition)
 }
 
 impl Trait {
@@ -196,6 +199,7 @@ impl Trait {
             Trait::Empathetic => "Feels others' emotions strongly (alias for Empathic)",
             Trait::Manipulative => "Lies and manipulates for personal gain (alias for Manipulator)",
             Trait::Obsessive => "Strong focus on specific obsession target",
+            Trait::Infertile => "Cannot reproduce due to biological condition",
         }
     }
 
@@ -280,6 +284,7 @@ impl Trait {
             Trait::Empathetic => "Empathetic",
             Trait::Manipulative => "Manipulative",
             Trait::Obsessive => "Obsessive",
+            Trait::Infertile => "Infertile",
         }
     }
 

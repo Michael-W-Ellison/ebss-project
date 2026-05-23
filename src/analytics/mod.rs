@@ -3566,7 +3566,17 @@ impl Simulation {
 
             // Finalize developmental stats when transitioning to adult
             if agent.state.life_stage == LifeStage::Adult && !agent.developmental_nutrition.finalized {
-                agent.developmental_nutrition.finalize();
+                let became_infertile = agent.developmental_nutrition.finalize();
+
+                if became_infertile {
+                    // Severe malnutrition caused permanent infertility
+                    agent.traits.add_trait(crate::core::traits::Trait::Infertile);
+                    debug!(
+                        "Agent {} reached adulthood but severe malnutrition caused INFERTILITY",
+                        agent.id
+                    );
+                }
+
                 debug!(
                     "Agent {} reached adulthood with development: {:?}",
                     agent.id, agent.developmental_nutrition.stat_modifiers

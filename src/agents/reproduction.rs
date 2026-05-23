@@ -698,4 +698,64 @@ mod tests {
         // With 10% mutation rate over 200 reproductions, we should see at least one mutation
         assert!(mutation_occurred, "Expected at least one trait mutation to occur over 200 reproductions");
     }
+
+    #[test]
+    fn test_infertile_cannot_mate() {
+        use crate::core::traits::Trait;
+
+        let (mut male, female) = create_mating_pair();
+
+        // Make male infertile
+        male.traits.add_trait(Trait::Infertile);
+
+        let criteria = MateSelectionCriteria::default();
+        // Should NOT be able to mate - male is infertile
+        assert!(!can_mate(&male, &female, &criteria));
+        assert!(!male.can_reproduce());
+        assert!(male.is_infertile());
+    }
+
+    #[test]
+    fn test_infertile_female_cannot_mate() {
+        use crate::core::traits::Trait;
+
+        let (male, mut female) = create_mating_pair();
+
+        // Make female infertile
+        female.traits.add_trait(Trait::Infertile);
+
+        let criteria = MateSelectionCriteria::default();
+        // Should NOT be able to mate - female is infertile
+        assert!(!can_mate(&male, &female, &criteria));
+        assert!(!female.can_reproduce());
+        assert!(female.is_infertile());
+    }
+
+    #[test]
+    fn test_severe_malnutrition_can_cause_infertility() {
+        use crate::agents::childcare::DevelopmentalNutrition;
+
+        // Run finalize many times with severe malnutrition - should eventually cause infertility
+        let mut infertility_occurred = false;
+        for _ in 0..100 {
+            // Create severely malnourished development
+            let mut dev = DevelopmentalNutrition::with_prenatal(0.05);
+            // Simulate severe infant malnutrition
+            for _ in 0..50 {
+                dev.update_infant_nutrition(0.1, false); // Very poor nutrition, not nursed
+            }
+            // Simulate severe child malnutrition
+            for _ in 0..50 {
+                dev.update_child_nutrition(0.1, 30.0); // Poor nutrition, low health
+            }
+
+            if dev.finalize() {
+                infertility_occurred = true;
+                break;
+            }
+        }
+
+        // With severe malnutrition, should eventually cause infertility
+        assert!(infertility_occurred, "Severe malnutrition should eventually cause infertility");
+    }
 }

@@ -109,9 +109,10 @@ impl DevelopmentalNutrition {
 
     /// Finalize developmental stats when transitioning to adult
     /// This calculates permanent stat modifiers based on nutrition history
-    pub fn finalize(&mut self) {
+    /// Returns true if severe malnutrition caused infertility
+    pub fn finalize(&mut self) -> bool {
         if self.finalized {
-            return;
+            return false;
         }
 
         // Weight different stages (prenatal and infant most important)
@@ -133,6 +134,19 @@ impl DevelopmentalNutrition {
         };
 
         self.finalized = true;
+
+        // Severe malnutrition (quality < 0.2) has a chance to cause permanent infertility
+        // The worse the nutrition, the higher the chance (up to 30% at quality 0)
+        if overall_quality < 0.2 {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let infertility_chance = (0.2 - overall_quality) * 1.5; // 0% at 0.2, 30% at 0
+            if rng.gen_bool(infertility_chance as f64) {
+                return true; // Agent becomes infertile
+            }
+        }
+
+        false
     }
 
     /// Calculate a modifier value based on nutrition quality
