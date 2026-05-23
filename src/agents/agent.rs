@@ -15,7 +15,7 @@ use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
 use crate::environment::TechnologyKnowledge;
-use crate::world::nutrition::{FoodData, NutritionalState, NutritionalContent, PreparationState, EatResult};
+use crate::world::nutrition::{FoodData, NutritionalState, NutritionalContent, EatResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -688,6 +688,8 @@ pub struct Agent {
     pub developmental_nutrition: super::childcare::DevelopmentalNutrition,
     /// Base reproduction drive modifier (personality-based, 0.5 to 1.5)
     pub reproduction_drive_modifier: f32,
+    /// Fatigue state tracking tiredness, sleep debt, and penalties
+    pub fatigue: super::fatigue::FatigueState,
 }
 
 impl Agent {
@@ -733,6 +735,7 @@ impl Agent {
             nursing: None,
             developmental_nutrition: super::childcare::DevelopmentalNutrition::default(),
             reproduction_drive_modifier: Self::generate_reproduction_modifier(),
+            fatigue: super::fatigue::FatigueState::new(),
         };
 
         // Initialize default behavior trees for each drive type
@@ -878,6 +881,49 @@ impl Agent {
 
         // Process food spoilage in inventory
         self.tick_food_spoilage(current_tick);
+
+        // Process fatigue (awake state)
+        if !self.fatigue.is_sleeping {
+            // Activity level based on current drive urgency and recent actions
+            let activity_level = self.calculate_activity_level();
+            self.fatigue.tick_awake(activity_level, current_tick);
+
+            // Update rest drive based on fatigue
+            if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
+                // Rest drive increases with fatigue level
+                let rest_increase = self.fatigue.level * 0.02;
+                rest_drive.increase(rest_increase);
+            }
+
+            // Apply fatigue-induced happiness penalty
+            let happiness_penalty = self.fatigue.happiness_modifier();
+            if happiness_penalty < 0.0 {
+                self.emotions.happiness = (self.emotions.happiness + happiness_penalty).max(0.0);
+            }
+        }
+    }
+
+    /// Calculate activity level based on current state (0.0 = resting, 1.0 = strenuous)
+    fn calculate_activity_level(&self) -> f32 {
+        // Base on energy expenditure indicators
+        let mut activity: f32 = 0.3; // Base activity
+
+        // Higher if carrying heavy load
+        if self.inventory.weight_percentage() > 0.5 {
+            activity += 0.2;
+        }
+
+        // Higher if in dangerous situation
+        if self.emotions.fear > 0.5 {
+            activity += 0.2; // Stress/alertness
+        }
+
+        // Higher if low energy (struggling)
+        if self.state.energy < 30.0 {
+            activity += 0.1;
+        }
+
+        activity.min(1.0)
     }
 
     /// Tick nutrition metabolism and apply deficiency effects
@@ -1523,9 +1569,24 @@ impl Agent {
         self.observational_learning.set_learning_rate(rate);
     }
 
-    /// Get current learning rate
+    /// Get current learning rate (base rate modified by fatigue)
     pub fn learning_rate(&self) -> f32 {
-        self.observational_learning.learning_rate()
+        self.observational_learning.learning_rate() * self.fatigue.learning_modifier()
+    }
+
+    /// Get effective skill modifier (affected by fatigue)
+    pub fn skill_effectiveness(&self) -> f32 {
+        self.fatigue.skill_modifier()
+    }
+
+    /// Get decision quality modifier (affected by fatigue)
+    pub fn decision_quality(&self) -> f32 {
+        self.fatigue.decision_modifier()
+    }
+
+    /// Get injury chance modifier (affected by fatigue)
+    pub fn injury_risk_modifier(&self) -> f32 {
+        self.fatigue.injury_chance_modifier()
     }
 
     /// Equip a transport (activate it)
@@ -1570,7 +1631,7 @@ impl Agent {
         self.inventory.max_weight = total_capacity;
     }
 
-    /// Get movement speed including transport penalties
+    /// Get movement speed including transport and fatigue penalties
     pub fn movement_speed(&self) -> f32 {
         let body_speed = self.body.movement_speed_multiplier();
         let transport_speed = self.transport.speed_modifier();
@@ -1579,8 +1640,9 @@ impl Agent {
         } else {
             1.0 - (self.inventory.weight_percentage() * 0.3) // Up to 30% slower at max weight
         };
+        let fatigue_penalty = self.fatigue.movement_speed_modifier();
 
-        body_speed * transport_speed * weight_penalty
+        body_speed * transport_speed * weight_penalty * fatigue_penalty
     }
 
     /// Check if agent can carry additional weight
@@ -1681,7 +1743,15 @@ impl Agent {
             1.0
         };
 
-        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5) * self.reproduction_drive_modifier * dev_modifier
+        // Fatigue reduces fertility (tired agents are less likely to reproduce)
+        let fatigue_factor = match self.fatigue.severity() {
+            super::fatigue::FatigueSeverity::None => 1.0,
+            super::fatigue::FatigueSeverity::Mild => 0.9,
+            super::fatigue::FatigueSeverity::Moderate => 0.6,
+            super::fatigue::FatigueSeverity::Severe => 0.2,
+        };
+
+        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5) * self.reproduction_drive_modifier * dev_modifier * fatigue_factor
     }
 
     /// Get effective reproduction drive (base drive * personal modifier)
@@ -2370,6 +2440,54 @@ impl Agent {
         if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
             rest_drive.decrease(rest_reduction);
         }
+    }
+
+    /// Sleep for one tick with quality factors affecting recovery
+    /// Returns the fatigue decrease this tick
+    pub fn sleep_tick(&mut self, current_tick: u32, sleep_quality_factors: &super::fatigue::SleepQualityFactors) -> f32 {
+        let sleep_quality = sleep_quality_factors.calculate_quality();
+        let fatigue_decrease = self.fatigue.tick_sleeping(sleep_quality, current_tick);
+
+        // Also restore energy based on fatigue recovery
+        let energy_restored = fatigue_decrease * 30.0;
+        self.state.energy = (self.state.energy + energy_restored).min(100.0);
+
+        // Satisfy rest drive
+        if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
+            rest_drive.decrease(fatigue_decrease * 0.5);
+        }
+
+        fatigue_decrease
+    }
+
+    /// Wake up from sleep
+    pub fn wake_up(&mut self, current_tick: u32) {
+        self.fatigue.wake_up(current_tick);
+    }
+
+    /// Check if agent needs sleep based on fatigue
+    pub fn needs_sleep(&self) -> bool {
+        self.fatigue.needs_sleep()
+    }
+
+    /// Check if agent desperately needs sleep
+    pub fn desperately_needs_sleep(&self) -> bool {
+        self.fatigue.desperately_needs_sleep()
+    }
+
+    /// Check if agent should collapse from exhaustion
+    pub fn should_collapse(&self) -> bool {
+        self.fatigue.should_collapse()
+    }
+
+    /// Get current fatigue level (0.0 to 1.0)
+    pub fn fatigue_level(&self) -> f32 {
+        self.fatigue.level
+    }
+
+    /// Get fatigue severity description
+    pub fn fatigue_description(&self) -> &'static str {
+        self.fatigue.description()
     }
 
     /// Consume energy from activity

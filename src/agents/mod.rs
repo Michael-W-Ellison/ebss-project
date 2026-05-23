@@ -16,6 +16,7 @@ pub mod drive_satisfaction;
 pub mod gender;
 pub mod pregnancy;
 pub mod childcare;
+pub mod fatigue;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};
@@ -58,6 +59,7 @@ pub use drive_satisfaction::{
 pub use gender::Gender;
 pub use pregnancy::PregnancyState;
 pub use childcare::{DevelopmentalNutrition, NursingState, StatModifiers};
+pub use fatigue::{FatigueState, FatigueSeverity, SleepQualityFactors};
 
 #[cfg(test)]
 mod tests;
