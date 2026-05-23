@@ -450,57 +450,65 @@ impl Simulation {
                     agent.update_plan_relevance(&world_state);
                 }
 
-                // Generate action based on priority: shelter > percepts > plan > goals > drives
+                // Generate action based on priority: emotions > shelter > percepts > plan > goals > drives
                 let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
 
-                    // PRIORITY 1: Check if agent needs shelter due to exposure
-                    if agent.needs_shelter() && agent.shelter_priority() > 0.7 {
-                        // Critical shelter need - override all other actions
-                        (crate::environment::Action::SeekShelter, false)
-                    } else {
-                        // PRIORITY 2: Check for high-salience percepts that should override drive-based actions
-                        let percept_action = Self::generate_action_from_percepts(
-                            &agent.recent_percepts,
-                            &agent.drives,
-                            agent_position,
-                        );
+                    // PRIORITY 0: Check emotional overrides (fear/anger from being attacked)
+                    if agent.emotions.should_flee() {
+                        // High fear - flee from attacker or danger
+                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                            // Find attacker position and flee away from them
+                            if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
+                                let attacker_pos = attacker.state.position;
+                                let dx = agent_position.0 - attacker_pos.0;
+                                let dy = agent_position.1 - attacker_pos.1;
+                                let distance = ((dx * dx + dy * dy) as f32).sqrt().max(1.0);
+                                let flee_distance = 15;
+                                let flee_x = agent_position.0 + ((dx as f32 / distance) * flee_distance as f32) as i32;
+                                let flee_y = agent_position.1 + ((dy as f32 / distance) * flee_distance as f32) as i32;
 
-                        if percept_action.is_some() {
-                            (percept_action.unwrap(), false)
-                        } else if agent.should_execute_plan() {
-                            // PRIORITY 3: Execute current plan step if agent has an active plan
-                            if let Some(plan_action) = agent.get_plan_action() {
                                 debug!(
-                                    "Agent {} executing plan step: {:?}",
-                                    agent_id,
-                                    agent.current_plan_step_description()
+                                    "Agent {} FLEEING from attacker {} (fear={:.2})",
+                                    agent_id, attacker_id, agent.emotions.fear
                                 );
-                                (plan_action, true)
-                            } else {
-                                // Plan step can't be converted to action (e.g., EquipItem)
-                                // Advance plan and use goal-based action instead
-                                (Self::generate_action_for_drive(drive_type, agent_position), false)
-                            }
-                        } else if agent.has_active_plan() {
-                            // Agent has a plan but shouldn't execute it (survival override)
-                            // Still use drive-based action
-                            (Self::generate_action_for_drive(drive_type, agent_position), false)
-                        } else {
-                            // PRIORITY 4: Check if we have active goals and generate goal-aligned action
-                            // Also try to create a plan for the goal if we don't have one
-                            if let Some(active_goal) = agent.goals.highest_priority_goal() {
-                                let goal_action = Self::generate_action_for_goal(active_goal, agent_position, drive_type);
 
-                                // Use goal-aligned action if available, otherwise fall back to drive-based
-                                (goal_action.unwrap_or_else(|| {
-                                    Self::generate_action_for_drive(drive_type, agent_position)
-                                }), false)
+                                (crate::environment::Action::Move {
+                                    target: (flee_x, flee_y, agent_position.2),
+                                }, false)
                             } else {
-                                // PRIORITY 5: Use drive-based action
-                                (Self::generate_action_for_drive(drive_type, agent_position), false)
+                                // Attacker not found, flee in random direction
+                                use rand::Rng;
+                                let mut rng = rand::thread_rng();
+                                let flee_x = agent_position.0 + rng.gen_range(-15..=15);
+                                let flee_y = agent_position.1 + rng.gen_range(-15..=15);
+                                (crate::environment::Action::Move {
+                                    target: (flee_x, flee_y, agent_position.2),
+                                }, false)
                             }
+                        } else {
+                            // No specific attacker, continue with other priorities
+                            // (fear might be from other sources like predators)
+                            Self::generate_non_emotional_action(agent, agent_position, &self.population, self.current_tick)
                         }
+                    } else if agent.emotions.should_attack() {
+                        // High anger, low fear - retaliate against attacker
+                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                            debug!(
+                                "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
+                                agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
+                            );
+
+                            (crate::environment::Action::Attack {
+                                target_agent_id: attacker_id,
+                                weapon: agent.equipment.get_weapon().map(|w| w.name.clone()),
+                            }, false)
+                        } else {
+                            // Angry but no target, continue with other priorities
+                            Self::generate_non_emotional_action(agent, agent_position, &self.population, self.current_tick)
+                        }
+                    } else {
+                        Self::generate_non_emotional_action(agent, agent_position, &self.population, self.current_tick)
                     }
                 };
 
@@ -955,6 +963,64 @@ impl Simulation {
         }
     }
 
+    /// Generate an action based on non-emotional priorities:
+    /// PRIORITY 1: Check if agent needs shelter due to exposure
+    /// PRIORITY 2: Check for high-salience percepts
+    /// PRIORITY 3: Execute current plan step
+    /// PRIORITY 4: Check active goals
+    /// PRIORITY 5: Use drive-based action
+    fn generate_non_emotional_action(
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        _population: &Population,
+        _current_tick: u32,
+    ) -> (Action, bool) {
+        // PRIORITY 1: Check if agent needs shelter due to exposure
+        if agent.exposure_status.exposure_damage > 0.5 {
+            return (Action::SeekShelter, false);
+        }
+
+        // PRIORITY 2: Check for high-salience percepts (danger, resources, social opportunities)
+        let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
+            .iter()
+            .cloned()
+            .collect();
+
+        if let Some(percept_action) = Self::generate_action_from_percepts(
+            &recent_percepts,
+            &agent.drives,
+            agent_position,
+        ) {
+            return (percept_action, false);
+        }
+
+        // PRIORITY 3: Execute current plan step (if agent has an active plan)
+        if agent.should_execute_plan() {
+            if let Some(plan_action) = agent.get_plan_action() {
+                return (plan_action, true);
+            }
+        }
+
+        // PRIORITY 4: Check active goals and generate goal-directed action
+        if let Some(goal) = agent.goals.highest_priority_goal() {
+            // Get most urgent drive for fallback
+            let fallback_drive = agent.drives.most_urgent()
+                .map(|d| d.drive_type)
+                .unwrap_or(DriveType::Curiosity);
+
+            if let Some(goal_action) = Self::generate_action_for_goal(&goal, agent_position, fallback_drive) {
+                return (goal_action, false);
+            }
+        }
+
+        // PRIORITY 5: Use drive-based action as fallback
+        let drive_type = agent.select_drive_with_happiness()
+            .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
+            .unwrap_or(DriveType::Curiosity);
+
+        (Self::generate_action_for_drive(drive_type, agent_position), false)
+    }
+
     /// Execute an action in the environment and return the result
     fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
         use rand::Rng;
@@ -1390,11 +1456,44 @@ impl Simulation {
                 let target = &mut self.population.agents[target_index];
                 target.state.health = (target.state.health - actual_damage * 0.2).max(0.0);
 
+                // Get IDs before borrowing
+                let attacker_id = self.population.agents[agent_index].id;
+                let target_id = self.population.agents[target_index].id;
+
+                // EMOTIONAL RESPONSE: Target responds emotionally to being attacked
+                {
+                    // Calculate attacker's apparent strength
+                    let attacker = &self.population.agents[agent_index];
+                    let attacker_health = attacker.state.health / 100.0;
+                    let attacker_armor = attacker.equipment.total_armor() / 100.0;
+                    let attacker_has_weapon = attacker.equipment.get_weapon().is_some();
+                    let attacker_strength = attacker_health * (1.0 + attacker_armor * 0.5)
+                        + if attacker_has_weapon { 0.3 } else { 0.0 };
+
+                    // Target responds to threat
+                    let target = &mut self.population.agents[target_index];
+                    let emotion_source = crate::agents::EmotionSource::Agent(attacker_id);
+
+                    // Record who attacked for potential retaliation
+                    target.emotions.record_attack(attacker_id, self.current_tick);
+
+                    // Scale emotional response by damage severity
+                    let damage_severity = (actual_damage / 50.0).min(1.0);
+
+                    // Use threat assessment to determine fear vs anger
+                    target.respond_to_threat(attacker_strength + damage_severity * 0.5, emotion_source);
+
+                    debug!(
+                        "Agent {} emotional response to attack: fear={:.2}, anger={:.2}, should_flee={}, should_attack={}",
+                        target_id, target.emotions.fear, target.emotions.anger,
+                        target.emotions.should_flee(), target.emotions.should_attack()
+                    );
+                }
+
                 // Check if target died from the attack
                 let target_alive = self.population.agents[target_index].body.is_alive()
                     && self.population.agents[target_index].state.health > 0.0;
 
-                let attacker_id = self.population.agents[agent_index].id;
                 let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
 
                 debug!(
