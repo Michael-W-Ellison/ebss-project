@@ -106,6 +106,13 @@ impl FatigueState {
     /// Update fatigue while sleeping
     /// Returns the fatigue decrease this tick
     pub fn tick_sleeping(&mut self, sleep_quality: f32, current_tick: u32) -> f32 {
+        self.tick_sleeping_with_modifier(sleep_quality, current_tick, 1.0)
+    }
+
+    /// Update fatigue while sleeping with a recovery modifier from traits
+    /// recovery_modifier: 1.0 = normal, <1.0 = slower recovery (Narcoleptic), >1.0 = faster
+    /// Returns the fatigue decrease this tick
+    pub fn tick_sleeping_with_modifier(&mut self, sleep_quality: f32, current_tick: u32, recovery_modifier: f32) -> f32 {
         if !self.is_sleeping {
             // Just started sleeping
             self.is_sleeping = true;
@@ -116,8 +123,8 @@ impl FatigueState {
         self.last_sleep_duration += 1;
         self.last_sleep_quality = sleep_quality;
 
-        // Calculate recovery rate based on sleep quality
-        let recovery_rate = BASE_RECOVERY_RATE * sleep_quality;
+        // Calculate recovery rate based on sleep quality and trait modifier
+        let recovery_rate = BASE_RECOVERY_RATE * sleep_quality * recovery_modifier;
 
         // Reduce fatigue
         let fatigue_decrease = recovery_rate;
@@ -228,6 +235,21 @@ impl FatigueState {
     /// Check if agent needs sleep soon
     pub fn needs_sleep(&self) -> bool {
         self.level >= MODERATE_FATIGUE_THRESHOLD || self.sleep_debt >= 6.0
+    }
+
+    /// Check if agent needs sleep with trait-based threshold modifier
+    /// threshold_modifier: 1.0 = normal, <1.0 = needs less sleep (SoundSleeper)
+    pub fn needs_sleep_with_modifier(&self, threshold_modifier: f32) -> bool {
+        let adjusted_threshold = MODERATE_FATIGUE_THRESHOLD * threshold_modifier;
+        let adjusted_debt_threshold = 6.0 * threshold_modifier;
+        self.level >= adjusted_threshold || self.sleep_debt >= adjusted_debt_threshold
+    }
+
+    /// Check if desperately needs sleep with trait modifier
+    pub fn desperately_needs_sleep_with_modifier(&self, threshold_modifier: f32) -> bool {
+        let adjusted_threshold = SEVERE_FATIGUE_THRESHOLD * threshold_modifier;
+        let adjusted_debt_threshold = 12.0 * threshold_modifier;
+        self.level >= adjusted_threshold || self.sleep_debt >= adjusted_debt_threshold
     }
 
     /// Get a description of current fatigue state

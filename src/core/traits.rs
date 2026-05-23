@@ -115,6 +115,10 @@ pub enum Trait {
 
     // Reproductive Traits
     Infertile,      // Cannot reproduce (rare, ~1-2% at birth or from severe malnutrition)
+
+    // Sleep Traits
+    Narcoleptic,    // Sleep is less restful (reduced recovery rate)
+    SoundSleeper,   // Needs 2 hours less sleep than normal
 }
 
 impl Trait {
@@ -200,6 +204,8 @@ impl Trait {
             Trait::Manipulative => "Lies and manipulates for personal gain (alias for Manipulator)",
             Trait::Obsessive => "Strong focus on specific obsession target",
             Trait::Infertile => "Cannot reproduce due to biological condition",
+            Trait::Narcoleptic => "Sleep is less restful, recovers fatigue slower",
+            Trait::SoundSleeper => "Needs 2 hours less sleep than normal",
         }
     }
 
@@ -285,6 +291,8 @@ impl Trait {
             Trait::Manipulative => "Manipulative",
             Trait::Obsessive => "Obsessive",
             Trait::Infertile => "Infertile",
+            Trait::Narcoleptic => "Narcoleptic",
+            Trait::SoundSleeper => "Sound Sleeper",
         }
     }
 

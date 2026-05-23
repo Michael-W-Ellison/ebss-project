@@ -2446,7 +2446,10 @@ impl Agent {
     /// Returns the fatigue decrease this tick
     pub fn sleep_tick(&mut self, current_tick: u32, sleep_quality_factors: &super::fatigue::SleepQualityFactors) -> f32 {
         let sleep_quality = sleep_quality_factors.calculate_quality();
-        let fatigue_decrease = self.fatigue.tick_sleeping(sleep_quality, current_tick);
+
+        // Apply trait modifiers to recovery rate
+        let recovery_modifier = self.sleep_recovery_modifier();
+        let fatigue_decrease = self.fatigue.tick_sleeping_with_modifier(sleep_quality, current_tick, recovery_modifier);
 
         // Also restore energy based on fatigue recovery
         let energy_restored = fatigue_decrease * 30.0;
@@ -2460,19 +2463,41 @@ impl Agent {
         fatigue_decrease
     }
 
+    /// Get sleep recovery modifier based on traits
+    /// Narcoleptic: 0.6 (40% less effective sleep)
+    /// Normal: 1.0
+    fn sleep_recovery_modifier(&self) -> f32 {
+        if self.traits.has(crate::core::traits::Trait::Narcoleptic) {
+            0.6 // Sleep is 40% less restorative
+        } else {
+            1.0
+        }
+    }
+
+    /// Get sleep need threshold modifier based on traits
+    /// SoundSleeper: ~0.75 (needs ~2 hours less sleep, which is ~25% less)
+    /// Normal: 1.0
+    fn sleep_need_modifier(&self) -> f32 {
+        if self.traits.has(crate::core::traits::Trait::SoundSleeper) {
+            0.75 // Needs 25% less sleep (~2 hours less of a typical 8-hour night)
+        } else {
+            1.0
+        }
+    }
+
     /// Wake up from sleep
     pub fn wake_up(&mut self, current_tick: u32) {
         self.fatigue.wake_up(current_tick);
     }
 
-    /// Check if agent needs sleep based on fatigue
+    /// Check if agent needs sleep based on fatigue (trait-aware)
     pub fn needs_sleep(&self) -> bool {
-        self.fatigue.needs_sleep()
+        self.fatigue.needs_sleep_with_modifier(self.sleep_need_modifier())
     }
 
-    /// Check if agent desperately needs sleep
+    /// Check if agent desperately needs sleep (trait-aware)
     pub fn desperately_needs_sleep(&self) -> bool {
-        self.fatigue.desperately_needs_sleep()
+        self.fatigue.desperately_needs_sleep_with_modifier(self.sleep_need_modifier())
     }
 
     /// Check if agent should collapse from exhaustion
