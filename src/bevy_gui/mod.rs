@@ -15,6 +15,9 @@ pub mod events;
 pub mod systems;
 pub mod ui;
 
+#[cfg(test)]
+mod tests;
+
 use bevy::prelude::*;
 
 pub use resources::*;
