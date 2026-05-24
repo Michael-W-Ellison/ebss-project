@@ -73,6 +73,8 @@ pub fn agent_to_snapshot(agent: &Agent) -> AgentSnapshot {
         FatigueSeverity::Severe => 3,
     };
 
+    let current_activity = agent.current_plan.as_ref().map(|p| p.goal_description.clone());
+
     AgentSnapshot {
         id: agent.id,
         position: agent.state.position,
@@ -83,6 +85,9 @@ pub fn agent_to_snapshot(agent: &Agent) -> AgentSnapshot {
         most_urgent_drive: most_urgent.map(|drive| drive.drive_type),
         is_sleeping: agent.fatigue.is_sleeping,
         fatigue_severity,
+        relationship_count: agent.relationships.get_all().len(),
+        inventory_count: agent.inventory.get_all_items().len() as u32,
+        current_activity,
     }
 }
 

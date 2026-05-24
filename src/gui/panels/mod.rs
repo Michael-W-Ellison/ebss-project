@@ -12,3 +12,4 @@ pub mod keyboard_help;
 pub mod save_load;
 pub mod timeline;
 pub mod relationship_graph;
+pub mod tooltip;

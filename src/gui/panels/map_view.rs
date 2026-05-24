@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::gui::state::{GuiState, SimulationCommand, EntitySelection};
 use crate::world::TerrainType;
 use crate::agents::LifeStage;
+use super::tooltip;
 
 const TILE_SIZE: f32 = 12.0;
 const PAN_SPEED: f32 = 20.0;
@@ -336,57 +337,52 @@ pub fn render_map(
         let (tile_x, tile_y) = screen_to_world(pos, view_rect, state);
 
         response.clone().on_hover_ui_at_pointer(|ui| {
-            ui.label(format!("Position: ({}, {})", tile_x, tile_y));
+            ui.set_max_width(260.0);
 
-            // Show terrain
-            if let Some(tile) = world.tiles.iter().find(|t| t.x == tile_x && t.y == tile_y) {
-                ui.label(format!("Terrain: {:?}", tile.terrain));
+            // Show terrain header
+            let terrain = world.tiles.iter()
+                .find(|t| t.x == tile_x && t.y == tile_y)
+                .map(|t| t.terrain);
+            tooltip::render_terrain_header(ui, tile_x, tile_y, terrain);
+
+            // Show ALL agents at this position
+            let agents_here: Vec<_> = snapshot.population.agents.iter()
+                .filter(|a| a.position.0 == tile_x && a.position.1 == tile_y && a.is_alive)
+                .collect();
+
+            for agent in &agents_here {
+                ui.separator();
+                tooltip::render_agent_tooltip(ui, agent);
             }
 
-            // Show agent info
-            if let Some(agent) = snapshot.population.agents.iter()
-                .find(|a| a.position.0 == tile_x && a.position.1 == tile_y && a.is_alive)
-            {
+            // Show ALL resources at this position
+            let resources_here: Vec<_> = world.resources.iter()
+                .filter(|r| r.position.x == tile_x && r.position.y == tile_y)
+                .collect();
+
+            for resource in &resources_here {
                 ui.separator();
-                ui.label(format!("Agent ({:?})", agent.life_stage));
-                ui.label(format!("Health: {:.0}%", agent.health));
-                ui.label(format!("Energy: {:.0}%", agent.energy));
-                if agent.is_sleeping {
-                    ui.label("Status: Sleeping");
-                } else {
-                    let fatigue_desc = match agent.fatigue_severity {
-                        0 => "Well-rested",
-                        1 => "Slightly tired",
-                        2 => "Fatigued",
-                        _ => "Exhausted",
-                    };
-                    ui.label(format!("Fatigue: {}", fatigue_desc));
-                }
-                if let Some(drive) = agent.most_urgent_drive {
-                    ui.label(format!("Urgent: {:?}", drive));
-                }
+                tooltip::render_resource_tooltip(
+                    ui,
+                    resource.resource_type,
+                    resource.amount,
+                    resource.max_amount,
+                );
             }
 
-            // Show resource info
-            if let Some(resource) = world.resources.iter()
-                .find(|r| r.position.x == tile_x && r.position.y == tile_y)
-            {
-                ui.separator();
-                ui.label(format!("{:?}", resource.resource_type));
-                ui.label(format!("Amount: {}/{}", resource.amount, resource.max_amount));
-            }
+            // Show ALL buildings at this position
+            let buildings_here: Vec<_> = world.buildings.iter()
+                .filter(|b| b.position.x == tile_x && b.position.y == tile_y)
+                .collect();
 
-            // Show building info
-            if let Some(building) = world.buildings.iter()
-                .find(|b| b.position.x == tile_x && b.position.y == tile_y)
-            {
+            for building in &buildings_here {
                 ui.separator();
-                ui.label(format!("{:?}", building.building_type));
-                if building.completed {
-                    ui.label("Completed");
-                } else {
-                    ui.label(format!("Progress: {:.0}%", building.progress * 100.0));
-                }
+                tooltip::render_building_tooltip(
+                    ui,
+                    building.building_type,
+                    building.completed,
+                    building.progress,
+                );
             }
         });
     }

@@ -99,6 +99,9 @@ pub struct AgentSnapshot {
     pub most_urgent_drive: Option<DriveType>,
     pub is_sleeping: bool,
     pub fatigue_severity: u8,
+    pub relationship_count: usize,
+    pub inventory_count: u32,
+    pub current_activity: Option<String>,
 }
 
 /// Population statistics snapshot
