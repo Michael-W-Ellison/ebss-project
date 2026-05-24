@@ -219,3 +219,13 @@ pub fn map_pan_system(
         map_view.pan(speed, 0.0);
     }
 }
+
+/// Handle map centering requests
+pub fn center_map_handler(
+    mut center_events: EventReader<CenterMapRequest>,
+    mut map_view: ResMut<MapViewState>,
+) {
+    for event in center_events.read() {
+        map_view.center_on(event.x, event.y);
+    }
+}

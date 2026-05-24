@@ -109,6 +109,31 @@ mod tests {
     }
 
     #[test]
+    fn test_map_view_center_on() {
+        let mut map = MapViewState::default();
+
+        // Center on tile (5, 10) with default zoom (1.0)
+        map.center_on(5, 10);
+
+        // Expected offset = -(tile * TILE_SIZE * zoom)
+        let expected_x = -(5.0 * MapViewState::TILE_SIZE * 1.0);
+        let expected_y = -(10.0 * MapViewState::TILE_SIZE * 1.0);
+
+        assert!((map.offset.0 - expected_x).abs() < 0.01);
+        assert!((map.offset.1 - expected_y).abs() < 0.01);
+
+        // Test with different zoom
+        map.zoom = 2.0;
+        map.center_on(3, 4);
+
+        let expected_x = -(3.0 * MapViewState::TILE_SIZE * 2.0);
+        let expected_y = -(4.0 * MapViewState::TILE_SIZE * 2.0);
+
+        assert!((map.offset.0 - expected_x).abs() < 0.01);
+        assert!((map.offset.1 - expected_y).abs() < 0.01);
+    }
+
+    #[test]
     fn test_notification_queue() {
         let mut queue = NotificationQueue::default();
         let time = 0.0;

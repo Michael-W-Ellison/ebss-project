@@ -63,6 +63,7 @@ impl Plugin for EbssGuiPlugin {
             // Input handling in PreUpdate
             .add_systems(PreUpdate, systems::keyboard_input_system)
             .add_systems(PreUpdate, systems::map_pan_system)
+            .add_systems(PreUpdate, systems::center_map_handler)
             // UI rendering in Update
             .add_systems(Update, ui::render_menu_bar)
             .add_systems(Update, ui::render_controls_panel)

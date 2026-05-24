@@ -213,4 +213,10 @@ impl MapViewState {
         self.offset.0 += delta_x;
         self.offset.1 += delta_y;
     }
+
+    /// Center the view on a specific tile coordinate
+    pub fn center_on(&mut self, tile_x: i32, tile_y: i32) {
+        self.offset.0 = -(tile_x as f32 * Self::TILE_SIZE * self.zoom);
+        self.offset.1 = -(tile_y as f32 * Self::TILE_SIZE * self.zoom);
+    }
 }
