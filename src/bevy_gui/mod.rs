@@ -37,10 +37,12 @@ impl Plugin for EbssGuiPlugin {
             .insert_resource(MapViewState::default())
             .insert_resource(PanelVisibility::default())
             .insert_resource(StatisticsData::default())
+            .insert_resource(StatisticsHistory::default())
             .insert_resource(NotificationQueue::default())
             .insert_resource(SelectedEntityData::default())
             .insert_resource(TechTreeData::default())
             .insert_resource(RelationshipGraphData::default())
+            .insert_resource(InspectorState::default())
             // Events
             .add_event::<SimulationCommand>()
             .add_event::<SelectionChanged>()
@@ -58,6 +60,10 @@ impl Plugin for EbssGuiPlugin {
             .add_systems(Update, ui::render_map_placeholder)
             .add_systems(Update, ui::render_notifications)
             .add_systems(Update, ui::render_keyboard_help)
+            // Panel systems
+            .add_systems(Update, ui::render_inspector_panel)
+            .add_systems(Update, ui::render_legend_panel)
+            .add_systems(Update, ui::render_statistics_panel)
             // Command sending in PostUpdate
             .add_systems(PostUpdate, systems::send_commands_system)
             .add_systems(PostUpdate, systems::entity_data_system)

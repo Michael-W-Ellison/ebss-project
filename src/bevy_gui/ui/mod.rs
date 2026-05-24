@@ -1,11 +1,15 @@
 // src/bevy_gui/ui/mod.rs
 //! UI rendering systems using bevy_egui.
 
+pub mod panels;
+
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
 use crate::bevy_gui::resources::*;
 use crate::bevy_gui::events::SimulationCommand;
+
+pub use panels::{render_legend_panel, render_inspector_panel, render_statistics_panel};
 
 /// Render the top menu bar
 pub fn render_menu_bar(

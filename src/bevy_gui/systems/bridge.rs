@@ -38,6 +38,7 @@ pub fn receive_snapshots_system(
     bridge: Res<SimulationBridge>,
     mut snapshot: ResMut<CurrentSnapshot>,
     mut sim_control: ResMut<SimulationControl>,
+    mut stats_history: ResMut<StatisticsHistory>,
 ) {
     if let Ok(rx) = bridge.snapshot_rx.try_lock() {
         while let Ok(new_snapshot) = rx.try_recv() {
@@ -47,6 +48,29 @@ pub fn receive_snapshots_system(
                 crate::gui::state::SimState::Stepping => SimState::Stepping,
             };
             sim_control.speed = new_snapshot.speed;
+
+            // Update statistics history
+            let tick = new_snapshot.tick;
+            if stats_history.should_sample(tick) {
+                let stats = &new_snapshot.population.stats;
+                let point = HistoryPoint {
+                    tick,
+                    population: stats.total_agents,
+                    average_health: stats.average_health,
+                    average_energy: stats.average_energy,
+                    average_happiness: stats.average_happiness,
+                    total_resources: new_snapshot.world.resources.iter()
+                        .map(|r| r.amount)
+                        .sum(),
+                    buildings_completed: new_snapshot.world.buildings.iter()
+                        .filter(|b| b.progress >= 1.0)
+                        .count(),
+                    births: stats.total_births,
+                    deaths: stats.total_deaths,
+                };
+                stats_history.add_point(point);
+            }
+
             snapshot.update(new_snapshot);
         }
     }
