@@ -14,6 +14,7 @@ mod notifications;
 mod inspector;
 mod relationship_graph;
 mod timeline;
+mod simulation_errors;
 
 pub use simulation_control::*;
 pub use snapshot::*;
@@ -25,3 +26,4 @@ pub use notifications::*;
 pub use inspector::*;
 pub use relationship_graph::*;
 pub use timeline::*;
+pub use simulation_errors::*;

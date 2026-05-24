@@ -22,7 +22,7 @@ use bevy::prelude::*;
 
 pub use resources::*;
 pub use events::*;
-pub use systems::SimulationBridge;
+pub use systems::{SimulationBridge, BridgeError};
 
 /// Plugin that sets up the EBSS GUI systems and resources.
 ///
@@ -47,6 +47,7 @@ impl Plugin for EbssGuiPlugin {
             .insert_resource(RelationshipGraphData::default())
             .insert_resource(InspectorState::default())
             .insert_resource(TimelineData::default())
+            .insert_resource(SimulationErrors::default())
             // Events
             .add_event::<SimulationCommand>()
             .add_event::<SelectionChanged>()
@@ -55,6 +56,7 @@ impl Plugin for EbssGuiPlugin {
             .add_event::<CenterMapRequest>()
             // Add systems in First for bridge communication
             .add_systems(First, systems::receive_snapshots_system)
+            .add_systems(First, systems::receive_errors_system)
             // Input handling in PreUpdate
             .add_systems(PreUpdate, systems::keyboard_input_system)
             .add_systems(PreUpdate, systems::map_pan_system)

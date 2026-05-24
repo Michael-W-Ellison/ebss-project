@@ -24,7 +24,8 @@ use ebss::gui::{
     simulation_to_snapshot, agent_to_detailed, building_to_detailed, resource_to_detailed,
     tech_tree_to_snapshot, relationship_graph_to_snapshot,
 };
-use ebss::bevy_gui::{EbssGuiPlugin, SimulationBridge};
+use ebss::bevy_gui::{EbssGuiPlugin, SimulationBridge, BridgeError};
+use ebss::bevy_gui::resources::ErrorSeverity;
 
 fn main() {
     // Initialize logging
@@ -37,6 +38,7 @@ fn main() {
     // Create communication channels
     let (command_tx, command_rx): (Sender<GuiCommand>, Receiver<GuiCommand>) = channel();
     let (snapshot_tx, snapshot_rx): (Sender<SimulationSnapshot>, Receiver<SimulationSnapshot>) = channel();
+    let (error_tx, error_rx): (Sender<BridgeError>, Receiver<BridgeError>) = channel();
 
     // Shared state for entity data requests
     let agent_data_request: Arc<Mutex<Option<uuid::Uuid>>> = Arc::new(Mutex::new(None));
@@ -67,6 +69,7 @@ fn main() {
         run_simulation_thread(
             command_rx,
             snapshot_tx,
+            error_tx,
             agent_request_clone,
             agent_response_clone,
             building_request_clone,
@@ -84,6 +87,7 @@ fn main() {
     let bridge = SimulationBridge {
         command_tx: Arc::new(Mutex::new(command_tx)),
         snapshot_rx: Arc::new(Mutex::new(snapshot_rx)),
+        error_rx: Arc::new(Mutex::new(error_rx)),
         agent_data_request,
         agent_data_response,
         building_data_request,
@@ -112,10 +116,27 @@ fn main() {
         .run();
 }
 
+/// Send an error to the GUI
+fn send_error(
+    error_tx: &Sender<BridgeError>,
+    tick: u32,
+    severity: ErrorSeverity,
+    message: impl Into<String>,
+    context: Option<String>,
+) {
+    let _ = error_tx.send(BridgeError {
+        tick,
+        message: message.into(),
+        severity,
+        context,
+    });
+}
+
 /// Simulation thread main loop
 fn run_simulation_thread(
     command_rx: Receiver<GuiCommand>,
     snapshot_tx: Sender<SimulationSnapshot>,
+    error_tx: Sender<BridgeError>,
     agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
     agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
     building_data_request: Arc<Mutex<Option<ebss::world::Position>>>,

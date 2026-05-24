@@ -15,9 +15,18 @@ use crate::world::Position;
 use crate::bevy_gui::resources::{
     CurrentSnapshot, SimulationControl, SimState, StatisticsHistory, HistoryPoint,
     EntitySelection, SelectedEntityData, PanelVisibility, TechTreeData, RelationshipGraphData,
-    TimelineData, Selection,
+    TimelineData, Selection, SimulationErrors, SimulationError, NotificationQueue, NotificationType,
 };
 use crate::bevy_gui::events::SimulationCommand;
+
+/// Error sent from simulation thread to GUI
+#[derive(Debug, Clone)]
+pub struct BridgeError {
+    pub tick: u32,
+    pub message: String,
+    pub severity: crate::bevy_gui::resources::ErrorSeverity,
+    pub context: Option<String>,
+}
 
 /// Handles for communication with the simulation thread.
 /// Uses Arc<Mutex<>> wrappers to make channels thread-safe for Bevy.
@@ -25,6 +34,7 @@ use crate::bevy_gui::events::SimulationCommand;
 pub struct SimulationBridge {
     pub command_tx: Arc<Mutex<Sender<GuiCommand>>>,
     pub snapshot_rx: Arc<Mutex<Receiver<SimulationSnapshot>>>,
+    pub error_rx: Arc<Mutex<Receiver<BridgeError>>>,
     pub agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
     pub agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
     pub building_data_request: Arc<Mutex<Option<Position>>>,
@@ -35,6 +45,51 @@ pub struct SimulationBridge {
     pub tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
     pub relationship_graph_request: Arc<Mutex<bool>>,
     pub relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
+}
+
+/// System to receive errors from the simulation thread
+pub fn receive_errors_system(
+    bridge: Res<SimulationBridge>,
+    mut errors: ResMut<SimulationErrors>,
+    mut notifications: ResMut<NotificationQueue>,
+    time: Res<Time>,
+) {
+    if let Ok(rx) = bridge.error_rx.try_lock() {
+        let current_time = time.elapsed_secs_f64();
+
+        while let Ok(bridge_error) = rx.try_recv() {
+            let error = SimulationError {
+                tick: bridge_error.tick,
+                message: bridge_error.message.clone(),
+                severity: bridge_error.severity,
+                timestamp: current_time,
+                context: bridge_error.context.clone(),
+            };
+
+            // Add to error log
+            errors.push(error);
+
+            // Show notification based on severity
+            let notification_msg = if let Some(ctx) = &bridge_error.context {
+                format!("[{}] {}: {}", bridge_error.severity.as_str(), ctx, bridge_error.message)
+            } else {
+                format!("[{}] {}", bridge_error.severity.as_str(), bridge_error.message)
+            };
+
+            match bridge_error.severity {
+                crate::bevy_gui::resources::ErrorSeverity::Warning => {
+                    notifications.warning(&notification_msg, current_time);
+                }
+                crate::bevy_gui::resources::ErrorSeverity::Error => {
+                    notifications.error(&notification_msg, current_time);
+                }
+                crate::bevy_gui::resources::ErrorSeverity::Fatal => {
+                    notifications.error(&format!("FATAL: {}", notification_msg), current_time);
+                    log::error!("Fatal simulation error: {}", bridge_error.message);
+                }
+            }
+        }
+    }
 }
 
 /// System to receive snapshots from the simulation thread
