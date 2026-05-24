@@ -12,6 +12,7 @@ use crate::bevy_gui::events::SimulationCommand;
 pub use panels::{
     render_legend_panel, render_inspector_panel, render_statistics_panel,
     render_tech_tree_panel, render_timeline_panel, render_relationship_graph_panel,
+    render_save_dialog, render_load_dialog,
 };
 
 /// Render the top menu bar

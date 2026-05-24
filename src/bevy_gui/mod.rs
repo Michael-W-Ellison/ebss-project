@@ -48,6 +48,7 @@ impl Plugin for EbssGuiPlugin {
             .insert_resource(InspectorState::default())
             .insert_resource(TimelineData::default())
             .insert_resource(SimulationErrors::default())
+            .insert_resource(SaveLoadState::default())
             // Events
             .add_event::<SimulationCommand>()
             .add_event::<SelectionChanged>()
@@ -74,6 +75,9 @@ impl Plugin for EbssGuiPlugin {
             .add_systems(Update, ui::render_tech_tree_panel)
             .add_systems(Update, ui::render_timeline_panel)
             .add_systems(Update, ui::render_relationship_graph_panel)
+            // Dialog systems
+            .add_systems(Update, ui::render_save_dialog)
+            .add_systems(Update, ui::render_load_dialog)
             // Command sending in PostUpdate
             .add_systems(PostUpdate, systems::send_commands_system)
             .add_systems(PostUpdate, systems::entity_data_system)
