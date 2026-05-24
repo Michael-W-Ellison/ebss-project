@@ -51,6 +51,18 @@ impl Selection {
         self.current = selection;
     }
 
+    pub fn select_agent(&mut self, id: Uuid) {
+        self.current = EntitySelection::Agent(id);
+    }
+
+    pub fn select_building(&mut self, pos: (i32, i32)) {
+        self.current = EntitySelection::Building(Position { x: pos.0, y: pos.1 });
+    }
+
+    pub fn select_resource(&mut self, pos: (i32, i32)) {
+        self.current = EntitySelection::Resource(Position { x: pos.0, y: pos.1 });
+    }
+
     pub fn deselect(&mut self) {
         self.current = EntitySelection::None;
         self.follow_selected = false;

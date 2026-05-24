@@ -16,6 +16,7 @@ mod relationship_graph;
 mod timeline;
 mod simulation_errors;
 mod save_load;
+mod search;
 
 pub use simulation_control::*;
 pub use snapshot::*;
@@ -29,3 +30,4 @@ pub use relationship_graph::*;
 pub use timeline::*;
 pub use simulation_errors::*;
 pub use save_load::*;
+pub use search::*;

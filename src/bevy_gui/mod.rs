@@ -49,6 +49,7 @@ impl Plugin for EbssGuiPlugin {
             .insert_resource(TimelineData::default())
             .insert_resource(SimulationErrors::default())
             .insert_resource(SaveLoadState::default())
+            .insert_resource(SearchState::default())
             // Events
             .add_event::<SimulationCommand>()
             .add_event::<SelectionChanged>()
@@ -78,6 +79,9 @@ impl Plugin for EbssGuiPlugin {
             // Dialog systems
             .add_systems(Update, ui::render_save_dialog)
             .add_systems(Update, ui::render_load_dialog)
+            .add_systems(Update, ui::render_search_panel)
+            // Search system
+            .add_systems(Update, ui::search_system)
             // Command sending in PostUpdate
             .add_systems(PostUpdate, systems::send_commands_system)
             .add_systems(PostUpdate, systems::entity_data_system)
