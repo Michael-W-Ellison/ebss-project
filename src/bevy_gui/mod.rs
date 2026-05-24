@@ -87,6 +87,7 @@ impl Plugin for EbssGuiPlugin {
             .add_systems(PostUpdate, systems::entity_data_system)
             .add_systems(PostUpdate, systems::tech_tree_data_system)
             .add_systems(PostUpdate, systems::relationship_graph_data_system)
+            .add_systems(PostUpdate, systems::selection_sync_system)
             // Shutdown handling
             .add_systems(PostUpdate, systems::handle_shutdown_requests)
             .add_systems(Last, systems::on_app_exit);

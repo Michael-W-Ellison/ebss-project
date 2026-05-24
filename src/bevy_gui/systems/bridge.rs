@@ -19,7 +19,7 @@ use crate::bevy_gui::resources::{
     EntitySelection, SelectedEntityData, PanelVisibility, TechTreeData, RelationshipGraphData,
     TimelineData, Selection, SimulationErrors, SimulationError, NotificationQueue, NotificationType,
 };
-use crate::bevy_gui::events::{SimulationCommand, ShutdownRequested};
+use crate::bevy_gui::events::{SimulationCommand, ShutdownRequested, SelectionChanged, CenterMapRequest};
 
 /// Error sent from simulation thread to GUI
 #[derive(Debug, Clone)]
@@ -307,5 +307,37 @@ pub fn on_app_exit(
     for _ in exit_events.read() {
         log::info!("App exit detected, ensuring simulation thread shutdown...");
         bridge.shutdown_flag.store(true, Ordering::SeqCst);
+    }
+}
+
+/// System to sync selection state and handle follow mode
+pub fn selection_sync_system(
+    selection: Res<Selection>,
+    snapshot: Res<CurrentSnapshot>,
+    mut selection_changed_events: EventWriter<SelectionChanged>,
+    mut center_request: EventWriter<CenterMapRequest>,
+    mut last_selection: Local<EntitySelection>,
+) {
+    // Detect selection changes and fire events
+    if selection.current != *last_selection {
+        selection_changed_events.send(SelectionChanged {
+            previous: last_selection.clone(),
+            current: selection.current.clone(),
+        });
+        *last_selection = selection.current.clone();
+    }
+
+    // Handle follow mode - center map on selected agent
+    if selection.follow_selected {
+        if let EntitySelection::Agent(id) = &selection.current {
+            if let Some(snap) = &snapshot.snapshot {
+                if let Some(agent) = snap.population.agents.iter().find(|a| a.id == *id && a.is_alive) {
+                    center_request.send(CenterMapRequest {
+                        x: agent.position.0,
+                        y: agent.position.1,
+                    });
+                }
+            }
+        }
     }
 }
