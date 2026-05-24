@@ -2,6 +2,7 @@
 use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
 use crate::environment::technology::TechnologyRegistry;
+use crate::gui::events::{SimulationEvent, SimulationEventType, DeathCause};
 use uuid::Uuid;
 use std::collections::HashMap;
 
@@ -52,6 +53,8 @@ pub struct Population {
     pub current_tick: u32, // Current simulation tick for survival mechanics
     pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
     pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
+    /// Events that occurred this tick (for GUI timeline)
+    pub pending_events: Vec<SimulationEvent>,
 }
 
 impl Population {
@@ -69,6 +72,7 @@ impl Population {
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
+            pending_events: Vec::new(),
         }
     }
 
@@ -87,6 +91,7 @@ impl Population {
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
+            pending_events: Vec::new(),
         }
     }
 
@@ -161,6 +166,9 @@ impl Population {
     /// Update all agents and handle lifecycle events
     pub fn tick(&mut self) {
         self.current_tick += 1;
+
+        // Clear pending events from previous tick
+        self.pending_events.clear();
 
         // Update shared knowledge tick counter
         self.shared_knowledge.tick();
@@ -460,7 +468,8 @@ impl Population {
         let current_tick = self.current_tick;
 
         // Collect discoveries to be made (to avoid borrowing issues)
-        let mut discoveries: Vec<(usize, String, Uuid)> = Vec::new();
+        // (agent_idx, tech_id, agent_uuid, position)
+        let mut discoveries: Vec<(usize, String, Uuid, (i32, i32))> = Vec::new();
 
         // Get list of discoverable technologies for each agent
         for agent_idx in 0..self.agents.len() {
@@ -502,19 +511,31 @@ impl Population {
                 let discovery_roll: f32 = rng.gen();
                 if discovery_roll < tech.discovery_chance * curiosity {
                     // Record discovery for later
-                    discoveries.push((agent_idx, tech.id.clone(), agent.id));
+                    let pos = (agent.state.position.0, agent.state.position.1);
+                    discoveries.push((agent_idx, tech.id.clone(), agent.id, pos));
                     break; // Only one discovery per tick per agent
                 }
             }
         }
 
         // Now apply all discoveries
-        for (agent_idx, tech_id, agent_id) in discoveries {
+        for (agent_idx, tech_id, agent_id, pos) in discoveries {
             let is_world_first = self.technology_registry.record_first_discovery(
                 tech_id.clone(),
                 agent_id,
                 current_tick as u64,
             );
+
+            // Emit technology discovery event
+            self.pending_events.push(SimulationEvent::new(
+                self.current_tick,
+                SimulationEventType::TechnologyDiscovered {
+                    tech_id: tech_id.clone(),
+                    discoverer_id: agent_id,
+                    is_world_first,
+                },
+                Some(pos),
+            ));
 
             self.agents[agent_idx].technology_knowledge.discover_technology(
                 tech_id,
@@ -530,18 +551,32 @@ impl Population {
     fn process_deaths(&mut self) {
         use crate::agents::EmotionSource;
 
-        // Identify dead agents before removing them
-        let dead_agents: Vec<(uuid::Uuid, String)> = self.agents
+        // Identify dead agents before removing them, collecting position and detailed cause
+        let dead_agents: Vec<(uuid::Uuid, String, (i32, i32), DeathCause)> = self.agents
             .iter()
             .filter(|agent| !agent.state.is_alive)
             .map(|agent| {
-                // Determine cause of death from health context
-                let cause = if agent.state.health <= 0.0 {
-                    "health depletion".to_string()
+                // Determine cause of death from agent state
+                let (cause_str, cause_enum) = if agent.state.is_starving() {
+                    ("starvation".to_string(), DeathCause::Starvation)
+                } else if agent.state.is_dehydrated() {
+                    ("dehydration".to_string(), DeathCause::Dehydration)
+                } else if agent.state.age >= agent.state.max_age {
+                    ("old age".to_string(), DeathCause::OldAge)
+                } else if agent.state.health <= 0.0 {
+                    // Could be combat or other damage
+                    if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                        ("combat".to_string(), DeathCause::Combat { killer_id: Some(attacker_id) })
+                    } else {
+                        ("health depletion".to_string(), DeathCause::Unknown)
+                    }
+                } else if agent.state.energy <= 0.0 {
+                    ("exhaustion".to_string(), DeathCause::Exhaustion)
                 } else {
-                    "unknown cause".to_string()
+                    ("unknown cause".to_string(), DeathCause::Unknown)
                 };
-                (agent.id, cause)
+                let pos = (agent.state.position.0, agent.state.position.1);
+                (agent.id, cause_str, pos, cause_enum)
             })
             .collect();
 
@@ -549,8 +584,20 @@ impl Population {
             return; // No deaths to process
         }
 
+        // Emit death events for timeline
+        for (deceased_id, _cause_str, pos, cause_enum) in &dead_agents {
+            self.pending_events.push(SimulationEvent::new(
+                self.current_tick,
+                SimulationEventType::Death {
+                    agent_id: *deceased_id,
+                    cause: cause_enum.clone(),
+                },
+                Some(*pos),
+            ));
+        }
+
         // Process grief for each death
-        for (deceased_id, cause_description) in &dead_agents {
+        for (deceased_id, cause_description, _, _) in &dead_agents {
             let cause_source = EmotionSource::Event(cause_description.clone());
 
             // Notify all surviving agents about the death
@@ -622,7 +669,7 @@ impl Population {
         self.stats.total_deaths += deaths as u64;
 
         // Clean up tracking for dead agents
-        for (deceased_id, _) in &dead_agents {
+        for (deceased_id, _, _, _) in &dead_agents {
             self.unhappiness_tracker.remove(deceased_id);
             self.reproduction_cooldown.remove(deceased_id);
         }
@@ -634,8 +681,8 @@ impl Population {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        // Track unhappiness and identify agents who should abandon
-        let mut agents_to_remove = Vec::new();
+        // Track unhappiness and identify agents who should abandon (with position)
+        let mut agents_to_remove: Vec<(Uuid, (i32, i32))> = Vec::new();
 
         for agent in &self.agents {
             if !agent.state.is_alive {
@@ -657,7 +704,7 @@ impl Population {
                 if *unhappy_duration >= self.config.abandonment_unhappy_duration {
                     // Probabilistic abandonment
                     if rng.gen::<f32>() < self.config.abandonment_probability {
-                        agents_to_remove.push(agent.id);
+                        agents_to_remove.push((agent.id, (agent.state.position.0, agent.state.position.1)));
                     }
                 }
             } else {
@@ -668,11 +715,23 @@ impl Population {
 
         // Remove agents who are abandoning
         if !agents_to_remove.is_empty() {
-            self.agents.retain(|agent| !agents_to_remove.contains(&agent.id));
+            // Emit abandonment events
+            for (agent_id, pos) in &agents_to_remove {
+                self.pending_events.push(SimulationEvent::new(
+                    self.current_tick,
+                    SimulationEventType::Abandonment {
+                        agent_id: *agent_id,
+                    },
+                    Some(*pos),
+                ));
+            }
+
+            let agent_ids: Vec<Uuid> = agents_to_remove.iter().map(|(id, _)| *id).collect();
+            self.agents.retain(|agent| !agent_ids.contains(&agent.id));
             self.stats.total_abandonments += agents_to_remove.len() as u64;
 
             // Clean up tracking for abandoned agents
-            for agent_id in agents_to_remove {
+            for (agent_id, _) in agents_to_remove {
                 self.unhappiness_tracker.remove(&agent_id);
                 self.reproduction_cooldown.remove(&agent_id);
             }
@@ -718,7 +777,23 @@ impl Population {
                     if drive1 && drive2 {
                         // Successful reproduction
                         let offspring = reproduce(agent1, agent2, self.current_tick);
+                        let child_id = offspring.id;
+                        let child_pos = (offspring.state.position.0, offspring.state.position.1);
+                        let parent1_id = agent1.id;
+                        let parent2_id = agent2.id;
+
                         new_offspring.push(offspring);
+
+                        // Emit birth event
+                        self.pending_events.push(SimulationEvent::new(
+                            self.current_tick,
+                            SimulationEventType::Birth {
+                                mother_id: parent1_id,
+                                child_id,
+                                father_id: Some(parent2_id),
+                            },
+                            Some(child_pos),
+                        ));
 
                         // Add cooldown (prevent immediate re-reproduction)
                         self.reproduction_cooldown.insert(agent1.id, 500); // 500 ticks cooldown
@@ -1458,6 +1533,18 @@ impl Population {
         }
 
         learning_pairs
+    }
+
+    /// Drain and return all pending events
+    ///
+    /// This is called by the GUI snapshot system to collect events for the timeline.
+    pub fn drain_events(&mut self) -> Vec<SimulationEvent> {
+        std::mem::take(&mut self.pending_events)
+    }
+
+    /// Get pending events without draining (for read-only access)
+    pub fn get_pending_events(&self) -> &[SimulationEvent] {
+        &self.pending_events
     }
 }
 

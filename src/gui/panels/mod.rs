@@ -10,3 +10,4 @@ pub mod tech_tree;
 pub mod search;
 pub mod keyboard_help;
 pub mod save_load;
+pub mod timeline;

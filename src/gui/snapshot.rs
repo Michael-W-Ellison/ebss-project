@@ -279,11 +279,14 @@ pub fn resource_to_detailed(resource: &ResourceNode) -> SelectedResourceData {
 
 /// Generate complete simulation snapshot
 pub fn simulation_to_snapshot(
-    simulation: &Simulation,
+    simulation: &mut Simulation,
     state: SimState,
     speed: f32,
     selected: &EntitySelection,
 ) -> SimulationSnapshot {
+    // Drain events from population for this snapshot
+    let events = simulation.population.drain_events();
+
     SimulationSnapshot {
         tick: simulation.world.tick,
         state,
@@ -291,6 +294,7 @@ pub fn simulation_to_snapshot(
         world: world_to_snapshot(&simulation.world),
         population: population_to_snapshot(&simulation.population),
         selected: selected.clone(),
+        events,
     }
 }
 

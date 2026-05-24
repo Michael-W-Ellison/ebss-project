@@ -1330,6 +1330,22 @@ impl Simulation {
                 // Add building to world
                 self.world.add_building(building);
 
+                // Emit building started event for timeline
+                {
+                    use crate::gui::events::{SimulationEvent, SimulationEventType};
+                    let agent = &self.population.agents[agent_index];
+                    let event = SimulationEvent::new(
+                        self.current_tick,
+                        SimulationEventType::BuildingStarted {
+                            building_type,
+                            position: build_pos,
+                            builder_id: agent.id,
+                        },
+                        Some((build_pos.x, build_pos.y)),
+                    );
+                    self.population.pending_events.push(event);
+                }
+
                 // Grant Construction XP (more XP for larger buildings)
                 let construction_xp = match building_type {
                     BuildingType::SmallHouse => 5,
@@ -1501,6 +1517,22 @@ impl Simulation {
                     && self.population.agents[target_index].state.health > 0.0;
 
                 let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
+
+                // Emit conflict event for timeline
+                {
+                    use crate::gui::events::{SimulationEvent, SimulationEventType};
+                    let event = SimulationEvent::new(
+                        self.current_tick,
+                        SimulationEventType::Conflict {
+                            attacker_id,
+                            target_id,
+                            damage: actual_damage,
+                            fatal: !target_alive,
+                        },
+                        Some((attacker_pos.0, attacker_pos.1)),
+                    );
+                    self.population.pending_events.push(event);
+                }
 
                 debug!(
                     "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({}, mounted: {}, bonus: +{:.0}%)",
@@ -1989,6 +2021,9 @@ impl Simulation {
                             );
                         }
 
+                        let agent_id = agent.id;
+                        let agent_pos = (agent.state.position.0, agent.state.position.1);
+
                         debug!(
                             "Agent {} deposited {} {} to storehouse (storehouse now has {})",
                             agent.id,
@@ -1998,6 +2033,21 @@ impl Simulation {
                                 .map(|i| i.quantity)
                                 .unwrap_or(0)
                         );
+
+                        // Emit storehouse deposit event for timeline (only for significant deposits)
+                        if removed >= 3 {
+                            use crate::gui::events::{SimulationEvent, SimulationEventType};
+                            let event = SimulationEvent::new(
+                                self.current_tick,
+                                SimulationEventType::StorehouseDeposit {
+                                    agent_id,
+                                    resource: item_type.clone(),
+                                    amount: removed,
+                                },
+                                Some(agent_pos),
+                            );
+                            self.population.pending_events.push(event);
+                        }
 
                         ActionResult::success()
                             .with_drive_change(DriveType::Preparedness, -0.15)

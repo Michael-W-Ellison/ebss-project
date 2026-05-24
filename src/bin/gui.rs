@@ -244,7 +244,7 @@ fn run_simulation_thread(
 
         // Send snapshot to GUI at regular intervals
         if last_snapshot.elapsed() >= snapshot_interval {
-            let snapshot = simulation_to_snapshot(&simulation, state, speed, &selected);
+            let snapshot = simulation_to_snapshot(&mut simulation, state, speed, &selected);
             let _ = snapshot_tx.send(snapshot);
             last_snapshot = Instant::now();
         }

@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::agents::LifeStage;
 use crate::core::DriveType;
 use crate::world::{Position, BuildingType, ResourceType, TerrainType};
+use super::events::TimelineState;
 
 /// Commands sent from GUI to simulation thread
 #[derive(Debug, Clone)]
@@ -130,6 +131,8 @@ pub struct SimulationSnapshot {
     pub world: WorldSnapshot,
     pub population: PopulationSnapshot,
     pub selected: EntitySelection,
+    /// Events that occurred this tick (for timeline panel)
+    pub events: Vec<super::events::SimulationEvent>,
 }
 
 /// Selected agent detailed data (only populated when an agent is selected)
@@ -483,6 +486,10 @@ pub struct GuiState {
     // Save/Load state
     pub save_load_state: SaveLoadState,
 
+    // Timeline state
+    pub show_timeline: bool,
+    pub timeline_state: TimelineState,
+
     // Notifications
     pub notifications: Vec<Notification>,
 }
@@ -638,6 +645,8 @@ impl Default for GuiState {
             selected_tech: None,
             search_state: SearchState::default(),
             save_load_state: SaveLoadState::default(),
+            show_timeline: false,
+            timeline_state: TimelineState::default(),
             notifications: Vec::new(),
         }
     }
@@ -651,6 +660,11 @@ impl GuiState {
     pub fn update_from_snapshot(&mut self, snapshot: SimulationSnapshot) {
         self.simulation_state = snapshot.state;
         self.speed = snapshot.speed;
+
+        // Process events from snapshot and add to timeline
+        for event in &snapshot.events {
+            self.timeline_state.add_event(event.clone());
+        }
 
         // Record history point if interval elapsed
         if self.statistics_history.should_sample(snapshot.tick) {

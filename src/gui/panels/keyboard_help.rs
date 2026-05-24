@@ -46,6 +46,7 @@ pub fn render_keyboard_help(ui: &mut Ui) {
         ("I", "Toggle inspector panel"),
         ("P", "Toggle statistics panel"),
         ("T", "Toggle tech tree"),
+        ("Y", "Toggle timeline"),
         ("L", "Toggle legend"),
         ("M", "Toggle minimap"),
         ("G", "Toggle grid overlay"),

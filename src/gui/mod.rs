@@ -14,10 +14,12 @@ pub mod state;
 pub mod snapshot;
 pub mod app;
 pub mod panels;
+pub mod events;
 
 pub use state::*;
 pub use snapshot::*;
 pub use app::EbssApp;
+pub use events::{SimulationEvent, SimulationEventType, EventFilterType, DeathCause, TimelineState};
 
 // Re-export snapshot functions for binary
 pub use snapshot::{
