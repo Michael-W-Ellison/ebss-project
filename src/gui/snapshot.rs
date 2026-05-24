@@ -563,3 +563,32 @@ pub fn tech_tree_to_snapshot(
         discovery_history: discovery_history.to_vec(),
     }
 }
+
+/// Generate relationship graph snapshot for GUI
+pub fn relationship_graph_to_snapshot(population: &Population, tick: u32) -> RelationshipGraphSnapshot {
+    let nodes: Vec<RelationshipGraphNode> = population.agents.iter()
+        .filter(|a| a.state.is_alive)
+        .map(|agent| {
+            let relationships: Vec<RelationshipEdge> = agent.relationships.get_all()
+                .values()
+                .map(|rel| RelationshipEdge {
+                    target_id: rel.other_agent,
+                    relationship_type: format!("{:?}", rel.relationship_type),
+                    bond_strength: rel.bond_strength,
+                    total_interactions: rel.total_interactions,
+                })
+                .collect();
+
+            RelationshipGraphNode {
+                agent_id: agent.id,
+                position: (agent.state.position.0, agent.state.position.1),
+                life_stage: agent.state.life_stage,
+                health: agent.state.health,
+                is_alive: agent.state.is_alive,
+                relationships,
+            }
+        })
+        .collect();
+
+    RelationshipGraphSnapshot { nodes, tick }
+}

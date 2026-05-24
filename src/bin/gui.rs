@@ -14,9 +14,9 @@ use ebss::world::TechnologyTree;
 use ebss::gui::{
     EbssApp, SimulationCommand, SimulationSnapshot, SimState,
     EntitySelection, SelectedAgentData, SelectedBuildingData, SelectedResourceData,
-    TechTreeSnapshot,
+    TechTreeSnapshot, RelationshipGraphSnapshot,
     simulation_to_snapshot, agent_to_detailed, building_to_detailed, resource_to_detailed,
-    tech_tree_to_snapshot,
+    tech_tree_to_snapshot, relationship_graph_to_snapshot,
 };
 
 fn main() -> Result<(), eframe::Error> {
@@ -40,6 +40,8 @@ fn main() -> Result<(), eframe::Error> {
     let resource_data_response: Arc<Mutex<Option<SelectedResourceData>>> = Arc::new(Mutex::new(None));
     let tech_tree_request: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
     let tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>> = Arc::new(Mutex::new(None));
+    let relationship_graph_request: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    let relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>> = Arc::new(Mutex::new(None));
 
     let agent_request_clone = Arc::clone(&agent_data_request);
     let agent_response_clone = Arc::clone(&agent_data_response);
@@ -49,6 +51,8 @@ fn main() -> Result<(), eframe::Error> {
     let resource_response_clone = Arc::clone(&resource_data_response);
     let tech_tree_request_clone = Arc::clone(&tech_tree_request);
     let tech_tree_response_clone = Arc::clone(&tech_tree_response);
+    let relationship_graph_request_clone = Arc::clone(&relationship_graph_request);
+    let relationship_graph_response_clone = Arc::clone(&relationship_graph_response);
 
     // Spawn simulation thread
     thread::spawn(move || {
@@ -63,6 +67,8 @@ fn main() -> Result<(), eframe::Error> {
             resource_response_clone,
             tech_tree_request_clone,
             tech_tree_response_clone,
+            relationship_graph_request_clone,
+            relationship_graph_response_clone,
         );
     });
 
@@ -91,6 +97,8 @@ fn main() -> Result<(), eframe::Error> {
                 resource_data_response,
                 tech_tree_request,
                 tech_tree_response,
+                relationship_graph_request,
+                relationship_graph_response,
             )))
         }),
     )
@@ -108,6 +116,8 @@ fn run_simulation_thread(
     resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
     tech_tree_request: Arc<Mutex<bool>>,
     tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
+    relationship_graph_request: Arc<Mutex<bool>>,
+    relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
 ) {
     log::info!("Simulation thread starting...");
 
@@ -215,6 +225,20 @@ fn run_simulation_thread(
                     &discovery_history,
                 );
                 if let Ok(mut response) = tech_tree_response.try_lock() {
+                    *response = Some(snapshot);
+                }
+            }
+        }
+
+        // Process relationship graph data requests
+        if let Ok(mut request) = relationship_graph_request.try_lock() {
+            if *request {
+                *request = false;
+                let snapshot = relationship_graph_to_snapshot(
+                    &simulation.population,
+                    simulation.current_tick,
+                );
+                if let Ok(mut response) = relationship_graph_response.try_lock() {
                     *response = Some(snapshot);
                 }
             }

@@ -28,4 +28,5 @@ pub use snapshot::{
     building_to_detailed,
     resource_to_detailed,
     tech_tree_to_snapshot,
+    relationship_graph_to_snapshot,
 };

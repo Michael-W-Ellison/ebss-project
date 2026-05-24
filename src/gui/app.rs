@@ -44,6 +44,10 @@ pub struct EbssApp {
     /// Tech tree snapshot data (updated periodically)
     pub tech_tree_request: Arc<Mutex<bool>>,
     pub tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
+
+    /// Relationship graph snapshot data (updated periodically)
+    pub relationship_graph_request: Arc<Mutex<bool>>,
+    pub relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
 }
 
 impl EbssApp {
@@ -59,6 +63,8 @@ impl EbssApp {
         resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
         tech_tree_request: Arc<Mutex<bool>>,
         tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
+        relationship_graph_request: Arc<Mutex<bool>>,
+        relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
     ) -> Self {
         Self {
             state: GuiState::new(),
@@ -75,6 +81,8 @@ impl EbssApp {
             resource_data_response,
             tech_tree_request,
             tech_tree_response,
+            relationship_graph_request,
+            relationship_graph_response,
         }
     }
 
@@ -122,6 +130,13 @@ impl EbssApp {
                 self.state.tech_tree_snapshot = response.take();
             }
         }
+
+        // Check relationship graph data
+        if let Ok(mut response) = self.relationship_graph_response.try_lock() {
+            if response.is_some() {
+                self.state.relationship_graph_snapshot = response.take();
+            }
+        }
     }
 
     /// Request data for currently selected entity
@@ -148,6 +163,13 @@ impl EbssApp {
         // Request tech tree data when tech tree panel is visible
         if self.state.show_tech_tree {
             if let Ok(mut request) = self.tech_tree_request.try_lock() {
+                *request = true;
+            }
+        }
+
+        // Request relationship graph data when relationship graph panel is visible
+        if self.state.show_relationship_graph {
+            if let Ok(mut request) = self.relationship_graph_request.try_lock() {
                 *request = true;
             }
         }
@@ -201,6 +223,7 @@ impl eframe::App for EbssApp {
                     ui.checkbox(&mut self.state.show_statistics, "Statistics Panel (P)");
                     ui.checkbox(&mut self.state.show_tech_tree, "Technology Tree (T)");
                     ui.checkbox(&mut self.state.show_timeline, "Timeline (Y)");
+                    ui.checkbox(&mut self.state.show_relationship_graph, "Relationship Graph (R)");
                     ui.checkbox(&mut self.state.show_legend, "Legend (L)");
                     ui.checkbox(&mut self.state.show_minimap, "Minimap (M)");
                     ui.separator();
@@ -314,6 +337,17 @@ impl eframe::App for EbssApp {
                 });
         }
 
+        // Relationship graph window (if enabled)
+        if self.state.show_relationship_graph {
+            egui::Window::new("Relationship Graph")
+                .collapsible(true)
+                .resizable(true)
+                .default_size([700.0, 550.0])
+                .show(ctx, |ui| {
+                    panels::relationship_graph::render_relationship_graph(ui, &mut self.state);
+                });
+        }
+
         // Search window (if enabled)
         if self.state.show_search {
             egui::Window::new("Search")
@@ -383,6 +417,8 @@ impl EbssApp {
                     self.state.show_tech_tree = false;
                 } else if self.state.show_timeline {
                     self.state.show_timeline = false;
+                } else if self.state.show_relationship_graph {
+                    self.state.show_relationship_graph = false;
                 } else {
                     self.state.selected = EntitySelection::None;
                     self.state.follow_selected = false;
@@ -443,6 +479,9 @@ impl EbssApp {
             }
             if i.key_pressed(Key::Y) && !ctrl {
                 self.state.show_timeline = !self.state.show_timeline;
+            }
+            if i.key_pressed(Key::R) && !ctrl {
+                self.state.show_relationship_graph = !self.state.show_relationship_graph;
             }
 
             // Ctrl shortcuts

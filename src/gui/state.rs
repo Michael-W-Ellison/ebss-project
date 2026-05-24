@@ -419,6 +419,115 @@ pub struct TechTreeSnapshot {
     pub discovery_history: Vec<(u32, String)>, // (tick, tech_id)
 }
 
+/// Relationship graph node data for visualization
+#[derive(Debug, Clone)]
+pub struct RelationshipGraphNode {
+    pub agent_id: Uuid,
+    pub position: (i32, i32),
+    pub life_stage: LifeStage,
+    pub health: f32,
+    pub is_alive: bool,
+    pub relationships: Vec<RelationshipEdge>,
+}
+
+/// Relationship edge data for graph
+#[derive(Debug, Clone)]
+pub struct RelationshipEdge {
+    pub target_id: Uuid,
+    pub relationship_type: String,
+    pub bond_strength: f32,
+    pub total_interactions: u32,
+}
+
+/// Relationship graph snapshot for GUI
+#[derive(Debug, Clone, Default)]
+pub struct RelationshipGraphSnapshot {
+    pub nodes: Vec<RelationshipGraphNode>,
+    pub tick: u32,
+}
+
+/// Filter options for relationship graph
+#[derive(Debug, Clone)]
+pub struct RelationshipFilter {
+    pub show_parent: bool,
+    pub show_child: bool,
+    pub show_sibling: bool,
+    pub show_partner: bool,
+    pub show_friend: bool,
+    pub show_acquaintance: bool,
+    pub show_rival: bool,
+    pub show_enemy: bool,
+    pub min_bond_strength: f32,
+}
+
+impl Default for RelationshipFilter {
+    fn default() -> Self {
+        Self {
+            show_parent: true,
+            show_child: true,
+            show_sibling: true,
+            show_partner: true,
+            show_friend: true,
+            show_acquaintance: false, // Hidden by default (too many)
+            show_rival: true,
+            show_enemy: true,
+            min_bond_strength: -1.0,
+        }
+    }
+}
+
+/// Layout mode for relationship graph
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GraphLayoutMode {
+    #[default]
+    ForceDirected,
+    Circular,
+    Spatial,
+}
+
+/// Computed node position for graph layout
+#[derive(Debug, Clone, Default)]
+pub struct GraphNodePosition {
+    pub x: f32,
+    pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
+}
+
+/// Relationship graph panel state
+#[derive(Debug, Clone)]
+pub struct RelationshipGraphState {
+    pub zoom: f32,
+    pub offset: (f32, f32),
+    pub selected_agent: Option<Uuid>,
+    pub hovered_agent: Option<Uuid>,
+    pub filter: RelationshipFilter,
+    pub layout_mode: GraphLayoutMode,
+    pub show_labels: bool,
+    pub focus_agent: Option<Uuid>,
+    pub node_positions: HashMap<Uuid, GraphNodePosition>,
+    pub layout_iterations: u32,
+    pub needs_layout: bool,
+}
+
+impl Default for RelationshipGraphState {
+    fn default() -> Self {
+        Self {
+            zoom: 1.0,
+            offset: (0.0, 0.0),
+            selected_agent: None,
+            hovered_agent: None,
+            filter: RelationshipFilter::default(),
+            layout_mode: GraphLayoutMode::default(),
+            show_labels: true,
+            focus_agent: None,
+            node_positions: HashMap::new(),
+            layout_iterations: 0,
+            needs_layout: true,
+        }
+    }
+}
+
 /// Map layer visibility settings
 #[derive(Debug, Clone)]
 pub struct MapLayers {
@@ -479,6 +588,11 @@ pub struct GuiState {
     pub show_tech_tree: bool,
     pub tech_tree_snapshot: Option<TechTreeSnapshot>,
     pub selected_tech: Option<String>,
+
+    // Relationship graph state
+    pub show_relationship_graph: bool,
+    pub relationship_graph_snapshot: Option<RelationshipGraphSnapshot>,
+    pub relationship_graph_state: RelationshipGraphState,
 
     // Search state
     pub search_state: SearchState,
@@ -643,6 +757,9 @@ impl Default for GuiState {
             show_tech_tree: false,
             tech_tree_snapshot: None,
             selected_tech: None,
+            show_relationship_graph: false,
+            relationship_graph_snapshot: None,
+            relationship_graph_state: RelationshipGraphState::default(),
             search_state: SearchState::default(),
             save_load_state: SaveLoadState::default(),
             show_timeline: false,
