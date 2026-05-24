@@ -1,7 +1,7 @@
 // src/gui/snapshot.rs
 //! Snapshot generation for GUI rendering.
 
-use crate::agents::{Agent, Population};
+use crate::agents::{Agent, Population, FatigueSeverity};
 use crate::analytics::Simulation;
 use crate::core::DriveType;
 use crate::world::{World, Position, BuildingState, Building, ResourceNode, TechEra, TechnologyTree};
@@ -66,6 +66,13 @@ pub fn world_to_snapshot(world: &World) -> WorldSnapshot {
 pub fn agent_to_snapshot(agent: &Agent) -> AgentSnapshot {
     let most_urgent = agent.drives.most_urgent();
 
+    let fatigue_severity = match agent.fatigue.severity() {
+        FatigueSeverity::None => 0,
+        FatigueSeverity::Mild => 1,
+        FatigueSeverity::Moderate => 2,
+        FatigueSeverity::Severe => 3,
+    };
+
     AgentSnapshot {
         id: agent.id,
         position: agent.state.position,
@@ -74,6 +81,8 @@ pub fn agent_to_snapshot(agent: &Agent) -> AgentSnapshot {
         life_stage: agent.state.life_stage,
         is_alive: agent.state.is_alive,
         most_urgent_drive: most_urgent.map(|drive| drive.drive_type),
+        is_sleeping: agent.fatigue.is_sleeping,
+        fatigue_severity,
     }
 }
 

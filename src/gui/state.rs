@@ -97,6 +97,8 @@ pub struct AgentSnapshot {
     pub life_stage: LifeStage,
     pub is_alive: bool,
     pub most_urgent_drive: Option<DriveType>,
+    pub is_sleeping: bool,
+    pub fatigue_severity: u8,
 }
 
 /// Population statistics snapshot

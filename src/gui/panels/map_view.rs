@@ -248,6 +248,40 @@ pub fn render_map(
                 painter.circle_filled(dot_pos, 2.0, Color32::from_rgb(100, 100, 255));
             }
 
+            // Sleep indicator (Zzz when sleeping)
+            if agent.is_sleeping {
+                let z_color = Color32::from_rgb(138, 43, 226);
+                let z_x = center.x + radius + 2.0;
+                let z_y = center.y - radius;
+                let font_size = (8.0 * state.map_zoom).max(6.0);
+                painter.text(
+                    Pos2::new(z_x, z_y),
+                    egui::Align2::LEFT_CENTER,
+                    "z",
+                    egui::FontId::proportional(font_size),
+                    z_color,
+                );
+                painter.text(
+                    Pos2::new(z_x + font_size * 0.5, z_y - font_size * 0.4),
+                    egui::Align2::LEFT_CENTER,
+                    "z",
+                    egui::FontId::proportional(font_size * 0.75),
+                    z_color.gamma_multiply(0.7),
+                );
+            } else if agent.fatigue_severity > 0 {
+                // Fatigue indicator (small dot on left side when tired but awake)
+                let fatigue_color = match agent.fatigue_severity {
+                    1 => Color32::from_rgb(200, 200, 100),
+                    2 => Color32::from_rgb(255, 165, 0),
+                    _ => Color32::from_rgb(255, 69, 0),
+                };
+                let indicator_pos = Pos2::new(center.x - radius - 3.0, center.y);
+                painter.circle_filled(indicator_pos, 2.0, fatigue_color);
+                if agent.fatigue_severity >= 3 {
+                    painter.circle_stroke(indicator_pos, 3.5, Stroke::new(1.0, fatigue_color));
+                }
+            }
+
             // Drive urgency indicator (small colored triangle above agent)
             if let Some(drive) = agent.most_urgent_drive {
                 let indicator_color = drive_color(drive);
@@ -317,6 +351,17 @@ pub fn render_map(
                 ui.label(format!("Agent ({:?})", agent.life_stage));
                 ui.label(format!("Health: {:.0}%", agent.health));
                 ui.label(format!("Energy: {:.0}%", agent.energy));
+                if agent.is_sleeping {
+                    ui.label("Status: Sleeping");
+                } else {
+                    let fatigue_desc = match agent.fatigue_severity {
+                        0 => "Well-rested",
+                        1 => "Slightly tired",
+                        2 => "Fatigued",
+                        _ => "Exhausted",
+                    };
+                    ui.label(format!("Fatigue: {}", fatigue_desc));
+                }
                 if let Some(drive) = agent.most_urgent_drive {
                     ui.label(format!("Urgent: {:?}", drive));
                 }
