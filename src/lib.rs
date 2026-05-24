@@ -40,6 +40,9 @@ pub mod visualization;
 #[cfg(feature = "gui")]
 pub mod gui;
 
+#[cfg(feature = "bevy_gui")]
+pub mod bevy_gui;
+
 /// Prelude module for convenient imports
 pub mod prelude {
     pub use crate::core::{
