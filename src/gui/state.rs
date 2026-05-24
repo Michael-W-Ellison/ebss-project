@@ -722,13 +722,25 @@ pub struct GuiState {
     pub notifications: Vec<Notification>,
 }
 
+/// Minimap corner position
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MinimapPosition {
+    #[default]
+    TopRight,
+    TopLeft,
+    BottomRight,
+    BottomLeft,
+}
+
 /// Minimap display settings
 #[derive(Debug, Clone)]
 pub struct MinimapSettings {
     pub size: f32,
     pub show_resources: bool,
     pub show_buildings: bool,
+    pub show_agents: bool,
     pub opacity: f32,
+    pub position: MinimapPosition,
 }
 
 impl Default for MinimapSettings {
@@ -737,7 +749,9 @@ impl Default for MinimapSettings {
             size: 150.0,
             show_resources: true,
             show_buildings: true,
+            show_agents: true,
             opacity: 0.85,
+            position: MinimapPosition::default(),
         }
     }
 }

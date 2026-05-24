@@ -512,14 +512,20 @@ fn draw_minimap(
     state: &GuiState,
     snapshot: &crate::gui::state::SimulationSnapshot,
 ) -> Option<(i32, i32)> {
+    use crate::gui::state::MinimapPosition;
+
     let world = &snapshot.world;
     let minimap_size = state.minimap_settings.size;
     let opacity = (state.minimap_settings.opacity * 255.0) as u8;
 
-    let minimap_rect = Rect::from_min_size(
-        Pos2::new(view_rect.max.x - minimap_size - 10.0, view_rect.min.y + 10.0),
-        Vec2::new(minimap_size, minimap_size),
-    );
+    let minimap_pos = match state.minimap_settings.position {
+        MinimapPosition::TopRight => Pos2::new(view_rect.max.x - minimap_size - 10.0, view_rect.min.y + 10.0),
+        MinimapPosition::TopLeft => Pos2::new(view_rect.min.x + 10.0, view_rect.min.y + 10.0),
+        MinimapPosition::BottomRight => Pos2::new(view_rect.max.x - minimap_size - 10.0, view_rect.max.y - minimap_size - 10.0),
+        MinimapPosition::BottomLeft => Pos2::new(view_rect.min.x + 10.0, view_rect.max.y - minimap_size - 10.0),
+    };
+
+    let minimap_rect = Rect::from_min_size(minimap_pos, Vec2::new(minimap_size, minimap_size));
 
     // Background with configurable opacity
     painter.rect_filled(minimap_rect, 4.0, Color32::from_rgba_unmultiplied(0, 0, 0, opacity));
@@ -547,6 +553,13 @@ fn draw_minimap(
             let y = minimap_rect.min.y + resource.position.y as f32 * scale + scale / 2.0;
             let color = resource_color(resource.resource_type);
             painter.circle_filled(Pos2::new(x, y), 1.5, color);
+
+            // Highlight selected resource
+            if let crate::gui::state::EntitySelection::Resource(pos) = &state.selected {
+                if pos.x == resource.position.x && pos.y == resource.position.y {
+                    painter.circle_stroke(Pos2::new(x, y), 4.0, Stroke::new(1.5, Color32::YELLOW));
+                }
+            }
         }
     }
 
@@ -561,57 +574,73 @@ fn draw_minimap(
             } else {
                 Color32::from_rgb(180, 150, 100)
             };
-            painter.rect_filled(
-                Rect::from_min_size(Pos2::new(x, y), Vec2::new(size, size)),
-                0.0,
-                color,
-            );
-        }
-    }
+            let building_rect = Rect::from_min_size(Pos2::new(x, y), Vec2::new(size, size));
+            painter.rect_filled(building_rect, 0.0, color);
 
-    // Draw agents as dots
-    for agent in &snapshot.population.agents {
-        if !agent.is_alive {
-            continue;
-        }
-
-        if !should_show_agent(agent, &state.agent_filter) {
-            continue;
-        }
-
-        let x = minimap_rect.min.x + agent.position.0 as f32 * scale;
-        let y = minimap_rect.min.y + agent.position.1 as f32 * scale;
-        let color = life_stage_color(agent.life_stage);
-        painter.circle_filled(Pos2::new(x + scale / 2.0, y + scale / 2.0), 2.0, color);
-
-        // Highlight selected agent on minimap
-        if let crate::gui::state::EntitySelection::Agent(selected_id) = &state.selected {
-            if *selected_id == agent.id {
-                painter.circle_stroke(
-                    Pos2::new(x + scale / 2.0, y + scale / 2.0),
-                    4.0,
-                    Stroke::new(1.0, Color32::WHITE),
-                );
+            // Highlight selected building
+            if let crate::gui::state::EntitySelection::Building(pos) = &state.selected {
+                if pos.x == building.position.x && pos.y == building.position.y {
+                    painter.rect_stroke(building_rect.expand(2.0), 0.0, Stroke::new(1.5, Color32::YELLOW));
+                }
             }
         }
     }
 
-    // Draw viewport rectangle
+    // Draw agents as dots (if enabled)
+    if state.minimap_settings.show_agents {
+        for agent in &snapshot.population.agents {
+            if !agent.is_alive {
+                continue;
+            }
+
+            if !should_show_agent(agent, &state.agent_filter) {
+                continue;
+            }
+
+            let x = minimap_rect.min.x + agent.position.0 as f32 * scale;
+            let y = minimap_rect.min.y + agent.position.1 as f32 * scale;
+            let color = life_stage_color(agent.life_stage);
+            painter.circle_filled(Pos2::new(x + scale / 2.0, y + scale / 2.0), 2.0, color);
+
+            // Highlight selected agent on minimap
+            if let crate::gui::state::EntitySelection::Agent(selected_id) = &state.selected {
+                if *selected_id == agent.id {
+                    painter.circle_stroke(
+                        Pos2::new(x + scale / 2.0, y + scale / 2.0),
+                        4.0,
+                        Stroke::new(1.5, Color32::WHITE),
+                    );
+                }
+            }
+        }
+    }
+
+    // Draw viewport rectangle (clamped to minimap bounds)
     let vp_x = minimap_rect.min.x + state.map_offset.0 / (TILE_SIZE * state.map_zoom) * scale;
     let vp_y = minimap_rect.min.y + state.map_offset.1 / (TILE_SIZE * state.map_zoom) * scale;
     let vp_w = (view_rect.width() / (TILE_SIZE * state.map_zoom)) * scale;
     let vp_h = (view_rect.height() / (TILE_SIZE * state.map_zoom)) * scale;
 
     let viewport_rect = Rect::from_min_size(Pos2::new(vp_x, vp_y), Vec2::new(vp_w, vp_h));
-    painter.rect_stroke(viewport_rect, 0.0, Stroke::new(2.0, Color32::WHITE));
+    let clamped_viewport = viewport_rect.intersect(minimap_rect);
+    if clamped_viewport.width() > 0.0 && clamped_viewport.height() > 0.0 {
+        painter.rect_stroke(clamped_viewport, 0.0, Stroke::new(2.0, Color32::WHITE));
+    }
 
-    // Minimap title
+    // Minimap title and zoom indicator
     painter.text(
         Pos2::new(minimap_rect.min.x + 4.0, minimap_rect.min.y + 2.0),
         egui::Align2::LEFT_TOP,
         "Minimap",
         egui::FontId::proportional(10.0),
         Color32::from_rgba_unmultiplied(200, 200, 200, opacity),
+    );
+    painter.text(
+        Pos2::new(minimap_rect.max.x - 4.0, minimap_rect.min.y + 2.0),
+        egui::Align2::RIGHT_TOP,
+        format!("{:.0}%", state.map_zoom * 100.0),
+        egui::FontId::proportional(9.0),
+        Color32::from_rgba_unmultiplied(180, 180, 180, opacity),
     );
 
     // Click on minimap to pan - return position instead of modifying state
@@ -685,8 +714,27 @@ fn render_map_controls(ui: &mut Ui, state: &mut GuiState, view_rect: Rect) {
         ui.menu_button(if state.show_minimap { "Minimap [ON]" } else { "Minimap [OFF]" }, |ui| {
             ui.checkbox(&mut state.show_minimap, "Show Minimap (M)");
             ui.separator();
-            ui.checkbox(&mut state.minimap_settings.show_resources, "Show Resources");
-            ui.checkbox(&mut state.minimap_settings.show_buildings, "Show Buildings");
+            ui.label(egui::RichText::new("Display").strong());
+            ui.checkbox(&mut state.minimap_settings.show_resources, "Resources");
+            ui.checkbox(&mut state.minimap_settings.show_buildings, "Buildings");
+            ui.checkbox(&mut state.minimap_settings.show_agents, "Agents");
+            ui.separator();
+            ui.label(egui::RichText::new("Position").strong());
+            ui.horizontal(|ui| {
+                use crate::gui::state::MinimapPosition;
+                if ui.selectable_label(state.minimap_settings.position == MinimapPosition::TopLeft, "TL").clicked() {
+                    state.minimap_settings.position = MinimapPosition::TopLeft;
+                }
+                if ui.selectable_label(state.minimap_settings.position == MinimapPosition::TopRight, "TR").clicked() {
+                    state.minimap_settings.position = MinimapPosition::TopRight;
+                }
+                if ui.selectable_label(state.minimap_settings.position == MinimapPosition::BottomLeft, "BL").clicked() {
+                    state.minimap_settings.position = MinimapPosition::BottomLeft;
+                }
+                if ui.selectable_label(state.minimap_settings.position == MinimapPosition::BottomRight, "BR").clicked() {
+                    state.minimap_settings.position = MinimapPosition::BottomRight;
+                }
+            });
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label("Size:");
