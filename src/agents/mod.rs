@@ -36,7 +36,8 @@ pub use crate::core::traits::{Trait, TraitSet};
 pub use crate::core::EmotionType; // EmotionType now unified in core
 pub use gossip::{
     Information, InformationType, InformationDistortion, DistortionType,
-    Belief, TrustRating, KnowledgeBase,
+    Belief, TrustRating, KnowledgeBase, OpinionTransferResult,
+    calculate_opinion_transfer_chance, attempt_opinion_transfer,
 };
 pub use equipment::{
     Equipment, EquipmentSlot, ClothingMaterial, ClothingTemplate,
