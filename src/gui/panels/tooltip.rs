@@ -3,7 +3,7 @@
 
 use egui::{Ui, Color32, RichText};
 
-use crate::agents::LifeStage;
+use crate::agents::{LifeStage, Gender};
 use crate::core::DriveType;
 use crate::world::{TerrainType, ResourceType, BuildingType};
 use crate::gui::state::AgentSnapshot;
@@ -97,6 +97,11 @@ pub fn render_agent_tooltip(ui: &mut Ui, agent: &AgentSnapshot) {
         let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(8.0, 8.0), egui::Sense::hover());
         ui.painter().circle_filled(rect.center(), 4.0, stage_color);
         ui.label(RichText::new(format!("{:?}", agent.life_stage)).strong());
+        let gender_symbol = match agent.gender {
+            Gender::Male => "\u{2642}",
+            Gender::Female => "\u{2640}",
+        };
+        ui.label(RichText::new(gender_symbol).color(Color32::LIGHT_GRAY));
         ui.label(RichText::new(format!("{:.6}...", agent.id)).small().color(Color32::GRAY));
     });
 

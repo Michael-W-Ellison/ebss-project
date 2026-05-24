@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::agents::LifeStage;
+use crate::agents::{LifeStage, Gender, JobCategory};
 use crate::core::DriveType;
 use crate::world::{Position, BuildingType, ResourceType, TerrainType};
 use super::events::TimelineState;
@@ -102,6 +102,8 @@ pub struct AgentSnapshot {
     pub relationship_count: usize,
     pub inventory_count: u32,
     pub current_activity: Option<String>,
+    pub gender: Gender,
+    pub inferred_job: Option<JobCategory>,
 }
 
 /// Population statistics snapshot
@@ -555,6 +557,112 @@ impl Default for MapLayers {
     }
 }
 
+/// Filter options for agent display on the map
+#[derive(Debug, Clone)]
+pub struct AgentMapFilter {
+    pub show_infant: bool,
+    pub show_child: bool,
+    pub show_adolescent: bool,
+    pub show_adult: bool,
+    pub show_elderly: bool,
+    pub show_male: bool,
+    pub show_female: bool,
+    pub show_sleeping: bool,
+    pub show_idle: bool,
+    pub show_mining: bool,
+    pub show_building: bool,
+    pub show_crafting: bool,
+    pub show_farming: bool,
+    pub show_hunting: bool,
+    pub show_fishing: bool,
+    pub show_cooking: bool,
+    pub show_social: bool,
+    pub show_exploring: bool,
+    pub show_caretaking: bool,
+    pub show_gathering: bool,
+    pub show_labor: bool,
+}
+
+impl Default for AgentMapFilter {
+    fn default() -> Self {
+        Self {
+            show_infant: true,
+            show_child: true,
+            show_adolescent: true,
+            show_adult: true,
+            show_elderly: true,
+            show_male: true,
+            show_female: true,
+            show_sleeping: true,
+            show_idle: true,
+            show_mining: true,
+            show_building: true,
+            show_crafting: true,
+            show_farming: true,
+            show_hunting: true,
+            show_fishing: true,
+            show_cooking: true,
+            show_social: true,
+            show_exploring: true,
+            show_caretaking: true,
+            show_gathering: true,
+            show_labor: true,
+        }
+    }
+}
+
+impl AgentMapFilter {
+    pub fn is_filtering(&self) -> bool {
+        !(self.show_infant && self.show_child && self.show_adolescent
+            && self.show_adult && self.show_elderly
+            && self.show_male && self.show_female
+            && self.show_sleeping && self.show_idle
+            && self.show_mining && self.show_building && self.show_crafting
+            && self.show_farming && self.show_hunting && self.show_fishing
+            && self.show_cooking && self.show_social && self.show_exploring
+            && self.show_caretaking && self.show_gathering && self.show_labor)
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn show_life_stage(&self, stage: LifeStage) -> bool {
+        match stage {
+            LifeStage::Infant => self.show_infant,
+            LifeStage::Child => self.show_child,
+            LifeStage::Adolescent => self.show_adolescent,
+            LifeStage::Adult => self.show_adult,
+            LifeStage::Elderly => self.show_elderly,
+        }
+    }
+
+    pub fn show_gender(&self, gender: Gender) -> bool {
+        match gender {
+            Gender::Male => self.show_male,
+            Gender::Female => self.show_female,
+        }
+    }
+
+    pub fn show_job(&self, job: Option<JobCategory>) -> bool {
+        match job {
+            None => self.show_idle,
+            Some(JobCategory::Mining) => self.show_mining,
+            Some(JobCategory::Building) => self.show_building,
+            Some(JobCategory::Crafting) => self.show_crafting,
+            Some(JobCategory::Farming) => self.show_farming,
+            Some(JobCategory::Hunting) => self.show_hunting,
+            Some(JobCategory::Fishing) => self.show_fishing,
+            Some(JobCategory::Cooking) => self.show_cooking,
+            Some(JobCategory::Social) => self.show_social,
+            Some(JobCategory::Exploring) => self.show_exploring,
+            Some(JobCategory::Caretaking) => self.show_caretaking,
+            Some(JobCategory::Gathering) => self.show_gathering,
+            Some(JobCategory::Labor) => self.show_labor,
+        }
+    }
+}
+
 /// GUI application state
 pub struct GuiState {
     pub simulation_state: SimState,
@@ -569,6 +677,7 @@ pub struct GuiState {
     pub map_zoom: f32,
     pub map_offset: (f32, f32),
     pub map_layers: MapLayers,
+    pub agent_filter: AgentMapFilter,
     pub show_minimap: bool,
     pub follow_selected: bool,
     pub minimap_settings: MinimapSettings,
@@ -746,6 +855,7 @@ impl Default for GuiState {
             map_zoom: 1.0,
             map_offset: (0.0, 0.0),
             map_layers: MapLayers::default(),
+            agent_filter: AgentMapFilter::default(),
             show_minimap: true,
             follow_selected: false,
             minimap_settings: MinimapSettings::default(),

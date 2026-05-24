@@ -1,7 +1,7 @@
 // src/gui/snapshot.rs
 //! Snapshot generation for GUI rendering.
 
-use crate::agents::{Agent, Population, FatigueSeverity};
+use crate::agents::{Agent, Population, FatigueSeverity, JobCategory};
 use crate::analytics::Simulation;
 use crate::core::DriveType;
 use crate::world::{World, Position, BuildingState, Building, ResourceNode, TechEra, TechnologyTree};
@@ -74,6 +74,7 @@ pub fn agent_to_snapshot(agent: &Agent) -> AgentSnapshot {
     };
 
     let current_activity = agent.current_plan.as_ref().map(|p| p.goal_description.clone());
+    let inferred_job = infer_job_category(agent);
 
     AgentSnapshot {
         id: agent.id,
@@ -88,7 +89,72 @@ pub fn agent_to_snapshot(agent: &Agent) -> AgentSnapshot {
         relationship_count: agent.relationships.get_all().len(),
         inventory_count: agent.inventory.get_all_items().len() as u32,
         current_activity,
+        gender: agent.gender,
+        inferred_job,
     }
+}
+
+fn infer_job_category(agent: &Agent) -> Option<JobCategory> {
+    if agent.fatigue.is_sleeping {
+        return None;
+    }
+
+    if let Some(plan) = &agent.current_plan {
+        let desc = plan.goal_description.to_lowercase();
+
+        if desc.contains("mine") || desc.contains("mining") || desc.contains("quarry") {
+            return Some(JobCategory::Mining);
+        }
+        if desc.contains("build") || desc.contains("construct") {
+            return Some(JobCategory::Building);
+        }
+        if desc.contains("craft") || desc.contains("make") || desc.contains("create") {
+            return Some(JobCategory::Crafting);
+        }
+        if desc.contains("farm") || desc.contains("plant") || desc.contains("harvest") || desc.contains("tend") {
+            return Some(JobCategory::Farming);
+        }
+        if desc.contains("hunt") || desc.contains("track") {
+            return Some(JobCategory::Hunting);
+        }
+        if desc.contains("fish") {
+            return Some(JobCategory::Fishing);
+        }
+        if desc.contains("cook") || desc.contains("prepare food") || desc.contains("bake") {
+            return Some(JobCategory::Cooking);
+        }
+        if desc.contains("talk") || desc.contains("social") || desc.contains("greet") || desc.contains("chat") {
+            return Some(JobCategory::Social);
+        }
+        if desc.contains("explor") || desc.contains("scout") || desc.contains("discover") {
+            return Some(JobCategory::Exploring);
+        }
+        if desc.contains("care") || desc.contains("nurse") || desc.contains("heal") || desc.contains("tend to") {
+            return Some(JobCategory::Caretaking);
+        }
+        if desc.contains("gather") || desc.contains("forage") || desc.contains("collect") || desc.contains("pick") {
+            return Some(JobCategory::Gathering);
+        }
+        if desc.contains("haul") || desc.contains("carry") || desc.contains("transport") || desc.contains("move") {
+            return Some(JobCategory::Labor);
+        }
+    }
+
+    if let Some(drive) = agent.drives.most_urgent() {
+        return match drive.drive_type {
+            DriveType::Industry => Some(JobCategory::Mining),
+            DriveType::Construction => Some(JobCategory::Building),
+            DriveType::Utility => Some(JobCategory::Crafting),
+            DriveType::Sustenance => Some(JobCategory::Gathering),
+            DriveType::Social => Some(JobCategory::Social),
+            DriveType::Curiosity => Some(JobCategory::Exploring),
+            DriveType::Preparedness => Some(JobCategory::Labor),
+            DriveType::Hunger | DriveType::Thirst => Some(JobCategory::Gathering),
+            _ => None,
+        };
+    }
+
+    None
 }
 
 /// Generate population snapshot

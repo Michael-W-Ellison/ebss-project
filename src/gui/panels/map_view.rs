@@ -6,7 +6,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-use crate::gui::state::{GuiState, SimulationCommand, EntitySelection};
+use crate::gui::state::{GuiState, SimulationCommand, EntitySelection, AgentSnapshot, AgentMapFilter};
 use crate::world::TerrainType;
 use crate::agents::LifeStage;
 use super::tooltip;
@@ -216,6 +216,10 @@ pub fn render_map(
     if state.map_layers.agents {
         for agent in &snapshot.population.agents {
             if !agent.is_alive {
+                continue;
+            }
+
+            if !should_show_agent(agent, &state.agent_filter) {
                 continue;
             }
 
@@ -570,6 +574,11 @@ fn draw_minimap(
         if !agent.is_alive {
             continue;
         }
+
+        if !should_show_agent(agent, &state.agent_filter) {
+            continue;
+        }
+
         let x = minimap_rect.min.x + agent.position.0 as f32 * scale;
         let y = minimap_rect.min.y + agent.position.1 as f32 * scale;
         let color = life_stage_color(agent.life_stage);
@@ -657,6 +666,18 @@ fn render_map_controls(ui: &mut Ui, state: &mut GuiState, view_rect: Rect) {
         ui.checkbox(&mut state.map_layers.buildings, "Buildings");
         ui.checkbox(&mut state.map_layers.agents, "Agents");
         ui.checkbox(&mut state.map_layers.grid, "Grid (G)");
+
+        ui.separator();
+
+        // Agent filter menu
+        let filter_label = if state.agent_filter.is_filtering() {
+            "Filter [ON]"
+        } else {
+            "Filter"
+        };
+        ui.menu_button(filter_label, |ui| {
+            render_agent_filter_menu(ui, state);
+        });
 
         ui.separator();
 
@@ -778,4 +799,77 @@ fn drive_color(drive: crate::core::DriveType) -> Color32 {
         DriveType::Utility => Color32::from_rgb(192, 192, 192),
         DriveType::Construction => Color32::from_rgb(139, 69, 19),
     }
+}
+
+fn should_show_agent(agent: &AgentSnapshot, filter: &AgentMapFilter) -> bool {
+    if !filter.show_life_stage(agent.life_stage) {
+        return false;
+    }
+
+    if !filter.show_gender(agent.gender) {
+        return false;
+    }
+
+    if agent.is_sleeping {
+        return filter.show_sleeping;
+    }
+
+    filter.show_job(agent.inferred_job)
+}
+
+fn render_agent_filter_menu(ui: &mut egui::Ui, state: &mut GuiState) {
+    if ui.button("Reset All").clicked() {
+        state.agent_filter.reset();
+    }
+
+    ui.separator();
+
+    ui.label(egui::RichText::new("Life Stage").strong());
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut state.agent_filter.show_infant, "Infant");
+        ui.checkbox(&mut state.agent_filter.show_child, "Child");
+    });
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut state.agent_filter.show_adolescent, "Adolescent");
+        ui.checkbox(&mut state.agent_filter.show_adult, "Adult");
+    });
+    ui.checkbox(&mut state.agent_filter.show_elderly, "Elderly");
+
+    ui.separator();
+
+    ui.label(egui::RichText::new("Gender").strong());
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut state.agent_filter.show_male, "Male");
+        ui.checkbox(&mut state.agent_filter.show_female, "Female");
+    });
+
+    ui.separator();
+
+    ui.label(egui::RichText::new("Status").strong());
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut state.agent_filter.show_sleeping, "Sleeping");
+        ui.checkbox(&mut state.agent_filter.show_idle, "Idle");
+    });
+
+    ui.separator();
+
+    ui.label(egui::RichText::new("Activity").strong());
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            ui.checkbox(&mut state.agent_filter.show_gathering, "Gathering");
+            ui.checkbox(&mut state.agent_filter.show_farming, "Farming");
+            ui.checkbox(&mut state.agent_filter.show_hunting, "Hunting");
+            ui.checkbox(&mut state.agent_filter.show_fishing, "Fishing");
+            ui.checkbox(&mut state.agent_filter.show_mining, "Mining");
+            ui.checkbox(&mut state.agent_filter.show_cooking, "Cooking");
+        });
+        ui.vertical(|ui| {
+            ui.checkbox(&mut state.agent_filter.show_building, "Building");
+            ui.checkbox(&mut state.agent_filter.show_crafting, "Crafting");
+            ui.checkbox(&mut state.agent_filter.show_exploring, "Exploring");
+            ui.checkbox(&mut state.agent_filter.show_social, "Social");
+            ui.checkbox(&mut state.agent_filter.show_caretaking, "Caretaking");
+            ui.checkbox(&mut state.agent_filter.show_labor, "Labor");
+        });
+    });
 }
