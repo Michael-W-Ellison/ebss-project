@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
 use crate::bevy_gui::resources::*;
-use crate::bevy_gui::events::SimulationCommand;
+use crate::bevy_gui::events::{SimulationCommand, CenterMapRequest};
 
 /// Handle global keyboard shortcuts
 pub fn keyboard_input_system(
@@ -17,6 +17,8 @@ pub fn keyboard_input_system(
     mut map_view: ResMut<MapViewState>,
     mut selection: ResMut<Selection>,
     mut notifications: ResMut<NotificationQueue>,
+    snapshot: Res<CurrentSnapshot>,
+    mut center_request: EventWriter<CenterMapRequest>,
     time: Res<Time>,
 ) {
     // Don't process shortcuts if egui wants keyboard input
@@ -133,6 +135,59 @@ pub fn keyboard_input_system(
         }
         if keys.just_pressed(KeyCode::KeyO) {
             panels.load_dialog = true;
+        }
+    }
+
+    // Entity cycling with Tab/Shift+Tab
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    if keys.just_pressed(KeyCode::Tab) {
+        if let Some(snap) = &snapshot.snapshot {
+            let alive_agents: Vec<_> = snap.population.agents.iter()
+                .filter(|a| a.is_alive)
+                .collect();
+
+            if alive_agents.is_empty() {
+                return;
+            }
+
+            let current_idx = selection.current.agent_id()
+                .and_then(|id| alive_agents.iter().position(|a| a.id == id));
+
+            let next_idx = if shift {
+                // Shift+Tab: go to previous
+                match current_idx {
+                    None => alive_agents.len() - 1,
+                    Some(0) => alive_agents.len() - 1,
+                    Some(idx) => idx - 1,
+                }
+            } else {
+                // Tab: go to next
+                match current_idx {
+                    None => 0,
+                    Some(idx) => (idx + 1) % alive_agents.len(),
+                }
+            };
+
+            let agent = alive_agents[next_idx];
+            selection.select_agent(agent.id);
+            sim_commands.send(SimulationCommand::SelectEntity(
+                EntitySelection::Agent(agent.id)
+            ));
+
+            // Center map on the selected agent
+            center_request.send(CenterMapRequest {
+                x: agent.position.0,
+                y: agent.position.1,
+            });
+
+            notifications.info(
+                format!("Agent {} selected ({}/{})",
+                    &agent.id.to_string()[..8],
+                    next_idx + 1,
+                    alive_agents.len()
+                ),
+                current_time,
+            );
         }
     }
 }
