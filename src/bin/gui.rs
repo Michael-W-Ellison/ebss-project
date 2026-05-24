@@ -176,6 +176,25 @@ fn run_simulation_thread(
                 SimulationCommand::DeselectAll => {
                     selected = EntitySelection::None;
                 }
+                SimulationCommand::SaveGame(path) => {
+                    log::info!("Saving simulation to: {}", path);
+                    if let Err(e) = simulation.save(&path) {
+                        log::error!("Failed to save simulation: {}", e);
+                    }
+                }
+                SimulationCommand::LoadGame(path) => {
+                    log::info!("Loading simulation from: {}", path);
+                    match Simulation::load(&path) {
+                        Ok(loaded_sim) => {
+                            simulation = loaded_sim;
+                            state = SimState::Paused;
+                            log::info!("Simulation loaded successfully from {}", path);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to load simulation: {}", e);
+                        }
+                    }
+                }
             }
         }
 

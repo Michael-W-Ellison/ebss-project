@@ -171,8 +171,8 @@ pub fn send_commands_system(
                 GuiCommand::SelectEntity(gui_sel)
             }
             SimulationCommand::DeselectAll => GuiCommand::DeselectAll,
-            SimulationCommand::SaveGame(_path) => continue,
-            SimulationCommand::LoadGame(_path) => continue,
+            SimulationCommand::SaveGame(path) => GuiCommand::SaveGame(path.clone()),
+            SimulationCommand::LoadGame(path) => GuiCommand::LoadGame(path.clone()),
         };
         let _ = tx.send(gui_cmd);
     }

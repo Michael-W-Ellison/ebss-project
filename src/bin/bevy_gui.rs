@@ -219,6 +219,51 @@ fn run_simulation_thread(
                 GuiCommand::DeselectAll => {
                     selected = GuiEntitySelection::None;
                 }
+                GuiCommand::SaveGame(path) => {
+                    log::info!("Saving simulation to: {}", path);
+                    match simulation.save(&path) {
+                        Ok(_) => {
+                            log::info!("Simulation saved successfully to {}", path);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to save simulation: {}", e);
+                            send_error(
+                                &error_tx,
+                                simulation.current_tick,
+                                ErrorSeverity::Error,
+                                format!("Failed to save: {}", e),
+                                Some("Save operation".to_string()),
+                            );
+                        }
+                    }
+                }
+                GuiCommand::LoadGame(path) => {
+                    log::info!("Loading simulation from: {}", path);
+                    match Simulation::load(&path) {
+                        Ok(loaded_sim) => {
+                            simulation = loaded_sim;
+                            // Reset timing
+                            last_tick = Instant::now();
+                            last_snapshot = Instant::now();
+                            // Reset to paused state after loading
+                            state = GuiSimState::Paused;
+                            log::info!(
+                                "Simulation loaded successfully from {}, tick: {}",
+                                path, simulation.current_tick
+                            );
+                        }
+                        Err(e) => {
+                            log::error!("Failed to load simulation: {}", e);
+                            send_error(
+                                &error_tx,
+                                simulation.current_tick,
+                                ErrorSeverity::Error,
+                                format!("Failed to load: {}", e),
+                                Some("Load operation".to_string()),
+                            );
+                        }
+                    }
+                }
             }
         }
 

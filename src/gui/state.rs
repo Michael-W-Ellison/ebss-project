@@ -17,6 +17,8 @@ pub enum SimulationCommand {
     SetSpeed(f32),
     SelectEntity(EntitySelection),
     DeselectAll,
+    SaveGame(String),
+    LoadGame(String),
 }
 
 /// Entity selection types
