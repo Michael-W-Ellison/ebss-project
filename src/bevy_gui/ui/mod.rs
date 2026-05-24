@@ -9,7 +9,10 @@ use bevy_egui::{egui, EguiContexts};
 use crate::bevy_gui::resources::*;
 use crate::bevy_gui::events::SimulationCommand;
 
-pub use panels::{render_legend_panel, render_inspector_panel, render_statistics_panel};
+pub use panels::{
+    render_legend_panel, render_inspector_panel, render_statistics_panel,
+    render_tech_tree_panel, render_timeline_panel, render_relationship_graph_panel,
+};
 
 /// Render the top menu bar
 pub fn render_menu_bar(

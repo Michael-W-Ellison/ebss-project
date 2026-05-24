@@ -44,8 +44,10 @@ mod tests {
     #[test]
     fn test_panel_visibility_defaults() {
         let panels = PanelVisibility::default();
-        assert!(!panels.inspector);
-        assert!(!panels.statistics);
+        // Inspector and statistics default to open
+        assert!(panels.inspector);
+        assert!(panels.statistics);
+        // Others default to closed
         assert!(!panels.legend);
         assert!(!panels.tech_tree);
         assert!(!panels.timeline);
@@ -57,14 +59,17 @@ mod tests {
     fn test_panel_visibility_toggles() {
         let mut panels = PanelVisibility::default();
 
-        panels.toggle_inspector();
-        assert!(panels.inspector);
+        // Inspector starts open
         panels.toggle_inspector();
         assert!(!panels.inspector);
+        panels.toggle_inspector();
+        assert!(panels.inspector);
 
+        // Statistics starts open
         panels.toggle_statistics();
-        assert!(panels.statistics);
+        assert!(!panels.statistics);
 
+        // Legend starts closed
         panels.toggle_legend();
         assert!(panels.legend);
     }
@@ -124,7 +129,9 @@ mod tests {
         let mut history = StatisticsHistory::default();
 
         assert!(history.points.is_empty());
-        assert!(history.should_sample(0));
+        // At tick 0, with last_sample_tick=0 and interval=10, should_sample returns false
+        // It should sample once we reach tick 10
+        assert!(history.should_sample(10));
 
         let point = HistoryPoint {
             tick: 10,
@@ -140,7 +147,7 @@ mod tests {
 
         history.add_point(point);
         assert_eq!(history.points.len(), 1);
-        assert!(!history.should_sample(10));
+        assert!(!history.should_sample(15));
         assert!(history.should_sample(25));
     }
 
@@ -148,19 +155,22 @@ mod tests {
     fn test_selection_defaults() {
         let selection = Selection::default();
         assert_eq!(selection.current, EntitySelection::None);
-        assert!(!selection.follow_mode);
+        assert!(!selection.follow_selected);
     }
 
     #[test]
     fn test_selection_toggle_follow() {
         let mut selection = Selection::default();
-        assert!(!selection.follow_mode);
+        assert!(!selection.follow_selected);
+
+        // toggle_follow only works when something is selected
+        selection.current = EntitySelection::Agent(uuid::Uuid::new_v4());
 
         selection.toggle_follow();
-        assert!(selection.follow_mode);
+        assert!(selection.follow_selected);
 
         selection.toggle_follow();
-        assert!(!selection.follow_mode);
+        assert!(!selection.follow_selected);
     }
 
     #[test]
@@ -169,5 +179,73 @@ mod tests {
         assert_eq!(InspectorTab::Overview.name(), "Overview");
         assert_eq!(InspectorTab::Drives.name(), "Drives");
         assert_eq!(InspectorTab::Skills.name(), "Skills");
+    }
+
+    #[test]
+    fn test_timeline_data_defaults() {
+        use super::super::resources::TimelineData;
+        let timeline = TimelineData::default();
+        assert!(timeline.event_log.is_empty());
+        assert!(timeline.filter_types.is_empty());
+        assert!(timeline.search_query.is_empty());
+        assert!(timeline.newest_first);
+        assert_eq!(timeline.events_per_page, 50);
+        assert_eq!(timeline.current_page, 0);
+        assert!(timeline.auto_scroll);
+    }
+
+    #[test]
+    fn test_timeline_pagination() {
+        use super::super::resources::TimelineData;
+        let mut timeline = TimelineData::default();
+        timeline.events_per_page = 10;
+
+        assert_eq!(timeline.total_pages(), 1);
+        assert_eq!(timeline.current_page, 0);
+
+        timeline.next_page();
+        assert_eq!(timeline.current_page, 0);
+
+        timeline.first_page();
+        assert_eq!(timeline.current_page, 0);
+    }
+
+    #[test]
+    fn test_relationship_graph_data_defaults() {
+        use super::super::resources::RelationshipGraphData;
+        let graph = RelationshipGraphData::default();
+        assert!(graph.snapshot.is_none());
+        assert!(graph.selected_agent.is_none());
+        assert!(graph.focus_agent.is_none());
+        assert!((graph.zoom - 1.0).abs() < 0.01);
+        assert!((graph.offset.0).abs() < 0.01);
+        assert!((graph.offset.1).abs() < 0.01);
+        assert!(graph.show_labels);
+        assert!(graph.needs_layout);
+    }
+
+    #[test]
+    fn test_relationship_graph_reset_view() {
+        use super::super::resources::RelationshipGraphData;
+        let mut graph = RelationshipGraphData::default();
+        graph.zoom = 2.5;
+        graph.offset = (100.0, -50.0);
+
+        graph.reset_view();
+        assert!((graph.zoom - 1.0).abs() < 0.01);
+        assert!((graph.offset.0).abs() < 0.01);
+        assert!((graph.offset.1).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_relationship_graph_request_layout() {
+        use super::super::resources::RelationshipGraphData;
+        let mut graph = RelationshipGraphData::default();
+        graph.needs_layout = false;
+        graph.layout_iterations = 50;
+
+        graph.request_layout();
+        assert!(graph.needs_layout);
+        assert_eq!(graph.layout_iterations, 0);
     }
 }

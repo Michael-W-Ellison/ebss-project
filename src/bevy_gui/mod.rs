@@ -46,6 +46,7 @@ impl Plugin for EbssGuiPlugin {
             .insert_resource(TechTreeData::default())
             .insert_resource(RelationshipGraphData::default())
             .insert_resource(InspectorState::default())
+            .insert_resource(TimelineData::default())
             // Events
             .add_event::<SimulationCommand>()
             .add_event::<SelectionChanged>()
@@ -67,9 +68,13 @@ impl Plugin for EbssGuiPlugin {
             .add_systems(Update, ui::render_inspector_panel)
             .add_systems(Update, ui::render_legend_panel)
             .add_systems(Update, ui::render_statistics_panel)
+            .add_systems(Update, ui::render_tech_tree_panel)
+            .add_systems(Update, ui::render_timeline_panel)
+            .add_systems(Update, ui::render_relationship_graph_panel)
             // Command sending in PostUpdate
             .add_systems(PostUpdate, systems::send_commands_system)
             .add_systems(PostUpdate, systems::entity_data_system)
-            .add_systems(PostUpdate, systems::tech_tree_data_system);
+            .add_systems(PostUpdate, systems::tech_tree_data_system)
+            .add_systems(PostUpdate, systems::relationship_graph_data_system);
     }
 }

@@ -12,7 +12,11 @@ use crate::gui::state::{
     EntitySelection as GuiEntitySelection,
 };
 use crate::world::Position;
-use crate::bevy_gui::resources::*;
+use crate::bevy_gui::resources::{
+    CurrentSnapshot, SimulationControl, SimState, StatisticsHistory, HistoryPoint,
+    EntitySelection, SelectedEntityData, PanelVisibility, TechTreeData, RelationshipGraphData,
+    TimelineData, Selection,
+};
 use crate::bevy_gui::events::SimulationCommand;
 
 /// Handles for communication with the simulation thread.
@@ -39,6 +43,7 @@ pub fn receive_snapshots_system(
     mut snapshot: ResMut<CurrentSnapshot>,
     mut sim_control: ResMut<SimulationControl>,
     mut stats_history: ResMut<StatisticsHistory>,
+    mut timeline: ResMut<TimelineData>,
 ) {
     if let Ok(rx) = bridge.snapshot_rx.try_lock() {
         while let Ok(new_snapshot) = rx.try_recv() {
@@ -69,6 +74,11 @@ pub fn receive_snapshots_system(
                     deaths: stats.total_deaths,
                 };
                 stats_history.add_point(point);
+            }
+
+            // Add events to timeline
+            if !new_snapshot.events.is_empty() {
+                timeline.add_events(new_snapshot.events.clone());
             }
 
             snapshot.update(new_snapshot);
@@ -125,17 +135,17 @@ pub fn entity_data_system(
     match &selection.current {
         EntitySelection::Agent(id) => {
             if let Ok(mut request) = bridge.agent_data_request.try_lock() {
-                *request = Some(*id);
+                *request = Some(id.clone());
             }
         }
         EntitySelection::Building(pos) => {
             if let Ok(mut request) = bridge.building_data_request.try_lock() {
-                *request = Some(*pos);
+                *request = Some(pos.clone());
             }
         }
         EntitySelection::Resource(pos) => {
             if let Ok(mut request) = bridge.resource_data_request.try_lock() {
-                *request = Some(*pos);
+                *request = Some(pos.clone());
             }
         }
         _ => {}
@@ -182,6 +192,38 @@ pub fn tech_tree_data_system(
     if let Ok(mut response) = bridge.tech_tree_response.try_lock() {
         if let Some(data) = Option::<TechTreeSnapshot>::take(&mut response) {
             tech_data.snapshot = Some(data);
+        }
+    }
+}
+
+/// System to request and receive relationship graph data
+pub fn relationship_graph_data_system(
+    bridge: Res<SimulationBridge>,
+    panels: Res<PanelVisibility>,
+    mut graph_data: ResMut<RelationshipGraphData>,
+) {
+    if !panels.relationship_graph {
+        return;
+    }
+
+    // Request relationship graph data
+    if let Ok(mut request) = bridge.relationship_graph_request.try_lock() {
+        *request = true;
+    }
+
+    // Check for response
+    if let Ok(mut response) = bridge.relationship_graph_response.try_lock() {
+        if let Some(data) = Option::<RelationshipGraphSnapshot>::take(&mut response) {
+            // Check if the data has changed significantly (new agents)
+            let needs_relayout = graph_data.snapshot.as_ref()
+                .map(|old| old.nodes.len() != data.nodes.len())
+                .unwrap_or(true);
+
+            graph_data.snapshot = Some(data);
+
+            if needs_relayout {
+                graph_data.needs_layout = true;
+            }
         }
     }
 }
