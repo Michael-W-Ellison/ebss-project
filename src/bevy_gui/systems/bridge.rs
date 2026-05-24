@@ -2,8 +2,10 @@
 //! Simulation bridge system for thread communication.
 
 use bevy::prelude::*;
+use bevy::app::AppExit;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::gui::state::{
     SimulationSnapshot, SimulationCommand as GuiCommand,
@@ -17,7 +19,7 @@ use crate::bevy_gui::resources::{
     EntitySelection, SelectedEntityData, PanelVisibility, TechTreeData, RelationshipGraphData,
     TimelineData, Selection, SimulationErrors, SimulationError, NotificationQueue, NotificationType,
 };
-use crate::bevy_gui::events::SimulationCommand;
+use crate::bevy_gui::events::{SimulationCommand, ShutdownRequested};
 
 /// Error sent from simulation thread to GUI
 #[derive(Debug, Clone)]
@@ -35,6 +37,7 @@ pub struct SimulationBridge {
     pub command_tx: Arc<Mutex<Sender<GuiCommand>>>,
     pub snapshot_rx: Arc<Mutex<Receiver<SimulationSnapshot>>>,
     pub error_rx: Arc<Mutex<Receiver<BridgeError>>>,
+    pub shutdown_flag: Arc<AtomicBool>,
     pub agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
     pub agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
     pub building_data_request: Arc<Mutex<Option<Position>>>,
@@ -280,5 +283,29 @@ pub fn relationship_graph_data_system(
                 graph_data.needs_layout = true;
             }
         }
+    }
+}
+
+/// System to handle shutdown requests (from menu, keyboard shortcut, etc.)
+pub fn handle_shutdown_requests(
+    bridge: Res<SimulationBridge>,
+    mut shutdown_events: EventReader<ShutdownRequested>,
+    mut app_exit: EventWriter<AppExit>,
+) {
+    for _ in shutdown_events.read() {
+        log::info!("Shutdown requested, signaling simulation thread...");
+        bridge.shutdown_flag.store(true, Ordering::SeqCst);
+        app_exit.send(AppExit::Success);
+    }
+}
+
+/// System to handle app exit events and ensure clean shutdown
+pub fn on_app_exit(
+    bridge: Res<SimulationBridge>,
+    mut exit_events: EventReader<AppExit>,
+) {
+    for _ in exit_events.read() {
+        log::info!("App exit detected, ensuring simulation thread shutdown...");
+        bridge.shutdown_flag.store(true, Ordering::SeqCst);
     }
 }

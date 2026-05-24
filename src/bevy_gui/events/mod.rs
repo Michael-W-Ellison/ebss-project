@@ -54,3 +54,7 @@ pub struct CenterMapRequest {
     pub x: i32,
     pub y: i32,
 }
+
+/// Event to request graceful shutdown of the simulation thread
+#[derive(Event, Debug, Clone)]
+pub struct ShutdownRequested;

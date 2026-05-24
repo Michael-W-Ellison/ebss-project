@@ -5,6 +5,7 @@
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -40,6 +41,10 @@ fn main() {
     let (snapshot_tx, snapshot_rx): (Sender<SimulationSnapshot>, Receiver<SimulationSnapshot>) = channel();
     let (error_tx, error_rx): (Sender<BridgeError>, Receiver<BridgeError>) = channel();
 
+    // Create shutdown flag for graceful termination
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_flag_clone = Arc::clone(&shutdown_flag);
+
     // Shared state for entity data requests
     let agent_data_request: Arc<Mutex<Option<uuid::Uuid>>> = Arc::new(Mutex::new(None));
     let agent_data_response: Arc<Mutex<Option<SelectedAgentData>>> = Arc::new(Mutex::new(None));
@@ -70,6 +75,7 @@ fn main() {
             command_rx,
             snapshot_tx,
             error_tx,
+            shutdown_flag_clone,
             agent_request_clone,
             agent_response_clone,
             building_request_clone,
@@ -88,6 +94,7 @@ fn main() {
         command_tx: Arc::new(Mutex::new(command_tx)),
         snapshot_rx: Arc::new(Mutex::new(snapshot_rx)),
         error_rx: Arc::new(Mutex::new(error_rx)),
+        shutdown_flag,
         agent_data_request,
         agent_data_response,
         building_data_request,
@@ -137,6 +144,7 @@ fn run_simulation_thread(
     command_rx: Receiver<GuiCommand>,
     snapshot_tx: Sender<SimulationSnapshot>,
     error_tx: Sender<BridgeError>,
+    shutdown_flag: Arc<AtomicBool>,
     agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
     agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
     building_data_request: Arc<Mutex<Option<ebss::world::Position>>>,
@@ -180,6 +188,12 @@ fn run_simulation_thread(
     log::info!("Simulation initialized with {} agents", simulation.population.agents.len());
 
     loop {
+        // Check for shutdown signal
+        if shutdown_flag.load(Ordering::SeqCst) {
+            log::info!("Simulation thread received shutdown signal, exiting...");
+            break;
+        }
+
         // Process commands from GUI
         while let Ok(command) = command_rx.try_recv() {
             match command {
