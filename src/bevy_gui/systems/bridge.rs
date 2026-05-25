@@ -317,6 +317,7 @@ pub fn selection_sync_system(
     mut selection_changed_events: EventWriter<SelectionChanged>,
     mut center_request: EventWriter<CenterMapRequest>,
     mut last_selection: Local<EntitySelection>,
+    mut last_followed_position: Local<Option<(i32, i32)>>,
 ) {
     // Detect selection changes and fire events
     if selection.current != *last_selection {
@@ -325,19 +326,30 @@ pub fn selection_sync_system(
             current: selection.current.clone(),
         });
         *last_selection = selection.current.clone();
+        // Reset followed position when selection changes
+        *last_followed_position = None;
     }
 
-    // Handle follow mode - center map on selected agent
+    // Handle follow mode - center map on selected agent only when it moves
     if selection.follow_selected {
         if let EntitySelection::Agent(id) = &selection.current {
             if let Some(snap) = &snapshot.snapshot {
                 if let Some(agent) = snap.population.agents.iter().find(|a| a.id == *id && a.is_alive) {
-                    center_request.send(CenterMapRequest {
-                        x: agent.position.0,
-                        y: agent.position.1,
-                    });
+                    let current_pos = (agent.position.0, agent.position.1);
+
+                    // Only send center request if position changed
+                    if *last_followed_position != Some(current_pos) {
+                        center_request.send(CenterMapRequest {
+                            x: current_pos.0,
+                            y: current_pos.1,
+                        });
+                        *last_followed_position = Some(current_pos);
+                    }
                 }
             }
         }
+    } else {
+        // Reset when follow mode is disabled
+        *last_followed_position = None;
     }
 }
