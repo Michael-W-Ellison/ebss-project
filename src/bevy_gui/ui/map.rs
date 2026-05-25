@@ -530,158 +530,274 @@ fn render_map_controls(
 ) {
     ui.horizontal(|ui| {
         // Zoom controls
-        ui.label("Zoom:");
-        if ui.button("-").clicked() {
+        ui.label(egui::RichText::new("Zoom:").small());
+
+        if ui.add(egui::Button::new("-").min_size(egui::vec2(24.0, 0.0)))
+            .on_hover_text("Zoom out (-)")
+            .clicked()
+        {
             map_view.zoom = (map_view.zoom - 0.25).max(MIN_ZOOM);
         }
-        ui.label(format!("{:.0}%", map_view.zoom * 100.0));
-        if ui.button("+").clicked() {
+
+        ui.label(format!("{:.0}%", map_view.zoom * 100.0))
+            .on_hover_text("Current zoom level\nScroll wheel to zoom toward cursor");
+
+        if ui.add(egui::Button::new("+").min_size(egui::vec2(24.0, 0.0)))
+            .on_hover_text("Zoom in (+/=)")
+            .clicked()
+        {
             map_view.zoom = (map_view.zoom + 0.25).min(MAX_ZOOM);
         }
-        if ui.button("Reset").clicked() {
+
+        if ui.button("Reset")
+            .on_hover_text("Reset view to default zoom and position (Home)")
+            .clicked()
+        {
             map_view.reset_view();
+            notifications.info("View reset", current_time);
         }
 
         ui.separator();
 
-        // Center on selection
-        if ui.button("Center (C)").clicked() {
-            if let EntitySelection::Agent(id) = &selection.current {
-                if let Some(agent) = snapshot.population.agents.iter().find(|a| a.id == *id && a.is_alive) {
-                    center_request.send(CenterMapRequest { x: agent.position.0, y: agent.position.1 });
-                    notifications.info("Centering on selection", current_time);
+        // Selection controls
+        let has_selection = !matches!(selection.current, EntitySelection::None);
+
+        let center_button = egui::Button::new("Center");
+        if ui.add_enabled(has_selection, center_button)
+            .on_hover_text(if has_selection {
+                "Center view on selected entity (C)"
+            } else {
+                "Select an entity first"
+            })
+            .clicked()
+        {
+            match &selection.current {
+                EntitySelection::Agent(id) => {
+                    if let Some(agent) = snapshot.population.agents.iter().find(|a| a.id == *id && a.is_alive) {
+                        center_request.send(CenterMapRequest { x: agent.position.0, y: agent.position.1 });
+                        notifications.info("Centered on agent", current_time);
+                    }
                 }
-            } else if let EntitySelection::Building(pos) = &selection.current {
-                center_request.send(CenterMapRequest { x: pos.x, y: pos.y });
-                notifications.info("Centering on selection", current_time);
-            } else if let EntitySelection::Resource(pos) = &selection.current {
-                center_request.send(CenterMapRequest { x: pos.x, y: pos.y });
-                notifications.info("Centering on selection", current_time);
+                EntitySelection::Building(pos) | EntitySelection::Resource(pos) | EntitySelection::Terrain(pos) => {
+                    center_request.send(CenterMapRequest { x: pos.x, y: pos.y });
+                    notifications.info("Centered on selection", current_time);
+                }
+                EntitySelection::None => {}
             }
         }
 
         // Follow mode toggle
-        let follow_label = if selection.follow_selected { "Following (F)" } else { "Follow (F)" };
-        if ui.selectable_label(selection.follow_selected, follow_label).clicked() {
+        let follow_text = if selection.follow_selected {
+            egui::RichText::new("Following").color(egui::Color32::from_rgb(100, 200, 100))
+        } else {
+            egui::RichText::new("Follow")
+        };
+
+        if ui.add_enabled(has_selection, egui::SelectableLabel::new(selection.follow_selected, follow_text))
+            .on_hover_text(if has_selection {
+                "Auto-center on selected agent as it moves (F)"
+            } else {
+                "Select an agent first"
+            })
+            .clicked()
+        {
             selection.toggle_follow();
             if selection.follow_selected {
                 notifications.info("Follow mode enabled", current_time);
+            } else {
+                notifications.info("Follow mode disabled", current_time);
             }
         }
 
         ui.separator();
 
-        // Layer toggles
-        ui.label("Layers:");
-        ui.checkbox(&mut map_view.layers.terrain, "Terrain");
-        ui.checkbox(&mut map_view.layers.resources, "Resources");
-        ui.checkbox(&mut map_view.layers.buildings, "Buildings");
-        ui.checkbox(&mut map_view.layers.agents, "Agents");
-        ui.checkbox(&mut map_view.layers.grid, "Grid (G)");
+        // Layer toggles with tooltips
+        ui.label(egui::RichText::new("Layers:").small());
+        ui.checkbox(&mut map_view.layers.terrain, "T")
+            .on_hover_text("Show terrain layer");
+        ui.checkbox(&mut map_view.layers.resources, "R")
+            .on_hover_text("Show resource deposits");
+        ui.checkbox(&mut map_view.layers.buildings, "B")
+            .on_hover_text("Show buildings");
+        ui.checkbox(&mut map_view.layers.agents, "A")
+            .on_hover_text("Show agents");
+        ui.checkbox(&mut map_view.layers.grid, "G")
+            .on_hover_text("Show grid overlay (G)");
 
         ui.separator();
 
         // Agent filter menu
-        let filter_label = if map_view.agent_filter.is_filtering() { "Filter [ON]" } else { "Filter" };
-        ui.menu_button(filter_label, |ui| {
+        let filter_color = if map_view.agent_filter.is_filtering() {
+            egui::Color32::from_rgb(255, 200, 100)
+        } else {
+            egui::Color32::GRAY
+        };
+        let filter_text = egui::RichText::new(if map_view.agent_filter.is_filtering() { "Filter*" } else { "Filter" })
+            .color(filter_color);
+
+        ui.menu_button(filter_text, |ui| {
+            ui.set_min_width(180.0);
             render_agent_filter_menu(ui, map_view);
-        });
+        }).response.on_hover_text("Filter which agents are displayed");
 
         ui.separator();
 
         // Minimap settings menu
-        ui.menu_button(if map_view.minimap.enabled { "Minimap [ON]" } else { "Minimap [OFF]" }, |ui| {
-            ui.checkbox(&mut map_view.minimap.enabled, "Show Minimap (M)");
+        let minimap_text = if map_view.minimap.enabled {
+            egui::RichText::new("Minimap").color(egui::Color32::from_rgb(100, 200, 100))
+        } else {
+            egui::RichText::new("Minimap").color(egui::Color32::GRAY)
+        };
+
+        ui.menu_button(minimap_text, |ui| {
+            ui.set_min_width(160.0);
+            ui.checkbox(&mut map_view.minimap.enabled, "Show Minimap")
+                .on_hover_text("Toggle minimap visibility (M)");
             ui.separator();
-            ui.label(egui::RichText::new("Display").strong());
+
+            ui.label(egui::RichText::new("Display Layers").small().color(egui::Color32::GRAY));
             ui.checkbox(&mut map_view.minimap.show_resources, "Resources");
             ui.checkbox(&mut map_view.minimap.show_buildings, "Buildings");
             ui.checkbox(&mut map_view.minimap.show_agents, "Agents");
             ui.separator();
-            ui.label(egui::RichText::new("Position").strong());
+
+            ui.label(egui::RichText::new("Position").small().color(egui::Color32::GRAY));
             ui.horizontal(|ui| {
-                if ui.selectable_label(map_view.minimap.position == MinimapPosition::TopLeft, "TL").clicked() {
-                    map_view.minimap.position = MinimapPosition::TopLeft;
-                }
-                if ui.selectable_label(map_view.minimap.position == MinimapPosition::TopRight, "TR").clicked() {
-                    map_view.minimap.position = MinimapPosition::TopRight;
-                }
-                if ui.selectable_label(map_view.minimap.position == MinimapPosition::BottomLeft, "BL").clicked() {
-                    map_view.minimap.position = MinimapPosition::BottomLeft;
-                }
-                if ui.selectable_label(map_view.minimap.position == MinimapPosition::BottomRight, "BR").clicked() {
-                    map_view.minimap.position = MinimapPosition::BottomRight;
+                let positions = [
+                    (MinimapPosition::TopLeft, "TL", "Top-left corner"),
+                    (MinimapPosition::TopRight, "TR", "Top-right corner"),
+                    (MinimapPosition::BottomLeft, "BL", "Bottom-left corner"),
+                    (MinimapPosition::BottomRight, "BR", "Bottom-right corner"),
+                ];
+                for (pos, label, tooltip) in positions {
+                    if ui.selectable_label(map_view.minimap.position == pos, label)
+                        .on_hover_text(tooltip)
+                        .clicked()
+                    {
+                        map_view.minimap.position = pos;
+                    }
                 }
             });
             ui.separator();
+
             ui.horizontal(|ui| {
                 ui.label("Size:");
-                ui.add(egui::Slider::new(&mut map_view.minimap.size, 80.0..=200.0).suffix("px"));
+                ui.add(egui::Slider::new(&mut map_view.minimap.size, 80.0..=200.0)
+                    .suffix("px")
+                    .clamp_to_range(true));
             });
             ui.horizontal(|ui| {
                 ui.label("Opacity:");
-                ui.add(egui::Slider::new(&mut map_view.minimap.opacity, 0.3..=1.0));
+                ui.add(egui::Slider::new(&mut map_view.minimap.opacity, 0.3..=1.0)
+                    .clamp_to_range(true));
             });
+        }).response.on_hover_text("Minimap display settings (M)");
+
+        // Coordinates display on the right
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let selection_info = match &selection.current {
+                EntitySelection::Agent(id) => {
+                    if let Some(agent) = snapshot.population.agents.iter().find(|a| a.id == *id) {
+                        format!("Agent @ ({}, {})", agent.position.0, agent.position.1)
+                    } else {
+                        "Agent (not found)".to_string()
+                    }
+                }
+                EntitySelection::Building(pos) => format!("Building @ ({}, {})", pos.x, pos.y),
+                EntitySelection::Resource(pos) => format!("Resource @ ({}, {})", pos.x, pos.y),
+                EntitySelection::Terrain(pos) => format!("Terrain @ ({}, {})", pos.x, pos.y),
+                EntitySelection::None => "No selection".to_string(),
+            };
+            ui.label(egui::RichText::new(selection_info).small().color(egui::Color32::GRAY))
+                .on_hover_text("Current selection\nTab/Shift+Tab to cycle agents");
         });
     });
 }
 
 /// Render agent filter menu
 fn render_agent_filter_menu(ui: &mut egui::Ui, map_view: &mut MapViewState) {
-    if ui.button("Reset All").clicked() {
-        map_view.agent_filter.reset();
-    }
-
-    ui.separator();
-
-    ui.label(egui::RichText::new("Life Stage").strong());
+    // Quick actions
     ui.horizontal(|ui| {
-        ui.checkbox(&mut map_view.agent_filter.show_infant, "Infant");
-        ui.checkbox(&mut map_view.agent_filter.show_child, "Child");
-    });
-    ui.horizontal(|ui| {
-        ui.checkbox(&mut map_view.agent_filter.show_adolescent, "Adolescent");
-        ui.checkbox(&mut map_view.agent_filter.show_adult, "Adult");
-    });
-    ui.checkbox(&mut map_view.agent_filter.show_elderly, "Elderly");
-
-    ui.separator();
-
-    ui.label(egui::RichText::new("Gender").strong());
-    ui.horizontal(|ui| {
-        ui.checkbox(&mut map_view.agent_filter.show_male, "Male");
-        ui.checkbox(&mut map_view.agent_filter.show_female, "Female");
-    });
-
-    ui.separator();
-
-    ui.label(egui::RichText::new("Status").strong());
-    ui.horizontal(|ui| {
-        ui.checkbox(&mut map_view.agent_filter.show_sleeping, "Sleeping");
-        ui.checkbox(&mut map_view.agent_filter.show_idle, "Idle");
+        if ui.button("Show All")
+            .on_hover_text("Show all agents")
+            .clicked()
+        {
+            map_view.agent_filter.reset();
+        }
+        if ui.button("Adults Only")
+            .on_hover_text("Show only adult agents")
+            .clicked()
+        {
+            map_view.agent_filter.show_infant = false;
+            map_view.agent_filter.show_child = false;
+            map_view.agent_filter.show_adolescent = false;
+            map_view.agent_filter.show_adult = true;
+            map_view.agent_filter.show_elderly = false;
+        }
+        if ui.button("Workers")
+            .on_hover_text("Show agents with active jobs")
+            .clicked()
+        {
+            map_view.agent_filter.show_sleeping = false;
+            map_view.agent_filter.show_idle = false;
+        }
     });
 
     ui.separator();
 
-    ui.label(egui::RichText::new("Activity").strong());
+    // Life stage filter
+    ui.label(egui::RichText::new("Life Stage").small().color(Color32::GRAY));
     ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.checkbox(&mut map_view.agent_filter.show_gathering, "Gathering");
-            ui.checkbox(&mut map_view.agent_filter.show_farming, "Farming");
-            ui.checkbox(&mut map_view.agent_filter.show_hunting, "Hunting");
-            ui.checkbox(&mut map_view.agent_filter.show_fishing, "Fishing");
-            ui.checkbox(&mut map_view.agent_filter.show_mining, "Mining");
-            ui.checkbox(&mut map_view.agent_filter.show_cooking, "Cooking");
-        });
-        ui.vertical(|ui| {
-            ui.checkbox(&mut map_view.agent_filter.show_building, "Building");
-            ui.checkbox(&mut map_view.agent_filter.show_crafting, "Crafting");
-            ui.checkbox(&mut map_view.agent_filter.show_exploring, "Exploring");
-            ui.checkbox(&mut map_view.agent_filter.show_social, "Social");
-            ui.checkbox(&mut map_view.agent_filter.show_caretaking, "Caretaking");
-            ui.checkbox(&mut map_view.agent_filter.show_labor, "Labor");
-        });
+        filter_checkbox(ui, &mut map_view.agent_filter.show_infant, "Infant", "Newborns (0-2 years)");
+        filter_checkbox(ui, &mut map_view.agent_filter.show_child, "Child", "Children (2-12 years)");
+        filter_checkbox(ui, &mut map_view.agent_filter.show_adolescent, "Teen", "Adolescents (12-18 years)");
     });
+    ui.horizontal(|ui| {
+        filter_checkbox(ui, &mut map_view.agent_filter.show_adult, "Adult", "Adults (18-60 years)");
+        filter_checkbox(ui, &mut map_view.agent_filter.show_elderly, "Elder", "Elderly (60+ years)");
+    });
+
+    ui.separator();
+
+    // Gender filter
+    ui.label(egui::RichText::new("Gender").small().color(Color32::GRAY));
+    ui.horizontal(|ui| {
+        filter_checkbox(ui, &mut map_view.agent_filter.show_male, "\u{2642} Male", "Show male agents");
+        filter_checkbox(ui, &mut map_view.agent_filter.show_female, "\u{2640} Female", "Show female agents");
+    });
+
+    ui.separator();
+
+    // Status filter
+    ui.label(egui::RichText::new("Status").small().color(Color32::GRAY));
+    ui.horizontal(|ui| {
+        filter_checkbox(ui, &mut map_view.agent_filter.show_sleeping, "Sleeping", "Agents currently resting");
+        filter_checkbox(ui, &mut map_view.agent_filter.show_idle, "Idle", "Agents without current task");
+    });
+
+    ui.separator();
+
+    // Activity filter
+    ui.label(egui::RichText::new("Activity").small().color(Color32::GRAY));
+    ui.columns(2, |cols| {
+        filter_checkbox(&mut cols[0], &mut map_view.agent_filter.show_gathering, "Gathering", "Collecting natural resources");
+        filter_checkbox(&mut cols[0], &mut map_view.agent_filter.show_farming, "Farming", "Agricultural work");
+        filter_checkbox(&mut cols[0], &mut map_view.agent_filter.show_hunting, "Hunting", "Hunting animals");
+        filter_checkbox(&mut cols[0], &mut map_view.agent_filter.show_fishing, "Fishing", "Catching fish");
+        filter_checkbox(&mut cols[0], &mut map_view.agent_filter.show_mining, "Mining", "Extracting stone/ore");
+        filter_checkbox(&mut cols[0], &mut map_view.agent_filter.show_cooking, "Cooking", "Preparing food");
+
+        filter_checkbox(&mut cols[1], &mut map_view.agent_filter.show_building, "Building", "Construction work");
+        filter_checkbox(&mut cols[1], &mut map_view.agent_filter.show_crafting, "Crafting", "Creating items");
+        filter_checkbox(&mut cols[1], &mut map_view.agent_filter.show_exploring, "Exploring", "Scouting new areas");
+        filter_checkbox(&mut cols[1], &mut map_view.agent_filter.show_social, "Social", "Social interactions");
+        filter_checkbox(&mut cols[1], &mut map_view.agent_filter.show_caretaking, "Caretaking", "Caring for others");
+        filter_checkbox(&mut cols[1], &mut map_view.agent_filter.show_labor, "Labor", "General labor tasks");
+    });
+}
+
+fn filter_checkbox(ui: &mut egui::Ui, value: &mut bool, label: &str, tooltip: &str) {
+    ui.checkbox(value, label).on_hover_text(tooltip);
 }
 
 /// Convert world coordinates to screen position

@@ -123,6 +123,35 @@ pub fn keyboard_input_system(
     // Follow mode
     if keys.just_pressed(KeyCode::KeyF) && !ctrl {
         selection.toggle_follow();
+        if selection.follow_selected {
+            notifications.info("Follow mode enabled", current_time);
+        } else {
+            notifications.info("Follow mode disabled", current_time);
+        }
+    }
+
+    // Center on selection
+    if keys.just_pressed(KeyCode::KeyC) && !ctrl {
+        match &selection.current {
+            EntitySelection::Agent(id) => {
+                if let Some(snap) = &snapshot.snapshot {
+                    if let Some(agent) = snap.population.agents.iter().find(|a| a.id == *id && a.is_alive) {
+                        center_request.send(CenterMapRequest {
+                            x: agent.position.0,
+                            y: agent.position.1,
+                        });
+                        notifications.info("Centered on agent", current_time);
+                    }
+                }
+            }
+            EntitySelection::Building(pos) | EntitySelection::Resource(pos) | EntitySelection::Terrain(pos) => {
+                center_request.send(CenterMapRequest { x: pos.x, y: pos.y });
+                notifications.info("Centered on selection", current_time);
+            }
+            EntitySelection::None => {
+                notifications.info("Nothing selected", current_time);
+            }
+        }
     }
 
     // Ctrl shortcuts
