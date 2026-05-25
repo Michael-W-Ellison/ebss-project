@@ -154,25 +154,6 @@ pub fn render_controls_panel(
     });
 }
 
-/// Render placeholder for map panel (will be expanded in Phase 3)
-pub fn render_map_placeholder(
-    mut egui_ctx: EguiContexts,
-    snapshot: Res<CurrentSnapshot>,
-) {
-    egui::CentralPanel::default().show(egui_ctx.ctx_mut(), |ui| {
-        if snapshot.snapshot.is_some() {
-            ui.centered_and_justified(|ui| {
-                ui.heading("Map View - Coming in Phase 3");
-                ui.label("Simulation is running. Use the controls below.");
-            });
-        } else {
-            ui.centered_and_justified(|ui| {
-                ui.heading("Waiting for simulation data...");
-            });
-        }
-    });
-}
-
 /// Render notifications
 pub fn render_notifications(
     mut egui_ctx: EguiContexts,
