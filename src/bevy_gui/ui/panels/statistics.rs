@@ -40,10 +40,10 @@ pub fn render_statistics_panel(
             // Tab bar
             ui.horizontal(|ui| {
                 let tabs = [
-                    (StatisticsTab::Population, "Overview"),
                     (StatisticsTab::Population, "Population"),
                     (StatisticsTab::Health, "Vitals"),
                     (StatisticsTab::Resources, "Resources"),
+                    (StatisticsTab::Economy, "Economy"),
                 ];
                 for (tab, label) in tabs {
                     if ui.selectable_label(history.active_tab == tab, label).clicked() {
