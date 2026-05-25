@@ -80,29 +80,24 @@ pub fn terrain_color(terrain: TerrainType) -> Color32 {
 /// Get resource color for map rendering
 pub fn resource_color(resource_type: ResourceType) -> Color32 {
     match resource_type {
-        // Basic Resources
         ResourceType::Wood => Color32::from_rgb(139, 69, 19),
         ResourceType::Stone => Color32::from_rgb(169, 169, 169),
         ResourceType::Iron => Color32::from_rgb(112, 128, 144),
         ResourceType::Food => Color32::from_rgb(255, 99, 71),
         ResourceType::Water => Color32::from_rgb(0, 191, 255),
-        // Raw Materials (Agricultural)
         ResourceType::Grain => Color32::from_rgb(255, 215, 0),
         ResourceType::Flax => Color32::from_rgb(245, 245, 220),
         ResourceType::Herbs => Color32::from_rgb(0, 128, 0),
         ResourceType::Cotton => Color32::from_rgb(255, 250, 250),
-        // Raw Materials (Animal)
         ResourceType::Hides => Color32::from_rgb(139, 90, 43),
         ResourceType::Wool => Color32::from_rgb(255, 250, 240),
         ResourceType::Meat => Color32::from_rgb(205, 92, 92),
         ResourceType::Milk => Color32::from_rgb(255, 255, 240),
         ResourceType::Fish => Color32::from_rgb(70, 130, 180),
         ResourceType::Honey => Color32::from_rgb(255, 185, 15),
-        // Raw Materials (Mineral)
         ResourceType::Clay => Color32::from_rgb(205, 133, 63),
         ResourceType::Sand => Color32::from_rgb(238, 214, 175),
         ResourceType::Coal => Color32::from_rgb(47, 79, 79),
-        // Processed Materials
         ResourceType::Flour => Color32::from_rgb(255, 248, 220),
         ResourceType::Leather => Color32::from_rgb(139, 69, 19),
         ResourceType::Cloth => Color32::from_rgb(186, 85, 211),
@@ -113,11 +108,9 @@ pub fn resource_color(resource_type: ResourceType) -> Color32 {
         ResourceType::Rope => Color32::from_rgb(193, 154, 107),
         ResourceType::Paper => Color32::from_rgb(255, 255, 240),
         ResourceType::Dye => Color32::from_rgb(148, 0, 211),
-        // Finished Goods (Food)
         ResourceType::Bread => Color32::from_rgb(222, 184, 135),
         ResourceType::Ale => Color32::from_rgb(210, 105, 30),
         ResourceType::Cheese => Color32::from_rgb(255, 215, 0),
-        // Finished Goods (Items)
         ResourceType::Clothing => Color32::from_rgb(147, 112, 219),
         ResourceType::Shoes => Color32::from_rgb(101, 67, 33),
         ResourceType::Tools => Color32::from_rgb(169, 169, 169),
@@ -126,6 +119,50 @@ pub fn resource_color(resource_type: ResourceType) -> Color32 {
         ResourceType::Pottery => Color32::from_rgb(205, 92, 0),
         ResourceType::Furniture => Color32::from_rgb(160, 82, 45),
         ResourceType::Jewelry => Color32::from_rgb(255, 215, 0),
+    }
+}
+
+/// Get building color for map rendering
+pub fn building_color(building_type: BuildingType, completed: bool) -> Color32 {
+    if !completed {
+        return Color32::from_rgb(180, 150, 100);
+    }
+    match building_type {
+        BuildingType::Longhouse => Color32::from_rgb(139, 90, 43),
+        BuildingType::UpgradedLonghouse => Color32::from_rgb(160, 82, 45),
+        BuildingType::SmallHouse => Color32::from_rgb(160, 82, 45),
+        BuildingType::MediumHouse => Color32::from_rgb(139, 90, 43),
+        BuildingType::LargeHouse => Color32::from_rgb(139, 69, 19),
+        BuildingType::Manor => Color32::from_rgb(218, 165, 32),
+        BuildingType::TownCenter => Color32::from_rgb(169, 169, 169),
+        BuildingType::TownStorage => Color32::from_rgb(139, 119, 101),
+        BuildingType::GuardPost => Color32::from_rgb(139, 0, 0),
+        BuildingType::Workshop => Color32::from_rgb(105, 105, 105),
+        BuildingType::Forge => Color32::from_rgb(255, 140, 0),
+        BuildingType::Smithy => Color32::from_rgb(112, 128, 144),
+        BuildingType::Bakery => Color32::from_rgb(245, 222, 179),
+        BuildingType::WeaverHut => Color32::from_rgb(186, 85, 211),
+        BuildingType::PotteryKiln => Color32::from_rgb(205, 92, 0),
+        BuildingType::Tannery => Color32::from_rgb(139, 90, 43),
+        BuildingType::Mill => Color32::from_rgb(222, 184, 135),
+        BuildingType::Butchery => Color32::from_rgb(205, 92, 92),
+        BuildingType::Brewery => Color32::from_rgb(139, 69, 19),
+        BuildingType::Dairy => Color32::from_rgb(255, 255, 240),
+        BuildingType::Glassworks => Color32::from_rgb(200, 225, 255),
+        BuildingType::Dyeworks => Color32::from_rgb(148, 0, 211),
+        BuildingType::Ropewalk => Color32::from_rgb(193, 154, 107),
+        BuildingType::Brickyard => Color32::from_rgb(178, 34, 34),
+        BuildingType::PaperMill => Color32::from_rgb(255, 255, 240),
+        BuildingType::TailorShop => Color32::from_rgb(147, 112, 219),
+        BuildingType::CobblerShop => Color32::from_rgb(101, 67, 33),
+        BuildingType::BarberShop => Color32::from_rgb(255, 182, 193),
+        BuildingType::Scriptorium => Color32::from_rgb(139, 90, 43),
+        BuildingType::Storehouse => Color32::from_rgb(139, 119, 101),
+        BuildingType::Farm => Color32::from_rgb(34, 139, 34),
+        BuildingType::AnimalPen => Color32::from_rgb(139, 119, 101),
+        BuildingType::Shrine => Color32::from_rgb(255, 250, 205),
+        BuildingType::Temple => Color32::from_rgb(255, 215, 0),
+        BuildingType::MedicalBuilding => Color32::from_rgb(255, 255, 255),
     }
 }
 
