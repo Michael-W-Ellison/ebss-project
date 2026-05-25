@@ -67,7 +67,7 @@ impl Plugin for EbssGuiPlugin {
             // UI rendering in Update
             .add_systems(Update, ui::render_menu_bar)
             .add_systems(Update, ui::render_controls_panel)
-            .add_systems(Update, ui::render_map_placeholder)
+            .add_systems(Update, ui::render_map)
             .add_systems(Update, ui::render_notifications)
             .add_systems(Update, ui::render_keyboard_help)
             // Panel systems

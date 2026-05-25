@@ -1,7 +1,9 @@
 // src/bevy_gui/ui/mod.rs
 //! UI rendering systems using bevy_egui.
 
+pub mod map;
 pub mod panels;
+pub mod tooltip;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
@@ -14,6 +16,7 @@ pub use panels::{
     render_tech_tree_panel, render_timeline_panel, render_relationship_graph_panel,
     render_save_dialog, render_load_dialog, render_search_panel, search_system,
 };
+pub use map::render_map;
 
 /// Render the top menu bar
 pub fn render_menu_bar(
