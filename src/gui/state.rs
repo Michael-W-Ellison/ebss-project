@@ -149,6 +149,7 @@ pub struct SimulationSnapshot {
 pub struct SelectedAgentData {
     pub id: Uuid,
     pub name: String,
+    pub gender: Gender,
     pub position: (i32, i32, i32),
     pub health: f32,
     pub energy: f32,

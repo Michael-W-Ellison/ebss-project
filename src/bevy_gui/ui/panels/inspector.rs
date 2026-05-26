@@ -42,7 +42,6 @@ pub fn render_inspector_panel(
             ui.horizontal(|ui| {
                 ui.heading("Inspector");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Pin button (future feature placeholder)
                     let pin_text = if inspector_state.pinned {
                         egui::RichText::new("📌").color(egui::Color32::from_rgb(255, 200, 100))
                     } else {
@@ -196,10 +195,10 @@ fn render_agent_header(ui: &mut egui::Ui, agent: &SelectedAgentData, notificatio
         let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(24.0, 24.0), egui::Sense::hover());
         ui.painter().circle_filled(rect.center(), 10.0, stage_color);
 
-        // Gender symbol overlay
+        // Gender symbol overlay (only shown for non-children)
         let gender_symbol = match agent.life_stage {
             crate::agents::LifeStage::Infant | crate::agents::LifeStage::Child => "",
-            _ => match Gender::Male { // Placeholder - we need to get actual gender
+            _ => match agent.gender {
                 Gender::Male => "♂",
                 Gender::Female => "♀",
             }

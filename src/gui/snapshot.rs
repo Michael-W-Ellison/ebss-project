@@ -285,6 +285,7 @@ pub fn agent_to_detailed(agent: &Agent) -> SelectedAgentData {
     SelectedAgentData {
         id: agent.id,
         name: format!("Agent {:?}", agent.id),
+        gender: agent.gender,
         position: agent.state.position,
         health: agent.state.health,
         energy: agent.state.energy,

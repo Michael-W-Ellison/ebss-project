@@ -29,6 +29,8 @@ pub fn render_menu_bar(
     mut center_request: EventWriter<crate::bevy_gui::events::CenterMapRequest>,
     mut notifications: ResMut<NotificationQueue>,
     snapshot: Res<CurrentSnapshot>,
+    stats_history: Res<StatisticsHistory>,
+    timeline: Res<TimelineData>,
     time: Res<Time>,
 ) {
     let current_time = time.elapsed_secs_f64();
@@ -63,7 +65,10 @@ pub fn render_menu_bar(
                     .on_hover_text("Export population statistics to CSV file")
                     .clicked()
                 {
-                    notifications.info("Export not yet implemented", current_time);
+                    match export_statistics_csv(&stats_history) {
+                        Ok(path) => notifications.success(&format!("Statistics exported to {}", path), current_time),
+                        Err(e) => notifications.error(&format!("Export failed: {}", e), current_time),
+                    }
                     ui.close_menu();
                 }
 
@@ -71,7 +76,10 @@ pub fn render_menu_bar(
                     .on_hover_text("Export event timeline to CSV file")
                     .clicked()
                 {
-                    notifications.info("Export not yet implemented", current_time);
+                    match export_timeline_csv(&timeline) {
+                        Ok(path) => notifications.success(&format!("Timeline exported to {}", path), current_time),
+                        Err(e) => notifications.error(&format!("Export failed: {}", e), current_time),
+                    }
                     ui.close_menu();
                 }
 
@@ -969,4 +977,75 @@ fn render_shortcut_section(ui: &mut egui::Ui, title: &str, shortcuts: &[(&str, &
                 ui.end_row();
             }
         });
+}
+
+fn export_statistics_csv(stats_history: &StatisticsHistory) -> Result<String, std::io::Error> {
+    use std::io::Write;
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let filename = format!("ebss_statistics_{}.csv", timestamp);
+
+    let mut file = std::fs::File::create(&filename)?;
+
+    writeln!(file, "tick,population,infants,children,adolescents,adults,elderly,births,deaths,avg_health,avg_energy,avg_happiness,total_resources,buildings_completed,buildings_construction")?;
+
+    for point in &stats_history.points {
+        writeln!(
+            file,
+            "{},{},{},{},{},{},{},{},{},{:.2},{:.2},{:.2},{},{},{}",
+            point.tick,
+            point.population,
+            point.infants,
+            point.children,
+            point.adolescents,
+            point.adults,
+            point.elderly,
+            point.births,
+            point.deaths,
+            point.avg_health,
+            point.avg_energy,
+            point.avg_happiness,
+            point.total_resources,
+            point.buildings_completed,
+            point.buildings_construction,
+        )?;
+    }
+
+    Ok(filename)
+}
+
+fn export_timeline_csv(timeline: &TimelineData) -> Result<String, std::io::Error> {
+    use std::io::Write;
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let filename = format!("ebss_timeline_{}.csv", timestamp);
+
+    let mut file = std::fs::File::create(&filename)?;
+
+    writeln!(file, "tick,event_type,description,position_x,position_y")?;
+
+    for event in &timeline.event_log {
+        let description = event.short_description();
+        let escaped_description = description.replace('"', "\"\"");
+        let (pos_x, pos_y) = event.position.map(|(x, y)| (x.to_string(), y.to_string()))
+            .unwrap_or(("".to_string(), "".to_string()));
+
+        writeln!(
+            file,
+            "{},{:?},\"{}\",{},{}",
+            event.tick,
+            event.filter_type(),
+            escaped_description,
+            pos_x,
+            pos_y,
+        )?;
+    }
+
+    Ok(filename)
 }
