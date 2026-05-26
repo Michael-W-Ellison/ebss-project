@@ -684,12 +684,12 @@ fn render_map_controls(
                 ui.label("Size:");
                 ui.add(egui::Slider::new(&mut map_view.minimap.size, 80.0..=200.0)
                     .suffix("px")
-                    .clamp_to_range(true));
+                    .clamping(egui::SliderClamping::Always));
             });
             ui.horizontal(|ui| {
                 ui.label("Opacity:");
                 ui.add(egui::Slider::new(&mut map_view.minimap.opacity, 0.3..=1.0)
-                    .clamp_to_range(true));
+                    .clamping(egui::SliderClamping::Always));
             });
         }).response.on_hover_text("Minimap display settings (M)");
 
