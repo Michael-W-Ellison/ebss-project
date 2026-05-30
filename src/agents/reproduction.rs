@@ -400,13 +400,21 @@ mod tests {
         male.state.position = (0, 0, 0);
         female.state.position = (10, 10, 0);
 
-        // Ensure both are well-fed (low survival drives)
+        // Set consistent reproduction drive modifier (randomly generated, so set explicitly for tests)
+        male.reproduction_drive_modifier = 1.0;
+        female.reproduction_drive_modifier = 1.0;
+
+        // Ensure both are well-fed (low survival drives) and have reproduction drive
         for agent in [&mut male, &mut female] {
             if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
                 hunger.value = 0.2;
             }
             if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
                 thirst.value = 0.2;
+            }
+            // Set reproduction drive to ensure fertility is above min threshold (0.3)
+            if let Some(reproduction) = agent.drives.get_mut(DriveType::Reproduction) {
+                reproduction.value = 0.5;
             }
         }
 

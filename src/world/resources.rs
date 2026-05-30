@@ -313,6 +313,10 @@ pub struct ResourceNode {
     pub position: Position,
     pub amount: u32,
     pub max_amount: u32,
+    /// Accumulator for fractional regeneration (0.0-1.0)
+    /// When this reaches 1.0+, whole units are added to amount
+    #[serde(default)]
+    regen_accumulator: f32,
 }
 
 impl ResourceNode {
@@ -322,6 +326,7 @@ impl ResourceNode {
             position,
             amount,
             max_amount: amount,
+            regen_accumulator: 0.0,
         }
     }
 
@@ -451,15 +456,25 @@ impl ResourceNode {
             _ => 1.0,
         };
 
-        // Calculate total regeneration
+        // Calculate total regeneration per tick
+        // Base rates are now actual units/tick (e.g., 0.05 = 1 unit per 20 ticks)
         let regen_amount = base_rate * temp_modifier * precip_modifier * season_modifier;
-        let regen_units = (regen_amount * 100.0).round() as u32; // Convert to whole units
 
-        // Add regenerated amount, capped at max
-        let actual_regen = regen_units.min(self.max_amount - self.amount);
-        self.amount += actual_regen;
+        // Accumulate fractional regeneration
+        self.regen_accumulator += regen_amount;
 
-        actual_regen
+        // Only add whole units when accumulator reaches 1.0+
+        let whole_units = self.regen_accumulator.floor() as u32;
+        if whole_units > 0 {
+            self.regen_accumulator -= whole_units as f32;
+
+            // Add regenerated amount, capped at max
+            let actual_regen = whole_units.min(self.max_amount - self.amount);
+            self.amount += actual_regen;
+            return actual_regen;
+        }
+
+        0
     }
 }
 
@@ -522,5 +537,101 @@ mod tests {
 
         node.harvest(50);
         assert!((node.percentage_remaining() - 0.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_regeneration_accumulator() {
+        let pos = Position::new(5, 5);
+        let mut node = ResourceNode::new(ResourceType::Food, pos, 40);
+
+        // Deplete the node
+        node.harvest(40);
+        assert_eq!(node.amount, 0);
+        assert!(node.is_depleted());
+
+        // Food base rate is 0.05/tick, so it should take ~20 ticks to regenerate 1 unit
+        // With neutral conditions (temp 20°C = 1.5x, precip 0.5 = 1.5x, season 1.0)
+        // Effective rate: 0.05 * 1.5 * 1.5 * 1.0 = 0.1125/tick
+        // Should take ~9 ticks to get 1 unit
+
+        let temperature = 20.0; // Ideal temp for plants
+        let precipitation = 0.5; // Ideal precipitation
+        let season_modifier = 1.0; // Neutral season
+
+        // Simulate 8 ticks - should not regenerate yet
+        for _ in 0..8 {
+            node.regenerate(temperature, precipitation, season_modifier);
+        }
+        // At 0.1125/tick, after 8 ticks: 0.9 accumulated, not yet 1 unit
+        assert_eq!(node.amount, 0);
+
+        // One more tick should push it over 1.0
+        node.regenerate(temperature, precipitation, season_modifier);
+        assert_eq!(node.amount, 1);
+
+        // Simulate many more ticks to verify steady regeneration
+        for _ in 0..100 {
+            node.regenerate(temperature, precipitation, season_modifier);
+        }
+        // 100 more ticks at 0.1125/tick = 11.25 more units, total should be ~12
+        assert!(node.amount >= 10 && node.amount <= 14);
+    }
+
+    #[test]
+    fn test_regeneration_seasonal_variation() {
+        let pos = Position::new(5, 5);
+
+        // Test winter conditions (harsh)
+        let mut winter_node = ResourceNode::new(ResourceType::Food, pos.clone(), 40);
+        winter_node.harvest(40);
+
+        // Winter: temp -5°C (suboptimal = 0.5x), precip 0.3 (adequate = 1.0x), season 0.3x
+        // Effective rate: 0.05 * 0.5 * 1.0 * 0.3 = 0.0075/tick
+        // Takes ~133 ticks to get 1 unit
+        for _ in 0..100 {
+            winter_node.regenerate(-5.0, 0.3, 0.3);
+        }
+        // After 100 ticks at 0.0075: 0.75 accumulated, should still be 0
+        assert_eq!(winter_node.amount, 0);
+
+        // 50 more ticks
+        for _ in 0..50 {
+            winter_node.regenerate(-5.0, 0.3, 0.3);
+        }
+        // After 150 ticks: 1.125 accumulated, should be 1 unit
+        assert_eq!(winter_node.amount, 1);
+
+        // Test spring conditions (ideal)
+        let mut spring_node = ResourceNode::new(ResourceType::Food, pos, 40);
+        spring_node.harvest(40);
+
+        // Spring: temp 20°C (ideal = 1.5x), precip 0.5 (good = 1.5x), season 1.5x
+        // Effective rate: 0.05 * 1.5 * 1.5 * 1.5 = 0.169/tick
+        // Takes ~6 ticks to get 1 unit
+        for _ in 0..100 {
+            spring_node.regenerate(20.0, 0.5, 1.5);
+        }
+        // After 100 ticks at 0.169: 16.9 units
+        assert!(spring_node.amount >= 15 && spring_node.amount <= 18);
+    }
+
+    #[test]
+    fn test_non_renewable_resources_dont_regenerate() {
+        let pos = Position::new(5, 5);
+        let mut stone_node = ResourceNode::new(ResourceType::Stone, pos.clone(), 100);
+        let mut iron_node = ResourceNode::new(ResourceType::Iron, pos, 50);
+
+        stone_node.harvest(50);
+        iron_node.harvest(25);
+
+        // Simulate many ticks with ideal conditions
+        for _ in 0..1000 {
+            stone_node.regenerate(20.0, 0.5, 1.5);
+            iron_node.regenerate(20.0, 0.5, 1.5);
+        }
+
+        // Non-renewable resources should not regenerate
+        assert_eq!(stone_node.amount, 50);
+        assert_eq!(iron_node.amount, 25);
     }
 }
