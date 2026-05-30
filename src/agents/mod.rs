@@ -79,7 +79,7 @@ pub mod job_happiness;
 pub mod religious_effects;
 
 pub use population::{Population, PopulationConfig, PopulationLearningStats};
-pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
+pub use reproduction::{can_mate, reproduce, attempt_impregnation, give_birth, MateSelectionCriteria};
 pub use shared_knowledge::{SharedKnowledge, DiscoveredResource};
 pub use knowledge::{PersonalKnowledge, ResourceKnowledge, KnowledgeSource};
 pub use relationships::{SocialNetwork, RelationshipLevel, TrustLevel};

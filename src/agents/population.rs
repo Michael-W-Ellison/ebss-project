@@ -1,10 +1,74 @@
 // src/agents/population.rs
 use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
-use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
+use crate::agents::{can_mate, reproduce, attempt_impregnation, give_birth, MateSelectionCriteria, PregnancyState};
 use crate::environment::technology::TechnologyRegistry;
+#[cfg(feature = "gui")]
 use crate::gui::events::{SimulationEvent, SimulationEventType, DeathCause};
+#[cfg(not(feature = "gui"))]
+use crate::agents::population::gui_stubs::{SimulationEvent, SimulationEventType, DeathCause};
 use uuid::Uuid;
 use std::collections::HashMap;
+
+#[cfg(not(feature = "gui"))]
+mod gui_stubs {
+    use uuid::Uuid;
+    use serde::{Serialize, Deserialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum DeathCause {
+        OldAge,
+        Starvation,
+        Dehydration,
+        Combat { killer_id: Option<Uuid> },
+        Exhaustion,
+        Exposure,
+        Unknown,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub enum SimulationEventType {
+        Birth {
+            mother_id: Uuid,
+            child_id: Uuid,
+            father_id: Option<Uuid>,
+        },
+        Death {
+            agent_id: Uuid,
+            cause: DeathCause,
+        },
+        Pregnancy {
+            mother_id: Uuid,
+            father_id: Uuid,
+        },
+        Abandonment {
+            agent_id: Uuid,
+        },
+        TechnologyDiscovered {
+            tech_id: String,
+            discoverer_id: Uuid,
+            is_world_first: bool,
+        },
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct SimulationEvent {
+        pub id: Uuid,
+        pub tick: u32,
+        pub event_type: SimulationEventType,
+        pub position: Option<(i32, i32)>,
+    }
+
+    impl SimulationEvent {
+        pub fn new(tick: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
+            Self {
+                id: Uuid::new_v4(),
+                tick,
+                event_type,
+                position,
+            }
+        }
+    }
+}
 
 /// Statistics about population dynamics
 #[derive(Debug, Clone, Default)]
@@ -183,7 +247,11 @@ impl Population {
         let current_tick = self.current_tick;
         for agent in &mut self.agents {
             agent.tick_with_percepts(current_tick); // Process percepts with timestamp
-            agent.state.age_tick(current_tick);
+            // Apply pregnancy energy multiplier to age_tick
+            let energy_multiplier = agent.pregnancy.as_ref()
+                .map(|p| p.energy_multiplier(current_tick))
+                .unwrap_or(1.0);
+            agent.state.age_tick_with_modifier(current_tick, energy_multiplier);
         }
 
         // Update relationships between nearby agents
@@ -227,7 +295,10 @@ impl Population {
         // Process deaths
         self.process_deaths();
 
-        // Process reproduction
+        // Process active pregnancies (nutrition updates and births)
+        self.process_pregnancies();
+
+        // Process new reproduction attempts
         self.process_reproduction();
 
         // Update cooldowns
@@ -783,69 +854,150 @@ impl Population {
                         .unwrap_or(false);
 
                     if drive1 && drive2 {
-                        // Successful reproduction
-                        let offspring = reproduce(agent1, agent2, self.current_tick);
-                        let child_id = offspring.id;
-                        let child_pos = (offspring.state.position.0, offspring.state.position.1);
-                        let parent1_id = agent1.id;
-                        let parent2_id = agent2.id;
+                        // Determine male/female for impregnation
+                        use crate::agents::gender::Gender;
+                        let (male_idx, female_idx) = match (agent1.gender, agent2.gender) {
+                            (Gender::Male, Gender::Female) => (idx1, idx2),
+                            (Gender::Female, Gender::Male) => (idx2, idx1),
+                            _ => continue, // Same-sex pairs can't reproduce
+                        };
 
-                        new_offspring.push(offspring);
+                        let male = &self.agents[male_idx];
+                        let female = &self.agents[female_idx];
 
-                        // Emit birth event
-                        self.pending_events.push(SimulationEvent::new(
-                            self.current_tick,
-                            SimulationEventType::Birth {
-                                mother_id: parent1_id,
-                                child_id,
-                                father_id: Some(parent2_id),
-                            },
-                            Some(child_pos),
-                        ));
+                        // Try to impregnate - this uses proper pregnancy system
+                        if let Some(pregnancy) = attempt_impregnation(male, female, self.current_tick) {
+                            let mother_id = female.id;
+                            let father_id = male.id;
+                            let pos = (female.state.position.0, female.state.position.1);
 
-                        // Add cooldown (prevent immediate re-reproduction)
-                        self.reproduction_cooldown.insert(agent1.id, 500); // 500 ticks cooldown
-                        self.reproduction_cooldown.insert(agent2.id, 500);
+                            // Store pregnancy info to apply after iteration
+                            new_offspring.push((female_idx, pregnancy, mother_id, father_id, pos));
 
-                        // Mark parents as having a new child
-                        // We'll do this in a second pass to avoid borrow issues
-                        // Store offspring IDs for later
+                            // Add cooldown (prevent immediate re-reproduction)
+                            self.reproduction_cooldown.insert(mother_id, 800); // Full pregnancy duration
+                            self.reproduction_cooldown.insert(father_id, 100); // Short cooldown for males
+                        }
                     }
                 }
             }
         }
 
-        // Store offspring IDs for establishing parent-child relationships
-        let offspring_ids: Vec<(Uuid, Vec<Uuid>)> = new_offspring
-            .iter()
-            .map(|o| (o.id, o.parent_ids.clone()))
-            .collect();
+        // Apply pregnancies to female agents and emit pregnancy events
+        for (female_idx, pregnancy, mother_id, father_id, pos) in new_offspring {
+            self.agents[female_idx].pregnancy = Some(pregnancy);
+
+            // Emit pregnancy event
+            self.pending_events.push(SimulationEvent::new(
+                self.current_tick,
+                SimulationEventType::Pregnancy {
+                    mother_id,
+                    father_id,
+                },
+                Some(pos),
+            ));
+
+            // Partially satisfy reproduction drive (full satisfaction comes at birth)
+            if let Some(drive) = self.agents[female_idx].drives.get_mut(crate::core::DriveType::Reproduction) {
+                drive.value = (drive.value - 0.3).max(0.0);
+            }
+        }
+    }
+
+    /// Process active pregnancies and handle births
+    /// Should be called every tick to update nutrition and check for due deliveries
+    pub fn process_pregnancies(&mut self) {
+        use crate::core::DriveType;
+
+        // First pass: update pregnancy nutrition and collect due births
+        let mut births_to_process: Vec<(usize, PregnancyState)> = Vec::new();
+
+        for (idx, agent) in self.agents.iter_mut().enumerate() {
+            if let Some(ref mut pregnancy) = agent.pregnancy {
+                // Update prenatal nutrition based on mother's current state
+                let hunger_drive = agent.drives.get(DriveType::Hunger)
+                    .map(|d| d.value)
+                    .unwrap_or(0.0);
+                pregnancy.update_nutrition(hunger_drive, agent.state.health);
+
+                // Check if due
+                if pregnancy.is_due(self.current_tick) {
+                    births_to_process.push((idx, pregnancy.clone()));
+                }
+            }
+        }
+
+        // Second pass: process births
+        let mut new_offspring: Vec<Agent> = Vec::new();
+
+        for (mother_idx, pregnancy) in births_to_process {
+            // Clear pregnancy from mother
+            self.agents[mother_idx].pregnancy = None;
+
+            // Find father
+            let father_idx = self.agents.iter()
+                .position(|a| a.id == pregnancy.father_id);
+
+            // Create offspring
+            let offspring = if let Some(f_idx) = father_idx {
+                let mother = &self.agents[mother_idx];
+                let father = &self.agents[f_idx];
+                give_birth(mother, father, &pregnancy, self.current_tick)
+            } else {
+                // Father not found (dead?), use legacy reproduce with just mother
+                let mother = &self.agents[mother_idx];
+                reproduce(mother, mother, self.current_tick)
+            };
+
+            let child_id = offspring.id;
+            let mother_id = self.agents[mother_idx].id;
+            let father_id = pregnancy.father_id;
+            let child_pos = (offspring.state.position.0, offspring.state.position.1);
+
+            // Emit birth event
+            self.pending_events.push(SimulationEvent::new(
+                self.current_tick,
+                SimulationEventType::Birth {
+                    mother_id,
+                    child_id,
+                    father_id: Some(father_id),
+                },
+                Some(child_pos),
+            ));
+
+            new_offspring.push(offspring);
+
+            // Satisfy reproduction drive for mother
+            if let Some(drive) = self.agents[mother_idx].drives.get_mut(DriveType::Reproduction) {
+                drive.satisfy();
+            }
+
+            // Establish parent-child relationship for mother
+            {
+                use crate::agents::emotions::{Relationship, RelationshipType};
+                self.agents[mother_idx].relationships.add_relationship(
+                    Relationship::new(child_id, RelationshipType::Child)
+                );
+            }
+
+            // Establish parent-child relationship for father if alive
+            if let Some(f_idx) = father_idx {
+                use crate::agents::emotions::{Relationship, RelationshipType};
+                self.agents[f_idx].relationships.add_relationship(
+                    Relationship::new(child_id, RelationshipType::Child)
+                );
+                // Satisfy reproduction drive for father
+                if let Some(drive) = self.agents[f_idx].drives.get_mut(DriveType::Reproduction) {
+                    drive.satisfy();
+                }
+            }
+        }
 
         // Add offspring to population
         let birth_count = new_offspring.len();
         self.agents.extend(new_offspring);
         self.stats.total_births += birth_count as u64;
         self.stats.births_this_tick += birth_count as u32;
-
-        // Satisfy reproduction drive and establish relationships for parents who reproduced
-        for agent in &mut self.agents {
-            if self.reproduction_cooldown.contains_key(&agent.id) {
-                // Satisfy reproduction drive
-                if let Some(drive) = agent.drives.get_mut(crate::core::DriveType::Reproduction) {
-                    drive.satisfy();
-                }
-
-                // Mark children in parent's relationships
-                for (offspring_id, parent_ids) in &offspring_ids {
-                    if parent_ids.contains(&agent.id) {
-                        use crate::agents::emotions::{Relationship, RelationshipType};
-                        agent.relationships.add_relationship(
-                            Relationship::new(*offspring_id, RelationshipType::Child)
-                        );
-                    }
-                }
-            }
-        }
     }
 
     /// Check if agent is on reproduction cooldown

@@ -1455,6 +1455,7 @@ impl Simulation {
                 self.world.add_building(building);
 
                 // Emit building started event for timeline
+                #[cfg(feature = "gui")]
                 {
                     use crate::gui::events::{SimulationEvent, SimulationEventType};
                     let agent = &self.population.agents[agent_index];
@@ -1643,6 +1644,7 @@ impl Simulation {
                 let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
 
                 // Emit conflict event for timeline
+                #[cfg(feature = "gui")]
                 {
                     use crate::gui::events::{SimulationEvent, SimulationEventType};
                     let event = SimulationEvent::new(
@@ -2159,6 +2161,7 @@ impl Simulation {
                         );
 
                         // Emit storehouse deposit event for timeline (only for significant deposits)
+                        #[cfg(feature = "gui")]
                         if removed >= 3 {
                             use crate::gui::events::{SimulationEvent, SimulationEventType};
                             let event = SimulationEvent::new(
@@ -3709,6 +3712,9 @@ impl Simulation {
 
             // Call the agent's lie detection processing
             agent.process_information_verification(self.current_tick);
+        }
+    }
+
     /// Process pregnancies and handle births
     fn process_pregnancies_and_births(&mut self) {
         use crate::agents::reproduction::give_birth;
