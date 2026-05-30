@@ -8,6 +8,15 @@
 //! - World grid rendering
 //! - Historical data tracking
 //! - Multiple rendering modes
+//! - Streaming output for external tools
+
+pub mod streaming;
+
+pub use streaming::{
+    StreamFormat, StreamOutput, ConsoleOutput, FileOutput, BufferOutput, MultiOutput,
+    StreamEvent, StreamFormatter, StreamingVisualizer, StreamConfig,
+    DisplayWidget, WidgetData, TextWidget, ProgressWidget, WidgetDashboard,
+};
 
 use crate::agents::{Agent, Population};
 use crate::core::DriveType;

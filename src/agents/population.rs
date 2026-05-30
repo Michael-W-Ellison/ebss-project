@@ -20,6 +20,10 @@ pub struct PopulationStats {
     pub adolescents: usize,
     pub adults: usize,
     pub elderly: usize,
+    // Per-tick tracking (reset at start of each tick)
+    pub births_this_tick: u32,
+    pub deaths_this_tick: u32,
+    pub abandonments_this_tick: u32,
 }
 
 /// Configuration for population behavior
@@ -167,8 +171,10 @@ impl Population {
     pub fn tick(&mut self) {
         self.current_tick += 1;
 
-        // Clear pending events from previous tick
-        self.pending_events.clear();
+        // Reset per-tick counters at the start of each tick
+        self.stats.births_this_tick = 0;
+        self.stats.deaths_this_tick = 0;
+        self.stats.abandonments_this_tick = 0;
 
         // Update shared knowledge tick counter
         self.shared_knowledge.tick();
@@ -193,9 +199,10 @@ impl Population {
             self.process_social_interactions();
         }
 
-        // Process gossip spreading (every 15 ticks)
-        if current_tick % 15 == 0 {
-            self.process_gossip();
+        // Process trait-based proximity effects (every 10 ticks)
+        // Handles: Romantic partner happiness, Mediator calming, Intolerant stranger penalty
+        if current_tick % 10 == 0 {
+            self.process_trait_proximity_effects();
         }
 
         // Process observational learning (every 20 ticks to reduce overhead)
@@ -667,6 +674,7 @@ impl Population {
         self.agents.retain(|agent| agent.state.is_alive);
         let deaths = before - self.agents.len();
         self.stats.total_deaths += deaths as u64;
+        self.stats.deaths_this_tick += deaths as u32;
 
         // Clean up tracking for dead agents
         for (deceased_id, _, _, _) in &dead_agents {
@@ -817,6 +825,7 @@ impl Population {
         let birth_count = new_offspring.len();
         self.agents.extend(new_offspring);
         self.stats.total_births += birth_count as u64;
+        self.stats.births_this_tick += birth_count as u32;
 
         // Satisfy reproduction drive and establish relationships for parents who reproduced
         for agent in &mut self.agents {
@@ -929,9 +938,6 @@ impl Population {
         use crate::core::DriveType;
         use rand::Rng;
 
-        // Pre-compute squared distance threshold (avoids sqrt)
-        const SOCIAL_RANGE_SQUARED: f32 = 25.0; // 5.0 * 5.0
-
         let mut rng = rand::thread_rng();
         let current_tick = self.current_tick;
 
@@ -966,6 +972,9 @@ impl Population {
                 continue;
             }
 
+            // Calculate social range based on personality traits
+            let agent1_social_range_sq = calculate_social_range_squared(&self.agents[i].traits.traits);
+
             for j in (i + 1)..self.agents.len() {
                 if !self.agents[j].state.is_alive {
                     continue;
@@ -990,8 +999,13 @@ impl Population {
                 let dy = (agent1_pos.1 - agent2_pos.1) as f32;
                 let distance_squared = dx * dx + dy * dy;
 
-                // Must be within social interaction range (5 tiles)
-                if distance_squared > SOCIAL_RANGE_SQUARED {
+                // Use the larger of the two agents' social ranges
+                // (more social agent can reach out to less social one)
+                let agent2_social_range_sq = calculate_social_range_squared(&self.agents[j].traits.traits);
+                let max_social_range_sq = agent1_social_range_sq.max(agent2_social_range_sq);
+
+                // Must be within social interaction range
+                if distance_squared > max_social_range_sq {
                     continue;
                 }
 
@@ -1343,8 +1357,123 @@ impl Population {
                     drive.partial_satisfy(satisfaction);
                 }
 
-                // Also track in observational learning if discovering new actions
-                // (future enhancement: learn from discovered resources/buildings)
+                // Award Navigation skill XP for exploration
+                agent.skills.gain_experience(super::SkillType::Navigation, new_discoveries as u32 * 2);
+            }
+
+            // Learn skills from discovered resources
+            for (pos, resource_type) in &agent.exploration_knowledge.known_resources {
+                // Only give XP for recently discovered resources (within last 10 ticks)
+                if let Some(&discover_tick) = agent.exploration_knowledge.resource_discovery_ticks.get(pos) {
+                    if current_tick.saturating_sub(discover_tick) < 10 {
+                        let skill_xp = Self::get_skill_for_resource_discovery(resource_type);
+                        for (skill_type, xp) in skill_xp {
+                            agent.skills.gain_experience(skill_type, xp);
+                        }
+                    }
+                }
+            }
+
+            // Learn skills from discovered buildings
+            for (pos, building_type) in &agent.exploration_knowledge.known_buildings {
+                // Only give XP for recently discovered buildings (within last 10 ticks)
+                if let Some(&discover_tick) = agent.exploration_knowledge.building_discovery_ticks.get(pos) {
+                    if current_tick.saturating_sub(discover_tick) < 10 {
+                        let skill_xp = Self::get_skill_for_building_discovery(building_type);
+                        for (skill_type, xp) in skill_xp {
+                            agent.skills.gain_experience(skill_type, xp);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get skill XP gains for discovering a resource type
+    fn get_skill_for_resource_discovery(resource_type: &crate::world::ResourceType) -> Vec<(super::SkillType, u32)> {
+        use crate::world::ResourceType;
+        use super::SkillType;
+
+        match resource_type {
+            // Mining resources teach Mining skill
+            ResourceType::Stone | ResourceType::Iron | ResourceType::Coal
+            | ResourceType::Clay | ResourceType::Sand => {
+                vec![(SkillType::Mining, 5)]
+            }
+            // Wood resources teach Woodcutting
+            ResourceType::Wood => vec![(SkillType::Woodcutting, 5)],
+            // Agricultural resources teach Farming/Herbalism
+            ResourceType::Grain | ResourceType::Flax | ResourceType::Cotton => {
+                vec![(SkillType::Farming, 5)]
+            }
+            ResourceType::Herbs => vec![(SkillType::Herbalism, 5)],
+            // Animal resources teach Hunting
+            ResourceType::Meat | ResourceType::Hides => vec![(SkillType::Hunting, 5)],
+            // Fish teaches Fishing
+            ResourceType::Fish => vec![(SkillType::Fishing, 5)],
+            // Food and foraging
+            ResourceType::Food => vec![(SkillType::Herbalism, 3)],
+            // Other resources
+            _ => vec![(SkillType::Navigation, 2)],
+        }
+    }
+
+    /// Get skill XP gains for discovering a building type
+    fn get_skill_for_building_discovery(building_type: &crate::world::BuildingType) -> Vec<(super::SkillType, u32)> {
+        use crate::world::BuildingType;
+        use super::SkillType;
+
+        match building_type {
+            // Production buildings teach relevant crafting skills
+            BuildingType::Forge | BuildingType::Smithy => {
+                vec![(SkillType::Smelting, 10), (SkillType::Metalworking, 5)]
+            }
+            BuildingType::Workshop => vec![(SkillType::Crafting, 10)],
+            BuildingType::Farm => vec![(SkillType::Farming, 10)],
+            BuildingType::Bakery => vec![(SkillType::Cooking, 10)],
+            BuildingType::Butchery => vec![(SkillType::Cooking, 5), (SkillType::Hunting, 5)],
+            BuildingType::WeaverHut | BuildingType::TailorShop => {
+                vec![(SkillType::Crafting, 10)]
+            }
+            BuildingType::Tannery => vec![(SkillType::Leatherworking, 10)],
+            BuildingType::PotteryKiln | BuildingType::Brickyard => {
+                vec![(SkillType::Masonry, 10)]
+            }
+            BuildingType::Mill | BuildingType::Brewery | BuildingType::Dairy => {
+                vec![(SkillType::Cooking, 8)]
+            }
+            // Specialized craft buildings
+            BuildingType::Glassworks | BuildingType::Dyeworks | BuildingType::Ropewalk | BuildingType::PaperMill => {
+                vec![(SkillType::Crafting, 8)]
+            }
+            BuildingType::CobblerShop => {
+                vec![(SkillType::Crafting, 5), (SkillType::Leatherworking, 5)]
+            }
+            BuildingType::Scriptorium => {
+                vec![(SkillType::Crafting, 5), (SkillType::Social, 5)]
+            }
+            BuildingType::BarberShop => vec![(SkillType::Social, 8)],
+            // Animal husbandry
+            BuildingType::AnimalPen => {
+                vec![(SkillType::Farming, 5), (SkillType::Hunting, 5)]
+            }
+            // Housing teaches Construction
+            BuildingType::SmallHouse | BuildingType::MediumHouse | BuildingType::LargeHouse
+            | BuildingType::Longhouse | BuildingType::UpgradedLonghouse | BuildingType::Manor => {
+                vec![(SkillType::Construction, 10)]
+            }
+            // Civic buildings
+            BuildingType::TownCenter => vec![(SkillType::Social, 10), (SkillType::Construction, 5)],
+            BuildingType::TownStorage => vec![(SkillType::Navigation, 5), (SkillType::Construction, 5)],
+            BuildingType::GuardPost => vec![(SkillType::MeleeCombat, 10)],
+            // Storage buildings
+            BuildingType::Storehouse => vec![(SkillType::Navigation, 8)],
+            // Religious buildings teach social skills
+            BuildingType::Shrine => vec![(SkillType::Social, 8)],
+            BuildingType::Temple => vec![(SkillType::Social, 10)],
+            // Medical building teaches herbalism and cooking (medicine preparation)
+            BuildingType::MedicalBuilding => {
+                vec![(SkillType::Herbalism, 10), (SkillType::Cooking, 5)]
             }
         }
     }
@@ -1381,16 +1510,20 @@ impl Population {
             }
         }
 
-        // Knowledge sharing between nearby agents (simplified gossip about discoveries)
-        // Share random discoveries with nearby agents
+        // Knowledge sharing between nearby agents (gossip about discoveries)
+        // Agents share knowledge about buildings, resources, and terrain when in proximity
+        use rand::seq::SliceRandom;
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
         for i in 0..self.agents.len() {
-            let (_, pos_i, alive_i) = agent_positions[i];
+            let (agent_i_id, pos_i, alive_i) = agent_positions[i];
             if !alive_i {
                 continue;
             }
 
             for j in (i + 1)..self.agents.len() {
-                let (_, pos_j, alive_j) = agent_positions[j];
+                let (agent_j_id, pos_j, alive_j) = agent_positions[j];
                 if !alive_j {
                     continue;
                 }
@@ -1401,24 +1534,118 @@ impl Population {
                 let dist_sq = dx * dx + dy * dy;
 
                 if dist_sq <= EXPLORATION_SHARE_RANGE_SQ {
-                    // Share a random discovery from i to j and vice versa
-                    // This simulates agents telling each other about places they've been
                     let current_tick = self.current_tick;
 
-                    // Agent i shares with agent j
-                    if let Some((pos, building_type)) = self.agents[i].exploration_knowledge
-                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
-                    {
-                        self.agents[j].exploration_knowledge
-                            .discover_building(pos, building_type, current_tick);
+                    // Get actual agent UUIDs for relationship lookups
+                    let uuid_j = self.agents[j].id;
+
+                    // Calculate sharing probability based on relationship
+                    let relationship_i_to_j = self.agents[i].relationships
+                        .get_relationship(&uuid_j)
+                        .map(|r| r.bond_strength)
+                        .unwrap_or(0.0);
+                    let share_probability = 0.3 + (relationship_i_to_j * 0.5).max(0.0); // 30-80% based on relationship
+
+                    // Share buildings (prioritize recent discoveries)
+                    if rng.gen_bool(share_probability as f64) {
+                        // Agent i shares with agent j - prioritize recent discoveries
+                        let buildings_i: Vec<_> = self.agents[i].exploration_knowledge
+                            .known_buildings.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !buildings_i.is_empty() {
+                            // Share up to 3 buildings, prioritizing ones j doesn't know
+                            let mut shared = 0;
+                            for (pos, building_type) in buildings_i.choose_multiple(&mut rng, 5) {
+                                if !self.agents[j].exploration_knowledge.known_buildings.contains_key(pos) {
+                                    self.agents[j].exploration_knowledge
+                                        .discover_building(*pos, *building_type, current_tick);
+                                    shared += 1;
+                                    if shared >= 3 { break; }
+                                }
+                            }
+
+                            // Sharing satisfies social drive for agent i
+                            if shared > 0 {
+                                if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Social) {
+                                    drive.partial_satisfy(0.02 * shared as f32);
+                                }
+                            }
+                        }
                     }
 
                     // Agent j shares with agent i
-                    if let Some((pos, building_type)) = self.agents[j].exploration_knowledge
-                        .known_buildings.iter().next().map(|(p, t)| (*p, *t))
-                    {
-                        self.agents[i].exploration_knowledge
-                            .discover_building(pos, building_type, current_tick);
+                    if rng.gen_bool(share_probability as f64) {
+                        let buildings_j: Vec<_> = self.agents[j].exploration_knowledge
+                            .known_buildings.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !buildings_j.is_empty() {
+                            let mut shared = 0;
+                            for (pos, building_type) in buildings_j.choose_multiple(&mut rng, 5) {
+                                if !self.agents[i].exploration_knowledge.known_buildings.contains_key(pos) {
+                                    self.agents[i].exploration_knowledge
+                                        .discover_building(*pos, *building_type, current_tick);
+                                    shared += 1;
+                                    if shared >= 3 { break; }
+                                }
+                            }
+
+                            if shared > 0 {
+                                if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Social) {
+                                    drive.partial_satisfy(0.02 * shared as f32);
+                                }
+                            }
+                        }
+                    }
+
+                    // Share resources (important for survival)
+                    if rng.gen_bool((share_probability * 0.8) as f64) {
+                        // Agent i shares resource knowledge with agent j
+                        let resources_i: Vec<_> = self.agents[i].exploration_knowledge
+                            .known_resources.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !resources_i.is_empty() {
+                            let mut shared = 0;
+                            for (pos, resource_type) in resources_i.choose_multiple(&mut rng, 5) {
+                                if !self.agents[j].exploration_knowledge.known_resources.contains_key(pos) {
+                                    self.agents[j].exploration_knowledge
+                                        .discover_resource(*pos, *resource_type, current_tick);
+                                    shared += 1;
+                                    if shared >= 3 { break; }
+                                }
+                            }
+                        }
+
+                        // Agent j shares with agent i
+                        let resources_j: Vec<_> = self.agents[j].exploration_knowledge
+                            .known_resources.iter()
+                            .map(|(p, t)| (*p, *t))
+                            .collect();
+
+                        if !resources_j.is_empty() {
+                            for (pos, resource_type) in resources_j.choose_multiple(&mut rng, 5) {
+                                if !self.agents[i].exploration_knowledge.known_resources.contains_key(pos) {
+                                    self.agents[i].exploration_knowledge
+                                        .discover_resource(*pos, *resource_type, current_tick);
+                                }
+                            }
+                        }
+                    }
+
+                    // Strengthen relationship through gossip interaction
+                    let uuid_i = self.agents[i].id;
+                    if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&uuid_j) {
+                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        rel.total_interactions += 1;
+                    }
+                    if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&uuid_i) {
+                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        rel.total_interactions += 1;
                     }
                 }
             }
@@ -1431,19 +1658,286 @@ impl Population {
     /// - Broadcasting actions to nearby observers
     /// - Automatic adoption of ready behaviors
     /// - Skill learning from adopted behaviors
+    /// - Drive satisfaction and emotional responses for learners and teachers
     pub fn process_observational_learning(&mut self) {
-        use super::observation_processing::{auto_adopt_ready_behaviors};
+        use super::observation_processing::auto_adopt_ready_behaviors;
+        use crate::core::DriveType;
+        use crate::agents::emotions::EmotionSource;
+
+        // Collect adopted behaviors with agent indices
+        let mut adoptions: Vec<(usize, uuid::Uuid, super::ActionType)> = Vec::new();
 
         // Process auto-adoption for each agent
         for i in 0..self.agents.len() {
             let adopted = auto_adopt_ready_behaviors(&mut self.agents[i]);
 
-            // Log adoptions (could be extended to notify parents, etc.)
             if !adopted.is_empty() {
                 for (teacher_id, action_type) in adopted {
-                    // Future: Could add events, notifications, or drive satisfaction here
-                    // For now, just record that learning happened
-                    let _ = (teacher_id, action_type);
+                    adoptions.push((i, teacher_id, action_type));
+
+                    // Satisfy learner's curiosity drive - learning is discovery!
+                    if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Curiosity) {
+                        drive.partial_satisfy(0.15); // Learning satisfies curiosity
+                    }
+
+                    // Learner experiences positive emotions from successful learning
+                    self.agents[i].emotions.add_happiness(
+                        EmotionSource::Event("learning_success".to_string()),
+                        0.1,
+                    );
+                }
+            }
+        }
+
+        // Process teacher satisfaction (teachers feel good when others learn from them)
+        for (learner_idx, teacher_id, action_type) in adoptions {
+            // Find the teacher in the population
+            if let Some(teacher_idx) = self.agents.iter().position(|a| a.id == teacher_id) {
+                // Teacher gets social drive satisfaction from teaching
+                if let Some(drive) = self.agents[teacher_idx].drives.get_mut(DriveType::Social) {
+                    drive.partial_satisfy(0.1); // Teaching is social interaction
+                }
+
+                // Teacher experiences positive emotions from being a role model
+                let learner_id = self.agents[learner_idx].id;
+                self.agents[teacher_idx].emotions.add_happiness(
+                    EmotionSource::Agent(learner_id),
+                    0.08,
+                );
+
+                // Strengthen relationship between teacher and learner
+                use crate::agents::emotions::{Relationship, RelationshipType};
+
+                // Learner develops respect for teacher
+                if self.agents[learner_idx].relationships.get_relationship(&teacher_id).is_none() {
+                    self.agents[learner_idx].relationships.add_relationship(
+                        Relationship::new(teacher_id, RelationshipType::Acquaintance)
+                    );
+                }
+                // Strengthen bond
+                if let Some(rel) = self.agents[learner_idx].relationships.get_relationship_mut(&teacher_id) {
+                    rel.bond_strength = (rel.bond_strength + 0.05).min(1.0);
+                }
+
+                // Teacher recognizes learner
+                if self.agents[teacher_idx].relationships.get_relationship(&learner_id).is_none() {
+                    self.agents[teacher_idx].relationships.add_relationship(
+                        Relationship::new(learner_id, RelationshipType::Acquaintance)
+                    );
+                }
+                // Strengthen bond
+                if let Some(rel) = self.agents[teacher_idx].relationships.get_relationship_mut(&learner_id) {
+                    rel.bond_strength = (rel.bond_strength + 0.03).min(1.0);
+                }
+
+                // Log the learning event for debugging/analytics
+                let _ = action_type; // Action type available for logging if needed
+            }
+        }
+    }
+
+    /// Process passive trait effects that depend on proximity or relationships
+    /// This handles:
+    /// - Romantic: happiness from partner proximity
+    /// - Mediator: reduces nearby negative emotions
+    /// - Intolerant: affection penalty with strangers
+    /// - Insecure: anxiety when partner socializes with others
+    /// - Copycat: happiness from mimicking nearby agents
+    pub fn process_trait_proximity_effects(&mut self) {
+        use crate::core::traits::Trait;
+        use crate::agents::emotions::EmotionSource;
+        use crate::agents::emotions::RelationshipType;
+
+        const PROXIMITY_RANGE_SQ: f32 = 100.0; // 10 tiles squared
+
+        // Collect agent positions and traits first to avoid borrow issues
+        let agent_data: Vec<_> = self.agents.iter()
+            .enumerate()
+            .filter(|(_, a)| a.state.is_alive)
+            .map(|(i, a)| (i, a.id, a.state.position, a.traits.clone()))
+            .collect();
+
+        // Process Romantic trait - happiness from partner proximity
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Romantic) {
+                // Check if any romantic partner is nearby
+                for (j, other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    // Check if this is a romantic partner
+                    let is_partner = self.agents[*i].relationships
+                        .get_relationship(other_id)
+                        .map(|r| r.relationship_type == RelationshipType::Partner)
+                        .unwrap_or(false);
+
+                    if is_partner {
+                        let dx = (pos_i.0 - pos_j.0) as f32;
+                        let dy = (pos_i.1 - pos_j.1) as f32;
+                        let dist_sq = dx * dx + dy * dy;
+
+                        if dist_sq <= PROXIMITY_RANGE_SQ {
+                            // Partner is nearby - gain happiness
+                            self.agents[*i].emotions.add_happiness(
+                                EmotionSource::Agent(*other_id),
+                                0.02  // Small but constant happiness from partner proximity
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Mediator trait - reduces nearby negative emotions
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Mediator) {
+                // Find nearby agents and reduce their negative emotions
+                for (j, _, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        // Mediator calms nearby agents - reduce anger slightly
+                        let current_anger = self.agents[*j].emotions.anger;
+                        if current_anger > 0.1 {
+                            // Reduce anger by small amount
+                            for (_, amount) in self.agents[*j].emotions.anger_sources.iter_mut() {
+                                *amount = (*amount * 0.98).max(0.0); // 2% reduction per tick
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Intolerant trait - affection penalty with strangers
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Intolerant) {
+                // Check nearby agents for strangers
+                for (j, other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        // Check if this is a stranger (no relationship or weak bond)
+                        let is_stranger = self.agents[*i].relationships
+                            .get_relationship(other_id)
+                            .map(|r| r.bond_strength < 0.2)
+                            .unwrap_or(true);
+
+                        if is_stranger {
+                            // Intolerant agents lose happiness around strangers
+                            self.agents[*i].emotions.add_sadness(
+                                EmotionSource::Agent(*other_id),
+                                0.01
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Insecure trait - anxiety when partner socializes with others
+        for (i, agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Insecure) {
+                // Find partner
+                let partner_id: Option<uuid::Uuid> = self.agents[*i].relationships
+                    .get_all()
+                    .values()
+                    .find(|r| r.relationship_type == RelationshipType::Partner)
+                    .map(|r| r.other_agent);
+
+                if let Some(partner) = partner_id {
+                    // Check if partner is socializing with someone else nearby
+                    let partner_idx = agent_data.iter()
+                        .find(|(_, id, _, _)| *id == partner)
+                        .map(|(idx, _, _, _)| *idx);
+
+                    if let Some(p_idx) = partner_idx {
+                        let partner_pos = agent_data.iter()
+                            .find(|(idx, _, _, _)| *idx == p_idx)
+                            .map(|(_, _, pos, _)| pos);
+
+                        if let Some(ppos) = partner_pos {
+                            // Check if partner is near other agents (not us)
+                            for (k, other_id, pos_k, _) in &agent_data {
+                                if *k == p_idx || *k == *i { continue; }
+
+                                let dx = (ppos.0 - pos_k.0) as f32;
+                                let dy = (ppos.1 - pos_k.1) as f32;
+                                let dist_sq = dx * dx + dy * dy;
+
+                                if dist_sq <= 25.0 { // Very close proximity (5 tiles)
+                                    // Partner is close to someone else - trigger insecurity
+                                    self.agents[*i].emotions.add_sadness(
+                                        EmotionSource::Event("partner_jealousy".to_string()),
+                                        0.02
+                                    );
+                                    break; // Only trigger once per tick
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Envious trait - sadness when others have better equipment
+        for (i, _agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Envious) {
+                let my_equipment_value = self.agents[*i].equipment.total_value();
+
+                for (j, other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        let other_equipment_value = self.agents[*j].equipment.total_value();
+
+                        if other_equipment_value > my_equipment_value * 1.5 {
+                            // Others have significantly better equipment - feel envious
+                            self.agents[*i].emotions.add_sadness(
+                                EmotionSource::Agent(*other_id),
+                                0.02
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process Greedy trait - happiness from having more inventory than others
+        for (i, _agent_id, pos_i, traits_i) in &agent_data {
+            if traits_i.has(Trait::Greedy) {
+                let my_inventory_count = self.agents[*i].inventory.total_items();
+
+                for (j, _other_id, pos_j, _) in &agent_data {
+                    if i == j { continue; }
+
+                    let dx = (pos_i.0 - pos_j.0) as f32;
+                    let dy = (pos_i.1 - pos_j.1) as f32;
+                    let dist_sq = dx * dx + dy * dy;
+
+                    if dist_sq <= PROXIMITY_RANGE_SQ {
+                        let other_inventory_count = self.agents[*j].inventory.total_items();
+
+                        if my_inventory_count > other_inventory_count * 2 {
+                            // I have significantly more stuff - feel satisfied
+                            self.agents[*i].emotions.add_happiness(
+                                EmotionSource::Event("wealth_satisfaction".to_string()),
+                                0.01
+                            );
+                            break; // Only need one comparison
+                        }
+                    }
                 }
             }
         }
@@ -1555,6 +2049,50 @@ pub struct PopulationLearningStats {
     pub total_ready_to_adopt: usize,
     pub agents_learning_from_parents: usize,
     pub average_unique_teachers: f32,
+}
+
+/// Calculate social interaction range based on agent personality traits
+///
+/// Returns squared range (to avoid sqrt in distance calculations)
+/// Base range is 5 tiles. Traits can modify this:
+/// - Extrovert/Sociable: +3 tiles (8 total)
+/// - Charismatic: +2 tiles
+/// - Introvert/Introverted: -2 tiles (3 total)
+/// - Mute: -1 tile
+/// - Explorer: +1 tile (willing to travel to meet people)
+///
+/// Range is clamped between 2 and 10 tiles.
+fn calculate_social_range_squared(traits: &[Trait]) -> f32 {
+    let mut range: f32 = 5.0; // Base social range in tiles
+
+    for trait_item in traits {
+        match trait_item {
+            // Traits that increase social range
+            Trait::Extrovert | Trait::Sociable => range += 3.0,
+            Trait::Charismatic => range += 2.0,
+            Trait::Explorer => range += 1.0,
+            Trait::Curious => range += 1.0,
+
+            // Traits that decrease social range
+            Trait::Introvert | Trait::Introverted => range -= 2.0,
+            Trait::Mute => range -= 1.0,
+            Trait::Anxious => range -= 1.0,
+            Trait::Paranoid => range -= 2.0,
+
+            _ => {}
+        }
+    }
+
+    // Clamp between 2 and 10 tiles
+    range = range.clamp(2.0, 10.0);
+
+    // Return squared range for efficient distance comparison
+    range * range
+}
+
+/// Get the base social range for a set of traits (in tiles, not squared)
+pub fn get_social_range(traits: &[Trait]) -> f32 {
+    calculate_social_range_squared(traits).sqrt()
 }
 
 impl Default for Population {

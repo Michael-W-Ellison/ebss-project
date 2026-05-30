@@ -148,6 +148,10 @@ pub struct BehaviorNode {
     pub children: Vec<BehaviorNode>,
     pub execution_count: u32,
     pub success_count: u32,
+    /// Whether this action was learned/discovered dynamically (not part of default tree)
+    pub learned: bool,
+    /// The source of this learned action (e.g., "observed_from:agent_id" or "experimentation")
+    pub learned_source: Option<String>,
 }
 
 impl BehaviorNode {
@@ -160,6 +164,22 @@ impl BehaviorNode {
             children: Vec::new(),
             execution_count: 0,
             success_count: 0,
+            learned: false,
+            learned_source: None,
+        }
+    }
+
+    /// Create a new learned behavior node (discovered through observation or experimentation)
+    pub fn new_learned(node_type: NodeType, source: String) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            node_type,
+            weight: 0.5, // Start with lower weight until proven effective
+            children: Vec::new(),
+            execution_count: 0,
+            success_count: 0,
+            learned: true,
+            learned_source: Some(source),
         }
     }
 
@@ -200,11 +220,65 @@ impl BehaviorNode {
     /// Prune low-weight children
     pub fn prune(&mut self, min_weight: f32) {
         self.children.retain(|child| child.weight >= min_weight);
-        
+
         // Recursively prune children
         for child in &mut self.children {
             child.prune(min_weight);
         }
+    }
+
+    /// Sort children by weight (highest first) for weighted selection
+    pub fn sort_children_by_weight(&mut self) {
+        self.children.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Recursively sort children
+        for child in &mut self.children {
+            child.sort_children_by_weight();
+        }
+    }
+
+    /// Check if this node or any child contains a specific action
+    pub fn has_action(&self, action_name: &str) -> bool {
+        match &self.node_type {
+            NodeType::Action(name) if name == action_name => true,
+            _ => self.children.iter().any(|c| c.has_action(action_name)),
+        }
+    }
+
+    /// Add a learned action as a child (only if not already present)
+    /// Returns true if the action was added
+    pub fn add_learned_action(&mut self, action_name: String, source: String) -> bool {
+        if self.has_action(&action_name) {
+            return false;
+        }
+
+        let learned_node = BehaviorNode::new_learned(NodeType::Action(action_name), source);
+        self.children.push(learned_node);
+        true
+    }
+
+    /// Get all learned actions in this tree
+    pub fn learned_actions(&self) -> Vec<&str> {
+        let mut actions = Vec::new();
+        self.collect_learned_actions(&mut actions);
+        actions
+    }
+
+    fn collect_learned_actions<'a>(&'a self, actions: &mut Vec<&'a str>) {
+        if self.learned {
+            if let NodeType::Action(name) = &self.node_type {
+                actions.push(name.as_str());
+            }
+        }
+        for child in &self.children {
+            child.collect_learned_actions(actions);
+        }
+    }
+
+    /// Count total learned nodes in the tree
+    pub fn learned_count(&self) -> usize {
+        let count = if self.learned { 1 } else { 0 };
+        count + self.children.iter().map(|c| c.learned_count()).sum::<usize>()
     }
 }
 
@@ -283,8 +357,11 @@ impl BehaviorTree {
         ExecutionResult::Success
     }
 
-    /// Execute a selector node
+    /// Execute a selector node (children sorted by weight - higher weight tried first)
     fn execute_selector<C: BehaviorContext>(&self, node: &mut BehaviorNode, context: &mut C) -> ExecutionResult {
+        // Sort children by weight (highest first) for dynamic priority
+        node.children.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap_or(std::cmp::Ordering::Equal));
+
         for child in &mut node.children {
             match self.execute_node(child, context) {
                 ExecutionResult::Success => return ExecutionResult::Success,
@@ -314,6 +391,54 @@ impl BehaviorTree {
         cloned.id = Uuid::new_v4(); // New ID for offspring
         cloned.prune(min_weight);
         cloned
+    }
+
+    /// Add a learned action to the root node (for selector trees)
+    /// Returns true if the action was successfully added
+    pub fn learn_action(&mut self, action_name: String, source: String) -> bool {
+        self.root.add_learned_action(action_name, source)
+    }
+
+    /// Check if an action exists in this tree
+    pub fn has_action(&self, action_name: &str) -> bool {
+        self.root.has_action(action_name)
+    }
+
+    /// Get all learned actions in this tree
+    pub fn learned_actions(&self) -> Vec<&str> {
+        self.root.learned_actions()
+    }
+
+    /// Count total learned nodes in the tree
+    pub fn learned_count(&self) -> usize {
+        self.root.learned_count()
+    }
+
+    /// Sort all nodes by weight for optimal execution order
+    pub fn optimize_weights(&mut self) {
+        self.root.sort_children_by_weight();
+    }
+
+    /// Reinforce a specific action (increase its weight)
+    pub fn reinforce_action(&mut self, action_name: &str, amount: f32) {
+        Self::reinforce_action_recursive(&mut self.root, action_name, amount);
+    }
+
+    fn reinforce_action_recursive(node: &mut BehaviorNode, action_name: &str, amount: f32) {
+        if let NodeType::Action(name) = &node.node_type {
+            if name == action_name {
+                node.weight = (node.weight + amount).clamp(0.1, 10.0);
+                return;
+            }
+        }
+        for child in &mut node.children {
+            Self::reinforce_action_recursive(child, action_name, amount);
+        }
+    }
+
+    /// Penalize a specific action (decrease its weight)
+    pub fn penalize_action(&mut self, action_name: &str, amount: f32) {
+        self.reinforce_action(action_name, -amount);
     }
 }
 

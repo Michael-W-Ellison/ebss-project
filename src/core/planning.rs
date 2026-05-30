@@ -1,16 +1,40 @@
 // src/core/planning.rs
-//! Decision-making and planning engine.
+//! Decision-making and planning engine for agent goal decomposition.
 //!
-//! Agents break down high-level goals into actionable sub-tasks,
-//! calculate efficiency of different methods, and learn from outcomes.
+//! This module provides the planning infrastructure for agents to break down
+//! high-level goals into actionable sub-tasks, calculate efficiency of different
+//! methods, and learn from outcomes.
 //!
-//! Example: "Get wood" becomes:
+//! # Architecture
+//!
+//! - [`Planner`]: Tracks action history and learns from outcomes
+//! - [`ActionPlan`]: A sequence of steps to achieve a goal
+//! - [`PlanStep`]: Individual action with timing and requirements
+//! - [`PlanningContext`]: World knowledge used for plan generation
+//!
+//! # Learning System
+//!
+//! The Planner learns from completed actions via [`Planner::record_outcome()`]:
+//! - Tracks average completion times for action types
+//! - Calculates success rates for different actions
+//! - Measures tool efficiency for specific tasks
+//!
+//! # Example: "Get wood" plan
+//!
 //! 1. Walk to forest (30 ticks)
 //! 2. Equip axe (5 ticks)
 //! 3. Chop tree (20 ticks with iron axe, 40 with stone)
 //! 4. Return to storehouse (30 ticks)
 //! 5. Deposit wood (5 ticks)
+//!
 //! Total: 90 ticks with iron axe vs 110 with stone axe
+//!
+//! # Extending the Planner
+//!
+//! To add new plan types, add methods similar to `plan_wood_gathering()` that:
+//! 1. Use `PlanningContext` to find relevant locations
+//! 2. Create `PlanStep` sequences with timing estimates
+//! 3. Use learned data via `get_average_time()` and `get_success_rate()`
 
 use serde::{Deserialize, Serialize};
 use crate::core::{Trait, ExternalGoal};
@@ -18,7 +42,7 @@ use crate::core::{Trait, ExternalGoal};
 /// A single step in an action plan
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanStep {
-    pub action: ActionType,
+    pub action: PlanActionType,
     pub estimated_ticks: u32,
     pub required_tool: Option<String>,
     pub required_resources: Vec<(String, u32)>,
@@ -26,9 +50,10 @@ pub struct PlanStep {
     pub confidence: f32, // 0.0 to 1.0, based on past experience
 }
 
-/// Types of actions an agent can take
+/// Types of actions an agent can plan and execute.
+/// This enum represents concrete, plannable actions with their parameters.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ActionType {
+pub enum PlanActionType {
     /// Move to a location
     MoveTo { location: (i32, i32, i32) },
     /// Equip a tool or item
@@ -118,21 +143,91 @@ impl ActionPlan {
         self.steps.len() > max_steps
     }
 
-    /// Calculate maximum steps an agent will tolerate based on traits
+    /// Calculate maximum steps an agent will tolerate based on personality traits
+    ///
+    /// Base complexity is 10 steps. Traits apply additive modifiers:
+    ///
+    /// **Positive modifiers (increase complexity tolerance):**
+    /// - Ambitious: +6 (tackles complex challenges)
+    /// - Stubborn: +4 (persists through long plans)
+    /// - Diligent: +4 (works hard on complex tasks)
+    /// - Curious: +3 (willing to explore complex solutions)
+    /// - Bookworm: +3 (enjoys intellectual challenges)
+    /// - Brave: +2 (not intimidated by complexity)
+    /// - Proud: +2 (wants to accomplish difficult goals)
+    /// - Explorer: +2 (willing to try complex paths)
+    ///
+    /// **Negative modifiers (decrease complexity tolerance):**
+    /// - Lazy: -5 (avoids complex work)
+    /// - Anxious: -3 (overwhelmed by complex plans)
+    /// - Coward: -2 (avoids challenging situations)
+    /// - Calm/Peaceful: -1 (prefers simple, stress-free plans)
+    ///
+    /// **Neutral/balancing modifiers:**
+    /// - Pragmatist: sets baseline to 8 (practical, efficient plans)
+    ///
+    /// Minimum complexity is 2 steps, maximum is 25 steps.
     fn calculate_max_steps(traits: &[Trait]) -> usize {
-        let mut max_steps = 10; // Default
+        let mut max_steps: i32 = 10; // Default base
+        let mut has_pragmatist = false;
 
         for trait_item in traits {
             match trait_item {
-                Trait::Lazy => max_steps = 3, // Lazy agents only do simple plans
-                Trait::Ambitious => max_steps = 20, // Ambitious agents tackle complex plans
-                Trait::Pragmatist => max_steps = 7, // Practical, moderate complexity
-                Trait::Stubborn => max_steps = 15, // Stubborn agents persist
+                // Large positive modifiers
+                Trait::Ambitious => max_steps += 6,
+                Trait::Stubborn => max_steps += 4,
+                Trait::Diligent => max_steps += 4,
+
+                // Medium positive modifiers
+                Trait::Curious => max_steps += 3,
+                Trait::Bookworm => max_steps += 3,
+                Trait::Brave => max_steps += 2,
+                Trait::Proud => max_steps += 2,
+                Trait::Explorer => max_steps += 2,
+
+                // Small positive modifiers
+                Trait::Resilient => max_steps += 1,
+                Trait::Handy => max_steps += 1,
+
+                // Large negative modifiers
+                Trait::Lazy => max_steps -= 5,
+
+                // Medium negative modifiers
+                Trait::Anxious => max_steps -= 3,
+                Trait::Coward => max_steps -= 2,
+
+                // Small negative modifiers
+                Trait::Calm => max_steps -= 1,
+                Trait::Peaceful => max_steps -= 1,
+                Trait::Ascetic => max_steps -= 1, // Prefers simplicity
+
+                // Pragmatist sets a reasonable baseline
+                Trait::Pragmatist => has_pragmatist = true,
+
                 _ => {}
             }
         }
 
-        max_steps
+        // Pragmatist prefers efficient plans - cap complexity at reasonable level
+        if has_pragmatist && max_steps > 12 {
+            max_steps = 12;
+        }
+
+        // Clamp between 2 and 25 steps
+        max_steps.clamp(2, 25) as usize
+    }
+
+    /// Get a descriptive complexity level for the agent's max steps
+    pub fn complexity_description(traits: &[Trait]) -> &'static str {
+        let max = Self::calculate_max_steps(traits);
+        match max {
+            0..=4 => "very simple",
+            5..=8 => "simple",
+            9..=12 => "moderate",
+            13..=17 => "complex",
+            18..=22 => "very complex",
+            _ => "extremely complex",
+        }
     }
 }
 
@@ -148,7 +243,7 @@ pub struct Planner {
 /// Record of an action's outcome for learning
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionOutcome {
-    pub action_type: ActionType,
+    pub action_type: PlanActionType,
     pub estimated_ticks: u32,
     pub actual_ticks: u32,
     pub success: bool,
@@ -268,7 +363,7 @@ impl Planner {
     }
 
     /// Get average actual time for an action type
-    pub fn get_average_time(&self, action_type: &ActionType) -> Option<u32> {
+    pub fn get_average_time(&self, action_type: &PlanActionType) -> Option<u32> {
         let matching: Vec<&ActionOutcome> = self.action_history
             .iter()
             .filter(|o| o.success && std::mem::discriminant(&o.action_type) == std::mem::discriminant(action_type))
@@ -283,7 +378,7 @@ impl Planner {
     }
 
     /// Get success rate for an action type
-    pub fn get_success_rate(&self, action_type: &ActionType) -> f32 {
+    pub fn get_success_rate(&self, action_type: &PlanActionType) -> f32 {
         let matching: Vec<&ActionOutcome> = self.action_history
             .iter()
             .filter(|o| std::mem::discriminant(&o.action_type) == std::mem::discriminant(action_type))
@@ -298,7 +393,7 @@ impl Planner {
     }
 
     /// Get tool efficiency (average time) for a specific tool and action
-    pub fn get_tool_efficiency(&self, action_type: &ActionType, tool: &str) -> Option<u32> {
+    pub fn get_tool_efficiency(&self, action_type: &PlanActionType, tool: &str) -> Option<u32> {
         let matching: Vec<&ActionOutcome> = self.action_history
             .iter()
             .filter(|o| {
@@ -331,12 +426,12 @@ impl Planner {
         let distance_to_forest = Self::calculate_distance(current_position, forest_position);
         let move_time = distance_to_forest as u32;
         steps.push(PlanStep {
-            action: ActionType::MoveTo { location: forest_position },
+            action: PlanActionType::MoveTo { location: forest_position },
             estimated_ticks: move_time,
             required_tool: None,
             required_resources: vec![],
             target_location: Some(forest_position),
-            confidence: self.get_success_rate(&ActionType::MoveTo { location: forest_position }),
+            confidence: self.get_success_rate(&PlanActionType::MoveTo { location: forest_position }),
         });
 
         // Step 2: Equip best available axe
@@ -344,7 +439,7 @@ impl Planner {
         let equip_time = 5;
         if let Some(axe) = &best_axe {
             steps.push(PlanStep {
-                action: ActionType::EquipItem { item: axe.clone() },
+                action: PlanActionType::EquipItem { item: axe.clone() },
                 estimated_ticks: equip_time,
                 required_tool: None,
                 required_resources: vec![],
@@ -356,12 +451,12 @@ impl Planner {
         // Step 3: Chop trees
         let chop_time = self.estimate_gathering_time(&best_axe, "wood", amount);
         steps.push(PlanStep {
-            action: ActionType::GatherResource { resource: "wood".to_string(), amount },
+            action: PlanActionType::GatherResource { resource: "wood".to_string(), amount },
             estimated_ticks: chop_time,
             required_tool: best_axe.clone(),
             required_resources: vec![],
             target_location: Some(forest_position),
-            confidence: self.get_success_rate(&ActionType::GatherResource {
+            confidence: self.get_success_rate(&PlanActionType::GatherResource {
                 resource: "wood".to_string(),
                 amount
             }),
@@ -371,7 +466,7 @@ impl Planner {
         let distance_to_storehouse = Self::calculate_distance(forest_position, storehouse_position);
         let return_time = distance_to_storehouse as u32;
         steps.push(PlanStep {
-            action: ActionType::MoveTo { location: storehouse_position },
+            action: PlanActionType::MoveTo { location: storehouse_position },
             estimated_ticks: return_time,
             required_tool: None,
             required_resources: vec![],
@@ -382,7 +477,7 @@ impl Planner {
         // Step 5: Deposit wood
         let deposit_time = 5;
         steps.push(PlanStep {
-            action: ActionType::Deposit { resource: "wood".to_string(), amount },
+            action: PlanActionType::Deposit { resource: "wood".to_string(), amount },
             estimated_ticks: deposit_time,
             required_tool: None,
             required_resources: vec![("wood".to_string(), amount)],
@@ -415,7 +510,7 @@ impl Planner {
 
         // Check historical data for more accurate estimates
         if let Some(tool_name) = tool {
-            let action = ActionType::GatherResource {
+            let action = PlanActionType::GatherResource {
                 resource: resource.to_string(),
                 amount: 1
             };
@@ -525,7 +620,7 @@ mod tests {
     fn test_action_plan_creation() {
         let steps = vec![
             PlanStep {
-                action: ActionType::MoveTo { location: (10, 10, 0) },
+                action: PlanActionType::MoveTo { location: (10, 10, 0) },
                 estimated_ticks: 20,
                 required_tool: None,
                 required_resources: vec![],
@@ -543,7 +638,7 @@ mod tests {
     fn test_plan_progression() {
         let steps = vec![
             PlanStep {
-                action: ActionType::MoveTo { location: (10, 10, 0) },
+                action: PlanActionType::MoveTo { location: (10, 10, 0) },
                 estimated_ticks: 20,
                 required_tool: None,
                 required_resources: vec![],
@@ -551,7 +646,7 @@ mod tests {
                 confidence: 0.9,
             },
             PlanStep {
-                action: ActionType::Rest { duration: 10 },
+                action: PlanActionType::Rest { duration: 10 },
                 estimated_ticks: 10,
                 required_tool: None,
                 required_resources: vec![],
@@ -577,7 +672,7 @@ mod tests {
         let mut steps = Vec::new();
         for i in 0..15 {
             steps.push(PlanStep {
-                action: ActionType::Rest { duration: 1 },
+                action: PlanActionType::Rest { duration: 1 },
                 estimated_ticks: 1,
                 required_tool: None,
                 required_resources: vec![],
@@ -603,7 +698,7 @@ mod tests {
         let mut planner = Planner::new();
 
         let outcome = ActionOutcome {
-            action_type: ActionType::GatherResource {
+            action_type: PlanActionType::GatherResource {
                 resource: "wood".to_string(),
                 amount: 10
             },
@@ -622,7 +717,7 @@ mod tests {
     fn test_success_rate() {
         let mut planner = Planner::new();
 
-        let action_type = ActionType::GatherResource {
+        let action_type = PlanActionType::GatherResource {
             resource: "wood".to_string(),
             amount: 10
         };
@@ -647,7 +742,7 @@ mod tests {
     fn test_tool_efficiency() {
         let mut planner = Planner::new();
 
-        let action_type = ActionType::GatherResource {
+        let action_type = PlanActionType::GatherResource {
             resource: "wood".to_string(),
             amount: 10
         };

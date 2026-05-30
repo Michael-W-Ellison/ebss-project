@@ -244,6 +244,142 @@ impl EmotionState {
             EmotionType::Curiosity => Some(EmotionValue { value: self.curiosity }),
         }
     }
+
+    /// Get emotion gain multiplier from traits for a specific emotion type
+    fn get_trait_gain_modifier(traits: &TraitSet, emotion_type: crate::core::EmotionType) -> f32 {
+        let mut modifier = 1.0;
+        for t in traits.iter() {
+            for (etype, gain_mult, _) in t.emotion_modifiers() {
+                if etype == emotion_type {
+                    modifier *= gain_mult;
+                }
+            }
+        }
+        modifier
+    }
+
+    /// Get emotion decay multiplier from traits for a specific emotion type
+    fn get_trait_decay_modifier(traits: &TraitSet, emotion_type: crate::core::EmotionType) -> f32 {
+        let mut modifier = 1.0;
+        for t in traits.iter() {
+            for (etype, _, decay_mult) in t.emotion_modifiers() {
+                if etype == emotion_type {
+                    modifier *= decay_mult;
+                }
+            }
+        }
+        modifier
+    }
+
+    /// Add anger with trait modifiers applied
+    pub fn add_anger_with_traits(&mut self, source: EmotionSource, amount: f32, traits: &TraitSet) {
+        let modifier = Self::get_trait_gain_modifier(traits, crate::core::EmotionType::Anger);
+        let modified_amount = amount * modifier;
+        self.add_anger(source, modified_amount);
+    }
+
+    /// Add fear with trait modifiers applied
+    pub fn add_fear_with_traits(&mut self, source: EmotionSource, amount: f32, traits: &TraitSet) {
+        let modifier = Self::get_trait_gain_modifier(traits, crate::core::EmotionType::Fear);
+        let modified_amount = amount * modifier;
+        self.add_fear(source, modified_amount);
+    }
+
+    /// Add sadness with trait modifiers applied
+    pub fn add_sadness_with_traits(&mut self, source: EmotionSource, amount: f32, traits: &TraitSet) {
+        let modifier = Self::get_trait_gain_modifier(traits, crate::core::EmotionType::Sadness);
+        let modified_amount = amount * modifier;
+        self.add_sadness(source, modified_amount);
+    }
+
+    /// Add happiness with trait modifiers applied
+    pub fn add_happiness_with_traits(&mut self, source: EmotionSource, amount: f32, traits: &TraitSet) {
+        let modifier = Self::get_trait_gain_modifier(traits, crate::core::EmotionType::Happiness);
+        let modified_amount = amount * modifier;
+        self.add_happiness(source, modified_amount);
+    }
+
+    /// Add curiosity with trait modifiers applied
+    pub fn add_curiosity_with_traits(&mut self, source: EmotionSource, amount: f32, traits: &TraitSet) {
+        let modifier = Self::get_trait_gain_modifier(traits, crate::core::EmotionType::Curiosity);
+        let modified_amount = amount * modifier;
+        self.add_curiosity(source, modified_amount);
+    }
+
+    /// Decay emotions with trait modifiers applied (traits affect decay rates)
+    pub fn tick_with_traits(&mut self, traits: &TraitSet) {
+        use crate::core::EmotionType;
+
+        // Calculate trait-modified decay rates for each emotion
+        let anger_decay = self.decay_rate * Self::get_trait_decay_modifier(traits, EmotionType::Anger);
+        let fear_decay = self.decay_rate * Self::get_trait_decay_modifier(traits, EmotionType::Fear);
+        let sadness_decay = self.decay_rate * Self::get_trait_decay_modifier(traits, EmotionType::Sadness);
+        let happiness_decay = self.decay_rate * Self::get_trait_decay_modifier(traits, EmotionType::Happiness);
+        let curiosity_decay = self.decay_rate * 0.5 * Self::get_trait_decay_modifier(traits, EmotionType::Curiosity);
+
+        // Apply trait-modified decay to each source
+        for amount in self.anger_sources.values_mut() {
+            *amount = (*amount - anger_decay).max(0.0);
+        }
+        for amount in self.fear_sources.values_mut() {
+            *amount = (*amount - fear_decay).max(0.0);
+        }
+        for amount in self.sadness_sources.values_mut() {
+            *amount = (*amount - sadness_decay).max(0.0);
+        }
+        for amount in self.happiness_sources.values_mut() {
+            *amount = (*amount - happiness_decay).max(0.0);
+        }
+        for amount in self.curiosity_sources.values_mut() {
+            *amount = (*amount - curiosity_decay).max(0.0);
+        }
+
+        // Remove sources at 0
+        self.anger_sources.retain(|_, v| *v > 0.0);
+        self.fear_sources.retain(|_, v| *v > 0.0);
+        self.sadness_sources.retain(|_, v| *v > 0.0);
+        self.happiness_sources.retain(|_, v| *v > 0.0);
+        self.curiosity_sources.retain(|_, v| *v > 0.0);
+
+        self.update_totals();
+    }
+
+    /// Apply passive trait effects (e.g., Melancholic slowly gains sadness)
+    pub fn apply_passive_trait_effects(&mut self, traits: &TraitSet) {
+        for t in traits.iter() {
+            match t {
+                // Melancholic: Passive slow gain of sadness
+                Trait::Melancholic => {
+                    self.add_sadness(EmotionSource::Event("melancholy".to_string()), 0.005);
+                }
+                // Repressed: Moderate emotions trend toward neutral, extreme emotions intensify
+                Trait::Repressed => {
+                    // Pull moderate values toward 0.3, push extreme values further
+                    let emotions = [
+                        (self.anger, &mut self.anger_sources),
+                        (self.fear, &mut self.fear_sources),
+                        (self.sadness, &mut self.sadness_sources),
+                        (self.happiness, &mut self.happiness_sources),
+                    ];
+                    for (total, sources) in emotions {
+                        if total > 0.7 {
+                            // Extreme emotions intensify
+                            for amount in sources.values_mut() {
+                                *amount = (*amount * 1.02).min(1.0);
+                            }
+                        } else if total > 0.3 && total < 0.5 {
+                            // Moderate emotions dampen
+                            for amount in sources.values_mut() {
+                                *amount = (*amount * 0.98).max(0.0);
+                            }
+                        }
+                    }
+                    self.update_totals();
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 /// Emotion value wrapper for API compatibility

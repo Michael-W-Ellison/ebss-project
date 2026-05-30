@@ -104,9 +104,12 @@ impl<'a> SpatialPlanner<'a> {
         let search_radius = 50;
         let center = self.get_search_center(&criteria);
 
+        // Determine Z-level search range based on building type
+        let z_range = self.get_z_level_range(building_type, center.2);
+
         for x in (center.0 - search_radius)..=(center.0 + search_radius) {
             for y in (center.1 - search_radius)..=(center.1 + search_radius) {
-                for z in [center.2] { // Keep same Z level for now
+                for z in z_range.0..=z_range.1 {
                     let pos = (x, y, z);
 
                     // Skip if occupied or impassable
@@ -123,8 +126,11 @@ impl<'a> SpatialPlanner<'a> {
                         continue;
                     }
 
-                    // Score this location
-                    let score = self.score_location(pos, building_type, criteria.clone());
+                    // Score this location (includes elevation preference)
+                    let mut score = self.score_location(pos, building_type, criteria.clone());
+
+                    // Apply elevation scoring
+                    score += self.score_elevation(pos, building_type, center.2);
 
                     if score > best_score {
                         best_score = score;
@@ -135,6 +141,66 @@ impl<'a> SpatialPlanner<'a> {
         }
 
         best_pos
+    }
+
+    /// Get the Z-level search range for a building type
+    fn get_z_level_range(&self, building_type: BuildingType, center_z: i32) -> (i32, i32) {
+        match building_type {
+            // Farms prefer flat, low-lying areas
+            BuildingType::Farm | BuildingType::AnimalPen => {
+                (center_z.saturating_sub(5), center_z + 2)
+            }
+            // Defensive structures prefer high ground
+            BuildingType::GuardPost | BuildingType::TownCenter => {
+                (center_z, center_z + 10)
+            }
+            // Religious buildings often on elevated positions
+            BuildingType::Temple | BuildingType::Shrine => {
+                (center_z, center_z + 8)
+            }
+            // Mills need consistent water flow (lower elevation)
+            BuildingType::Mill => {
+                (center_z.saturating_sub(3), center_z + 1)
+            }
+            // Most buildings are flexible within a reasonable range
+            _ => (center_z.saturating_sub(3), center_z + 3)
+        }
+    }
+
+    /// Score elevation preference for building placement
+    fn score_elevation(&self, pos: Position, building_type: BuildingType, reference_z: i32) -> f32 {
+        let elevation_diff = pos.2 - reference_z;
+
+        match building_type {
+            // Guard posts and defensive structures benefit from high ground
+            BuildingType::GuardPost | BuildingType::TownCenter => {
+                (elevation_diff as f32 * 2.0).max(0.0) // Bonus for higher elevation
+            }
+            // Temples prefer elevated positions for visibility
+            BuildingType::Temple | BuildingType::Shrine => {
+                (elevation_diff as f32 * 1.5).max(0.0)
+            }
+            // Farms and mills prefer lower, flatter ground
+            BuildingType::Farm | BuildingType::AnimalPen | BuildingType::Mill => {
+                if elevation_diff.abs() <= 1 {
+                    5.0 // Bonus for flat terrain
+                } else {
+                    -(elevation_diff.abs() as f32 * 2.0) // Penalty for elevation changes
+                }
+            }
+            // Storage buildings prefer accessible (moderate) elevations
+            BuildingType::Storehouse | BuildingType::TownStorage => {
+                if elevation_diff.abs() <= 2 {
+                    3.0
+                } else {
+                    -(elevation_diff.abs() as f32)
+                }
+            }
+            // Most buildings prefer staying near reference elevation
+            _ => {
+                -(elevation_diff.abs() as f32 * 0.5) // Small penalty for elevation changes
+            }
+        }
     }
 
     /// Find optimal location considering agent's position.
@@ -157,6 +223,73 @@ impl<'a> SpatialPlanner<'a> {
     ) -> Option<Position> {
         let criteria = self.infer_criteria_from_building(building_type);
         self.find_optimal_location_with_criteria(building_type, agent_pos, strategy, criteria)
+    }
+
+    /// Find optimal location for an agent with territory bonus consideration.
+    ///
+    /// Similar to `find_optimal_location_for_agent` but includes a territory ownership bonus.
+    /// Agents prefer to build within their own territory.
+    ///
+    /// # Arguments
+    /// * `building_type` - The type of building to place
+    /// * `agent_pos` - The agent's current position
+    /// * `strategy` - The placement strategy to use
+    /// * `agent_id` - The agent's ID for territory ownership checking
+    ///
+    /// # Returns
+    /// The optimal position for the building, preferring owned territory.
+    pub fn find_optimal_location_with_territory(
+        &self,
+        building_type: BuildingType,
+        agent_pos: Position,
+        strategy: PlacementStrategy,
+        agent_id: u32,
+    ) -> Option<Position> {
+        let criteria = self.infer_criteria_from_building(building_type);
+        let mut best_pos: Option<Position> = None;
+        let mut best_score = f32::MIN;
+
+        let search_radius = match strategy {
+            PlacementStrategy::NearAgent => 15,
+            PlacementStrategy::NearestAvailable => 10,
+            _ => 30,
+        };
+
+        for x in (agent_pos.0 - search_radius)..=(agent_pos.0 + search_radius) {
+            for y in (agent_pos.1 - search_radius)..=(agent_pos.1 + search_radius) {
+                for z in [agent_pos.2] {
+                    let pos = (x, y, z);
+
+                    let grid_pos = crate::world::grid::Position::new(x, y);
+                    if self.world.is_position_occupied(&grid_pos) {
+                        continue;
+                    }
+                    if !self.world.is_terrain_passable(pos) {
+                        continue;
+                    }
+
+                    // Get base score from strategy
+                    let mut score = self.score_location_for_agent_with_criteria(
+                        pos,
+                        agent_pos,
+                        building_type,
+                        strategy,
+                        &criteria,
+                    );
+
+                    // Add territory bonus - strongly prefer building in owned territory
+                    let territory_bonus = self.world.territory_manager.get_territory_bonus(pos, agent_id);
+                    score += territory_bonus;
+
+                    if score > best_score {
+                        best_score = score;
+                        best_pos = Some(pos);
+                    }
+                }
+            }
+        }
+
+        best_pos
     }
 
     /// Find optimal location with explicit criteria

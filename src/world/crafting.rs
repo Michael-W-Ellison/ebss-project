@@ -486,11 +486,21 @@ pub struct CraftingJob {
     pub total_time: u32,
 }
 
+/// Completed craft ready for collection
+#[derive(Debug, Clone)]
+pub struct CompletedCraft {
+    pub crafter_id: Uuid,
+    pub item_id: String,
+    pub quantity: u32,
+}
+
 /// Crafting manager
 #[derive(Debug, Clone)]
 pub struct CraftingManager {
     registry: RecipeRegistry,
     active_jobs: Vec<CraftingJob>,
+    /// Completed crafts waiting to be collected by agents
+    pending_completions: Vec<CompletedCraft>,
 }
 
 impl Default for CraftingManager {
@@ -504,6 +514,7 @@ impl CraftingManager {
         Self {
             registry: RecipeRegistry::new(),
             active_jobs: Vec::new(),
+            pending_completions: Vec::new(),
         }
     }
 
@@ -596,28 +607,39 @@ impl CraftingManager {
         Some(job_id)
     }
 
-    /// Update crafting jobs
-    pub fn tick(&mut self) -> Vec<(Uuid, String, u32)> {
-        let mut completed = Vec::new();
-
+    /// Update crafting jobs and store completed crafts for collection
+    pub fn tick(&mut self) {
         for job in &mut self.active_jobs {
             job.progress += 1;
 
             if job.progress >= job.total_time {
                 if let Some(recipe) = self.registry.get(&job.recipe_id) {
-                    completed.push((
-                        job.crafter_id,
-                        recipe.output_item_id.clone(),
-                        recipe.output_quantity,
-                    ));
+                    self.pending_completions.push(CompletedCraft {
+                        crafter_id: job.crafter_id,
+                        item_id: recipe.output_item_id.clone(),
+                        quantity: recipe.output_quantity,
+                    });
                 }
             }
         }
 
         // Remove completed jobs
         self.active_jobs.retain(|job| job.progress < job.total_time);
+    }
 
-        completed
+    /// Collect completed crafts for a specific agent
+    /// Returns and removes all pending completions for this crafter
+    pub fn collect_completed(&mut self, crafter_id: &Uuid) -> Vec<CompletedCraft> {
+        let (for_crafter, remaining): (Vec<_>, Vec<_>) = self.pending_completions
+            .drain(..)
+            .partition(|c| c.crafter_id == *crafter_id);
+        self.pending_completions = remaining;
+        for_crafter
+    }
+
+    /// Check if there are any pending completions for an agent
+    pub fn has_pending_completions(&self, crafter_id: &Uuid) -> bool {
+        self.pending_completions.iter().any(|c| c.crafter_id == *crafter_id)
     }
 
     /// Get active jobs for a crafter

@@ -2,7 +2,7 @@
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
-use crate::core::planning::{ActionPlan, ActionType as PlanActionType, Planner, PlanStep, ActionOutcome};
+use crate::core::planning::{ActionPlan, PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
 use std::collections::HashMap;
 
@@ -381,11 +381,29 @@ impl Inventory {
             .unwrap_or(false)
     }
 
+    /// Check if inventory has food items (used by Survivalist trait)
+    /// Food items are identified by containing "food", "meat", "bread", etc. in their ID
+    pub fn has_food(&self, min_quantity: u32) -> bool {
+        let food_keywords = ["food", "meat", "bread", "fish", "fruit", "vegetable", "grain", "meal"];
+        self.items.iter()
+            .filter(|(id, _)| {
+                let lower_id = id.to_lowercase();
+                food_keywords.iter().any(|kw| lower_id.contains(kw))
+            })
+            .map(|(_, item)| item.quantity)
+            .sum::<u32>() >= min_quantity
+    }
+
     /// Count quantity of a specific item by id
     pub fn count_item(&self, item_id: &str) -> u32 {
         self.items.get(item_id)
             .map(|item| item.quantity)
             .unwrap_or(0)
+    }
+
+    /// Get total count of all items in inventory
+    pub fn total_items(&self) -> u32 {
+        self.items.values().map(|item| item.quantity).sum()
     }
 
     /// Get all items
@@ -799,6 +817,276 @@ impl Agent {
         agent
     }
 
+    /// Apply trait-based sensory and physical modifications
+    /// Should be called after traits are set/modified
+    pub fn apply_trait_sensory_modifications(&mut self) {
+        use crate::core::traits::Trait;
+
+        // Deaf trait: Set hearing sensitivity to 0
+        if self.traits.has(Trait::Deaf) {
+            self.senses.hearing.sensitivity = 0.0;
+            self.senses.hearing.set_impaired(true);
+        }
+
+        // Suspicious trait: Increase noise curiosity rate (already handled in emotion_modifiers)
+        // but we can also increase hearing sensitivity slightly
+        if self.traits.has(Trait::Suspicious) {
+            self.senses.hearing.sensitivity = (self.senses.hearing.sensitivity * 1.2).min(1.0);
+        }
+
+        // Uncaring trait: Reduce noise curiosity (reduce hearing sensitivity slightly)
+        if self.traits.has(Trait::Uncaring) && !self.traits.has(Trait::Deaf) {
+            self.senses.hearing.sensitivity *= 0.7;
+        }
+    }
+
+    /// Check if agent is near a known religious building
+    /// Returns the distance squared to the nearest religious building, or None if none known
+    pub fn distance_to_nearest_religious_building(&self) -> Option<f32> {
+        let pos = self.state.position;
+        let mut nearest_dist_sq: Option<f32> = None;
+
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            if building_type.is_religious() {
+                let dx = (pos.0 - building_pos.x) as f32;
+                let dy = (pos.1 - building_pos.y) as f32;
+                let dist_sq = dx * dx + dy * dy;
+
+                match nearest_dist_sq {
+                    Some(current) if dist_sq < current => nearest_dist_sq = Some(dist_sq),
+                    None => nearest_dist_sq = Some(dist_sq),
+                    _ => {}
+                }
+            }
+        }
+
+        nearest_dist_sq
+    }
+
+    /// Apply location-based trait effects
+    /// Called during tick to grant happiness based on agent's location
+    pub fn apply_location_trait_effects(&mut self) {
+        use crate::core::traits::Trait;
+        use super::EmotionSource;
+
+        const RELIGIOUS_PROXIMITY_SQ: f32 = 225.0; // 15 tiles squared
+
+        // Zealot/Believer traits: happiness near religious buildings
+        if self.traits.has(Trait::Zealot) || self.traits.has(Trait::Believer) {
+            if let Some(dist_sq) = self.distance_to_nearest_religious_building() {
+                if dist_sq <= RELIGIOUS_PROXIMITY_SQ {
+                    // Closer = more happiness (max 0.05 at building, 0.01 at 15 tiles)
+                    let proximity_factor = 1.0 - (dist_sq / RELIGIOUS_PROXIMITY_SQ);
+                    let base_happiness = if self.traits.has(Trait::Zealot) { 0.05 } else { 0.03 };
+                    let happiness = base_happiness * proximity_factor;
+
+                    self.emotions.add_happiness(
+                        EmotionSource::Event("religious_building_proximity".to_string()),
+                        happiness
+                    );
+                }
+            }
+        }
+
+        // Atheist trait: slight discomfort near religious buildings
+        if self.traits.has(Trait::Atheist) {
+            if let Some(dist_sq) = self.distance_to_nearest_religious_building() {
+                if dist_sq <= 100.0 { // 10 tiles - closer range for discomfort
+                    self.emotions.add_sadness(
+                        EmotionSource::Event("religious_discomfort".to_string()),
+                        0.01
+                    );
+                }
+            }
+        }
+
+        // Greedy trait: happiness from having large personal inventory
+        // "Happiness from supplies stored in home" - represented by personal inventory
+        if self.traits.has(Trait::Greedy) {
+            let item_count = self.inventory.total_items();
+            if item_count >= 20 {
+                // Scale happiness with inventory size (capped)
+                let happiness = (item_count as f32 / 100.0).min(0.05);
+                self.emotions.add_happiness(
+                    EmotionSource::Event("wealth_satisfaction".to_string()),
+                    happiness
+                );
+            }
+        }
+
+        // Survivalist trait: happiness when basic needs are well-met
+        if self.traits.has(Trait::Survivalist) {
+            // Check if energy, health, and food supplies are good
+            let has_food = self.inventory.has_food(5); // Has at least 5 food items
+            let well_fed = self.state.energy > 70.0;
+            let healthy = self.state.health > 80.0;
+
+            if has_food && well_fed && healthy {
+                self.emotions.add_happiness(
+                    EmotionSource::Event("self_sufficiency".to_string()),
+                    0.02
+                );
+            }
+        }
+
+        // Frugal trait: contentment from having stored goods nearby
+        if self.traits.has(Trait::Frugal) {
+            // Similar to greedy but more modest - happiness from savings
+            let item_count = self.inventory.total_items();
+            if item_count >= 10 {
+                self.emotions.add_happiness(
+                    EmotionSource::Event("savings_contentment".to_string()),
+                    0.01
+                );
+            }
+        }
+    }
+
+    /// Apply building proximity effects (morale, healing, defense awareness)
+    /// Called during tick to grant bonuses based on nearby buildings
+    pub fn apply_building_proximity_effects(&mut self) {
+        use super::EmotionSource;
+
+        let pos = self.state.position;
+
+        // Track cumulative effects
+        let mut total_morale_bonus: f32 = 0.0;
+        let mut healing_multiplier: f32 = 1.0;
+        let mut defense_multiplier: f32 = 1.0;
+
+        // Check all known buildings for proximity effects
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            let dx = (pos.0 - building_pos.x) as f32;
+            let dy = (pos.1 - building_pos.y) as f32;
+            let distance = (dx * dx + dy * dy).sqrt();
+
+            // Morale bonus from nearby buildings
+            let morale_radius = building_type.morale_radius();
+            if morale_radius > 0.0 && distance <= morale_radius {
+                let proximity_factor = 1.0 - (distance / morale_radius);
+                total_morale_bonus += building_type.morale_bonus() * proximity_factor;
+            }
+
+            // Healing bonus from medical buildings
+            let healing_radius = building_type.healing_radius();
+            if healing_radius > 0.0 && distance <= healing_radius {
+                let bonus = building_type.healing_bonus();
+                if bonus > healing_multiplier {
+                    healing_multiplier = bonus; // Use best healing bonus, don't stack
+                }
+            }
+
+            // Defense bonus from defensive buildings
+            let defense_radius = building_type.defense_radius();
+            if defense_radius > 0.0 && distance <= defense_radius {
+                let bonus = building_type.defense_bonus();
+                if bonus > defense_multiplier {
+                    defense_multiplier = bonus; // Use best defense bonus, don't stack
+                }
+            }
+        }
+
+        // Apply morale bonus (capped at 0.05 per tick to avoid runaway happiness)
+        if total_morale_bonus > 0.0 {
+            let capped_bonus = total_morale_bonus.min(0.05);
+            self.emotions.add_happiness(
+                EmotionSource::Event("building_comfort".to_string()),
+                capped_bonus
+            );
+        }
+
+        // Store building bonuses for use by other systems
+        // (healing bonus applied in regenerate_health, defense bonus applied in take_damage)
+        self.cached_healing_bonus = healing_multiplier;
+        self.cached_defense_bonus = defense_multiplier;
+    }
+
+    /// Get the current healing multiplier from nearby buildings
+    pub fn get_healing_bonus(&self) -> f32 {
+        self.cached_healing_bonus
+    }
+
+    /// Get the current defense multiplier from nearby buildings
+    pub fn get_defense_bonus(&self) -> f32 {
+        self.cached_defense_bonus
+    }
+
+    /// Get the productivity bonus for crafting/working based on nearby buildings
+    /// This considers the agent's current position and the buildings they're at
+    /// Returns the best productivity bonus from buildings within working distance (3 tiles)
+    pub fn get_productivity_bonus(&self) -> f32 {
+        const WORKING_DISTANCE_SQ: f32 = 9.0; // 3 tiles
+
+        let pos = self.state.position;
+        let mut best_bonus: f32 = 1.0;
+
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            let dx = (pos.0 - building_pos.x) as f32;
+            let dy = (pos.1 - building_pos.y) as f32;
+            let dist_sq = dx * dx + dy * dy;
+
+            // Only consider buildings within working distance
+            if dist_sq <= WORKING_DISTANCE_SQ {
+                let bonus = building_type.productivity_bonus();
+                if bonus > best_bonus {
+                    best_bonus = bonus;
+                }
+            }
+        }
+
+        best_bonus
+    }
+
+    /// Get the productivity bonus for a specific skill type based on nearby buildings
+    /// Different buildings give bonuses for different types of work
+    pub fn get_productivity_bonus_for_skill(&self, skill_type: super::SkillType) -> f32 {
+        use crate::world::BuildingType;
+        use super::SkillType;
+
+        const WORKING_DISTANCE_SQ: f32 = 9.0;
+
+        let pos = self.state.position;
+        let mut best_bonus: f32 = 1.0;
+
+        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
+            let dx = (pos.0 - building_pos.x) as f32;
+            let dy = (pos.1 - building_pos.y) as f32;
+            let dist_sq = dx * dx + dy * dy;
+
+            if dist_sq <= WORKING_DISTANCE_SQ {
+                // Check if this building provides bonus for this skill type
+                let provides_bonus = match (building_type, skill_type) {
+                    // Metalworking buildings
+                    (BuildingType::Smithy, SkillType::Metalworking | SkillType::Smelting) => true,
+                    (BuildingType::Forge, SkillType::Smelting) => true,
+                    // Crafting buildings
+                    (BuildingType::Workshop, SkillType::Crafting | SkillType::Carpentry) => true,
+                    // Cooking buildings
+                    (BuildingType::Bakery | BuildingType::Mill | BuildingType::Butchery |
+                     BuildingType::Brewery | BuildingType::Dairy, SkillType::Cooking) => true,
+                    // Textile buildings
+                    (BuildingType::WeaverHut | BuildingType::TailorShop, SkillType::Crafting) => true,
+                    // Leather buildings
+                    (BuildingType::Tannery | BuildingType::CobblerShop, SkillType::Leatherworking) => true,
+                    // Masonry buildings
+                    (BuildingType::PotteryKiln | BuildingType::Brickyard, SkillType::Masonry) => true,
+                    // Farming buildings
+                    (BuildingType::Farm | BuildingType::AnimalPen, SkillType::Farming) => true,
+                    _ => false,
+                };
+
+                if provides_bonus {
+                    let bonus = building_type.productivity_bonus();
+                    if bonus > best_bonus {
+                        best_bonus = bonus;
+                    }
+                }
+            }
+        }
+
+        best_bonus
+    }
+
     /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
         self.tick_with_percepts(0); // Default tick uses tick 0
@@ -809,7 +1097,14 @@ impl Agent {
         // Update subsystems
         self.senses.tick();
         self.body.tick();
-        self.emotions.tick();
+        // Use trait-aware emotion decay (traits affect how quickly emotions fade)
+        self.emotions.tick_with_traits(&self.traits);
+        // Apply passive trait effects (e.g., Melancholic slowly gains sadness)
+        self.emotions.apply_passive_trait_effects(&self.traits);
+        // Apply location-based trait effects (e.g., Zealot near religious buildings)
+        self.apply_location_trait_effects();
+        // Apply building proximity effects (morale, healing bonus, defense bonus)
+        self.apply_building_proximity_effects();
         self.memory.tick();
 
         // Check for stale storage knowledge and trigger curiosity
@@ -1085,10 +1380,10 @@ impl Agent {
 
         match emotion_type {
             super::EmotionType::Anger => {
-                self.emotions.add_anger(source, emotion_amount);
+                self.emotions.add_anger_with_traits(source, emotion_amount, &self.traits);
             }
             super::EmotionType::Fear => {
-                self.emotions.add_fear(source, emotion_amount);
+                self.emotions.add_fear_with_traits(source, emotion_amount, &self.traits);
             }
             _ => {}
         }
@@ -1108,7 +1403,7 @@ impl Agent {
             if relationship.is_loved_one() {
                 // Sadness scales with bond strength and harm severity
                 let sadness_amount = relationship.bond_strength * harm_severity * 0.8;
-                self.emotions.add_sadness(source.clone(), sadness_amount);
+                self.emotions.add_sadness_with_traits(source.clone(), sadness_amount, &self.traits);
 
                 // Also potentially add fear or anger based on agent's ability to protect
                 // Parents protecting children might feel anger if they can fight back
@@ -1120,9 +1415,9 @@ impl Agent {
                     let assessment = super::ThreatAssessment::assess(agent_strength, 0.7, source.clone());
 
                     if assessment.can_overcome {
-                        self.emotions.add_anger(source, 0.5);
+                        self.emotions.add_anger_with_traits(source, 0.5, &self.traits);
                     } else {
-                        self.emotions.add_fear(source, 0.3);
+                        self.emotions.add_fear_with_traits(source, 0.3, &self.traits);
                     }
                 }
             }
@@ -1139,10 +1434,10 @@ impl Agent {
         if let Some(relationship) = self.relationships.get_relationship(deceased_id) {
             if relationship.is_loved_one() {
                 let sadness_amount = relationship.bond_strength * 0.9;
-                self.emotions.add_sadness(EmotionSource::Agent(*deceased_id), sadness_amount);
+                self.emotions.add_sadness_with_traits(EmotionSource::Agent(*deceased_id), sadness_amount, &self.traits);
 
                 // Fear of the source that killed them
-                self.emotions.add_fear(source, 0.4);
+                self.emotions.add_fear_with_traits(source, 0.4, &self.traits);
             }
         }
     }
@@ -1903,8 +2198,262 @@ impl Agent {
         }
     }
 
+    /// Apply trait-based happiness rewards based on completed actions
+    /// This is called after successful actions to give trait holders bonus happiness
+    pub fn apply_trait_action_rewards(&mut self, action: &crate::environment::Action) {
+        use crate::core::traits::Trait;
+        use super::EmotionSource;
+
+        let mut happiness_bonus = 0.0;
+        let mut reward_reason = String::new();
+
+        match action {
+            // Building actions reward Builder trait
+            crate::environment::Action::Build { .. } => {
+                if self.traits.has(Trait::Builder) {
+                    happiness_bonus += Trait::Builder.happiness_gain() * 0.02;
+                    reward_reason = "building_satisfaction".to_string();
+                }
+                // Proud trait holders gain happiness from accomplishments
+                if self.traits.has(Trait::Proud) {
+                    happiness_bonus += Trait::Proud.happiness_gain() * 0.01;
+                }
+                // Ambitious trait holders gain happiness from external goals
+                if self.traits.has(Trait::Ambitious) {
+                    happiness_bonus += 0.05;
+                }
+            }
+
+            // Crafting actions reward CraftObsessed trait
+            crate::environment::Action::Craft { .. } => {
+                if self.traits.has(Trait::CraftObsessed) {
+                    happiness_bonus += 0.08; // Significant happiness from crafting
+                    reward_reason = "craft_satisfaction".to_string();
+                }
+                // Handy trait holders gain happiness from completing tasks
+                if self.traits.has(Trait::Handy) {
+                    happiness_bonus += Trait::Handy.happiness_gain() * 0.02;
+                }
+                if self.traits.has(Trait::Proud) {
+                    happiness_bonus += Trait::Proud.happiness_gain() * 0.01;
+                }
+                // Ascetic trait: slight discomfort crafting non-essential items
+                if self.traits.has(Trait::Ascetic) {
+                    happiness_bonus -= 0.02;
+                }
+            }
+
+            // Gathering/working actions reward Diligent trait, penalize Lazy
+            crate::environment::Action::Gather { .. } => {
+                if self.traits.has(Trait::Diligent) {
+                    happiness_bonus += Trait::Diligent.happiness_gain() * 0.02;
+                    reward_reason = "work_satisfaction".to_string();
+                }
+                // Lazy trait holders lose happiness from work
+                if self.traits.has(Trait::Lazy) {
+                    happiness_bonus -= 0.03; // Constant happiness decrease when working
+                }
+                // Traditionalist trait: happiness from using primitive (wood/stone) tools
+                if self.traits.has(Trait::Traditionalist) && self.equipment.has_primitive_tool() {
+                    happiness_bonus += 0.04;
+                    reward_reason = "traditional_tools_satisfaction".to_string();
+                }
+            }
+
+            // Exploring actions reward Explorer and Curious traits
+            crate::environment::Action::Move { .. } |
+            crate::environment::Action::Explore { .. } => {
+                if self.traits.has(Trait::Explorer) {
+                    happiness_bonus += Trait::Explorer.happiness_gain() * 0.01;
+                    reward_reason = "exploration_joy".to_string();
+                }
+                if self.traits.has(Trait::Curious) {
+                    happiness_bonus += Trait::Curious.happiness_gain() * 0.005;
+                }
+            }
+
+            // Social interactions reward Extrovert, penalize Introvert
+            crate::environment::Action::Socialize { .. } |
+            crate::environment::Action::ShareInformation { .. } => {
+                if self.traits.has(Trait::Extrovert) || self.traits.has(Trait::Sociable) {
+                    happiness_bonus += Trait::Extrovert.happiness_gain() * 0.03;
+                    reward_reason = "social_joy".to_string();
+                }
+                if self.traits.has(Trait::Charismatic) {
+                    happiness_bonus += 0.02;
+                }
+                // Introverts lose happiness from socializing
+                if self.traits.has(Trait::Introvert) || self.traits.has(Trait::Introverted) {
+                    happiness_bonus -= 0.02;
+                }
+            }
+
+            // Sleeping rewards introverts who enjoy solitude
+            crate::environment::Action::Sleep { .. } => {
+                // Introverts gain slight happiness from being alone/resting
+                if self.traits.has(Trait::Introvert) || self.traits.has(Trait::Introverted) {
+                    happiness_bonus += 0.01;
+                    reward_reason = "peaceful_solitude".to_string();
+                }
+            }
+
+            // Eating rewards Glutton trait
+            crate::environment::Action::Eat { .. } => {
+                if self.traits.has(Trait::Glutton) {
+                    happiness_bonus += 0.05; // Extra happiness from eating
+                    reward_reason = "food_enjoyment".to_string();
+                }
+                // Ascetic trait: no extra happiness from food, slight penalty for elaborate meals
+                if self.traits.has(Trait::Ascetic) {
+                    // Negate glutton bonus if somehow both traits exist
+                    happiness_bonus -= 0.03; // Prefers simple sustenance
+                }
+                // Survivalist trait: happiness from eating own stored food
+                // (They're happy just knowing they're self-sufficient)
+                if self.traits.has(Trait::Survivalist) {
+                    happiness_bonus += 0.03;
+                    reward_reason = "self_sufficient_meal".to_string();
+                }
+            }
+
+            // Animal interactions reward AnimalLover, penalize Allergic
+            crate::environment::Action::Tame { .. } |
+            crate::environment::Action::CollectAnimalProduct { .. } => {
+                if self.traits.has(Trait::AnimalLover) {
+                    happiness_bonus += 0.06;
+                    reward_reason = "animal_joy".to_string();
+                }
+                if self.traits.has(Trait::Allergic) {
+                    happiness_bonus -= 0.03; // Discomfort from animal proximity
+                }
+            }
+
+            // Hunting can reward Protector trait (protecting community from threats)
+            crate::environment::Action::Hunt { .. } => {
+                if self.traits.has(Trait::Protector) {
+                    happiness_bonus += 0.04;
+                    reward_reason = "protector_satisfaction".to_string();
+                }
+                // AnimalLover may feel conflicted about hunting
+                if self.traits.has(Trait::AnimalLover) {
+                    happiness_bonus -= 0.02;
+                }
+            }
+
+            // Attack actions - check for aggressive vs peaceful traits
+            crate::environment::Action::Attack { .. } => {
+                if self.traits.has(Trait::Aggressive) {
+                    happiness_bonus += 0.03;
+                    reward_reason = "combat_thrill".to_string();
+                }
+                if self.traits.has(Trait::Peaceful) || self.traits.has(Trait::Pacifist) {
+                    happiness_bonus -= 0.05; // Distress from violence
+                }
+            }
+
+            // Store/retrieve items - check for Frugal/Greedy
+            crate::environment::Action::Store { .. } => {
+                if self.traits.has(Trait::Frugal) {
+                    happiness_bonus += 0.02; // Satisfaction from saving
+                    reward_reason = "saving_satisfaction".to_string();
+                }
+            }
+
+            crate::environment::Action::Retrieve { .. } => {
+                if self.traits.has(Trait::Greedy) {
+                    happiness_bonus += 0.02; // Joy from acquiring
+                    reward_reason = "acquisition_joy".to_string();
+                }
+            }
+
+            // Mating rewards Romantic trait
+            crate::environment::Action::Mate { .. } => {
+                if self.traits.has(Trait::Romantic) {
+                    happiness_bonus += 0.1; // Significant happiness from romantic interaction
+                    reward_reason = "romantic_joy".to_string();
+                }
+            }
+
+            _ => {}
+        }
+
+        // Copycat trait: happiness from mimicking recently observed actions
+        if self.traits.has(Trait::Copycat) {
+            if let Some(action_type) = self.action_to_observable_type(action) {
+                // Check if we've seen this action type recently (within 50 ticks)
+                // Note: current tick tracking would be needed, but we use a simpler approach
+                // by checking if any recent observations exist
+                let observation_count = self.observational_learning.count_recent_observations_of_type(
+                    action_type,
+                    50, // Within last 50 ticks
+                    0   // Will use recent count which doesn't need exact tick
+                );
+
+                if observation_count > 0 {
+                    // Bonus happiness for mimicking others
+                    happiness_bonus += 0.03 * (observation_count as f32).min(3.0);
+                    reward_reason = "copycat_satisfaction".to_string();
+                }
+            }
+        }
+
+        // Apply the happiness bonus if any
+        if happiness_bonus != 0.0 {
+            let source = if reward_reason.is_empty() {
+                EmotionSource::Event("trait_reward".to_string())
+            } else {
+                EmotionSource::Event(reward_reason)
+            };
+
+            if happiness_bonus > 0.0 {
+                self.emotions.add_happiness_with_traits(source, happiness_bonus, &self.traits);
+            } else {
+                // Negative bonus means we reduce happiness or add sadness
+                self.emotions.add_sadness_with_traits(source, happiness_bonus.abs(), &self.traits);
+            }
+        }
+    }
+
 
     // Helper methods
+
+    /// Convert an environment Action to an ObservableActionType for Copycat trait
+    fn action_to_observable_type(&self, action: &crate::environment::Action) -> Option<super::ActionType> {
+        use crate::environment::Action;
+        use super::ActionType;
+
+        match action {
+            // Mining/gathering type actions
+            Action::Gather { .. } => Some(ActionType::Mining),
+
+            // Crafting actions
+            Action::Craft { .. } => Some(ActionType::Crafting),
+
+            // Building actions
+            Action::Build { .. } => Some(ActionType::Building),
+
+            // Combat actions
+            Action::Attack { .. } | Action::Hunt { .. } => Some(ActionType::Combat),
+
+            // Cooking and food preparation
+            Action::Eat { .. } => Some(ActionType::Cooking),
+
+            // Social interactions
+            Action::Socialize { .. } | Action::ShareInformation { .. } => Some(ActionType::Social),
+
+            // Exploration/navigation
+            Action::Move { .. } | Action::Explore { .. } => Some(ActionType::Navigation),
+
+            // Tool use (storing, retrieving, etc.)
+            Action::Store { .. } | Action::Retrieve { .. } => Some(ActionType::ToolUse),
+
+            // Animal interactions involve problem solving
+            Action::Tame { .. } | Action::CollectAnimalProduct { .. } => Some(ActionType::ProblemSolving),
+
+            // Other actions that don't fit categories
+            _ => None,
+        }
+    }
 
     /// Find the nearest known shelter (housing building) from the agent's exploration knowledge.
     /// Returns the position of the nearest shelter, or the agent's current position if no shelter is known.
@@ -2036,23 +2585,15 @@ impl Agent {
             return Err(format!("Item '{}' not found in inventory", item_id));
         }
 
-        // Create equipment item from inventory item
-        // For now, we'll create a basic equipment item
-        // In a full implementation, this would lookup item stats from a registry
-        use super::equipment::{EquipmentType, EquipmentMaterial, WoodMaterial};
-        use super::skills::Quality;
-
-        let equipment_type = match slot {
-            super::equipment::EquipmentSlot::MainHand | super::equipment::EquipmentSlot::OffHand => EquipmentType::Pickaxe,
-            _ => EquipmentType::Clothing,
-        };
+        // Item registry: maps item_id to (equipment_type, material, quality)
+        let (equipment_type, material, quality) = Self::lookup_item_properties(item_id, slot);
 
         let equipment_item = super::equipment::EquipmentItem::new(
             item_id.to_string(),
             equipment_type,
             slot,
-            EquipmentMaterial::Wood(WoodMaterial::Oak),
-            Quality::Basic,
+            material,
+            quality,
         );
 
         // Equip the item (this returns the previously equipped item if any)
@@ -2070,6 +2611,186 @@ impl Agent {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Lookup equipment properties from item registry
+    /// Returns (equipment_type, material, quality) for the given item
+    fn lookup_item_properties(
+        item_id: &str,
+        slot: super::equipment::EquipmentSlot,
+    ) -> (super::equipment::EquipmentType, super::equipment::EquipmentMaterial, super::skills::Quality) {
+        use super::equipment::{EquipmentType, EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial};
+        use super::skills::Quality;
+
+        // Normalize item_id for matching
+        let item_lower = item_id.to_lowercase();
+
+        // Match based on item name patterns
+        // Tools
+        if item_lower.contains("pickaxe") || item_lower.contains("pick") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Pickaxe, mat, qual);
+        }
+        if item_lower.contains("axe") && !item_lower.contains("pick") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Hatchet, mat, qual);
+        }
+        if item_lower.contains("shovel") || item_lower.contains("spade") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Shovel, mat, qual);
+        }
+        if item_lower.contains("hammer") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Hammer, mat, qual);
+        }
+        if item_lower.contains("sickle") || item_lower.contains("scythe") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Sickle, mat, qual);
+        }
+        if item_lower.contains("fishing") || item_lower.contains("rod") {
+            return (EquipmentType::FishingRod, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
+        }
+
+        // Weapons
+        if item_lower.contains("sword") || item_lower.contains("blade") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Sword, mat, qual);
+        }
+        if item_lower.contains("spear") || item_lower.contains("lance") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Spear, mat, qual);
+        }
+        if item_lower.contains("mace") || item_lower.contains("club") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Mace, mat, qual);
+        }
+        if item_lower.contains("dagger") || item_lower.contains("knife") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Dagger, mat, qual);
+        }
+        if item_lower.contains("bow") && !item_lower.contains("cross") {
+            return (EquipmentType::Bow, EquipmentMaterial::Wood(WoodMaterial::Yew), Quality::Basic);
+        }
+        if item_lower.contains("crossbow") {
+            return (EquipmentType::Crossbow, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
+        }
+        if item_lower.contains("shield") {
+            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
+            return (EquipmentType::Shield, mat, qual);
+        }
+
+        // Armor
+        if item_lower.contains("plate") || item_lower.contains("heavy armor") {
+            return (EquipmentType::HeavyArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
+        }
+        if item_lower.contains("chain") || item_lower.contains("mail") {
+            return (EquipmentType::MediumArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
+        }
+        if item_lower.contains("leather armor") || item_lower.contains("hide armor") {
+            return (EquipmentType::LightArmor, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
+        }
+
+        // Clothing
+        if item_lower.contains("fur") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Fur), Quality::Basic);
+        }
+        if item_lower.contains("wool") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Wool), Quality::Basic);
+        }
+        if item_lower.contains("leather") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
+        }
+        if item_lower.contains("linen") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic);
+        }
+        if item_lower.contains("cotton") {
+            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Cotton), Quality::Basic);
+        }
+
+        // Utility
+        if item_lower.contains("torch") {
+            return (EquipmentType::Torch, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
+        }
+        if item_lower.contains("lantern") || item_lower.contains("lamp") {
+            return (EquipmentType::Lantern, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
+        }
+
+        // Default based on slot type
+        match slot {
+            super::equipment::EquipmentSlot::MainHand | super::equipment::EquipmentSlot::OffHand => {
+                (EquipmentType::Pickaxe, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic)
+            }
+            _ => (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic)
+        }
+    }
+
+    /// Parse material and quality from item name
+    fn parse_material_quality(item_name: &str, is_tool_or_weapon: bool) -> (super::equipment::EquipmentMaterial, super::skills::Quality) {
+        use super::equipment::{EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial, StoneMaterial};
+        use super::skills::Quality;
+
+        // Parse quality (using Quality enum variants: Pathetic, Crude, Basic, Moderate, Advanced, Expert)
+        let quality = if item_name.contains("masterwork") || item_name.contains("master") || item_name.contains("expert") {
+            Quality::Expert
+        } else if item_name.contains("excellent") || item_name.contains("fine") || item_name.contains("advanced") {
+            Quality::Advanced
+        } else if item_name.contains("good") || item_name.contains("quality") || item_name.contains("moderate") {
+            Quality::Moderate
+        } else if item_name.contains("poor") || item_name.contains("crude") {
+            Quality::Crude
+        } else if item_name.contains("pathetic") || item_name.contains("terrible") {
+            Quality::Pathetic
+        } else {
+            Quality::Basic
+        };
+
+        // Parse material
+        let material = if is_tool_or_weapon {
+            // Tools and weapons use metal or wood
+            if item_name.contains("steel") {
+                EquipmentMaterial::Metal(MetalMaterial::Steel)
+            } else if item_name.contains("iron") {
+                EquipmentMaterial::Metal(MetalMaterial::Iron)
+            } else if item_name.contains("bronze") {
+                EquipmentMaterial::Metal(MetalMaterial::Bronze)
+            } else if item_name.contains("copper") {
+                EquipmentMaterial::Metal(MetalMaterial::Copper)
+            } else if item_name.contains("stone") {
+                EquipmentMaterial::Stone(StoneMaterial::Flint)
+            } else if item_name.contains("oak") {
+                EquipmentMaterial::Wood(WoodMaterial::Oak)
+            } else if item_name.contains("birch") {
+                EquipmentMaterial::Wood(WoodMaterial::Birch)
+            } else if item_name.contains("pine") {
+                EquipmentMaterial::Wood(WoodMaterial::Pine)
+            } else if item_name.contains("yew") {
+                EquipmentMaterial::Wood(WoodMaterial::Yew)
+            } else if item_name.contains("wood") {
+                EquipmentMaterial::Wood(WoodMaterial::Oak)
+            } else {
+                // Default to wood for basic tools
+                EquipmentMaterial::Wood(WoodMaterial::Oak)
+            }
+        } else {
+            // Armor and clothing
+            if item_name.contains("leather") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Leather)
+            } else if item_name.contains("fur") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Fur)
+            } else if item_name.contains("wool") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Wool)
+            } else if item_name.contains("linen") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
+            } else if item_name.contains("cotton") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Cotton)
+            } else if item_name.contains("hide") {
+                EquipmentMaterial::Cloth(ClothingMaterial::Hide)
+            } else {
+                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
+            }
+        };
+
+        (material, quality)
     }
 
     /// Unequip an item from a slot and put it in inventory
@@ -2526,8 +3247,56 @@ impl Agent {
     }
 
     /// Take damage (wrapper for AgentState method)
+    /// Defense bonus from nearby buildings reduces damage taken
+    /// Masochist trait holders gain happiness from taking damage (up to 50% health)
     pub fn take_damage(&mut self, amount: f32) {
-        self.state.take_damage(amount);
+        use crate::core::traits::Trait;
+        use super::EmotionSource;
+
+        // Apply defense bonus from nearby buildings (higher bonus = less damage)
+        // Defense bonus of 1.25 means 25% damage reduction (amount / 1.25)
+        let defense_bonus = self.cached_defense_bonus;
+        let reduced_amount = amount / defense_bonus;
+
+        let health_before = self.state.health;
+        self.state.take_damage(reduced_amount);
+
+        // Masochist trait: happiness from taking damage while above 50% health
+        if self.traits.has(Trait::Masochist) && health_before > 50.0 && self.state.health > 0.0 {
+            // Scale happiness by damage taken, capped at 0.1 per hit
+            let happiness_amount = (reduced_amount / 20.0).min(0.1);
+            self.emotions.add_happiness(
+                EmotionSource::Event("masochist_pleasure".to_string()),
+                happiness_amount
+            );
+        }
+    }
+
+    /// Heal the agent (wrapper for AgentState method)
+    /// Healing bonus from nearby medical buildings increases healing rate
+    pub fn heal(&mut self, amount: f32) {
+        // Apply healing bonus from nearby medical buildings
+        let healing_bonus = self.cached_healing_bonus;
+        let boosted_amount = amount * healing_bonus;
+        self.state.heal(boosted_amount);
+    }
+
+    /// Regenerate health naturally over time
+    /// Called during rest or when near medical facilities
+    /// Base regeneration rate is 0.1 health per tick when resting
+    pub fn regenerate_health(&mut self, is_resting: bool) {
+        if self.state.health >= 100.0 {
+            return; // Already at full health
+        }
+
+        // Base regeneration rate
+        let base_rate = if is_resting { 0.1 } else { 0.02 };
+
+        // Apply healing bonus from nearby medical buildings
+        let healing_bonus = self.cached_healing_bonus;
+        let regeneration = base_rate * healing_bonus;
+
+        self.state.heal(regeneration);
     }
 
     /// Check if agent is dead
@@ -2597,10 +3366,11 @@ impl Agent {
 
                 let curiosity_amount = base_curiosity * curiosity_bonus;
 
-                // Add curiosity about this specific storage location
-                self.emotions.add_curiosity(
+                // Add curiosity about this specific storage location (with trait modifiers)
+                self.emotions.add_curiosity_with_traits(
                     EmotionSource::Location(storage_memory.position),
-                    curiosity_amount
+                    curiosity_amount,
+                    &self.traits
                 );
             }
         }
@@ -2620,9 +3390,10 @@ impl Agent {
 
         // Curious trait holders gain happiness from learning/discovering
         if self.traits.has(crate::core::Trait::Curious) {
-            self.emotions.add_happiness(
+            self.emotions.add_happiness_with_traits(
                 EmotionSource::Event("satisfied curiosity".to_string()),
-                0.15 // Moderate happiness boost
+                0.15, // Moderate happiness boost
+                &self.traits
             );
         }
     }
@@ -2771,9 +3542,9 @@ impl Agent {
     fn process_gratitude(&mut self, helper_id: Uuid, help_amount: f32) {
         use super::EmotionSource;
 
-        // Happiness from receiving help (scaled by amount)
+        // Happiness from receiving help (scaled by amount, with trait modifiers)
         let gratitude_happiness = (help_amount * 0.3).min(0.4);
-        self.emotions.add_happiness(EmotionSource::Agent(helper_id), gratitude_happiness);
+        self.emotions.add_happiness_with_traits(EmotionSource::Agent(helper_id), gratitude_happiness, &self.traits);
 
         // Improve bond with helper
         if let Some(relationship) = self.relationships.get_relationship_mut(&helper_id) {
@@ -2793,18 +3564,30 @@ impl Agent {
 
     /// Process altruistic happiness when providing help to another agent
     /// Empathetic agents get extra happiness from helping
+    /// Altruist trait holders also get extra happiness from helping
     pub fn process_helper_happiness(&mut self, recipient_id: Uuid, help_amount: f32) {
         use super::EmotionSource;
+        use crate::core::traits::Trait;
 
         // Base happiness from helping (scaled by amount)
         let mut helper_happiness = (help_amount * 0.2).min(0.3);
 
         // Empathetic trait bonus: extra happiness from helping others
-        if self.traits.has_trait(&crate::core::traits::Trait::Empathetic) {
+        if self.traits.has_trait(&Trait::Empathetic) {
             helper_happiness += 0.15; // Significant bonus for empathetic helpers
         }
 
-        self.emotions.add_happiness(EmotionSource::Agent(recipient_id), helper_happiness);
+        // Altruist trait bonus: additional happiness from helping
+        if self.traits.has(Trait::Altruist) {
+            helper_happiness += Trait::Altruist.happiness_gain() * 0.02;
+        }
+
+        // Caretaker trait bonus: happiness from helping sick/injured/elderly
+        if self.traits.has(Trait::Caretaker) {
+            helper_happiness += Trait::Caretaker.happiness_gain() * 0.02;
+        }
+
+        self.emotions.add_happiness_with_traits(EmotionSource::Agent(recipient_id), helper_happiness, &self.traits);
     }
 
     /// Apply religious happiness effects from nearby religious buildings
@@ -2879,8 +3662,8 @@ impl Agent {
             }
         }
 
-        // Add sadness
-        self.emotions.add_sadness(EmotionSource::Agent(source_id), sadness);
+        // Add sadness (with trait modifiers)
+        self.emotions.add_sadness_with_traits(EmotionSource::Agent(source_id), sadness, &self.traits);
 
         // If there's a cause and it's an agent, add anger
         if let Some(cause_source) = cause {
@@ -2888,13 +3671,13 @@ impl Agent {
                 EmotionSource::Agent(_) | EmotionSource::Creature(_) => {
                     // Anger at whoever took away our satisfaction source
                     let anger = importance * 0.5; // 0.0 to 0.5 (stronger anger response)
-                    self.emotions.add_anger(cause_source, anger);
+                    self.emotions.add_anger_with_traits(cause_source, anger, &self.traits);
                 }
                 EmotionSource::Event(event) => {
                     // Natural causes - less anger, more sadness
                     if !event.contains("old age") && !event.contains("natural") {
                         // Accident or preventable - some anger
-                        self.emotions.add_anger(EmotionSource::Event(event.clone()), importance * 0.2);
+                        self.emotions.add_anger_with_traits(EmotionSource::Event(event.clone()), importance * 0.2, &self.traits);
                     }
                 }
                 _ => {}
@@ -3073,15 +3856,49 @@ impl Agent {
     ///
     /// Converts the current PlanStep to an environment Action.
     /// Returns None if no plan, plan is complete, or step can't be converted.
+    /// Note: Social actions may have nil UUIDs that need resolution at execution time.
     pub fn get_plan_action(&self) -> Option<Action> {
         let plan = self.current_plan.as_ref()?;
         let step = plan.current_step()?;
 
-        self.convert_plan_step_to_action(step)
+        self.convert_plan_step_to_action(step, &[])
+    }
+
+    /// Get the next action from the current plan, resolving social targets
+    ///
+    /// Like get_plan_action but resolves nil UUIDs in social actions to actual
+    /// nearby agents. The nearby_agents list should contain (id, position) pairs
+    /// for all agents that could be interacted with.
+    pub fn get_plan_action_with_nearby(
+        &self,
+        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Option<Action> {
+        let plan = self.current_plan.as_ref()?;
+        let step = plan.current_step()?;
+
+        self.convert_plan_step_to_action(step, nearby_agents)
+    }
+
+    /// Find the nearest agent from a list of candidates
+    fn find_nearest_agent(&self, candidates: &[(uuid::Uuid, (i32, i32, i32))]) -> Option<uuid::Uuid> {
+        let my_pos = self.state.position;
+        candidates
+            .iter()
+            .filter(|(id, _)| *id != self.id) // Exclude self
+            .min_by_key(|(_, pos)| {
+                let dx = (pos.0 - my_pos.0).abs();
+                let dy = (pos.1 - my_pos.1).abs();
+                dx + dy // Manhattan distance
+            })
+            .map(|(id, _)| *id)
     }
 
     /// Convert a PlanStep's ActionType to an environment Action
-    fn convert_plan_step_to_action(&self, step: &PlanStep) -> Option<Action> {
+    fn convert_plan_step_to_action(
+        &self,
+        step: &PlanStep,
+        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Option<Action> {
         match &step.action {
             PlanActionType::MoveTo { location } => {
                 Some(Action::Move { target: *location })
@@ -3108,7 +3925,13 @@ impl Agent {
                 Some(Action::Retrieve { item_type: resource.clone(), amount: *amount })
             }
             PlanActionType::Socialize { target_id } => {
-                Some(Action::Socialize { target_agent_id: *target_id })
+                // Resolve nil UUID to nearest agent if possible
+                let resolved_id = if target_id.is_nil() {
+                    self.find_nearest_agent(nearby_agents).unwrap_or(*target_id)
+                } else {
+                    *target_id
+                };
+                Some(Action::Socialize { target_agent_id: resolved_id })
             }
             PlanActionType::Rest { duration } => {
                 Some(Action::Sleep { duration: *duration })
@@ -3929,5 +4752,389 @@ impl Agent {
                 }
             })
         })
+    }
+
+    // ===== Trust and Lie Detection System =====
+
+    /// Get lie detection chance based on agent's traits
+    /// Returns a multiplier (1.0 = normal, higher = better detection)
+    pub fn get_lie_detection_bonus(&self) -> f32 {
+        use crate::core::traits::Trait;
+
+        let mut bonus: f32 = 1.0;
+
+        // Suspicious trait: +50% lie detection
+        if self.traits.has(Trait::Suspicious) {
+            bonus += 0.5;
+        }
+
+        // Paranoid trait: +80% lie detection (assumes malice)
+        if self.traits.has(Trait::Paranoid) {
+            bonus += 0.8;
+        }
+
+        // Honest agents are better at spotting dishonesty (they know what truth looks like)
+        if self.traits.has(Trait::Honest) {
+            bonus += 0.3;
+        }
+
+        // Skeptic trait: +40% lie detection
+        if self.traits.has(Trait::Skeptic) {
+            bonus += 0.4;
+        }
+
+        // Trusting trait: -40% lie detection (easily fooled)
+        if self.traits.has(Trait::Trusting) {
+            bonus -= 0.4;
+        }
+
+        bonus.max(0.1) // Minimum 10% detection chance
+    }
+
+    /// Verify a resource location claim against what this agent actually knows
+    /// Returns Some(true) if verified correct, Some(false) if verified wrong, None if unverifiable
+    pub fn verify_resource_claim(
+        &self,
+        claimed_resource: &str,
+        claimed_location: (i32, i32, i32),
+    ) -> Option<bool> {
+        use crate::world::Position;
+
+        let claimed_pos = Position::new(claimed_location.0, claimed_location.1);
+
+        // Check if we've explored this location
+        if !self.exploration_knowledge.is_explored(&claimed_pos) {
+            return None; // Can't verify - haven't been there
+        }
+
+        // Check what we actually know about this location
+        if let Some(actual_resource) = self.exploration_knowledge.known_resources.get(&claimed_pos) {
+            // We know what's at this location
+            let actual_name = format!("{:?}", actual_resource).to_lowercase();
+            let claimed_lower = claimed_resource.to_lowercase();
+
+            // Check if the claimed resource matches what we found
+            if actual_name.contains(&claimed_lower) || claimed_lower.contains(&actual_name) {
+                return Some(true); // Verified correct
+            } else {
+                return Some(false); // Verified wrong - different resource type
+            }
+        }
+
+        // We've been there but didn't find any resource
+        // If they claimed a resource exists there, they're likely wrong
+        Some(false)
+    }
+
+    /// Attempt to detect lies in received information based on personal knowledge
+    /// Returns a list of (info_id, source_id, was_lie) for detected lies
+    pub fn detect_lies_in_knowledge(&self, _current_tick: u32) -> Vec<(uuid::Uuid, uuid::Uuid, bool)> {
+        use super::gossip::InformationType;
+
+        let mut detections = Vec::new();
+        let detection_bonus = self.get_lie_detection_bonus();
+
+        // Check each piece of information we've received
+        for (info_id, info) in &self.knowledge.known_information {
+            // Skip if this is our own information
+            if info.original_source == self.id {
+                continue;
+            }
+
+            // Find the belief for this info to get the source
+            let source = self.knowledge.beliefs
+                .iter()
+                .find(|b| b.info_id == *info_id)
+                .map(|b| b.source);
+
+            if let Some(source_id) = source {
+                // Try to verify different types of information
+                match &info.info_type {
+                    InformationType::ResourceLocation { resource, location } => {
+                        if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
+                            // Apply detection bonus - higher bonus means more likely to catch lies
+                            let base_detection_chance = if is_correct { 0.0 } else { 0.5 };
+                            let effective_chance = base_detection_chance * detection_bonus;
+
+                            // Simple probability check
+                            use rand::Rng;
+                            let roll: f32 = rand::thread_rng().gen();
+
+                            if roll < effective_chance || !is_correct {
+                                // We detected this information as incorrect
+                                if !info.ground_truth || !is_correct {
+                                    detections.push((*info_id, source_id, true)); // It was a lie
+                                } else {
+                                    detections.push((*info_id, source_id, false)); // It was true
+                                }
+                            }
+                        }
+                    }
+                    // Could add more verification types here (accusations, observations, etc.)
+                    _ => {}
+                }
+            }
+        }
+
+        detections
+    }
+
+    /// Process lie detection and update trust/relationships accordingly
+    /// Call this periodically (e.g., every 100 ticks) to verify information
+    pub fn process_information_verification(&mut self, current_tick: u32) {
+        use super::EmotionSource;
+
+        let detections = self.detect_lies_in_knowledge(current_tick);
+
+        for (info_id, source_id, was_lie) in detections {
+            // Calculate info age for trust update (used by SocialNetwork methods)
+            let _info_age = if let Some(info) = self.knowledge.known_information.get(&info_id) {
+                current_tick.saturating_sub(info.timestamp as u32)
+            } else {
+                1000 // Default to old if not found
+            };
+
+            // Update knowledge base trust
+            self.knowledge.verify_information(&info_id, !was_lie);
+
+            // Update relationship
+            if was_lie {
+                // Lie detected - penalize relationship and trust
+                let rel = self.relationships.get_or_create_relationship(source_id, current_tick);
+                rel.weaken(0.15); // Significant relationship damage
+
+                // Add negative emotion
+                self.emotions.add_anger(
+                    EmotionSource::Agent(source_id),
+                    0.2 // Anger at being lied to
+                );
+
+                // Trait-based response to being lied to
+                if self.traits.has(crate::core::traits::Trait::Vengeful) {
+                    // Vengeful agents remember and hold grudges
+                    rel.weaken(0.1); // Extra relationship damage
+                }
+
+                if self.traits.has(crate::core::traits::Trait::Forgiving) {
+                    // Forgiving agents don't hold it against them as much
+                    rel.strengthen(0.05); // Partial forgiveness
+                }
+            } else {
+                // Truth verified - strengthen trust and relationship
+                let rel = self.relationships.get_or_create_relationship(source_id, current_tick);
+                rel.strengthen(0.05); // Small positive reinforcement
+
+                // Small happiness from receiving accurate information
+                self.emotions.add_happiness(
+                    EmotionSource::Agent(source_id),
+                    0.02
+                );
+            }
+        }
+    }
+
+    /// Handle receiving information from another agent with lie detection
+    /// This wraps the knowledge base receive and adds immediate verification
+    pub fn receive_information_with_verification(
+        &mut self,
+        info: super::gossip::Information,
+        source: uuid::Uuid,
+        current_tick: u32,
+    ) {
+        use super::gossip::InformationType;
+
+        let info_id = info.id;
+        let info_type = info.info_type.clone();
+        let _ground_truth = info.ground_truth;
+
+        // Receive the information normally
+        self.knowledge.receive_information(
+            info,
+            source,
+            self.id,
+            &self.traits,
+            current_tick as u64,
+        );
+
+        // Immediate verification attempt for resource claims
+        if let InformationType::ResourceLocation { resource, location } = &info_type {
+            if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
+                // We can immediately verify this claim
+                let _detection_bonus = self.get_lie_detection_bonus();
+
+                if !is_correct {
+                    // They lied about a resource location we know about!
+                    self.on_lie_detected(source, &info_id, current_tick);
+                } else {
+                    // Verified correct
+                    self.on_truth_verified(source, &info_id, current_tick);
+                }
+            } else if self.traits.has(crate::core::traits::Trait::Suspicious) {
+                // Suspicious agents are wary of unverifiable claims
+                // Slightly reduce confidence in the belief
+                if let Some(belief) = self.knowledge.beliefs.iter_mut().find(|b| b.info_id == info_id) {
+                    belief.confidence *= 0.9;
+                }
+            }
+        }
+    }
+
+    /// Called when a lie is detected from a source
+    fn on_lie_detected(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
+        use super::EmotionSource;
+
+        // Update knowledge trust
+        self.knowledge.verify_information(info_id, false);
+
+        // Get relationship and apply penalty
+        let rel = self.relationships.get_or_create_relationship(source, current_tick);
+
+        // Calculate penalty based on relationship
+        let base_penalty = 0.15;
+        let penalty = if rel.bond_strength > 0.5 {
+            // Betrayal by a friend hurts more
+            base_penalty * 1.5
+        } else if rel.bond_strength < -0.3 {
+            // Expected from an enemy - less emotional impact
+            base_penalty * 0.7
+        } else {
+            base_penalty
+        };
+
+        rel.weaken(penalty);
+        rel.total_interactions += 1;
+        rel.last_interaction_tick = current_tick;
+
+        // Emotional response
+        self.emotions.add_anger(
+            EmotionSource::Agent(source),
+            0.15
+        );
+
+        // Paranoid agents become extra suspicious
+        if self.traits.has(crate::core::traits::Trait::Paranoid) {
+            self.emotions.add_fear(
+                EmotionSource::Agent(source),
+                0.1 // Fear of further deception
+            );
+        }
+
+        // Trusting agents feel hurt/sad when lied to
+        if self.traits.has(crate::core::traits::Trait::Trusting) {
+            self.emotions.add_sadness(
+                EmotionSource::Agent(source),
+                0.1
+            );
+        }
+    }
+
+    /// Called when truth is verified from a source
+    fn on_truth_verified(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
+        use super::EmotionSource;
+
+        // Update knowledge trust
+        self.knowledge.verify_information(info_id, true);
+
+        // Strengthen relationship slightly
+        let rel = self.relationships.get_or_create_relationship(source, current_tick);
+        rel.strengthen(0.03);
+        rel.total_interactions += 1;
+        rel.last_interaction_tick = current_tick;
+
+        // Small happiness from accurate information
+        self.emotions.add_happiness(
+            EmotionSource::Agent(source),
+            0.01
+        );
+    }
+
+    /// Check if this agent would lie when sharing information
+    /// Based on traits and relationship with the target
+    pub fn would_lie_to(&self, target_id: uuid::Uuid, _current_tick: u32) -> bool {
+        use crate::core::traits::Trait;
+        use rand::Rng;
+
+        let mut lie_chance: f32 = 0.0;
+
+        // Dishonest trait: 40% base lie chance
+        if self.traits.has(Trait::Dishonest) {
+            lie_chance += 0.4;
+        }
+
+        // Manipulative/Manipulator: 30% lie chance
+        if self.traits.has(Trait::Manipulative) || self.traits.has(Trait::Manipulator) {
+            lie_chance += 0.3;
+        }
+
+        // Honest trait: prevents lying (override)
+        if self.traits.has(Trait::Honest) {
+            return false;
+        }
+
+        // Relationship affects lying
+        if let Some(rel) = self.relationships.get_relationship(&target_id) {
+            if rel.bond_strength < -0.5 {
+                // More likely to lie to enemies
+                lie_chance += 0.2;
+            } else if rel.bond_strength > 0.6 {
+                // Less likely to lie to loved ones
+                lie_chance -= 0.3;
+            }
+        }
+
+        // KindHearted agents avoid harmful lies
+        if self.traits.has(Trait::KindHearted) {
+            lie_chance -= 0.2;
+        }
+
+        let roll: f32 = rand::thread_rng().gen();
+        roll < lie_chance.clamp(0.0, 0.8) // Max 80% chance to lie
+    }
+
+    /// Create information to share, potentially distorting based on traits
+    /// Returns the information (possibly distorted) and whether it's a lie
+    pub fn prepare_information_to_share(
+        &self,
+        info: super::gossip::Information,
+        target_id: uuid::Uuid,
+        current_tick: u32,
+    ) -> (super::gossip::Information, bool) {
+        // Check if we would lie to this target
+        if self.would_lie_to(target_id, current_tick) {
+            // Apply distortion based on traits
+            if let Some(distortion_trait) = self.traits.would_distort_info() {
+                let distorted = info.distort(distortion_trait, self.id);
+                return (distorted, true);
+            }
+        }
+
+        // No lying - share truthfully
+        (info, false)
+    }
+
+    /// Spread reputation damage when caught lying (gossip about the liar)
+    /// Other agents who witnessed or heard about the lie will also lose trust
+    pub fn spread_liar_reputation(
+        &mut self,
+        liar_id: uuid::Uuid,
+        _witness_ids: &[uuid::Uuid],
+        current_tick: u32,
+    ) {
+        // Create gossip information about the lie
+        let gossip_info = super::gossip::Information::new(
+            super::gossip::InformationType::AgentTrait {
+                agent: liar_id,
+                trait_name: "dishonest".to_string(),
+            },
+            self.id,
+            true, // This is true - they did lie
+            current_tick as u64,
+        );
+
+        // Store this information in our knowledge
+        self.knowledge.known_information.insert(gossip_info.id, gossip_info);
+
+        // Witnesses also get reputation update (handled by population system)
+        // This method just marks that we're spreading the word
     }
 }

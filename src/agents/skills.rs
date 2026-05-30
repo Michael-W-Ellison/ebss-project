@@ -164,6 +164,18 @@ impl Quality {
         }
     }
 
+    /// Get value multiplier for trade/comparison purposes
+    pub fn value_multiplier(&self) -> f32 {
+        match self {
+            Quality::Pathetic => 0.3,
+            Quality::Crude => 0.6,
+            Quality::Basic => 1.0,
+            Quality::Moderate => 1.5,
+            Quality::Advanced => 2.5,
+            Quality::Expert => 4.0,
+        }
+    }
+
     /// Get tool durability modifier
     pub fn tool_durability_modifier(&self) -> f32 {
         match self {

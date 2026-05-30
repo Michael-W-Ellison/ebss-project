@@ -118,6 +118,19 @@ impl ClothingMaterial {
             ClothingMaterial::Bark => 1.0,
         }
     }
+
+    /// Value multiplier for trade/comparison purposes
+    pub fn value_multiplier(&self) -> f32 {
+        match self {
+            ClothingMaterial::Fur => 1.8,
+            ClothingMaterial::Leather => 1.5,
+            ClothingMaterial::Hide => 1.3,
+            ClothingMaterial::Wool => 1.0,
+            ClothingMaterial::Cotton => 0.9,
+            ClothingMaterial::Linen => 0.8,
+            ClothingMaterial::Bark => 0.4,
+        }
+    }
 }
 
 /// Metal materials for weapons and armor
@@ -177,6 +190,18 @@ impl MetalMaterial {
             MetalMaterial::Copper => 1.0,
             MetalMaterial::Silver => 0.8,
             MetalMaterial::Gold => 0.5,
+        }
+    }
+
+    /// Value multiplier for trade/comparison purposes
+    pub fn value_multiplier(&self) -> f32 {
+        match self {
+            MetalMaterial::Gold => 5.0,   // Precious metal
+            MetalMaterial::Silver => 3.0, // Precious metal
+            MetalMaterial::Steel => 2.0,
+            MetalMaterial::Iron => 1.5,
+            MetalMaterial::Bronze => 1.2,
+            MetalMaterial::Copper => 1.0,
         }
     }
 }
@@ -321,6 +346,16 @@ impl EquipmentMaterial {
         }
     }
 
+    /// Get value multiplier for trade/comparison purposes
+    pub fn value_multiplier(&self) -> f32 {
+        match self {
+            EquipmentMaterial::Cloth(m) => m.value_multiplier(),
+            EquipmentMaterial::Metal(m) => m.value_multiplier(),
+            EquipmentMaterial::Wood(_) => 0.8,
+            EquipmentMaterial::Stone(_) => 0.6,
+        }
+    }
+
     /// Get heat resistance multiplier
     pub fn heat_resistance(&self) -> f32 {
         match self {
@@ -329,6 +364,12 @@ impl EquipmentMaterial {
             EquipmentMaterial::Wood(_) => 0.7,
             EquipmentMaterial::Stone(_) => 0.6,
         }
+    }
+
+    /// Check if this is a primitive material (wood or stone, not metal)
+    /// Used by Traditionalist trait for bonus efficiency
+    pub fn is_primitive(&self) -> bool {
+        matches!(self, EquipmentMaterial::Wood(_) | EquipmentMaterial::Stone(_))
     }
 }
 
@@ -362,6 +403,12 @@ pub enum EquipmentType {
     // Utility
     Torch,
     Lantern,
+
+    // Accessories (jewelry)
+    Ring,       // Worn on finger, provides bonuses
+    Necklace,   // Worn on neck, provides bonuses
+    Amulet,     // Worn on neck, often magical/protective
+    Bracelet,   // Worn on arms/wrists
 }
 
 impl EquipmentType {
@@ -401,6 +448,17 @@ impl EquipmentType {
                 | EquipmentType::MediumArmor
                 | EquipmentType::HeavyArmor
                 | EquipmentType::Shield
+        )
+    }
+
+    /// Is this an accessory (jewelry)?
+    pub fn is_accessory(&self) -> bool {
+        matches!(
+            self,
+            EquipmentType::Ring
+                | EquipmentType::Necklace
+                | EquipmentType::Amulet
+                | EquipmentType::Bracelet
         )
     }
 
@@ -934,6 +992,46 @@ impl EquipmentManager {
             .unwrap_or(1.0)
     }
 
+    /// Check if any equipped tool uses primitive materials (wood or stone)
+    /// Used by Traditionalist trait for bonus efficiency/happiness
+    pub fn has_primitive_tool(&self) -> bool {
+        self.equipped.values().any(|item| {
+            item.equipment_type.is_tool() && item.material.is_primitive()
+        })
+    }
+
+    /// Get the current tool's primitive status for a task
+    /// Returns true if tool is made of primitive materials (wood/stone)
+    pub fn is_using_primitive_tool_for_task(&self, task: &str) -> bool {
+        self.get_tool_for_task(task)
+            .map(|tool| tool.material.is_primitive())
+            .unwrap_or(false)
+    }
+
+    /// Get mining speed bonus with Traditionalist trait bonus
+    /// Traditionalist trait grants +30% efficiency with primitive tools
+    pub fn mining_speed_with_traits(&self, traits: &crate::core::traits::TraitSet) -> f32 {
+        let base_speed = self.mining_speed_bonus();
+        if traits.has(crate::core::traits::Trait::Traditionalist) {
+            if self.is_using_primitive_tool_for_task("mining") {
+                return base_speed * 1.3; // 30% bonus with primitive tools
+            }
+        }
+        base_speed
+    }
+
+    /// Get harvesting speed bonus with Traditionalist trait bonus
+    /// Traditionalist trait grants +30% efficiency with primitive tools
+    pub fn harvesting_speed_with_traits(&self, traits: &crate::core::traits::TraitSet) -> f32 {
+        let base_speed = self.harvesting_speed_bonus();
+        if traits.has(crate::core::traits::Trait::Traditionalist) {
+            if self.is_using_primitive_tool_for_task("harvesting") || self.is_using_primitive_tool_for_task("woodcutting") {
+                return base_speed * 1.3; // 30% bonus with primitive tools
+            }
+        }
+        base_speed
+    }
+
     /// Tick all equipped items (apply wear)
     pub fn tick_all_equipment(&mut self) {
         for item in self.equipped.values_mut() {
@@ -994,6 +1092,37 @@ impl EquipmentManager {
         self.total_weight
     }
 
+    /// Get total value of all equipped items (for comparison purposes)
+    /// Value is based on quality, material tier, and equipment type
+    pub fn total_value(&self) -> f32 {
+        self.equipped.values().map(|item| {
+            let base_value = match item.equipment_type {
+                // Weapons
+                EquipmentType::Sword | EquipmentType::Axe => 20.0,
+                EquipmentType::Bow | EquipmentType::Crossbow => 25.0,
+                EquipmentType::Spear | EquipmentType::Hammer => 18.0,
+                EquipmentType::Dagger | EquipmentType::Mace => 15.0,
+                // Armor
+                EquipmentType::HeavyArmor => 30.0,
+                EquipmentType::MediumArmor => 20.0,
+                EquipmentType::LightArmor => 12.0,
+                EquipmentType::Clothing => 5.0,
+                EquipmentType::Shield => 15.0,
+                // Tools
+                EquipmentType::Pickaxe | EquipmentType::Hatchet | EquipmentType::Shovel | EquipmentType::Sickle => 15.0,
+                EquipmentType::FishingRod => 10.0,
+                // Accessories
+                EquipmentType::Ring | EquipmentType::Necklace | EquipmentType::Amulet | EquipmentType::Bracelet => 30.0,
+                // Utility
+                EquipmentType::Torch => 2.0,
+                EquipmentType::Lantern => 8.0,
+            };
+            let quality_mult = item.quality.value_multiplier();
+            let material_mult = item.material.value_multiplier();
+            base_value * quality_mult * material_mult
+        }).sum()
+    }
+
     /// Get list of broken equipment
     pub fn get_broken_equipment(&self) -> Vec<EquipmentSlot> {
         self.equipped
@@ -1041,12 +1170,20 @@ impl EquipmentManager {
                     || matches!(equipment_type, EquipmentType::Shield | EquipmentType::Torch | EquipmentType::Lantern)
             }
             EquipmentSlot::Head | EquipmentSlot::Torso | EquipmentSlot::Back |
-            EquipmentSlot::Arms | EquipmentSlot::Legs | EquipmentSlot::Hands | EquipmentSlot::Feet => {
+            EquipmentSlot::Legs | EquipmentSlot::Hands | EquipmentSlot::Feet => {
                 equipment_type.is_armor()
             }
-            EquipmentSlot::Neck | EquipmentSlot::Finger => {
-                // Accessories - for now just clothing
-                matches!(equipment_type, EquipmentType::Clothing)
+            EquipmentSlot::Arms => {
+                // Arms can accept armor or bracelets
+                equipment_type.is_armor() || matches!(equipment_type, EquipmentType::Bracelet)
+            }
+            EquipmentSlot::Neck => {
+                // Neck accepts necklaces and amulets
+                matches!(equipment_type, EquipmentType::Necklace | EquipmentType::Amulet)
+            }
+            EquipmentSlot::Finger => {
+                // Finger accepts rings
+                matches!(equipment_type, EquipmentType::Ring)
             }
         }
     }

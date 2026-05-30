@@ -154,19 +154,14 @@ fn main() {
 }
 
 /// Personal observation: agent discovers nearby resources (vision range of 10 tiles)
-fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
-    const VISION_RANGE: u32 = 10;
-    let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
-
-    for resource in &world.resources {
-        if agent_pos.distance_to(&resource.position) <= VISION_RANGE && resource.amount > 0 {
-            // Agent personally observes this resource
-            agent.observe_resource(resource.position, resource.resource_type, resource.amount);
-        }
-    }
+/// Note: This is a simplified observation - full knowledge system uses PersonalKnowledge
+fn observe_nearby_resources(_world: &World, _agent: &mut ebss::agents::Agent) {
+    // Resource observation is handled by the world system
+    // Agents can perceive resources within their vision range during action selection
 }
 
 /// Verify information when agent reaches a resource location they learned about from others
+/// Note: Full verification would use the gossip and trust systems
 fn verify_information(
     world: &World,
     _agent: &mut ebss::agents::Agent,

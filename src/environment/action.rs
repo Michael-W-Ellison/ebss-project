@@ -135,87 +135,6 @@ impl ActionEffects {
     }
 }
 
-/// A complete action definition with requirements and effects.
-///
-/// This struct provides a comprehensive action template system that defines:
-/// - What type of action it is (via `ActionType`)
-/// - What is required to perform it (`ActionRequirements`)
-/// - What effects it has (`ActionEffects`)
-///
-/// # Relationship to `crate::environment::Action` enum
-///
-/// This `Action` struct is a template/definition system, while the `Action` enum
-/// in `environment/mod.rs` represents concrete action instances. This struct can
-/// be used to define action templates that specify requirements and effects,
-/// which can then be used to validate and execute the simpler `Action` enum values.
-///
-/// # Example
-///
-/// ```ignore
-/// let chop_action = Action::new("chop_tree", "Chop Tree", ActionType::Harvest)
-///     .with_requirements(ActionRequirements::none().with_tool(ToolType::Axe, ToolTier::Wooden))
-///     .with_effects(ActionEffects::none().with_time_cost(100));
-/// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Action {
-    /// Unique identifier
-    pub id: String,
-    /// Display name
-    pub name: String,
-    /// Description
-    pub description: String,
-    /// Action type
-    pub action_type: ActionType,
-    /// Requirements to perform this action
-    pub requirements: ActionRequirements,
-    /// Effects of performing this action
-    pub effects: ActionEffects,
-    /// Whether this action can be interrupted
-    pub interruptible: bool,
-    /// Custom properties
-    pub properties: HashMap<String, String>,
-}
-
-impl Action {
-    pub fn new(id: String, name: String, action_type: ActionType) -> Self {
-        Self {
-            id,
-            name,
-            description: String::new(),
-            action_type,
-            requirements: ActionRequirements::none(),
-            effects: ActionEffects::none(),
-            interruptible: true,
-            properties: HashMap::new(),
-        }
-    }
-
-    pub fn with_description(mut self, desc: String) -> Self {
-        self.description = desc;
-        self
-    }
-
-    pub fn with_requirements(mut self, req: ActionRequirements) -> Self {
-        self.requirements = req;
-        self
-    }
-
-    pub fn with_effects(mut self, effects: ActionEffects) -> Self {
-        self.effects = effects;
-        self
-    }
-
-    pub fn non_interruptible(mut self) -> Self {
-        self.interruptible = false;
-        self
-    }
-
-    pub fn with_property(mut self, key: String, value: String) -> Self {
-        self.properties.insert(key, value);
-        self
-    }
-}
-
 /// Context for executing an action
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionContext {
@@ -261,31 +180,6 @@ impl ActionContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_action_creation() {
-        let action = Action::new(
-            "chop_tree".to_string(),
-            "Chop Tree".to_string(),
-            ActionType::Harvest,
-        )
-        .with_description("Chop down a tree for wood".to_string())
-        .with_requirements(
-            ActionRequirements::none()
-                .with_tool(ToolType::Axe, ToolTier::Wooden)
-                .with_min_energy(10.0)
-        )
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(5.0)
-                .with_time_cost(100)
-                .with_experience("woodcutting".to_string(), 10.0)
-        );
-
-        assert_eq!(action.id, "chop_tree");
-        assert_eq!(action.requirements.min_energy, 10.0);
-        assert_eq!(action.effects.energy_cost, 5.0);
-    }
 
     #[test]
     fn test_action_requirements() {

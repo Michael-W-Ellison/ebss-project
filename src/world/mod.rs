@@ -72,7 +72,7 @@ pub mod resource_spawning;
 pub mod nutrition;
 
 // Re-exports
-pub use terrain::{Terrain, TerrainType, Tile};
+pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use resources::{Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
 pub use inventory::{Inventory, Item, ItemType};
@@ -438,10 +438,10 @@ impl World {
     }
 
     fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
-        use rand::Rng;
+        use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
 
-        // Try up to 100 times to find matching terrain
+        // First, try random sampling (efficient for common terrain types)
         for _ in 0..100 {
             let x = rng.gen_range(0..self.grid.width) as i32;
             let y = rng.gen_range(0..self.grid.height) as i32;
@@ -457,11 +457,46 @@ impl World {
             }
         }
 
-        // Fallback: return random position
-        Position::new(
-            rng.gen_range(0..self.grid.width) as i32,
-            rng.gen_range(0..self.grid.height) as i32,
-        )
+        // Fallback: collect ALL valid positions and randomly select
+        // This guarantees we find a valid position if one exists
+        let valid_positions: Vec<Position> = (0..self.grid.width)
+            .flat_map(|x| (0..self.grid.height).map(move |y| Position::new(x as i32, y as i32)))
+            .filter(|pos| {
+                if let Some(tile) = self.grid.get_tile(pos) {
+                    tile.terrain.terrain_type == terrain_type && !self.is_position_occupied(pos)
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        if let Some(pos) = valid_positions.choose(&mut rng) {
+            return *pos;
+        }
+
+        // Last resort: if no valid terrain exists, find ANY unoccupied position
+        // of the requested type, allowing overlap with resources
+        let any_matching: Vec<Position> = (0..self.grid.width)
+            .flat_map(|x| (0..self.grid.height).map(move |y| Position::new(x as i32, y as i32)))
+            .filter(|pos| {
+                if let Some(tile) = self.grid.get_tile(pos) {
+                    tile.terrain.terrain_type == terrain_type
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        if let Some(pos) = any_matching.choose(&mut rng) {
+            return *pos;
+        }
+
+        // Absolute last resort: return center position (should never happen in a valid world)
+        log::warn!(
+            "Could not find any {:?} terrain in world, placing resource at center",
+            terrain_type
+        );
+        Position::new(self.grid.width as i32 / 2, self.grid.height as i32 / 2)
     }
 
     pub fn is_position_occupied(&self, pos: &Position) -> bool {
@@ -1170,8 +1205,9 @@ impl World {
         }
 
         // Update crafting jobs (progress crafting)
-        let _completed_crafts = self.crafting_manager.tick();
-        // Note: Completed items should be added to crafter inventories by caller
+        // Completed crafts are tracked but not auto-distributed - agents poll for their completed jobs
+        // via World::get_completed_crafts_for_agent() to add items to their inventories
+        self.crafting_manager.tick();
 
         // Remove depleted resources
         self.remove_depleted_resources();
@@ -1415,6 +1451,87 @@ impl World {
             }
         }
     }
+
+    // ===== Building Production and Maintenance =====
+
+    /// Collect all pending production from buildings and return as a map of position -> resources
+    /// This allows agents to pick up resources from production buildings
+    pub fn collect_all_building_production(&mut self) -> HashMap<Position, Vec<resources::Resource>> {
+        let mut production_by_position = HashMap::new();
+
+        for building in &mut self.buildings {
+            if !building.is_completed() {
+                continue;
+            }
+
+            let resources = building.collect_production();
+            if !resources.is_empty() {
+                production_by_position.insert(building.position, resources);
+            }
+        }
+
+        production_by_position
+    }
+
+    /// Collect production from a specific building at a position
+    /// Returns the resources collected, or empty vec if no building or no production
+    pub fn collect_building_production_at(&mut self, position: Position) -> Vec<resources::Resource> {
+        for building in &mut self.buildings {
+            if building.position == position && building.is_completed() {
+                return building.collect_production();
+            }
+        }
+        Vec::new()
+    }
+
+    /// Get list of buildings that need maintenance (condition below 50%)
+    /// Returns tuples of (position, building_type, condition)
+    pub fn get_buildings_needing_maintenance(&self) -> Vec<(Position, BuildingType, f32)> {
+        self.buildings
+            .iter()
+            .filter(|b| b.needs_maintenance())
+            .map(|b| (b.position, b.building_type, b.condition))
+            .collect()
+    }
+
+    /// Get list of buildings in critical condition (below 25%)
+    /// Returns tuples of (position, building_type, condition)
+    pub fn get_critical_buildings(&self) -> Vec<(Position, BuildingType, f32)> {
+        self.buildings
+            .iter()
+            .filter(|b| b.is_critical_condition())
+            .map(|b| (b.position, b.building_type, b.condition))
+            .collect()
+    }
+
+    /// Perform maintenance on a building at a specific position
+    /// Returns true if maintenance was performed
+    pub fn maintain_building_at(&mut self, position: Position, repair_amount: f32) -> bool {
+        for building in &mut self.buildings {
+            if building.position == position {
+                building.maintain(repair_amount);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Get pending production info for display (without collecting)
+    /// Returns map of position -> (building_type, resource_count)
+    pub fn get_pending_production_info(&self) -> HashMap<Position, (BuildingType, usize)> {
+        let mut info = HashMap::new();
+
+        for building in &self.buildings {
+            if building.is_completed() && !building.pending_production.is_empty() {
+                info.insert(
+                    building.position,
+                    (building.building_type, building.pending_production.len())
+                );
+            }
+        }
+
+        info
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1437,6 +1554,7 @@ pub struct WorldStats {
     pub stone_stored: u32,
     pub iron_stored: u32,
     pub food_stored: u32,
+    // Agricultural resources
     pub grain_stored: u32,
     // Agricultural resources
     pub flax_available: u32,

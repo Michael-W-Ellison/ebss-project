@@ -153,10 +153,11 @@ fn test_building_placement_prefers_owned_territory() {
 
     // Try to place a building - should prefer owned territory
     let agent_pos = (45, 45, 0);
-    let optimal_pos = planner.find_optimal_location_for_agent(
+    let optimal_pos = planner.find_optimal_location_with_territory(
         BuildingType::Workshop,
         agent_pos,
         crate::world::spatial_planning::PlacementStrategy::NearResources,
+        agent_id,
     );
 
     assert!(optimal_pos.is_some(), "Should find a location");
@@ -165,9 +166,8 @@ fn test_building_placement_prefers_owned_territory() {
     let pos = optimal_pos.unwrap();
     let owner = world.territory_manager.get_owner_at(pos);
 
-    // Note: This might be None if no territory bonus is implemented yet
-    // Once integrated, uncomment:
-    // assert_eq!(owner, Some(agent_id), "Should prefer building in owned territory");
+    // Territory bonus is now integrated - building placement should prefer owned territory
+    assert_eq!(owner, Some(agent_id), "Should prefer building in owned territory");
 }
 
 #[test]

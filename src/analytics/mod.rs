@@ -19,6 +19,12 @@ pub mod emergence;
 pub mod export;
 pub mod performance;
 
+// New observation interface modules
+pub mod events;
+pub mod replay;
+pub mod storage;
+pub mod web_api;
+
 pub use metrics::{SimulationMetrics, TickSnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
 pub use emergence::{
     EmergenceDetector, EmergentPattern, PatternType,
@@ -27,6 +33,12 @@ pub use emergence::{
 };
 pub use export::{DataExporter, ExportFormat};
 pub use performance::{PerformanceMonitor, PerformanceSnapshot};
+
+// Export new modules
+pub use events::{EventBus, EventData, EventType, EventFilter, EventEmitter, SubscriptionId, EventValue};
+pub use replay::{SessionRecorder, SessionPlayer, StateSnapshot, AgentSnapshot, WorldSnapshot, RecordingConfig};
+pub use storage::{StorageManager, StorageConfig, TimeSeriesStore, DocumentStore, DataPoint};
+pub use web_api::{ApiServer, ApiConfig, SimulationDataProvider, SimulationStatus, PopulationSummary, AgentSummary, AgentDetail};
 
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
@@ -287,8 +299,13 @@ impl Simulation {
         // Note: agents have already been updated by population.tick() above
         // This loop handles behavior tree execution and action processing
 
-        // Collect agent IDs to avoid borrowing issues
+        // Collect agent IDs and positions to avoid borrowing issues
+        // This also allows us to resolve nil UUIDs in social actions
         let agent_ids: Vec<_> = self.population.agents.iter().map(|a| a.id).collect();
+        let agent_positions: Vec<(uuid::Uuid, (i32, i32, i32))> = self.population.agents
+            .iter()
+            .map(|a| (a.id, a.state.position))
+            .collect();
 
         for agent_id in agent_ids {
             // Find the agent
@@ -429,10 +446,12 @@ impl Simulation {
                             item_id.contains("shield")
                         });
 
-                    // Check if agent owns a house (based on memory or state)
-                    // For now, we estimate based on whether agent has built structures
-                    let owns_house = agent.memory.knowledge.iter()
-                        .any(|k| k.description.contains("house") || k.description.contains("shelter"));
+                    // Check if agent owns a house by checking actual building ownership
+                    let owns_house = self.world.buildings.iter().any(|b| {
+                        b.owner == Some(agent_id) &&
+                        b.is_completed() &&
+                        b.building_type.is_residential()
+                    });
 
                     let world_state = GoalWorldState {
                         storehouse_food,
@@ -512,6 +531,14 @@ impl Simulation {
                     }
                 };
 
+                // Resolve nil UUIDs in social actions to actual nearby agents
+                let action = Self::resolve_action_target(
+                    action,
+                    agent_id,
+                    agent_position,
+                    &agent_positions,
+                );
+
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
 
@@ -543,6 +570,11 @@ impl Simulation {
                 // Apply feedback to agent (drive satisfaction)
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
+
+                // Apply trait-based happiness rewards for successful actions
+                if action_result.success {
+                    agent.apply_trait_action_rewards(&action);
+                }
 
                 // Update plan execution state if this was a plan action
                 if is_plan_action {
@@ -691,6 +723,23 @@ impl Simulation {
         // Process environmental damage (exposure, falling, disease)
         self.process_environmental_damage();
 
+        // Process building production collection (every 50 ticks)
+        // Agents near production buildings automatically collect resources
+        if self.current_tick % 50 == 0 {
+            self.process_building_production_collection();
+        }
+
+        // Process building maintenance (every 100 ticks)
+        // Generate maintenance tasks for buildings in poor condition
+        if self.current_tick % 100 == 0 {
+            self.process_building_maintenance();
+        }
+
+        // Process information verification and lie detection (every 100 ticks)
+        // Agents verify information they've received against their knowledge
+        if self.current_tick % 100 == 0 {
+            self.process_information_verification();
+        }
         // Process pregnancies and births
         self.process_pregnancies_and_births();
 
@@ -821,6 +870,58 @@ impl Simulation {
         }
     }
 
+    /// Find the nearest agent to use as a social interaction target
+    /// Returns None if no suitable target is found
+    fn find_nearest_social_target(
+        agent_id: uuid::Uuid,
+        position: (i32, i32, i32),
+        agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Option<uuid::Uuid> {
+        agents
+            .iter()
+            .filter(|(id, _)| *id != agent_id) // Exclude self
+            .min_by_key(|(_, pos)| {
+                let dx = (pos.0 - position.0).abs();
+                let dy = (pos.1 - position.1).abs();
+                dx + dy // Manhattan distance
+            })
+            .map(|(id, _)| *id)
+    }
+
+    /// Resolve a nil UUID in an action to an actual nearby agent
+    fn resolve_action_target(
+        action: Action,
+        agent_id: uuid::Uuid,
+        position: (i32, i32, i32),
+        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Action {
+        match action {
+            Action::Socialize { target_agent_id } if target_agent_id.is_nil() => {
+                if let Some(target) = Self::find_nearest_social_target(agent_id, position, nearby_agents) {
+                    Action::Socialize { target_agent_id: target }
+                } else {
+                    // No nearby agents, fall back to waiting
+                    Action::Wait
+                }
+            }
+            Action::ShareInformation { target_agent_id } if target_agent_id.is_nil() => {
+                if let Some(target) = Self::find_nearest_social_target(agent_id, position, nearby_agents) {
+                    Action::ShareInformation { target_agent_id: target }
+                } else {
+                    Action::Wait
+                }
+            }
+            Action::Mate { target_agent_id } if target_agent_id.is_nil() => {
+                if let Some(target) = Self::find_nearest_social_target(agent_id, position, nearby_agents) {
+                    Action::Mate { target_agent_id: target }
+                } else {
+                    Action::Wait
+                }
+            }
+            other => other, // Return unchanged
+        }
+    }
+
     /// Generate an action based on drive type and position
     fn generate_action_for_drive(drive_type: DriveType, position: (i32, i32, i32)) -> Action {
         use rand::Rng;
@@ -941,10 +1042,33 @@ impl Simulation {
                 ExternalGoal::GatherResource(resource_name, _amount) => {
                     Some(Action::Gather { resource_type: resource_name.clone() })
                 },
-                ExternalGoal::LearnSkill(_skill_name) => {
-                    // Learning happens through practice - choose relevant action
-                    // For now, map to a generic action
-                    None
+                ExternalGoal::LearnSkill(skill_name) => {
+                    // Learning happens through practice - map skill to relevant action
+                    let skill_lower = skill_name.to_lowercase();
+                    if skill_lower.contains("mining") {
+                        Some(Action::Gather { resource_type: "stone".to_string() })
+                    } else if skill_lower.contains("woodcutting") || skill_lower.contains("carpentry") {
+                        Some(Action::Gather { resource_type: "wood".to_string() })
+                    } else if skill_lower.contains("crafting") || skill_lower.contains("metalworking") {
+                        Some(Action::Craft { item_type: "tool".to_string() })
+                    } else if skill_lower.contains("construction") || skill_lower.contains("masonry") {
+                        Some(Action::Build { structure_type: "structure".to_string(), position })
+                    } else if skill_lower.contains("farming") || skill_lower.contains("herbalism") {
+                        Some(Action::Gather { resource_type: "food".to_string() })
+                    } else if skill_lower.contains("cooking") || skill_lower.contains("smelting") {
+                        Some(Action::Craft { item_type: "processed".to_string() })
+                    } else if skill_lower.contains("hunting") || skill_lower.contains("combat") || skill_lower.contains("archery") {
+                        Some(Action::Hunt { animal_id: uuid::Uuid::nil(), weapon: None })
+                    } else if skill_lower.contains("fishing") {
+                        Some(Action::Gather { resource_type: "fish".to_string() })
+                    } else if skill_lower.contains("social") {
+                        Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
+                    } else if skill_lower.contains("navigation") {
+                        Some(Action::Explore { direction: (1, 0, 0) })
+                    } else {
+                        // Default: generic crafting to practice skills
+                        Some(Action::Craft { item_type: "practice".to_string() })
+                    }
                 },
                 ExternalGoal::FormRelationship(_relationship_type) => {
                     Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
@@ -3283,25 +3407,32 @@ impl Simulation {
     /// Process environmental damage for all agents
     pub fn process_environmental_damage(&mut self) {
         use crate::agents::body::{BodyPartType, InjuryType, CripplingType};
+        use crate::world::{Position, TerrainType};
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         for agent in &mut self.population.agents {
-            // 1. EXPOSURE DAMAGE - Cold/Heat based on environment
-            // Check if agent has adequate protection from equipment
+            let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+
+            // Get terrain at agent position
+            let terrain_type = self.world.grid.get_tile(&agent_pos)
+                .map(|tile| tile.terrain.terrain_type)
+                .unwrap_or(TerrainType::Plains);
+
+            // Get actual temperature from climate system (returns f32 in Celsius)
+            let temp_celsius = self.world.climate.get_temperature(agent_pos, terrain_type);
+
+            // 1. EXPOSURE DAMAGE - Cold/Heat based on actual environment temperature
             let cold_insulation = agent.body.total_cold_insulation();
             let heat_resistance = agent.body.total_heat_resistance();
 
-            // Simplified environmental model - can be enhanced with actual world temperature
-            // Assume baseline comfortable temperature, extreme cold/heat causes damage
-            // In a full implementation, this would check world.get_temperature_at(position)
+            // Cold exposure (temperature below 5°C with inadequate insulation)
+            if temp_celsius < 5.0 {
+                let cold_severity = ((5.0_f32 - temp_celsius) / 30.0).min(1.0); // Max severity at -25°C
+                let effective_cold = cold_severity * (1.0 - cold_insulation.min(1.0));
 
-            // Cold exposure (lack of insulation)
-            if cold_insulation < 1.0 {
-                // Missing adequate cold protection
-                let exposure_severity = 1.0 - cold_insulation;
-                if rng.gen_bool(exposure_severity as f64 * 0.01) { // 1% chance per severity point
-                    let cold_damage = rng.gen_range(1.0..5.0);
+                if effective_cold > 0.1 && rng.gen_bool((effective_cold * 0.02) as f64) {
+                    let cold_damage = rng.gen_range(1.0..5.0) * effective_cold;
                     // Cold affects extremities most
                     let affected_parts = [
                         BodyPartType::LeftArm,
@@ -3313,51 +3444,58 @@ impl Simulation {
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
                         body_part.apply_injury(InjuryType::Minor, cold_damage, self.current_tick as u64);
-                        debug!("Agent {} suffered cold exposure: {:.1} damage to {:?}",
-                            agent.id, cold_damage, part);
+                        debug!("Agent {} suffered cold exposure at {:.1}°C: {:.1} damage to {:?}",
+                            agent.id, temp_celsius, cold_damage, part);
                     }
                 }
             }
 
-            // Heat exposure (lack of heat resistance) - less common, more severe
-            if heat_resistance < 0.5 {
-                let exposure_severity = 0.5 - heat_resistance;
-                if rng.gen_bool(exposure_severity as f64 * 0.005) { // 0.5% chance per severity
-                    let heat_damage = rng.gen_range(2.0..8.0);
+            // Heat exposure (temperature above 35°C with inadequate heat resistance)
+            if temp_celsius > 35.0 {
+                let heat_severity = ((temp_celsius - 35.0) / 20.0).min(1.0); // Max severity at 55°C
+                let effective_heat = heat_severity * (1.0 - heat_resistance.min(1.0));
+
+                if effective_heat > 0.1 && rng.gen_bool((effective_heat * 0.01) as f64) {
+                    let heat_damage = rng.gen_range(2.0..8.0) * effective_heat;
                     // Heat affects torso and head
                     let affected_parts = [BodyPartType::Head, BodyPartType::Torso];
                     let part = affected_parts[rng.gen_range(0..affected_parts.len())];
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
                         body_part.apply_injury(InjuryType::Minor, heat_damage, self.current_tick as u64);
-                        debug!("Agent {} suffered heat exposure: {:.1} damage to {:?}",
-                            agent.id, heat_damage, part);
+                        debug!("Agent {} suffered heat exposure at {:.1}°C: {:.1} damage to {:?}",
+                            agent.id, temp_celsius, heat_damage, part);
                     }
                 }
             }
 
-            // 2. FALLING DAMAGE - Based on height/terrain
-            // In a full implementation, this would check for actual falls
-            // For now, simulate random accidents
-            if rng.gen_bool(0.0001) { // 0.01% chance per tick (~14 falls per million ticks)
-                let fall_height = rng.gen_range(1..=5); // Units of height
+            // 2. FALLING DAMAGE - Based on terrain type and elevation
+            // Higher fall risk on mountains, hills, and near water (slippery)
+            let fall_risk = match terrain_type {
+                TerrainType::Mountain => 0.001,    // 0.1% - steep terrain
+                TerrainType::Hills => 0.0003,      // 0.03% - uneven ground
+                TerrainType::Riverbank => 0.0002,  // 0.02% - slippery banks
+                TerrainType::Wetland => 0.0002,    // 0.02% - unstable footing
+                TerrainType::Beach => 0.0001,      // 0.01% - uneven sand
+                TerrainType::Forest => 0.00005,    // 0.005% - roots and obstacles
+                _ => 0.00002,                      // 0.002% - flat terrain
+            };
+
+            if rng.gen_bool(fall_risk) {
+                // Fall severity based on terrain
+                let max_fall_height = match terrain_type {
+                    TerrainType::Mountain => 5,
+                    TerrainType::Hills => 3,
+                    _ => 2,
+                };
+                let fall_height = rng.gen_range(1..=max_fall_height);
                 let fall_damage = (fall_height as f32) * rng.gen_range(3.0..8.0);
 
                 // Falls primarily affect legs, with chance of head/torso on severe falls
                 let injured_part = if fall_height >= 4 && rng.gen_bool(0.3) {
-                    // High fall with head/torso injury
-                    if rng.gen_bool(0.5) {
-                        BodyPartType::Head
-                    } else {
-                        BodyPartType::Torso
-                    }
+                    if rng.gen_bool(0.5) { BodyPartType::Head } else { BodyPartType::Torso }
                 } else {
-                    // Normal fall - legs
-                    if rng.gen_bool(0.5) {
-                        BodyPartType::LeftLeg
-                    } else {
-                        BodyPartType::RightLeg
-                    }
+                    if rng.gen_bool(0.5) { BodyPartType::LeftLeg } else { BodyPartType::RightLeg }
                 };
 
                 let injury_severity = if fall_damage >= 25.0 {
@@ -3370,11 +3508,10 @@ impl Simulation {
 
                 if let Some(body_part) = agent.body.get_part_mut(injured_part) {
                     body_part.apply_injury(injury_severity, fall_damage, self.current_tick as u64);
-                    debug!("Agent {} suffered fall damage: {:.1} damage to {:?} ({:?})",
-                        agent.id, fall_damage, injured_part, injury_severity);
+                    debug!("Agent {} fell on {:?} terrain: {:.1} damage to {:?} ({:?})",
+                        agent.id, terrain_type, fall_damage, injured_part, injury_severity);
                 }
 
-                // Also reduce overall health
                 agent.state.health = (agent.state.health - fall_damage * 0.15).max(0.0);
             }
 
@@ -3410,6 +3547,168 @@ impl Simulation {
         }
     }
 
+    /// Process building production collection
+    /// Agents within range of production buildings automatically collect pending resources
+    fn process_building_production_collection(&mut self) {
+        use crate::world::Position;
+
+        const COLLECTION_RANGE: f32 = 5.0; // Agents must be within 5 units to collect
+
+        // Get all pending production
+        let pending_production = self.world.get_pending_production_info();
+
+        if pending_production.is_empty() {
+            return;
+        }
+
+        // For each agent, check if they're near a production building
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+
+            // Check each building with pending production
+            for (building_pos, (building_type, _resource_count)) in &pending_production {
+                let dx = (agent_pos.x - building_pos.x) as f32;
+                let dy = (agent_pos.y - building_pos.y) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if distance <= COLLECTION_RANGE {
+                    // Agent is close enough to collect - collect from this building
+                    let resources = self.world.collect_building_production_at(*building_pos);
+
+                    for resource in resources {
+                        // Add resource to agent's inventory
+                        let item_name = format!("{:?}", resource.resource_type).to_lowercase();
+                        agent.inventory.add_item(
+                            crate::agents::InventoryItem::new(item_name.clone(), resource.amount)
+                        );
+
+                        debug!(
+                            "Agent {} collected {} {} from {:?} at ({}, {})",
+                            agent.id, resource.amount, item_name, building_type,
+                            building_pos.x, building_pos.y
+                        );
+                    }
+
+                    // Only collect from one building per tick per agent
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Process building maintenance needs
+    /// Generates maintenance goals for agents near buildings that need repair
+    fn process_building_maintenance(&mut self) {
+        use crate::world::Position;
+        use crate::core::goals::{Goal, ExternalGoal};
+
+        const MAINTENANCE_RANGE: f32 = 20.0; // Agents within 20 units get maintenance goals
+
+        // Get buildings needing maintenance
+        let maintenance_needed = self.world.get_buildings_needing_maintenance();
+        let critical_buildings = self.world.get_critical_buildings();
+
+        if maintenance_needed.is_empty() {
+            return;
+        }
+
+        // For critical buildings, assign maintenance to nearby agents
+        for (building_pos, building_type, condition) in &critical_buildings {
+            // Find the closest agent to this building
+            let mut closest_agent_idx: Option<usize> = None;
+            let mut closest_distance = f32::MAX;
+
+            for (idx, agent) in self.population.agents.iter().enumerate() {
+                if !agent.state.is_alive {
+                    continue;
+                }
+
+                let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+                let dx = (agent_pos.x - building_pos.x) as f32;
+                let dy = (agent_pos.y - building_pos.y) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if distance < closest_distance && distance <= MAINTENANCE_RANGE {
+                    closest_distance = distance;
+                    closest_agent_idx = Some(idx);
+                }
+            }
+
+            // Assign maintenance goal to closest agent
+            if let Some(idx) = closest_agent_idx {
+                let agent = &mut self.population.agents[idx];
+                let maintenance_job = format!("maintain_{:?}", building_type);
+
+                // Check if agent already has a maintenance goal for this building
+                let has_maintenance_goal = agent.goals.goals.iter().any(|g| {
+                    if let Some(ExternalGoal::CompleteJob(ref job)) = g.external {
+                        job.contains("maintain")
+                    } else {
+                        false
+                    }
+                });
+
+                if !has_maintenance_goal {
+                    let priority = if *condition < 0.25 { 0.9 } else { 0.6 };
+                    let goal = Goal::new_external(
+                        ExternalGoal::CompleteJob(maintenance_job),
+                        priority,
+                        self.current_tick,
+                    );
+                    agent.goals.add_goal(goal);
+
+                    debug!(
+                        "Agent {} assigned maintenance goal for {:?} at ({}, {}) - condition: {:.0}%",
+                        agent.id, building_type, building_pos.x, building_pos.y, condition * 100.0
+                    );
+                }
+            }
+        }
+
+        // For non-critical but degraded buildings, inform nearby agents (lower priority)
+        for (building_pos, building_type, condition) in &maintenance_needed {
+            if critical_buildings.iter().any(|(p, _, _)| p == building_pos) {
+                continue; // Already handled as critical
+            }
+
+            // Add to exploration knowledge of nearby agents so they're aware
+            for agent in &mut self.population.agents {
+                if !agent.state.is_alive {
+                    continue;
+                }
+
+                let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+                let dx = (agent_pos.x - building_pos.x) as f32;
+                let dy = (agent_pos.y - building_pos.y) as f32;
+                let distance = (dx * dx + dy * dy).sqrt();
+
+                if distance <= MAINTENANCE_RANGE {
+                    // Agent is aware of this building's condition
+                    // Could be used to generate lower-priority maintenance tasks
+                    // For now, just log it
+                    debug!(
+                        "Agent {} aware of degraded {:?} at ({}, {}) - condition: {:.0}%",
+                        agent.id, building_type, building_pos.x, building_pos.y, condition * 100.0
+                    );
+                }
+            }
+        }
+    }
+
+    /// Process information verification and lie detection
+    /// Agents periodically verify information they've received against their knowledge
+    fn process_information_verification(&mut self) {
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Call the agent's lie detection processing
+            agent.process_information_verification(self.current_tick);
     /// Process pregnancies and handle births
     fn process_pregnancies_and_births(&mut self) {
         use crate::agents::reproduction::give_birth;

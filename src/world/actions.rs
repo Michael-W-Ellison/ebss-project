@@ -62,6 +62,33 @@ pub enum Action {
     /// Move towards another agent to socialize
     SeekSocialInteraction {
         target_agent_id: Uuid,
+        target_position: Position,
+    },
+
+    /// Trade items with another agent via marketplace
+    Trade {
+        /// The offer being accepted (if buying) or created (if selling)
+        offer_id: Option<Uuid>,
+        /// Items being offered for sale (if creating offer)
+        offering: Vec<(ItemType, u32)>,
+        /// Items being requested in exchange (if creating offer)
+        requesting: Vec<(ItemType, u32)>,
+        /// Price in currency units
+        price: u32,
+        /// Whether this is accepting an existing offer (true) or creating new one (false)
+        is_accepting: bool,
+        /// Target agent for direct trades (bypasses marketplace)
+        target_agent_id: Option<Uuid>,
+    },
+
+    /// Accept help from another agent (the helper performs this action)
+    PerformHelp {
+        /// The agent being helped
+        target_agent_id: Uuid,
+        /// Type of help being provided
+        help_type: crate::agents::social_interactions::HelpType,
+        /// Current task progress being assisted (0.0-1.0)
+        task_progress: f32,
     },
 }
 
@@ -69,7 +96,10 @@ pub enum Action {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActionResult {
     Success { message: String },
+    /// Action produced items that should be added to agent inventory
     SuccessWithItems { message: String, item_type: ItemType, quantity: u32 },
+    /// Action consumed items from agent inventory (caller should verify and remove)
+    SuccessConsumedItems { message: String, item_type: ItemType, quantity: u32 },
     Failure { reason: String },
     Partial { completed: f32, message: String },
     SocialSuccess {
@@ -78,21 +108,73 @@ pub enum ActionResult {
         trust_change: i8,
         social_satisfaction: f32,
     },
+    /// Trade completed successfully
+    TradeSuccess {
+        message: String,
+        /// Items received by the agent
+        items_received: Vec<(ItemType, u32)>,
+        /// Items given by the agent
+        items_given: Vec<(ItemType, u32)>,
+        /// Currency exchanged (positive = received, negative = paid)
+        currency_change: i32,
+        /// ID of the completed trade offer
+        offer_id: Uuid,
+    },
+    /// Trade offer posted to marketplace
+    TradeOfferPosted {
+        message: String,
+        offer_id: Uuid,
+    },
+    /// Help was performed successfully
+    HelpSuccess {
+        message: String,
+        /// How much the help contributed to task completion (0.0-1.0)
+        contribution: f32,
+        /// Relationship improvement with helped agent
+        relationship_change: i8,
+        /// Experience gained in the skill used
+        experience_gained: f32,
+    },
 }
 
 impl ActionResult {
     pub fn is_success(&self) -> bool {
-        matches!(self, ActionResult::Success { .. } | ActionResult::SuccessWithItems { .. } | ActionResult::SocialSuccess { .. })
+        matches!(
+            self,
+            ActionResult::Success { .. }
+                | ActionResult::SuccessWithItems { .. }
+                | ActionResult::SuccessConsumedItems { .. }
+                | ActionResult::SocialSuccess { .. }
+                | ActionResult::TradeSuccess { .. }
+                | ActionResult::TradeOfferPosted { .. }
+                | ActionResult::HelpSuccess { .. }
+        )
     }
 
-    /// Extract harvested items from the result, if any
-    pub fn take_items(&self) -> Option<(ItemType, u32)> {
+    /// Extract items to add to agent inventory from the result, if any
+    pub fn items_gained(&self) -> Option<(ItemType, u32)> {
         match self {
             ActionResult::SuccessWithItems { item_type, quantity, .. } => {
                 Some((*item_type, *quantity))
             }
             _ => None,
         }
+    }
+
+    /// Extract items that should be removed from agent inventory, if any
+    /// Caller should verify agent has these items before executing action
+    pub fn items_consumed(&self) -> Option<(ItemType, u32)> {
+        match self {
+            ActionResult::SuccessConsumedItems { item_type, quantity, .. } => {
+                Some((*item_type, *quantity))
+            }
+            _ => None,
+        }
+    }
+
+    /// Legacy alias for items_gained
+    pub fn take_items(&self) -> Option<(ItemType, u32)> {
+        self.items_gained()
     }
 
     /// Extract social satisfaction from the result, if any
@@ -159,8 +241,35 @@ impl World {
                 self.execute_social_interaction(agent_id, *target_agent_id, interaction_type)
             }
 
-            Action::SeekSocialInteraction { target_agent_id } => {
-                self.execute_seek_social(*target_agent_id, agent_position, occupied_positions)
+            Action::SeekSocialInteraction { target_agent_id, target_position } => {
+                self.execute_seek_social(*target_agent_id, agent_position, target_position, occupied_positions)
+            }
+
+            Action::Trade {
+                offer_id,
+                offering,
+                requesting,
+                price,
+                is_accepting,
+                target_agent_id,
+            } => {
+                self.execute_trade(
+                    agent_id,
+                    *offer_id,
+                    offering.clone(),
+                    requesting.clone(),
+                    *price,
+                    *is_accepting,
+                    *target_agent_id,
+                )
+            }
+
+            Action::PerformHelp {
+                target_agent_id,
+                help_type,
+                task_progress,
+            } => {
+                self.execute_perform_help(agent_id, *target_agent_id, *help_type, *task_progress)
             }
         }
     }
@@ -341,43 +450,6 @@ impl World {
         }
     }
 
-    fn execute_craft_item(
-        &mut self,
-        agent_id: Uuid,
-        item_type: ItemType,
-        quantity: u32,
-    ) -> ActionResult {
-        // Map ItemType to recipe ID
-        let recipe_id = match item_type {
-            ItemType::WoodenAxe => "stone_axe",
-            ItemType::StoneAxe => "stone_axe",
-            ItemType::IronAxe => "iron_axe",
-            ItemType::WoodenSpear => "stone_spear",
-            ItemType::Leather => "leather",
-            ItemType::Cloth => "simple_tunic",
-            ItemType::Furniture => "wooden_chest",
-            _ => {
-                return ActionResult::Failure {
-                    reason: format!("No recipe found for {:?}", item_type),
-                };
-            }
-        };
-
-        // Start crafting job
-        if let Some(job_id) = self.crafting_manager.start_crafting(recipe_id.to_string(), agent_id) {
-            ActionResult::Success {
-                message: format!(
-                    "Started crafting {} x{} (job {})",
-                    recipe_id, quantity, job_id
-                ),
-            }
-        } else {
-            ActionResult::Failure {
-                reason: format!("Failed to start crafting {}", recipe_id),
-            }
-        }
-    }
-
     fn execute_social_interaction(
         &self,
         initiator_id: Uuid,
@@ -419,15 +491,89 @@ impl World {
     fn execute_seek_social(
         &self,
         target_agent_id: Uuid,
-        _agent_position: &Position,
-        _occupied_positions: &[Position],
+        agent_position: &mut Position,
+        target_position: &Position,
+        occupied_positions: &[Position],
     ) -> ActionResult {
-        // SeekSocialInteraction is a planning action - actual movement should use MoveTo
+        // Check if already adjacent to target (distance 1 or less)
+        if agent_position.distance_to(target_position) <= 1 {
+            return ActionResult::Success {
+                message: format!("Reached agent {} for social interaction", target_agent_id),
+            };
+        }
+
+        // Move one step towards target using simple pathfinding
+        let dx = (target_position.x - agent_position.x).signum();
+        let dy = (target_position.y - agent_position.y).signum();
+
+        // Try direct movement first
+        let direct_pos = Position::new(agent_position.x + dx, agent_position.y + dy);
+        let direct_blocked = occupied_positions.contains(&direct_pos)
+            || self.grid.get_tile(&direct_pos).map(|t| !t.terrain.is_walkable()).unwrap_or(true);
+
+        if !direct_blocked {
+            *agent_position = direct_pos;
+            let remaining_distance = agent_position.distance_to(target_position);
+            return ActionResult::Partial {
+                completed: 1.0 / (remaining_distance as f32 + 1.0),
+                message: format!(
+                    "Moving towards agent {} ({} steps remaining)",
+                    target_agent_id, remaining_distance
+                ),
+            };
+        }
+
+        // Try horizontal movement only
+        if dx != 0 {
+            let horiz_pos = Position::new(agent_position.x + dx, agent_position.y);
+            let horiz_blocked = occupied_positions.contains(&horiz_pos)
+                || self.grid.get_tile(&horiz_pos).map(|t| !t.terrain.is_walkable()).unwrap_or(true);
+            if !horiz_blocked {
+                *agent_position = horiz_pos;
+                let remaining_distance = agent_position.distance_to(target_position);
+                return ActionResult::Partial {
+                    completed: 1.0 / (remaining_distance as f32 + 1.0),
+                    message: format!(
+                        "Moving towards agent {} ({} steps remaining)",
+                        target_agent_id, remaining_distance
+                    ),
+                };
+            }
+        }
+
+        // Try vertical movement only
+        if dy != 0 {
+            let vert_pos = Position::new(agent_position.x, agent_position.y + dy);
+            let vert_blocked = occupied_positions.contains(&vert_pos)
+                || self.grid.get_tile(&vert_pos).map(|t| !t.terrain.is_walkable()).unwrap_or(true);
+            if !vert_blocked {
+                *agent_position = vert_pos;
+                let remaining_distance = agent_position.distance_to(target_position);
+                return ActionResult::Partial {
+                    completed: 1.0 / (remaining_distance as f32 + 1.0),
+                    message: format!(
+                        "Moving towards agent {} ({} steps remaining)",
+                        target_agent_id, remaining_distance
+                    ),
+                };
+            }
+        }
+
+        // Use full pathfinding if simple movement is blocked
+        if let Some(next_pos) = self.grid.find_path_with_agents(agent_position, target_position, occupied_positions) {
+            *agent_position = next_pos;
+            let remaining_distance = agent_position.distance_to(target_position);
+            return ActionResult::Partial {
+                completed: 1.0 / (remaining_distance as f32 + 1.0),
+                message: format!(
+                    "Pathfinding towards agent {} ({} steps remaining)",
+                    target_agent_id, remaining_distance
+                ),
+            };
+        }
+
         ActionResult::Failure {
-            reason: format!(
-                "SeekSocialInteraction with {} requires using MoveTo to approach target",
-                target_agent_id
-            ),
+            reason: format!("Cannot find path to agent {}", target_agent_id),
         }
     }
 
@@ -552,11 +698,13 @@ impl World {
     }
 
     fn execute_deposit(&mut self, _agent_id: Uuid, item_type: ItemType, amount: u32) -> ActionResult {
-        // In full implementation, would take from agent inventory
-        // For now, assume agent has items
+        // Try to add items to storehouse
+        // The caller should verify agent has these items and remove them after success
         if self.storehouse_inventory.add_item(item_type, amount) {
-            ActionResult::Success {
-                message: format!("Deposited {} {:?}", amount, item_type),
+            ActionResult::SuccessConsumedItems {
+                message: format!("Deposited {} {:?} to storehouse", amount, item_type),
+                item_type,
+                quantity: amount,
             }
         } else {
             ActionResult::Failure {
@@ -566,14 +714,20 @@ impl World {
     }
 
     fn execute_retrieve(&mut self, _agent_id: Uuid, item_type: ItemType, amount: u32) -> ActionResult {
-        // In full implementation, would add to agent inventory
+        // Remove items from storehouse and return them for agent to collect
         if self.storehouse_inventory.remove_item(&item_type, amount) {
-            ActionResult::Success {
-                message: format!("Retrieved {} {:?}", amount, item_type),
+            ActionResult::SuccessWithItems {
+                message: format!("Retrieved {} {:?} from storehouse", amount, item_type),
+                item_type,
+                quantity: amount,
             }
         } else {
+            let available = self.storehouse_inventory.count_item(&item_type);
             ActionResult::Failure {
-                reason: "Not enough items in storehouse".to_string(),
+                reason: format!(
+                    "Not enough {:?} in storehouse (requested {}, available {})",
+                    item_type, amount, available
+                ),
             }
         }
     }
@@ -673,6 +827,258 @@ impl World {
             ActionResult::Failure {
                 reason: "Building not found".to_string(),
             }
+        }
+    }
+
+    /// Execute a trade action - either post an offer or accept an existing one
+    fn execute_trade(
+        &mut self,
+        agent_id: Uuid,
+        offer_id: Option<Uuid>,
+        offering: Vec<(ItemType, u32)>,
+        requesting: Vec<(ItemType, u32)>,
+        price: u32,
+        is_accepting: bool,
+        target_agent_id: Option<Uuid>,
+    ) -> ActionResult {
+        use crate::world::economy::TradeOffer;
+
+        // Prevent self-trading
+        if let Some(target) = target_agent_id {
+            if target == agent_id {
+                return ActionResult::Failure {
+                    reason: "Cannot trade with yourself".to_string(),
+                };
+            }
+        }
+
+        if is_accepting {
+            // Accept an existing offer from the marketplace
+            let offer_id = match offer_id {
+                Some(id) => id,
+                None => {
+                    return ActionResult::Failure {
+                        reason: "No offer ID provided for acceptance".to_string(),
+                    };
+                }
+            };
+
+            // Find the offer
+            let offer = match self.marketplace.offers.iter().find(|o| o.id == offer_id) {
+                Some(o) => o.clone(),
+                None => {
+                    return ActionResult::Failure {
+                        reason: "Trade offer not found or expired".to_string(),
+                    };
+                }
+            };
+
+            // Cannot accept your own offer
+            if offer.seller_id == agent_id {
+                return ActionResult::Failure {
+                    reason: "Cannot accept your own trade offer".to_string(),
+                };
+            }
+
+            // Check if offer is expired
+            if offer.is_expired(self.tick) {
+                self.marketplace.remove_offer(offer_id);
+                return ActionResult::Failure {
+                    reason: "Trade offer has expired".to_string(),
+                };
+            }
+
+            // Verify buyer has the requested items (if any)
+            for (item_type, quantity) in &offer.requesting {
+                let available = self.storehouse_inventory.count_item(item_type);
+                if available < *quantity {
+                    return ActionResult::Failure {
+                        reason: format!(
+                            "Insufficient {:?}: need {}, have {}",
+                            item_type, quantity, available
+                        ),
+                    };
+                }
+            }
+
+            // Execute the trade:
+            // 1. Remove requested items from buyer's storehouse
+            for (item_type, quantity) in &offer.requesting {
+                self.storehouse_inventory.remove_item(item_type, *quantity);
+            }
+
+            // 2. Add offered items to buyer's storehouse
+            for (item_type, quantity) in &offer.offering {
+                self.storehouse_inventory.add_item(*item_type, *quantity);
+            }
+
+            // 3. Complete the trade in marketplace
+            let completed = self.marketplace.complete_trade(offer_id, agent_id, self.tick);
+
+            if completed.is_some() {
+                ActionResult::TradeSuccess {
+                    message: format!(
+                        "Trade completed: received {:?}, gave {:?}",
+                        offer.offering, offer.requesting
+                    ),
+                    items_received: offer.offering,
+                    items_given: offer.requesting,
+                    currency_change: -(offer.price as i32),
+                    offer_id,
+                }
+            } else {
+                ActionResult::Failure {
+                    reason: "Failed to complete trade".to_string(),
+                }
+            }
+        } else {
+            // Create a new trade offer
+            if offering.is_empty() {
+                return ActionResult::Failure {
+                    reason: "Must offer at least one item".to_string(),
+                };
+            }
+
+            // Verify seller has the offered items
+            for (item_type, quantity) in &offering {
+                let available = self.storehouse_inventory.count_item(item_type);
+                if available < *quantity {
+                    return ActionResult::Failure {
+                        reason: format!(
+                            "Cannot offer {:?}: have {} but trying to offer {}",
+                            item_type, available, quantity
+                        ),
+                    };
+                }
+            }
+
+            // Reserve the offered items (remove from storehouse)
+            for (item_type, quantity) in &offering {
+                self.storehouse_inventory.remove_item(item_type, *quantity);
+            }
+
+            // Create and post the offer
+            let offer = TradeOffer::new(
+                agent_id,
+                offering.clone(),
+                requesting.clone(),
+                price,
+                self.tick,
+                500, // Offer valid for 500 ticks
+            );
+            let new_offer_id = offer.id;
+            self.marketplace.post_offer(offer);
+
+            ActionResult::TradeOfferPosted {
+                message: format!(
+                    "Posted trade offer: selling {:?} for {:?} (price: {})",
+                    offering, requesting, price
+                ),
+                offer_id: new_offer_id,
+            }
+        }
+    }
+
+    /// Execute help action - actually performs the assistance
+    fn execute_perform_help(
+        &mut self,
+        helper_id: Uuid,
+        target_id: Uuid,
+        help_type: crate::agents::social_interactions::HelpType,
+        task_progress: f32,
+    ) -> ActionResult {
+        use crate::agents::social_interactions::HelpType;
+
+        // Prevent self-help
+        if helper_id == target_id {
+            return ActionResult::Failure {
+                reason: "Cannot help yourself".to_string(),
+            };
+        }
+
+        // Calculate contribution based on help type
+        let (contribution, _experience_type, base_xp) = match help_type {
+            HelpType::Gathering => {
+                // Help gather resources - contributes 30% extra to task
+                (0.3, "Harvesting", 5.0)
+            }
+            HelpType::Building => {
+                // Help with construction - contributes 25% extra
+                (0.25, "Construction", 8.0)
+            }
+            HelpType::Crafting => {
+                // Help with crafting - contributes 20% (skilled work)
+                (0.2, "Crafting", 10.0)
+            }
+            HelpType::Transport => {
+                // Help carry items - contributes 40% (physical labor)
+                (0.4, "Transport", 3.0)
+            }
+            HelpType::General => {
+                // General help - contributes 15%
+                (0.15, "General", 2.0)
+            }
+        };
+
+        // Scale contribution by how much work remains
+        let work_remaining = 1.0 - task_progress;
+        let effective_contribution = (contribution * work_remaining).min(work_remaining);
+
+        // Calculate relationship change (helping builds trust and relationship)
+        let relationship_change: i8 = match help_type {
+            HelpType::Building | HelpType::Crafting => 3, // Skilled help is valued
+            HelpType::Gathering | HelpType::Transport => 2,
+            HelpType::General => 1,
+        };
+
+        // Execute the help based on type
+        match help_type {
+            HelpType::Gathering => {
+                // Bonus resources from helping gather
+                // Find a nearby resource and harvest a bonus amount
+                if let Some(resource) = self.resources.first_mut() {
+                    let bonus = (5.0 * effective_contribution) as u32;
+                    let harvested = resource.harvest(bonus.max(1));
+                    if harvested > 0 {
+                        // Add bonus to storehouse
+                        let item_type = match resource.resource_type {
+                            crate::world::ResourceType::Wood => ItemType::Wood,
+                            crate::world::ResourceType::Stone => ItemType::Stone,
+                            crate::world::ResourceType::Food => ItemType::Food,
+                            _ => ItemType::Wood,
+                        };
+                        self.storehouse_inventory.add_item(item_type, harvested);
+                    }
+                }
+            }
+            HelpType::Building => {
+                // Bonus construction progress
+                if let Some(building) = self.buildings.iter_mut()
+                    .find(|b| !b.is_completed())
+                {
+                    let bonus_work = (10.0 * effective_contribution) as u32;
+                    building.add_construction_progress(bonus_work, 0);
+                }
+            }
+            HelpType::Transport => {
+                // Help move items - no specific world effect, just relationship bonus
+            }
+            HelpType::Crafting => {
+                // Bonus crafting progress tracked elsewhere
+            }
+            HelpType::General => {
+                // General assistance - mainly relationship benefit
+            }
+        }
+
+        ActionResult::HelpSuccess {
+            message: format!(
+                "Helped agent {} with {:?}: contributed {:.0}% to task",
+                target_id, help_type, effective_contribution * 100.0
+            ),
+            contribution: effective_contribution,
+            relationship_change,
+            experience_gained: base_xp * effective_contribution,
         }
     }
 }
@@ -807,7 +1213,7 @@ mod tests {
         let agent_id = Uuid::new_v4();
         let mut agent_pos = Position::new(10, 10);
 
-        // Add materials needed for stone axe (2 wood, 3 stone)
+        // Add required materials to storehouse for stone_axe recipe (2 wood, 3 stone)
         world.storehouse_inventory.add_item(ItemType::Wood, 10);
         world.storehouse_inventory.add_item(ItemType::Stone, 10);
 
@@ -881,17 +1287,279 @@ mod tests {
     }
 
     #[test]
-    fn test_seek_social_interaction_fails() {
+    fn test_seek_social_interaction_moves_towards_target() {
         let mut world = World::new(WorldConfig::default());
         let agent_id = Uuid::new_v4();
         let target_id = Uuid::new_v4();
         let mut agent_pos = Position::new(10, 10);
+        let target_pos = Position::new(15, 10);
 
         let occupied = vec![];
 
-        // SeekSocialInteraction should fail when executed directly
+        // SeekSocialInteraction should move agent towards target
         let action = Action::SeekSocialInteraction {
             target_agent_id: target_id,
+            target_position: target_pos,
+        };
+
+        let initial_distance = agent_pos.distance_to(&target_pos);
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
+
+        // Should return Partial (still moving) since we're not adjacent yet
+        match result {
+            ActionResult::Partial { .. } => {
+                // Agent should have moved closer
+                let new_distance = agent_pos.distance_to(&target_pos);
+                assert!(new_distance < initial_distance, "Agent should move closer to target");
+            }
+            ActionResult::Success { .. } => {
+                // If already adjacent, that's fine too
+                assert!(agent_pos.distance_to(&target_pos) <= 1);
+            }
+            _ => panic!("Expected Partial or Success, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_seek_social_interaction_success_when_adjacent() {
+        let mut world = World::new(WorldConfig::default());
+        let agent_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let target_pos = Position::new(11, 10); // Adjacent
+
+        let occupied = vec![];
+
+        let action = Action::SeekSocialInteraction {
+            target_agent_id: target_id,
+            target_position: target_pos,
+        };
+
+        let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
+
+        // Should succeed immediately since already adjacent
+        assert!(result.is_success());
+    }
+
+    #[test]
+    fn test_trade_post_offer() {
+        let mut world = World::new(WorldConfig::default());
+        let seller_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let occupied = vec![];
+
+        // Add items to storehouse for seller
+        world.storehouse_inventory.add_item(ItemType::Bread, 20);
+
+        let action = Action::Trade {
+            offer_id: None,
+            offering: vec![(ItemType::Bread, 10)],
+            requesting: vec![(ItemType::Wood, 20)],
+            price: 50,
+            is_accepting: false,
+            target_agent_id: None,
+        };
+
+        let result = world.execute_action(seller_id, &mut agent_pos, &action, &occupied);
+
+        match result {
+            ActionResult::TradeOfferPosted { offer_id, .. } => {
+                // Verify offer was posted
+                assert!(world.marketplace.offers.iter().any(|o| o.id == offer_id));
+                // Verify items were reserved (removed from storehouse)
+                assert_eq!(world.storehouse_inventory.count_item(&ItemType::Bread), 10);
+            }
+            _ => panic!("Expected TradeOfferPosted, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_trade_accept_offer() {
+        let mut world = World::new(WorldConfig::default());
+        let seller_id = Uuid::new_v4();
+        let buyer_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let occupied = vec![];
+
+        // Add items for seller
+        world.storehouse_inventory.add_item(ItemType::Bread, 20);
+
+        // Post an offer
+        let post_action = Action::Trade {
+            offer_id: None,
+            offering: vec![(ItemType::Bread, 10)],
+            requesting: vec![(ItemType::Wood, 20)],
+            price: 50,
+            is_accepting: false,
+            target_agent_id: None,
+        };
+
+        let post_result = world.execute_action(seller_id, &mut agent_pos, &post_action, &occupied);
+        let offer_id = match post_result {
+            ActionResult::TradeOfferPosted { offer_id, .. } => offer_id,
+            _ => panic!("Expected TradeOfferPosted"),
+        };
+
+        // Add items for buyer to pay
+        world.storehouse_inventory.add_item(ItemType::Wood, 30);
+
+        // Accept the offer
+        let accept_action = Action::Trade {
+            offer_id: Some(offer_id),
+            offering: vec![],
+            requesting: vec![],
+            price: 0,
+            is_accepting: true,
+            target_agent_id: None,
+        };
+
+        let result = world.execute_action(buyer_id, &mut agent_pos, &accept_action, &occupied);
+
+        match result {
+            ActionResult::TradeSuccess { items_received, items_given, .. } => {
+                assert_eq!(items_received, vec![(ItemType::Bread, 10)]);
+                assert_eq!(items_given, vec![(ItemType::Wood, 20)]);
+                // Verify trade completed
+                assert!(world.marketplace.offers.iter().all(|o| o.id != offer_id));
+                // Buyer now has bread from trade
+                assert!(world.storehouse_inventory.count_item(&ItemType::Bread) >= 10);
+            }
+            _ => panic!("Expected TradeSuccess, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_trade_cannot_accept_own_offer() {
+        let mut world = World::new(WorldConfig::default());
+        let seller_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let occupied = vec![];
+
+        world.storehouse_inventory.add_item(ItemType::Bread, 20);
+
+        // Post an offer
+        let post_action = Action::Trade {
+            offer_id: None,
+            offering: vec![(ItemType::Bread, 10)],
+            requesting: vec![],
+            price: 50,
+            is_accepting: false,
+            target_agent_id: None,
+        };
+
+        let post_result = world.execute_action(seller_id, &mut agent_pos, &post_action, &occupied);
+        let offer_id = match post_result {
+            ActionResult::TradeOfferPosted { offer_id, .. } => offer_id,
+            _ => panic!("Expected TradeOfferPosted"),
+        };
+
+        // Try to accept own offer
+        let accept_action = Action::Trade {
+            offer_id: Some(offer_id),
+            offering: vec![],
+            requesting: vec![],
+            price: 0,
+            is_accepting: true,
+            target_agent_id: None,
+        };
+
+        let result = world.execute_action(seller_id, &mut agent_pos, &accept_action, &occupied);
+        assert!(!result.is_success());
+    }
+
+    #[test]
+    fn test_trade_insufficient_items() {
+        let mut world = World::new(WorldConfig::default());
+        let seller_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let occupied = vec![];
+
+        // Don't add enough items
+        world.storehouse_inventory.add_item(ItemType::Bread, 5);
+
+        let action = Action::Trade {
+            offer_id: None,
+            offering: vec![(ItemType::Bread, 10)], // Trying to sell 10 but only have 5
+            requesting: vec![],
+            price: 50,
+            is_accepting: false,
+            target_agent_id: None,
+        };
+
+        let result = world.execute_action(seller_id, &mut agent_pos, &action, &occupied);
+        assert!(!result.is_success());
+    }
+
+    #[test]
+    fn test_perform_help_gathering() {
+        let mut world = World::new(WorldConfig::default());
+        let helper_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let occupied = vec![];
+
+        let action = Action::PerformHelp {
+            target_agent_id: target_id,
+            help_type: crate::agents::social_interactions::HelpType::Gathering,
+            task_progress: 0.5, // Task is 50% complete
+        };
+
+        let result = world.execute_action(helper_id, &mut agent_pos, &action, &occupied);
+
+        match result {
+            ActionResult::HelpSuccess { contribution, relationship_change, experience_gained, .. } => {
+                assert!(contribution > 0.0);
+                assert!(contribution <= 0.5); // Can't contribute more than remaining work
+                assert!(relationship_change > 0);
+                assert!(experience_gained > 0.0);
+            }
+            _ => panic!("Expected HelpSuccess, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_perform_help_building() {
+        let mut world = World::new(WorldConfig::default());
+        let helper_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let occupied = vec![];
+
+        // Start a building
+        let build_pos = Position::new(15, 15);
+        let build_action = Action::ConstructBuilding {
+            building_type: BuildingType::SmallHouse,
+            position: build_pos,
+        };
+        world.execute_action(helper_id, &mut agent_pos, &build_action, &occupied);
+
+        let action = Action::PerformHelp {
+            target_agent_id: target_id,
+            help_type: crate::agents::social_interactions::HelpType::Building,
+            task_progress: 0.3,
+        };
+
+        let result = world.execute_action(helper_id, &mut agent_pos, &action, &occupied);
+
+        match result {
+            ActionResult::HelpSuccess { relationship_change, .. } => {
+                assert_eq!(relationship_change, 3); // Building help gives +3 relationship
+            }
+            _ => panic!("Expected HelpSuccess, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_perform_help_cannot_help_self() {
+        let mut world = World::new(WorldConfig::default());
+        let agent_id = Uuid::new_v4();
+        let mut agent_pos = Position::new(10, 10);
+        let occupied = vec![];
+
+        let action = Action::PerformHelp {
+            target_agent_id: agent_id, // Same as helper
+            help_type: crate::agents::social_interactions::HelpType::General,
+            task_progress: 0.5,
         };
 
         let result = world.execute_action(agent_id, &mut agent_pos, &action, &occupied);
