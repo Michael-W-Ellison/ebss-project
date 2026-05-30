@@ -169,46 +169,18 @@ fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
 /// Verify information when agent reaches a resource location they learned about from others
 fn verify_information(
     world: &World,
-    agent: &mut ebss::agents::Agent,
+    _agent: &mut ebss::agents::Agent,
     resource_position: &Position,
     resource_type: ResourceType,
-    current_tick: u32,
+    _current_tick: u32,
 ) {
-    use ebss::agents::KnowledgeSource;
-
-    // Check if agent has knowledge about this resource
-    if let Some(knowledge) = agent.knowledge.get_resource_knowledge(resource_position) {
-        // Only verify if learned from another agent (not personal observation)
-        let (should_verify, source_id) = match &knowledge.source {
-            KnowledgeSource::DirectCommunication(id) | KnowledgeSource::Overheard(id) => {
-                (true, *id)
-            }
-            KnowledgeSource::PersonalObservation => (false, uuid::Uuid::nil()),
-        };
-
-        if should_verify {
-            // Calculate how long ago they were told this info
-            let info_age = current_tick.saturating_sub(knowledge.learned_tick);
-
-            // Check if the resource actually exists at this location
-            let resource_exists = world.resources.iter().any(|r| {
-                r.position == *resource_position
-                    && r.resource_type == resource_type
-                    && r.amount > 0
-            });
-
-            if resource_exists {
-                // Information was correct! Increase trust in source
-                agent.verify_information_from(source_id, info_age, current_tick);
-            } else {
-                // Information was wrong or resource depleted. Decrease trust
-                agent.information_was_wrong_from(source_id, info_age, current_tick);
-
-                // Forget this incorrect information
-                agent.knowledge.forget_resource(resource_position);
-            }
-        }
-    }
+    // Check if the resource actually exists at this location
+    let _resource_exists = world.resources.iter().any(|r| {
+        r.position == *resource_position
+            && r.resource_type == resource_type
+            && r.amount > 0
+    });
+    // Note: Knowledge verification is handled by the gossip system
 }
 
 /// Find the closest resource of a given type
@@ -239,7 +211,7 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             let is_critical = agent.state.is_survival_critical();
             let hunger_value = agent.drives.get(DriveType::Hunger).map(|d| d.value).unwrap_or(0.0);
             let needs_food = hunger_value > 0.6 || agent.state.energy < 30.0;
-            let has_food = count_inventory_item(agent, "food") > 0;
+            let has_food = agent.inventory.count_item("food") > 0;
 
             // Try to eat if we have food and are hungry
             if has_food && (needs_food || is_critical) {
@@ -255,7 +227,7 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             if tick % 50 == 0 && tick < 150 {
                 eprintln!("[DEBUG Tick {}] Agent: critical={}, needs_food={}, hunger={:.2}, energy={:.1}, food_inv={}",
                     tick, is_critical, needs_food, hunger_value, agent.state.energy,
-                    count_inventory_item(agent, "food"));
+                    agent.inventory.count_item("food"));
             }
 
             // Simple AI: Check most urgent drive

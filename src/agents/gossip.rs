@@ -70,6 +70,14 @@ pub enum InformationType {
         agent: Uuid,
         trait_name: String,
     },
+
+    // Opinion/reputation information
+    NegativeOpinion {
+        speaker: Uuid,
+        target: Uuid,
+        complaint: String,
+        intensity: u8, // 0 to 100, how strongly negative (percentage)
+    },
 }
 
 /// Piece of information with truth tracking
@@ -756,6 +764,215 @@ impl Default for KnowledgeBase {
     }
 }
 
+/// Result of attempting to spread negative opinion through gossip
+#[derive(Debug, Clone)]
+pub struct OpinionTransferResult {
+    /// Whether the negative opinion was transferred
+    pub transferred: bool,
+    /// Amount of relationship change toward the target (negative = dislike)
+    pub relationship_change: f32,
+    /// Reason for the outcome
+    pub reason: String,
+}
+
+/// Calculate the chance that negative gossip will transfer dislike to the listener
+///
+/// # Arguments
+/// * `speaker_traits` - Traits of the agent speaking badly about someone
+/// * `listener_traits` - Traits of the agent hearing the gossip
+/// * `trust_in_speaker` - How much the listener trusts the speaker (0.0 to 1.0)
+/// * `existing_opinion_of_target` - Listener's current bond with target (-1.0 to 1.0)
+/// * `gossip_intensity` - How strongly negative the gossip is (0.0 to 1.0)
+///
+/// Returns probability (0.0 to 1.0) that the listener will adopt negative feelings
+pub fn calculate_opinion_transfer_chance(
+    speaker_traits: &crate::core::traits::TraitSet,
+    listener_traits: &crate::core::traits::TraitSet,
+    trust_in_speaker: f32,
+    existing_opinion_of_target: f32,
+    gossip_intensity: f32,
+) -> f32 {
+    // Base chance starts at 20%
+    let mut chance: f32 = 0.2;
+
+    // Trust is the primary factor (0.0 to 0.4 bonus)
+    chance += trust_in_speaker * 0.4;
+
+    // === Speaker trait modifiers ===
+    // Charismatic speakers are more persuasive (+15%)
+    if speaker_traits.has(Trait::Charismatic) {
+        chance += 0.15;
+    }
+    // Manipulative speakers are very persuasive (+20%)
+    if speaker_traits.has(Trait::Manipulative) || speaker_traits.has(Trait::Manipulator) {
+        chance += 0.20;
+    }
+    // Gossip trait makes negative talk more compelling (+10%)
+    if speaker_traits.has(Trait::Gossip) {
+        chance += 0.10;
+    }
+    // Honest speakers are believed more (+10%)
+    if speaker_traits.has(Trait::Honest) {
+        chance += 0.10;
+    }
+    // Dishonest speakers are believed less (-15%)
+    if speaker_traits.has(Trait::Dishonest) {
+        chance -= 0.15;
+    }
+
+    // === Listener trait modifiers ===
+    // Trusting listeners are easily swayed (+25%)
+    if listener_traits.has(Trait::Trusting) {
+        chance += 0.25;
+    }
+    // Skeptics are hard to convince (-30%)
+    if listener_traits.has(Trait::Skeptic) {
+        chance -= 0.30;
+    }
+    // Paranoid listeners believe negative things more easily (+15%)
+    if listener_traits.has(Trait::Paranoid) {
+        chance += 0.15;
+    }
+    // Kind-hearted listeners resist believing bad things about others (-20%)
+    if listener_traits.has(Trait::KindHearted) {
+        chance -= 0.20;
+    }
+    // Gossip trait listeners love hearing drama (+15%)
+    if listener_traits.has(Trait::Gossip) {
+        chance += 0.15;
+    }
+    // Forgiving listeners don't hold grudges (-15%)
+    if listener_traits.has(Trait::Forgiving) {
+        chance -= 0.15;
+    }
+    // Intolerant listeners are quick to judge (+10%)
+    if listener_traits.has(Trait::Intolerant) {
+        chance += 0.10;
+    }
+
+    // === Existing relationship modifier ===
+    // If listener already dislikes the target, easier to reinforce (-0.2 to +0.2)
+    // If listener likes the target, harder to sway
+    chance -= existing_opinion_of_target * 0.2;
+
+    // === Intensity modifier ===
+    // Stronger complaints are more likely to stick
+    chance *= 0.5 + (gossip_intensity * 0.5);
+
+    chance.clamp(0.0, 0.9) // Cap at 90% - never guaranteed
+}
+
+/// Calculate how much the listener's opinion of the target changes
+///
+/// # Arguments
+/// * `base_transfer_amount` - Base amount of negativity to transfer
+/// * `listener_traits` - Traits of the listener
+/// * `gossip_intensity` - Intensity of the negative gossip
+///
+/// Returns the relationship change (negative value)
+pub fn calculate_opinion_change_amount(
+    base_transfer_amount: f32,
+    listener_traits: &crate::core::traits::TraitSet,
+    gossip_intensity: f32,
+) -> f32 {
+    let mut change = -base_transfer_amount * gossip_intensity;
+
+    // Trait modifiers
+    if listener_traits.has(Trait::Trusting) {
+        change *= 1.3; // More affected
+    }
+    if listener_traits.has(Trait::Skeptic) {
+        change *= 0.5; // Less affected
+    }
+    if listener_traits.has(Trait::Forgiving) {
+        change *= 0.6; // Quicker to forgive
+    }
+    if listener_traits.has(Trait::Vengeful) {
+        change *= 1.4; // Holds grudges
+    }
+    if listener_traits.has(Trait::Paranoid) {
+        change *= 1.2; // Assumes the worst
+    }
+
+    // Cap the change
+    change.clamp(-0.3, 0.0) // Max 0.3 relationship decrease per gossip
+}
+
+/// Attempt to transfer negative opinion from speaker to listener about a target
+///
+/// # Arguments
+/// * `speaker_traits` - Traits of the gossiper
+/// * `listener_traits` - Traits of the listener
+/// * `trust_in_speaker` - Listener's trust in the speaker
+/// * `existing_opinion_of_target` - Listener's current relationship with target
+/// * `complaint` - What the speaker is complaining about
+/// * `intensity` - How strongly negative (0.0 to 1.0)
+///
+/// Returns the result of the transfer attempt
+pub fn attempt_opinion_transfer(
+    speaker_traits: &crate::core::traits::TraitSet,
+    listener_traits: &crate::core::traits::TraitSet,
+    trust_in_speaker: f32,
+    existing_opinion_of_target: f32,
+    complaint: &str,
+    intensity: f32,
+) -> OpinionTransferResult {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+
+    let transfer_chance = calculate_opinion_transfer_chance(
+        speaker_traits,
+        listener_traits,
+        trust_in_speaker,
+        existing_opinion_of_target,
+        intensity,
+    );
+
+    let roll: f32 = rng.gen();
+
+    if roll < transfer_chance {
+        // Transfer successful
+        let relationship_change = calculate_opinion_change_amount(
+            0.15, // Base transfer amount
+            listener_traits,
+            intensity,
+        );
+
+        let reason = if listener_traits.has(Trait::Trusting) {
+            format!("Believed the complaint about '{}' due to trusting nature", complaint)
+        } else if trust_in_speaker > 0.7 {
+            format!("Trusted the speaker's complaint about '{}'", complaint)
+        } else {
+            format!("Was convinced by the complaint about '{}'", complaint)
+        };
+
+        OpinionTransferResult {
+            transferred: true,
+            relationship_change,
+            reason,
+        }
+    } else {
+        // Transfer failed
+        let reason = if listener_traits.has(Trait::Skeptic) {
+            "Skeptical nature prevented believing the gossip".to_string()
+        } else if listener_traits.has(Trait::KindHearted) {
+            "Kind heart resisted believing bad things about others".to_string()
+        } else if existing_opinion_of_target > 0.5 {
+            "Already has a good opinion of the target".to_string()
+        } else if trust_in_speaker < 0.3 {
+            "Doesn't trust the speaker enough".to_string()
+        } else {
+            "Wasn't convinced by the gossip".to_string()
+        };
+
+        OpinionTransferResult {
+            transferred: false,
+            relationship_change: 0.0,
+            reason,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -931,5 +1148,119 @@ mod tests {
         // Trust should increase
         let new_trust = kb.get_trust(&source);
         assert!(new_trust > initial_trust);
+    }
+
+    #[test]
+    fn test_opinion_transfer_chance_high_trust() {
+        let speaker_traits = super::super::TraitSet::new();
+        let listener_traits = super::super::TraitSet::new();
+
+        // High trust should give high transfer chance
+        let chance = super::calculate_opinion_transfer_chance(
+            &speaker_traits,
+            &listener_traits,
+            0.9, // High trust
+            0.0, // Neutral opinion of target
+            0.8, // Strong complaint
+        );
+
+        assert!(chance > 0.4, "High trust should increase transfer chance: {}", chance);
+    }
+
+    #[test]
+    fn test_opinion_transfer_chance_skeptic_resists() {
+        let speaker_traits = super::super::TraitSet::new();
+        let mut listener_traits = super::super::TraitSet::new();
+        listener_traits.add_trait(Trait::Skeptic);
+
+        let chance = super::calculate_opinion_transfer_chance(
+            &speaker_traits,
+            &listener_traits,
+            0.5, // Moderate trust
+            0.0, // Neutral opinion
+            0.8, // Strong complaint
+        );
+
+        assert!(chance < 0.3, "Skeptic should resist gossip: {}", chance);
+    }
+
+    #[test]
+    fn test_opinion_transfer_chance_trusting_vulnerable() {
+        let speaker_traits = super::super::TraitSet::new();
+        let mut listener_traits = super::super::TraitSet::new();
+        listener_traits.add_trait(Trait::Trusting);
+
+        let chance = super::calculate_opinion_transfer_chance(
+            &speaker_traits,
+            &listener_traits,
+            0.5, // Moderate trust
+            0.0, // Neutral opinion
+            0.8, // Strong complaint
+        );
+
+        assert!(chance > 0.5, "Trusting listener should be more vulnerable: {}", chance);
+    }
+
+    #[test]
+    fn test_opinion_transfer_charismatic_speaker() {
+        let mut speaker_traits = super::super::TraitSet::new();
+        speaker_traits.add_trait(Trait::Charismatic);
+        let listener_traits = super::super::TraitSet::new();
+
+        let chance_with_charisma = super::calculate_opinion_transfer_chance(
+            &speaker_traits,
+            &listener_traits,
+            0.5,
+            0.0,
+            0.8,
+        );
+
+        let plain_speaker = super::super::TraitSet::new();
+        let chance_without = super::calculate_opinion_transfer_chance(
+            &plain_speaker,
+            &listener_traits,
+            0.5,
+            0.0,
+            0.8,
+        );
+
+        assert!(chance_with_charisma > chance_without,
+            "Charismatic speaker should be more persuasive: {} vs {}",
+            chance_with_charisma, chance_without);
+    }
+
+    #[test]
+    fn test_opinion_transfer_existing_friendship_protects() {
+        let speaker_traits = super::super::TraitSet::new();
+        let listener_traits = super::super::TraitSet::new();
+
+        // Listener already likes the target
+        let chance = super::calculate_opinion_transfer_chance(
+            &speaker_traits,
+            &listener_traits,
+            0.7, // Good trust in speaker
+            0.8, // Already likes target
+            0.8,
+        );
+
+        // Should be harder to sway
+        assert!(chance < 0.4, "Existing friendship should protect target: {}", chance);
+    }
+
+    #[test]
+    fn test_opinion_change_amount() {
+        let mut vengeful = super::super::TraitSet::new();
+        vengeful.add_trait(Trait::Vengeful);
+
+        let mut forgiving = super::super::TraitSet::new();
+        forgiving.add_trait(Trait::Forgiving);
+
+        let vengeful_change = super::calculate_opinion_change_amount(0.15, &vengeful, 0.8);
+        let forgiving_change = super::calculate_opinion_change_amount(0.15, &forgiving, 0.8);
+
+        // Vengeful should have larger negative change
+        assert!(vengeful_change < forgiving_change,
+            "Vengeful should have stronger negative response: {} vs {}",
+            vengeful_change, forgiving_change);
     }
 }

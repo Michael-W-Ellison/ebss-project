@@ -12,6 +12,7 @@ pub enum ItemType {
     Stone,
     Iron,
     Food,
+    Water,
 
     // === Raw Materials (Agricultural) ===
     Grain,

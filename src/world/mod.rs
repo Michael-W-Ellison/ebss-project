@@ -69,6 +69,7 @@ pub mod zoning;
 pub mod path_planning;
 pub mod territory;
 pub mod resource_spawning;
+pub mod nutrition;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile};
@@ -85,6 +86,10 @@ pub use climate::{ClimateManager, terrain_to_biome};
 pub use resource_spawning::{
     NaturalisticResourceConfig, NaturalisticSpawner, TerrainResourceMapper,
     AnimalResourceConfig, AnimalResourceMapper, TerrainGenerator,
+};
+pub use nutrition::{
+    NutrientType, NutritionalContent, PreparationState, FoodData,
+    FoodTemplate, FoodDatabase, NutritionalState, EatResult,
 };
 
 use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager, AnimalSpawnConfig};
@@ -138,6 +143,7 @@ pub struct ResourceConfig {
     pub stone_nodes: usize,
     pub iron_nodes: usize,
     pub food_nodes: usize,
+    pub water_sources: usize, // Rivers, wells, springs
 
     // Mineral resources (for technology progression)
     pub clay_clusters: usize,
@@ -166,6 +172,7 @@ impl Default for ResourceConfig {
             stone_nodes: 15,
             iron_nodes: 8,
             food_nodes: 25,
+            water_sources: 15, // Rivers, wells, springs - critical for survival
 
             // Minerals
             clay_clusters: 4,
@@ -359,6 +366,25 @@ impl World {
                 ResourceType::Food,
                 pos,
                 rng.gen_range(20..60),
+            ));
+        }
+
+        // Generate water sources (rivers, wells, springs)
+        // Water is critical for survival - place near various terrains
+        for _ in 0..config.water_sources {
+            // Water can be found in various locations
+            let terrain = match rng.gen_range(0..4) {
+                0 => TerrainType::Plains,   // River in plains
+                1 => TerrainType::Meadow,   // Stream in meadow
+                2 => TerrainType::Forest,   // Spring in forest
+                _ => TerrainType::Hills,    // Well in hills
+            };
+            let pos = self.find_random_terrain_position(terrain);
+            // Water sources are renewable and have high capacity
+            self.resources.push(ResourceNode::new(
+                ResourceType::Water,
+                pos,
+                rng.gen_range(200..500), // High capacity, water is abundant at source
             ));
         }
     }
@@ -1411,19 +1437,13 @@ pub struct WorldStats {
     pub stone_stored: u32,
     pub iron_stored: u32,
     pub food_stored: u32,
-    // Agricultural resources
-    pub grain_available: u32,
     pub grain_stored: u32,
+    // Agricultural resources
     pub flax_available: u32,
-    pub herbs_available: u32,
     // Animal resources
-    pub hides_available: u32,
     pub wool_available: u32,
     pub meat_available: u32,
     pub fish_available: u32,
-    // Mineral resources
-    pub clay_available: u32,
-    pub coal_available: u32,
     // Processed materials
     pub flour_stored: u32,
     pub leather_stored: u32,
@@ -1598,6 +1618,7 @@ mod tests {
                 stone_nodes: 20,
                 iron_nodes: 10,
                 food_nodes: 40,
+                ..Default::default()
             },
         };
         assert_eq!(config.size, (100, 80));
