@@ -163,14 +163,19 @@ fn observe_nearby_resources(_world: &World, _agent: &mut ebss::agents::Agent) {
 /// Verify information when agent reaches a resource location they learned about from others
 /// Note: Full verification would use the gossip and trust systems
 fn verify_information(
-    _world: &World,
+    world: &World,
     _agent: &mut ebss::agents::Agent,
-    _resource_position: &Position,
-    _resource_type: ResourceType,
+    resource_position: &Position,
+    resource_type: ResourceType,
     _current_tick: u32,
 ) {
-    // Information verification is handled by the gossip and relationship systems
-    // This would involve checking trust ratings and updating beliefs
+    // Check if the resource actually exists at this location
+    let _resource_exists = world.resources.iter().any(|r| {
+        r.position == *resource_position
+            && r.resource_type == resource_type
+            && r.amount > 0
+    });
+    // Note: Knowledge verification is handled by the gossip system
 }
 
 /// Find the closest resource of a given type

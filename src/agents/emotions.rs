@@ -27,6 +27,10 @@ pub struct EmotionState {
     pub sadness_sources: HashMap<EmotionSource, f32>,
     pub happiness_sources: HashMap<EmotionSource, f32>,
     pub curiosity_sources: HashMap<EmotionSource, f32>,
+    /// Last agent who attacked this agent (for retaliation)
+    pub last_attacker: Option<Uuid>,
+    /// Tick when last attacked (for recency)
+    pub last_attack_tick: u32,
 }
 
 impl EmotionState {
@@ -43,7 +47,30 @@ impl EmotionState {
             sadness_sources: HashMap::new(),
             happiness_sources: HashMap::new(),
             curiosity_sources: HashMap::new(),
+            last_attacker: None,
+            last_attack_tick: 0,
         }
+    }
+
+    /// Record being attacked by another agent
+    pub fn record_attack(&mut self, attacker_id: Uuid, current_tick: u32) {
+        self.last_attacker = Some(attacker_id);
+        self.last_attack_tick = current_tick;
+    }
+
+    /// Get the last attacker if attack was recent (within 100 ticks)
+    pub fn recent_attacker(&self, current_tick: u32) -> Option<Uuid> {
+        if let Some(attacker) = self.last_attacker {
+            if current_tick.saturating_sub(self.last_attack_tick) < 100 {
+                return Some(attacker);
+            }
+        }
+        None
+    }
+
+    /// Clear attack memory (e.g., after successful retaliation or reconciliation)
+    pub fn clear_attacker(&mut self) {
+        self.last_attacker = None;
     }
 
     /// Add anger toward a source

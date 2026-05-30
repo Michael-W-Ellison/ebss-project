@@ -618,6 +618,7 @@ impl World {
                     ResourceType::Stone => ItemType::Stone,
                     ResourceType::Iron => ItemType::Iron,
                     ResourceType::Food => ItemType::Food,
+                    ResourceType::Water => ItemType::Water,
 
                     // Agricultural
                     ResourceType::Grain => ItemType::Grain,

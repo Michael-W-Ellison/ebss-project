@@ -15,6 +15,7 @@ use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
 use crate::environment::TechnologyKnowledge;
+use crate::world::nutrition::{FoodData, NutritionalState, NutritionalContent, EatResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -44,6 +45,8 @@ pub struct InventoryItem {
     pub max_durability: Option<f32>,
     /// Quality level of this item
     pub quality: Option<super::Quality>,
+    /// Food-specific data (nutrition, freshness, preparation state)
+    pub food_data: Option<FoodData>,
 }
 
 impl InventoryItem {
@@ -57,6 +60,7 @@ impl InventoryItem {
             current_durability: None,
             max_durability: None,
             quality: None,
+            food_data: None,
         }
     }
 
@@ -70,6 +74,7 @@ impl InventoryItem {
             current_durability: None,
             max_durability: None,
             quality: None,
+            food_data: None,
         }
     }
 
@@ -83,6 +88,7 @@ impl InventoryItem {
             current_durability: None,
             max_durability: None,
             quality: None,
+            food_data: None,
         }
     }
 
@@ -102,6 +108,44 @@ impl InventoryItem {
             current_durability: Some(durability),
             max_durability: Some(durability),
             quality: Some(quality),
+            food_data: None,
+        }
+    }
+
+    /// Create a food item with nutritional data
+    pub fn new_food(
+        item_id: String,
+        quantity: u32,
+        weight_per_unit: f32,
+        food_data: FoodData,
+    ) -> Self {
+        Self {
+            item_id,
+            quantity,
+            weight_per_unit,
+            fill_level: None,
+            max_capacity: None,
+            current_durability: None,
+            max_durability: None,
+            quality: None,
+            food_data: Some(food_data),
+        }
+    }
+
+    /// Check if this is a food item
+    pub fn is_food(&self) -> bool {
+        self.food_data.is_some()
+    }
+
+    /// Check if food is spoiled
+    pub fn is_spoiled(&self) -> bool {
+        self.food_data.as_ref().map(|f| f.is_spoiled()).unwrap_or(false)
+    }
+
+    /// Update food freshness based on current tick
+    pub fn update_food_freshness(&mut self, current_tick: u32) {
+        if let Some(ref mut food) = self.food_data {
+            food.update_freshness(current_tick);
         }
     }
 
@@ -258,6 +302,7 @@ impl Inventory {
                     current_durability: item.current_durability,
                     max_durability: item.max_durability,
                     quality: item.quality,
+                    food_data: item.food_data.clone(),
                 };
 
                 // Update weight
@@ -469,6 +514,8 @@ pub struct AgentState {
     pub is_alive: bool,
     pub last_ate_tick: u32, // Track when agent last ate
     pub ticks_without_food: u32, // Count starvation duration
+    pub last_drank_tick: u32, // Track when agent last drank water
+    pub ticks_without_water: u32, // Count dehydration duration
 }
 
 impl AgentState {
@@ -488,6 +535,8 @@ impl AgentState {
             is_alive: true,
             last_ate_tick: 0,
             ticks_without_food: 0,
+            last_drank_tick: 0,
+            ticks_without_water: 0,
         }
     }
 
@@ -503,6 +552,9 @@ impl AgentState {
         // === SURVIVAL MECHANICS ===
         // Track starvation
         self.ticks_without_food = current_tick.saturating_sub(self.last_ate_tick);
+
+        // Track dehydration (faster than starvation - 3 days vs 7 days)
+        self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
         // Energy depletion (normal metabolism)
         let base_energy_loss = 0.05; // Base energy loss per tick
@@ -525,6 +577,24 @@ impl AgentState {
             self.health = (self.health - severe_health_loss).max(0.0);
         }
 
+        // === DEHYDRATION MECHANICS (faster than starvation) ===
+        // After 12 hours (720 ticks) without water: energy depletes faster
+        if self.ticks_without_water > 720 {
+            energy_loss *= 1.5; // Additional 50% energy depletion
+        }
+
+        // After 1.5 days (2160 ticks) without water: health starts decreasing
+        if self.ticks_without_water > 2160 {
+            let health_loss = 0.15; // Moderate health degradation
+            self.health = (self.health - health_loss).max(0.0);
+        }
+
+        // After 3 days (4320 ticks) without water: rapid health loss (death imminent)
+        if self.ticks_without_water > 4320 {
+            let severe_health_loss = 1.5; // Rapid health loss (faster than starvation)
+            self.health = (self.health - severe_health_loss).max(0.0);
+        }
+
         // Apply energy loss
         self.energy = (self.energy - energy_loss).max(0.0);
 
@@ -538,7 +608,7 @@ impl AgentState {
             self.is_alive = false;
         }
 
-        // Check for death from injury/starvation
+        // Check for death from injury/starvation/dehydration
         if self.health <= 0.0 {
             self.is_alive = false;
         }
@@ -564,14 +634,26 @@ impl AgentState {
         self.ticks_without_food = 0;
     }
 
+    /// Drink water and reset dehydration
+    pub fn drink(&mut self, current_tick: u32) {
+        self.last_drank_tick = current_tick;
+        self.ticks_without_water = 0;
+    }
+
     /// Check if agent is starving (critical survival state)
     pub fn is_starving(&self) -> bool {
         self.ticks_without_food > 1440 || self.energy < 20.0
     }
 
+    /// Check if agent is dehydrated (critical survival state)
+    /// Dehydration is more urgent than starvation (720 ticks = 12 hours)
+    pub fn is_dehydrated(&self) -> bool {
+        self.ticks_without_water > 720
+    }
+
     /// Check if agent is in critical survival state
     pub fn is_survival_critical(&self) -> bool {
-        self.is_starving() || self.health < 30.0
+        self.is_starving() || self.is_dehydrated() || self.health < 30.0
     }
 }
 
@@ -612,16 +694,20 @@ pub struct Agent {
     pub plan_step_ticks: u32,
     /// Accumulated learning exposure for various knowledge/skills
     pub learning_exposure: crate::core::learning::LearningExposure,
-    /// Cached healing bonus from nearby medical buildings (updated each tick)
-    #[serde(default = "default_bonus")]
-    pub cached_healing_bonus: f32,
-    /// Cached defense bonus from nearby defensive buildings (updated each tick)
-    #[serde(default = "default_bonus")]
-    pub cached_defense_bonus: f32,
-}
-
-fn default_bonus() -> f32 {
-    1.0
+    /// Nutritional state (energy, protein, micronutrients)
+    pub nutrition: NutritionalState,
+    /// Biological gender
+    pub gender: super::gender::Gender,
+    /// Pregnancy state (for females)
+    pub pregnancy: Option<super::pregnancy::PregnancyState>,
+    /// Nursing state (for infants)
+    pub nursing: Option<super::childcare::NursingState>,
+    /// Developmental nutrition tracking (affects adult stats)
+    pub developmental_nutrition: super::childcare::DevelopmentalNutrition,
+    /// Base reproduction drive modifier (personality-based, 0.5 to 1.5)
+    pub reproduction_drive_modifier: f32,
+    /// Fatigue state tracking tiredness, sleep debt, and penalties
+    pub fatigue: super::fatigue::FatigueState,
 }
 
 impl Agent {
@@ -661,8 +747,13 @@ impl Agent {
             planner: Planner::new(),
             plan_step_ticks: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
-            cached_healing_bonus: 1.0,
-            cached_defense_bonus: 1.0,
+            nutrition: NutritionalState::new(),
+            gender: super::gender::Gender::random(),
+            pregnancy: None,
+            nursing: None,
+            developmental_nutrition: super::childcare::DevelopmentalNutrition::default(),
+            reproduction_drive_modifier: Self::generate_reproduction_modifier(),
+            fatigue: super::fatigue::FatigueState::new(),
         };
 
         // Initialize default behavior trees for each drive type
@@ -671,11 +762,58 @@ impl Agent {
         agent
     }
 
+    /// Generate a personality-based reproduction drive modifier
+    fn generate_reproduction_modifier() -> f32 {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        // Range from 0.5 (low drive) to 1.5 (high drive)
+        // Normal distribution centered at 1.0
+        let base: f32 = rng.gen_range(0.5..1.5);
+        // Add some variance
+        (base + rng.gen_range(-0.2_f32..0.2_f32)).clamp(0.3, 1.8)
+    }
+
     /// Create an agent with specified parents
     pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, current_tick: u32) -> Self {
+        use rand::Rng;
+
         let mut agent = Self::new(config);
-        agent.parent_ids = parent_ids;
+        agent.parent_ids = parent_ids.clone();
         agent.state.last_ate_tick = current_tick;
+
+        // Set up infant as newborn
+        agent.state.life_stage = LifeStage::Infant;
+        agent.state.age = 0;
+
+        // Rare chance of congenital infertility (~1.5% chance)
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.015) {
+            agent.traits.add_trait(crate::core::traits::Trait::Infertile);
+        }
+
+        // Set up nursing - primary caregiver is first parent (usually mother)
+        if let Some(&mother_id) = parent_ids.first() {
+            agent.nursing = Some(super::childcare::NursingState::new(current_tick, mother_id));
+            // Add second parent as secondary caregiver
+            if let Some(&father_id) = parent_ids.get(1) {
+                if let Some(ref mut nursing) = agent.nursing {
+                    nursing.add_caregiver(father_id);
+                }
+            }
+        }
+
+        agent
+    }
+
+    /// Create a newborn with prenatal nutrition data from mother's pregnancy
+    pub fn with_parents_and_prenatal(
+        config: AgentConfig,
+        parent_ids: Vec<Uuid>,
+        current_tick: u32,
+        prenatal_nutrition: f32,
+    ) -> Self {
+        let mut agent = Self::with_parents(config, parent_ids, current_tick);
+        agent.developmental_nutrition = super::childcare::DevelopmentalNutrition::with_prenatal(prenatal_nutrition);
         agent
     }
 
@@ -1032,6 +1170,103 @@ impl Agent {
 
         // Then handle aging and survival mechanics
         self.state.age_tick(current_tick);
+
+        // Process nutrition metabolism
+        self.tick_nutrition(current_tick);
+
+        // Process food spoilage in inventory
+        self.tick_food_spoilage(current_tick);
+
+        // Process fatigue (awake state)
+        if !self.fatigue.is_sleeping {
+            // Activity level based on current drive urgency and recent actions
+            let activity_level = self.calculate_activity_level();
+            self.fatigue.tick_awake(activity_level, current_tick);
+
+            // Update rest drive based on fatigue
+            if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
+                // Rest drive increases with fatigue level
+                let rest_increase = self.fatigue.level * 0.02;
+                rest_drive.increase(rest_increase);
+            }
+
+            // Apply fatigue-induced happiness penalty
+            let happiness_penalty = self.fatigue.happiness_modifier();
+            if happiness_penalty < 0.0 {
+                self.emotions.happiness = (self.emotions.happiness + happiness_penalty).max(0.0);
+            }
+        }
+    }
+
+    /// Calculate activity level based on current state (0.0 = resting, 1.0 = strenuous)
+    fn calculate_activity_level(&self) -> f32 {
+        // Base on energy expenditure indicators
+        let mut activity: f32 = 0.3; // Base activity
+
+        // Higher if carrying heavy load
+        if self.inventory.weight_percentage() > 0.5 {
+            activity += 0.2;
+        }
+
+        // Higher if in dangerous situation
+        if self.emotions.fear > 0.5 {
+            activity += 0.2; // Stress/alertness
+        }
+
+        // Higher if low energy (struggling)
+        if self.state.energy < 30.0 {
+            activity += 0.1;
+        }
+
+        activity.min(1.0)
+    }
+
+    /// Tick nutrition metabolism and apply deficiency effects
+    pub fn tick_nutrition(&mut self, _current_tick: u32) {
+        // Calculate activity level from energy expenditure
+        let activity_level = if self.state.energy < 30.0 {
+            0.2 // Low energy = low activity
+        } else if self.state.energy > 70.0 {
+            0.8 // High energy = high activity
+        } else {
+            0.5 // Moderate
+        };
+
+        // Tick metabolism (depletes nutrients)
+        self.nutrition.tick_metabolism(activity_level);
+
+        // Apply deficiency health penalties
+        let penalty = self.nutrition.deficiency_health_penalty();
+        if penalty > 0.0 {
+            self.state.health = (self.state.health - penalty).max(0.0);
+        }
+
+        // Sync nutritional energy with agent state energy
+        // This connects the old energy system with the new nutrition system
+        let energy_sync = self.nutrition.energy_reserves * 0.5; // Scale 0-100 to 0-50 contribution
+        self.state.energy = ((self.state.energy * 0.5) + energy_sync).min(100.0);
+    }
+
+    /// Update food freshness in inventory and remove spoiled items
+    pub fn tick_food_spoilage(&mut self, current_tick: u32) {
+        // Update freshness for all food items
+        for item in self.inventory.items.values_mut() {
+            item.update_food_freshness(current_tick);
+        }
+
+        // Remove completely spoiled food (freshness <= 0)
+        let spoiled_items: Vec<String> = self.inventory.items.iter()
+            .filter(|(_, item)| {
+                item.food_data.as_ref()
+                    .map(|f| f.freshness <= 0.0)
+                    .unwrap_or(false)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for item_id in spoiled_items {
+            self.inventory.items.remove(&item_id);
+        }
     }
 
     /// Update body temperature based on environmental conditions
@@ -1262,6 +1497,32 @@ impl Agent {
         self.knowledge.get_trust(other_agent)
     }
 
+    /// Observe a resource at a position
+    /// Note: Resource knowledge is tracked separately from gossip knowledge
+    pub fn observe_resource(
+        &mut self,
+        _position: crate::world::Position,
+        _resource_type: crate::world::ResourceType,
+        _amount: u32,
+    ) {
+        // Resource observation is handled by the simulation tick loop
+        // This method exists for API compatibility
+    }
+
+    /// Record that information from another agent was verified as correct
+    pub fn verify_information_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
+        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
+            rel.positive_interaction(2, current_tick);
+        }
+    }
+
+    /// Record that information from another agent was incorrect
+    pub fn information_was_wrong_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
+        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
+            rel.negative_interaction(3, current_tick);
+        }
+    }
+
     /// React to learning about another agent's trait
     ///
     /// # Arguments
@@ -1291,6 +1552,122 @@ impl Agent {
                 self.relationships.add_relationship(new_rel);
             }
         }
+    }
+
+    /// Regenerate preferences based on current traits
+    ///
+    /// Call this after modifying agent traits to update their job preferences
+    pub fn update_preferences_from_traits(&mut self) {
+        self.preferences = Preferences::from_traits(&self.traits);
+        // Also update storage preferences
+        let trait_vec: Vec<_> = self.traits.get_traits().iter().copied().collect();
+        self.storage_preferences = super::storage_management::StoragePreferences::from_traits(&trait_vec);
+    }
+
+    /// Calculate happiness for doing a specific job category
+    pub fn get_job_happiness(&self, job: super::job_happiness::JobCategory) -> f32 {
+        super::job_happiness::calculate_job_happiness(&self.traits, job)
+    }
+
+    /// Get the job that would make this agent happiest
+    pub fn get_preferred_job(&self) -> (super::job_happiness::JobCategory, f32) {
+        super::job_happiness::find_preferred_job(&self.traits)
+    }
+
+    /// Get all jobs ranked by happiness preference
+    pub fn get_job_rankings(&self) -> Vec<(super::job_happiness::JobCategory, f32)> {
+        super::job_happiness::rank_jobs_by_happiness(&self.traits)
+    }
+
+    /// Check if survival needs should override happiness-based job selection
+    pub fn should_prioritize_survival(&self) -> bool {
+        let hunger = self.drives.get(crate::core::DriveType::Hunger)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+        let thirst = self.drives.get(crate::core::DriveType::Thirst)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+        let health_percent = self.state.health / 100.0;
+
+        super::job_happiness::should_override_happiness(hunger, thirst, health_percent)
+    }
+
+    /// Calculate effective priority for an action considering both drive urgency and happiness
+    ///
+    /// This is used when selecting between multiple possible work actions.
+    /// Higher values = more preferred action.
+    pub fn calculate_action_priority(
+        &self,
+        drive_urgency: f32,
+        job: super::job_happiness::JobCategory,
+    ) -> f32 {
+        // If survival is threatened, ignore happiness
+        if self.should_prioritize_survival() {
+            return drive_urgency;
+        }
+
+        let job_happiness = self.get_job_happiness(job);
+        // Use 0.3 weight - happiness is noticeable but doesn't dominate
+        super::job_happiness::calculate_effective_priority(drive_urgency, job_happiness, 0.3)
+    }
+
+    /// Map a drive type to a job category for happiness calculation
+    fn drive_to_job_category(drive_type: crate::core::DriveType) -> Option<super::job_happiness::JobCategory> {
+        use crate::core::DriveType;
+        use super::job_happiness::JobCategory;
+
+        match drive_type {
+            DriveType::Industry => Some(JobCategory::Mining),
+            DriveType::Construction => Some(JobCategory::Building),
+            DriveType::Utility => Some(JobCategory::Crafting),
+            DriveType::Sustenance => Some(JobCategory::Gathering),
+            DriveType::Social => Some(JobCategory::Social),
+            DriveType::Curiosity => Some(JobCategory::Exploring),
+            DriveType::Preparedness => Some(JobCategory::Labor),
+            // Survival drives don't map to happiness-influenced jobs
+            DriveType::Hunger | DriveType::Thirst | DriveType::Rest |
+            DriveType::Safety | DriveType::Shelter | DriveType::Reproduction |
+            DriveType::Luxury => None,
+        }
+    }
+
+    /// Select the best drive considering both urgency and happiness
+    ///
+    /// For survival-critical drives (hunger, thirst, rest, safety), returns the most urgent.
+    /// For work-related drives, considers happiness when drives are similarly urgent.
+    pub fn select_drive_with_happiness(&self) -> Option<crate::core::DriveType> {
+        use crate::core::DriveType;
+
+        // First check if survival is threatened - if so, use pure urgency
+        if self.should_prioritize_survival() {
+            return self.drives.most_urgent().map(|d| d.drive_type);
+        }
+
+        // Get all active drives
+        let mut drive_scores: Vec<(DriveType, f32)> = Vec::new();
+
+        for drive_type in DriveType::all() {
+            if let Some(drive) = self.drives.get(drive_type) {
+                if drive.is_active() {
+                    let base_urgency = drive.value * drive.weight;
+
+                    // For work-related drives, factor in happiness
+                    let effective_priority = if let Some(job) = Self::drive_to_job_category(drive_type) {
+                        self.calculate_action_priority(base_urgency, job)
+                    } else {
+                        // Survival drives use pure urgency
+                        base_urgency
+                    };
+
+                    drive_scores.push((drive_type, effective_priority));
+                }
+            }
+        }
+
+        // Sort by effective priority (descending)
+        drive_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        drive_scores.first().map(|(drive_type, _)| *drive_type)
     }
 
     /// Observe another agent performing an action
@@ -1487,9 +1864,24 @@ impl Agent {
         self.observational_learning.set_learning_rate(rate);
     }
 
-    /// Get current learning rate
+    /// Get current learning rate (base rate modified by fatigue)
     pub fn learning_rate(&self) -> f32 {
-        self.observational_learning.learning_rate()
+        self.observational_learning.learning_rate() * self.fatigue.learning_modifier()
+    }
+
+    /// Get effective skill modifier (affected by fatigue)
+    pub fn skill_effectiveness(&self) -> f32 {
+        self.fatigue.skill_modifier()
+    }
+
+    /// Get decision quality modifier (affected by fatigue)
+    pub fn decision_quality(&self) -> f32 {
+        self.fatigue.decision_modifier()
+    }
+
+    /// Get injury chance modifier (affected by fatigue)
+    pub fn injury_risk_modifier(&self) -> f32 {
+        self.fatigue.injury_chance_modifier()
     }
 
     /// Equip a transport (activate it)
@@ -1534,7 +1926,7 @@ impl Agent {
         self.inventory.max_weight = total_capacity;
     }
 
-    /// Get movement speed including transport penalties
+    /// Get movement speed including transport and fatigue penalties
     pub fn movement_speed(&self) -> f32 {
         let body_speed = self.body.movement_speed_multiplier();
         let transport_speed = self.transport.speed_modifier();
@@ -1543,8 +1935,9 @@ impl Agent {
         } else {
             1.0 - (self.inventory.weight_percentage() * 0.3) // Up to 30% slower at max weight
         };
+        let fatigue_penalty = self.fatigue.movement_speed_modifier();
 
-        body_speed * transport_speed * weight_penalty
+        body_speed * transport_speed * weight_penalty * fatigue_penalty
     }
 
     /// Check if agent can carry additional weight
@@ -1559,7 +1952,41 @@ impl Agent {
 
     /// Check if agent can reproduce (basic capability check)
     pub fn can_reproduce(&self) -> bool {
-        self.state.is_alive && self.state.life_stage.can_reproduce()
+        if !self.state.is_alive || !self.state.life_stage.can_reproduce() {
+            return false;
+        }
+
+        // Infertile agents cannot reproduce
+        if self.traits.has(crate::core::traits::Trait::Infertile) {
+            return false;
+        }
+
+        // Females cannot reproduce while pregnant
+        if self.gender.can_become_pregnant() && self.pregnancy.is_some() {
+            return false;
+        }
+
+        true
+    }
+
+    /// Check if agent is infertile
+    pub fn is_infertile(&self) -> bool {
+        self.traits.has(crate::core::traits::Trait::Infertile)
+    }
+
+    /// Check if female agent can become pregnant
+    pub fn can_become_pregnant(&self) -> bool {
+        self.can_reproduce() && self.gender.can_become_pregnant() && self.pregnancy.is_none()
+    }
+
+    /// Check if male agent can impregnate
+    pub fn can_impregnate(&self) -> bool {
+        self.can_reproduce() && self.gender.can_impregnate()
+    }
+
+    /// Check if this agent is currently pregnant
+    pub fn is_pregnant(&self) -> bool {
+        self.pregnancy.is_some()
     }
 
     /// Check if agent should attempt reproduction given current survival state
@@ -1599,12 +2026,35 @@ impl Agent {
         // Modified by health
         let health_factor = self.state.health / 100.0;
 
-        // Modified by reproduction drive
+        // Modified by reproduction drive and personal modifier
         let reproduction_drive = self.drives.get(crate::core::DriveType::Reproduction)
             .map(|d| d.value)
             .unwrap_or(0.0);
 
-        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5)
+        // Apply developmental nutrition modifier if finalized
+        let dev_modifier = if self.developmental_nutrition.finalized {
+            self.developmental_nutrition.stat_modifiers.fertility
+        } else {
+            1.0
+        };
+
+        // Fatigue reduces fertility (tired agents are less likely to reproduce)
+        let fatigue_factor = match self.fatigue.severity() {
+            super::fatigue::FatigueSeverity::None => 1.0,
+            super::fatigue::FatigueSeverity::Mild => 0.9,
+            super::fatigue::FatigueSeverity::Moderate => 0.6,
+            super::fatigue::FatigueSeverity::Severe => 0.2,
+        };
+
+        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5) * self.reproduction_drive_modifier * dev_modifier * fatigue_factor
+    }
+
+    /// Get effective reproduction drive (base drive * personal modifier)
+    pub fn effective_reproduction_drive(&self) -> f32 {
+        let base_drive = self.drives.get(DriveType::Reproduction)
+            .map(|d| d.value)
+            .unwrap_or(0.0);
+        (base_drive * self.reproduction_drive_modifier).clamp(0.0, 1.0)
     }
 
     /// Create a default behavior tree for a specific drive
@@ -2536,17 +2986,31 @@ impl Agent {
 
     // ========== Survival API Methods (for TDD tests) ==========
 
-    /// Eat food from inventory and satisfy hunger drive
+    /// Eat food from inventory and satisfy hunger drive (legacy method)
     /// Returns true if food was consumed
+    /// Note: Use eat_food_item for nutrition-aware eating
     pub fn eat_food(&mut self, amount: u32) -> bool {
         // Try to get food from inventory
         if let Some(food_item) = self.inventory.get_item_mut("food") {
             if food_item.quantity >= amount {
                 food_item.quantity -= amount;
 
-                // Restore energy (each food unit restores 20 energy)
-                let energy_restored = (amount as f32) * 20.0;
-                self.state.energy = (self.state.energy + energy_restored).min(100.0);
+                // If food has nutrition data, use it
+                if let Some(ref food_data) = food_item.food_data {
+                    let nutrition = food_data.effective_nutrition();
+                    self.nutrition.consume(&nutrition.scale(amount as f32));
+
+                    // Also satisfy thirst from water content
+                    if nutrition.water_content > 0.3 {
+                        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                            thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
+                        }
+                    }
+                } else {
+                    // Legacy: no food data, use old flat rate
+                    let energy_restored = (amount as f32) * 20.0;
+                    self.state.energy = (self.state.energy + energy_restored).min(100.0);
+                }
 
                 // Reset starvation (use current age as approximation of tick)
                 self.state.last_ate_tick = self.state.age;
@@ -2562,6 +3026,113 @@ impl Agent {
             }
         }
         false
+    }
+
+    /// Eat a specific food item from inventory with full nutrition tracking
+    /// Returns the result of eating including nutrition gained or problems
+    pub fn eat_food_item(&mut self, item_id: &str, current_tick: u32) -> EatResult {
+        // Get food item from inventory
+        let food_item = match self.inventory.get_item_mut(item_id) {
+            Some(item) if item.quantity > 0 => item,
+            _ => return EatResult::NoFood,
+        };
+
+        // Check if item has food data
+        let food_data = match &food_item.food_data {
+            Some(data) => data.clone(),
+            None => {
+                // Not a tracked food item - consume 1 with flat nutrition
+                food_item.quantity -= 1;
+                let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
+                self.nutrition.consume(&flat_nutrition);
+                self.state.last_ate_tick = current_tick;
+                self.state.ticks_without_food = 0;
+                if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+                    hunger.decrease(0.2);
+                }
+                return EatResult::Success(flat_nutrition);
+            }
+        };
+
+        // Check if food is harmful (severely spoiled)
+        if food_data.is_harmful() {
+            food_item.quantity -= 1;
+            let damage = 10.0;
+            self.state.health = (self.state.health - damage).max(0.0);
+            return EatResult::MadeSick(damage);
+        }
+
+        // Check if food is spoiled (inedible)
+        if food_data.is_spoiled() {
+            return EatResult::Spoiled;
+        }
+
+        // Consume the food
+        food_item.quantity -= 1;
+
+        // Get effective nutrition (preparation + freshness factors applied)
+        let nutrition = food_data.effective_nutrition();
+
+        // Apply nutrition to agent
+        self.nutrition.consume(&nutrition);
+
+        // Satisfy thirst from water content
+        if nutrition.water_content > 0.3 {
+            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                thirst.decrease(nutrition.water_content * 0.1);
+            }
+        }
+
+        // Reset starvation timer
+        self.state.last_ate_tick = current_tick;
+        self.state.ticks_without_food = 0;
+
+        // Satisfy hunger based on total nutrition
+        let hunger_reduction = nutrition.total() / 100.0 * 0.3;
+        if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+            hunger.decrease(hunger_reduction);
+        }
+
+        EatResult::Success(nutrition)
+    }
+
+    /// Find the best food item to eat based on nutritional needs and freshness
+    pub fn find_best_food_to_eat(&self) -> Option<String> {
+        let needed = self.nutrition.most_needed_nutrient();
+
+        let mut best_item: Option<(String, f32)> = None;
+
+        for (item_id, item) in &self.inventory.items {
+            if let Some(ref food_data) = item.food_data {
+                // Skip spoiled food
+                if food_data.is_spoiled() {
+                    continue;
+                }
+
+                let nutrition = food_data.effective_nutrition();
+
+                // Score based on what we need most
+                let score = match needed {
+                    crate::world::NutrientType::Energy => nutrition.energy,
+                    crate::world::NutrientType::Protein => nutrition.protein,
+                    crate::world::NutrientType::Micronutrients => nutrition.micronutrients,
+                };
+
+                // Prefer fresher food (multiply by freshness)
+                let adjusted_score = score * food_data.freshness;
+
+                if best_item.is_none() || adjusted_score > best_item.as_ref().unwrap().1 {
+                    best_item = Some((item_id.clone(), adjusted_score));
+                }
+            }
+        }
+
+        best_item.map(|(id, _)| id)
+    }
+
+    /// Get summary of nutritional status
+    pub fn nutrition_status(&self) -> String {
+        self.nutrition.status_string()
     }
 
     /// Drink water from inventory and satisfy thirst drive
@@ -2590,6 +3161,79 @@ impl Agent {
         if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
             rest_drive.decrease(rest_reduction);
         }
+    }
+
+    /// Sleep for one tick with quality factors affecting recovery
+    /// Returns the fatigue decrease this tick
+    pub fn sleep_tick(&mut self, current_tick: u32, sleep_quality_factors: &super::fatigue::SleepQualityFactors) -> f32 {
+        let sleep_quality = sleep_quality_factors.calculate_quality();
+
+        // Apply trait modifiers to recovery rate
+        let recovery_modifier = self.sleep_recovery_modifier();
+        let fatigue_decrease = self.fatigue.tick_sleeping_with_modifier(sleep_quality, current_tick, recovery_modifier);
+
+        // Also restore energy based on fatigue recovery
+        let energy_restored = fatigue_decrease * 30.0;
+        self.state.energy = (self.state.energy + energy_restored).min(100.0);
+
+        // Satisfy rest drive
+        if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
+            rest_drive.decrease(fatigue_decrease * 0.5);
+        }
+
+        fatigue_decrease
+    }
+
+    /// Get sleep recovery modifier based on traits
+    /// Narcoleptic: 0.6 (40% less effective sleep)
+    /// Normal: 1.0
+    fn sleep_recovery_modifier(&self) -> f32 {
+        if self.traits.has(crate::core::traits::Trait::Narcoleptic) {
+            0.6 // Sleep is 40% less restorative
+        } else {
+            1.0
+        }
+    }
+
+    /// Get sleep need threshold modifier based on traits
+    /// SoundSleeper: ~0.75 (needs ~2 hours less sleep, which is ~25% less)
+    /// Normal: 1.0
+    fn sleep_need_modifier(&self) -> f32 {
+        if self.traits.has(crate::core::traits::Trait::SoundSleeper) {
+            0.75 // Needs 25% less sleep (~2 hours less of a typical 8-hour night)
+        } else {
+            1.0
+        }
+    }
+
+    /// Wake up from sleep
+    pub fn wake_up(&mut self, current_tick: u32) {
+        self.fatigue.wake_up(current_tick);
+    }
+
+    /// Check if agent needs sleep based on fatigue (trait-aware)
+    pub fn needs_sleep(&self) -> bool {
+        self.fatigue.needs_sleep_with_modifier(self.sleep_need_modifier())
+    }
+
+    /// Check if agent desperately needs sleep (trait-aware)
+    pub fn desperately_needs_sleep(&self) -> bool {
+        self.fatigue.desperately_needs_sleep_with_modifier(self.sleep_need_modifier())
+    }
+
+    /// Check if agent should collapse from exhaustion
+    pub fn should_collapse(&self) -> bool {
+        self.fatigue.should_collapse()
+    }
+
+    /// Get current fatigue level (0.0 to 1.0)
+    pub fn fatigue_level(&self) -> f32 {
+        self.fatigue.level
+    }
+
+    /// Get fatigue severity description
+    pub fn fatigue_description(&self) -> &'static str {
+        self.fatigue.description()
     }
 
     /// Consume energy from activity
@@ -2944,6 +3588,27 @@ impl Agent {
         }
 
         self.emotions.add_happiness_with_traits(EmotionSource::Agent(recipient_id), helper_happiness, &self.traits);
+    }
+
+    /// Apply religious happiness effects from nearby religious buildings
+    /// Called by simulation tick with pre-calculated effects
+    pub fn apply_religious_happiness(&mut self, happiness_modifier: f32, source_description: &str) {
+        use super::EmotionSource;
+
+        if happiness_modifier.abs() < 0.001 {
+            return; // No effect to apply
+        }
+
+        if happiness_modifier > 0.0 {
+            self.emotions.add_happiness(
+                EmotionSource::Event(source_description.to_string()),
+                happiness_modifier,
+            );
+        } else {
+            // Negative effects reduce happiness (or could add sadness/discomfort)
+            // For religious discomfort, we reduce happiness rather than add sadness
+            self.emotions.happiness = (self.emotions.happiness + happiness_modifier).max(0.0);
+        }
     }
 
     /// Get all sources that satisfy a specific drive

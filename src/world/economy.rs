@@ -199,7 +199,7 @@ impl Marketplace {
     fn get_base_price(item: ItemType) -> u32 {
         match item {
             // Basic resources - cheap
-            ItemType::Wood | ItemType::Stone | ItemType::Food => 2,
+            ItemType::Wood | ItemType::Stone | ItemType::Food | ItemType::Water => 2,
 
             // Agricultural resources
             ItemType::Grain | ItemType::Flax | ItemType::Herbs | ItemType::Cotton => 3,

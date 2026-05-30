@@ -43,6 +43,9 @@ pub use web_api::{ApiServer, ApiConfig, SimulationDataProvider, SimulationStatus
 use crate::core::DriveType;
 use crate::environment::{Action, ActionResult};
 use crate::visualization::AsciiRenderer;
+use crate::agents::religious_effects::{
+    calculate_religious_effects, total_happiness_modifier, RELIGIOUS_EFFECT_RADIUS,
+};
 use log::{info, debug, warn};
 use serde::{Serialize, Deserialize};
 use std::path::{Path, PathBuf};
@@ -313,9 +316,18 @@ impl Simulation {
             let agent_index = agent_index.unwrap();
 
             // Get agent data we need
+            // Use happiness-aware drive selection so agents prefer enjoyable work
+            // when survival needs are met
             let (drive_type, drive_value, agent_position) = {
                 let agent = &self.population.agents[agent_index];
-                if let Some(urgent_drive) = agent.drives.most_urgent() {
+                // Use happiness-aware selection for non-survival situations
+                if let Some(selected_drive) = agent.select_drive_with_happiness() {
+                    let value = agent.drives.get(selected_drive)
+                        .map(|d| d.value)
+                        .unwrap_or(0.0);
+                    (Some(selected_drive), value, agent.state.position)
+                } else if let Some(urgent_drive) = agent.drives.most_urgent() {
+                    // Fallback to most urgent if no drive selected
                     (Some(urgent_drive.drive_type), urgent_drive.value, agent.state.position)
                 } else {
                     (None, 0.0, agent.state.position)
@@ -457,57 +469,65 @@ impl Simulation {
                     agent.update_plan_relevance(&world_state);
                 }
 
-                // Generate action based on priority: shelter > percepts > plan > goals > drives
+                // Generate action based on priority: emotions > shelter > percepts > plan > goals > drives
                 let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
 
-                    // PRIORITY 1: Check if agent needs shelter due to exposure
-                    if agent.needs_shelter() && agent.shelter_priority() > 0.7 {
-                        // Critical shelter need - override all other actions
-                        (crate::environment::Action::SeekShelter, false)
-                    } else {
-                        // PRIORITY 2: Check for high-salience percepts that should override drive-based actions
-                        let percept_action = Self::generate_action_from_percepts(
-                            &agent.recent_percepts,
-                            &agent.drives,
-                            agent_position,
-                        );
+                    // PRIORITY 0: Check emotional overrides (fear/anger from being attacked)
+                    if agent.emotions.should_flee() {
+                        // High fear - flee from attacker or danger
+                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                            // Find attacker position and flee away from them
+                            if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
+                                let attacker_pos = attacker.state.position;
+                                let dx = agent_position.0 - attacker_pos.0;
+                                let dy = agent_position.1 - attacker_pos.1;
+                                let distance = ((dx * dx + dy * dy) as f32).sqrt().max(1.0);
+                                let flee_distance = 15;
+                                let flee_x = agent_position.0 + ((dx as f32 / distance) * flee_distance as f32) as i32;
+                                let flee_y = agent_position.1 + ((dy as f32 / distance) * flee_distance as f32) as i32;
 
-                        if percept_action.is_some() {
-                            (percept_action.unwrap(), false)
-                        } else if agent.should_execute_plan() {
-                            // PRIORITY 3: Execute current plan step if agent has an active plan
-                            if let Some(plan_action) = agent.get_plan_action() {
                                 debug!(
-                                    "Agent {} executing plan step: {:?}",
-                                    agent_id,
-                                    agent.current_plan_step_description()
+                                    "Agent {} FLEEING from attacker {} (fear={:.2})",
+                                    agent_id, attacker_id, agent.emotions.fear
                                 );
-                                (plan_action, true)
-                            } else {
-                                // Plan step can't be converted to action (e.g., EquipItem)
-                                // Advance plan and use goal-based action instead
-                                (Self::generate_action_for_drive(drive_type, agent_position), false)
-                            }
-                        } else if agent.has_active_plan() {
-                            // Agent has a plan but shouldn't execute it (survival override)
-                            // Still use drive-based action
-                            (Self::generate_action_for_drive(drive_type, agent_position), false)
-                        } else {
-                            // PRIORITY 4: Check if we have active goals and generate goal-aligned action
-                            // Also try to create a plan for the goal if we don't have one
-                            if let Some(active_goal) = agent.goals.highest_priority_goal() {
-                                let goal_action = Self::generate_action_for_goal(active_goal, agent_position, drive_type);
 
-                                // Use goal-aligned action if available, otherwise fall back to drive-based
-                                (goal_action.unwrap_or_else(|| {
-                                    Self::generate_action_for_drive(drive_type, agent_position)
-                                }), false)
+                                (crate::environment::Action::Move {
+                                    target: (flee_x, flee_y, agent_position.2),
+                                }, false)
                             } else {
-                                // PRIORITY 5: Use drive-based action
-                                (Self::generate_action_for_drive(drive_type, agent_position), false)
+                                // Attacker not found, flee in random direction
+                                use rand::Rng;
+                                let mut rng = rand::thread_rng();
+                                let flee_x = agent_position.0 + rng.gen_range(-15..=15);
+                                let flee_y = agent_position.1 + rng.gen_range(-15..=15);
+                                (crate::environment::Action::Move {
+                                    target: (flee_x, flee_y, agent_position.2),
+                                }, false)
                             }
+                        } else {
+                            // No specific attacker, continue with other priorities
+                            // (fear might be from other sources like predators)
+                            Self::generate_non_emotional_action(agent, agent_position, &self.population, self.current_tick)
                         }
+                    } else if agent.emotions.should_attack() {
+                        // High anger, low fear - retaliate against attacker
+                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                            debug!(
+                                "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
+                                agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
+                            );
+
+                            (crate::environment::Action::Attack {
+                                target_agent_id: attacker_id,
+                                weapon: agent.equipment.get_weapon().map(|w| w.name.clone()),
+                            }, false)
+                        } else {
+                            // Angry but no target, continue with other priorities
+                            Self::generate_non_emotional_action(agent, agent_position, &self.population, self.current_tick)
+                        }
+                    } else {
+                        Self::generate_non_emotional_action(agent, agent_position, &self.population, self.current_tick)
                     }
                 };
 
@@ -720,9 +740,17 @@ impl Simulation {
         if self.current_tick % 100 == 0 {
             self.process_information_verification();
         }
+        // Process pregnancies and births
+        self.process_pregnancies_and_births();
+
+        // Process nursing for infants
+        self.process_nursing();
 
         // Tick world (building construction progress, etc.)
         self.world.tick();
+
+        // Apply religious building effects to agent happiness
+        self.apply_religious_effects();
 
         // Log statistics every 10 ticks
         if self.current_tick % 10 == 0 {
@@ -1065,6 +1093,64 @@ impl Simulation {
         }
     }
 
+    /// Generate an action based on non-emotional priorities:
+    /// PRIORITY 1: Check if agent needs shelter due to exposure
+    /// PRIORITY 2: Check for high-salience percepts
+    /// PRIORITY 3: Execute current plan step
+    /// PRIORITY 4: Check active goals
+    /// PRIORITY 5: Use drive-based action
+    fn generate_non_emotional_action(
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        _population: &Population,
+        _current_tick: u32,
+    ) -> (Action, bool) {
+        // PRIORITY 1: Check if agent needs shelter due to exposure
+        if agent.exposure_status.exposure_damage > 0.5 {
+            return (Action::SeekShelter, false);
+        }
+
+        // PRIORITY 2: Check for high-salience percepts (danger, resources, social opportunities)
+        let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
+            .iter()
+            .cloned()
+            .collect();
+
+        if let Some(percept_action) = Self::generate_action_from_percepts(
+            &recent_percepts,
+            &agent.drives,
+            agent_position,
+        ) {
+            return (percept_action, false);
+        }
+
+        // PRIORITY 3: Execute current plan step (if agent has an active plan)
+        if agent.should_execute_plan() {
+            if let Some(plan_action) = agent.get_plan_action() {
+                return (plan_action, true);
+            }
+        }
+
+        // PRIORITY 4: Check active goals and generate goal-directed action
+        if let Some(goal) = agent.goals.highest_priority_goal() {
+            // Get most urgent drive for fallback
+            let fallback_drive = agent.drives.most_urgent()
+                .map(|d| d.drive_type)
+                .unwrap_or(DriveType::Curiosity);
+
+            if let Some(goal_action) = Self::generate_action_for_goal(&goal, agent_position, fallback_drive) {
+                return (goal_action, false);
+            }
+        }
+
+        // PRIORITY 5: Use drive-based action as fallback
+        let drive_type = agent.select_drive_with_happiness()
+            .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
+            .unwrap_or(DriveType::Curiosity);
+
+        (Self::generate_action_for_drive(drive_type, agent_position), false)
+    }
+
     /// Execute an action in the environment and return the result
     fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
         use rand::Rng;
@@ -1149,6 +1235,7 @@ impl Simulation {
                     "stone" => Some(ResourceType::Stone),
                     "iron" => Some(ResourceType::Iron),
                     "food" => Some(ResourceType::Food),
+                    "water" => Some(ResourceType::Water),
                     "generic" => Some(ResourceType::Wood), // Default to wood for generic
                     _ => None,
                 };
@@ -1196,7 +1283,34 @@ impl Simulation {
                     let harvested = self.world.resources[resource_index].harvest(harvest_amount);
 
                     if harvested > 0 {
-                        // Add to agent inventory
+                        // Water is consumed immediately (drinking), not stored
+                        if resource_type_enum == ResourceType::Water {
+                            let agent = &mut self.population.agents[agent_index];
+
+                            // Satisfy thirst drive
+                            if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
+                                thirst.partial_satisfy(0.5);
+                            }
+
+                            // Reset dehydration counter
+                            agent.state.last_drank_tick = self.current_tick;
+                            agent.state.ticks_without_water = 0;
+
+                            // Fill containers if agent has any
+                            let filled = agent.inventory.fill_containers(harvested as f32);
+
+                            debug!(
+                                "Agent {} drank water and filled {:.1} units into containers",
+                                agent.id, filled
+                            );
+
+                            return ActionResult::success()
+                                .with_drive_change(DriveType::Thirst, -0.5)
+                                .with_energy_cost(5.0)
+                                .with_message(format!("Drank water, filled {:.1} into containers", filled));
+                        }
+
+                        // Add to agent inventory (non-water resources)
                         let item_id = match resource_type_enum {
                             ResourceType::Wood => "wood",
                             ResourceType::Stone => "stone",
@@ -1219,6 +1333,15 @@ impl Simulation {
 
                         let agent = &mut self.population.agents[agent_index];
                         if agent.inventory.add_item(item) {
+                            // Grant skill XP based on resource type
+                            let skill_type = match resource_type_enum {
+                                ResourceType::Wood => crate::agents::skills::SkillType::Woodcutting,
+                                ResourceType::Stone | ResourceType::Iron => crate::agents::skills::SkillType::Mining,
+                                ResourceType::Food => crate::agents::skills::SkillType::Herbalism,
+                                _ => crate::agents::skills::SkillType::Mining,
+                            };
+                            agent.skills.gain_experience(skill_type, 2);
+
                             debug!(
                                 "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
                                 agent.id, harvested, item_id,
@@ -1330,6 +1453,35 @@ impl Simulation {
 
                 // Add building to world
                 self.world.add_building(building);
+
+                // Emit building started event for timeline
+                {
+                    use crate::gui::events::{SimulationEvent, SimulationEventType};
+                    let agent = &self.population.agents[agent_index];
+                    let event = SimulationEvent::new(
+                        self.current_tick,
+                        SimulationEventType::BuildingStarted {
+                            building_type,
+                            position: build_pos,
+                            builder_id: agent.id,
+                        },
+                        Some((build_pos.x, build_pos.y)),
+                    );
+                    self.population.pending_events.push(event);
+                }
+
+                // Grant Construction XP (more XP for larger buildings)
+                let construction_xp = match building_type {
+                    BuildingType::SmallHouse => 5,
+                    BuildingType::MediumHouse => 10,
+                    BuildingType::LargeHouse => 15,
+                    BuildingType::Workshop => 12,
+                    BuildingType::Storehouse => 8,
+                    BuildingType::Farm => 10,
+                    _ => 5,
+                };
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.gain_experience(crate::agents::skills::SkillType::Construction, construction_xp);
 
                 debug!(
                     "Agent {} started construction of {:?} at ({}, {})",
@@ -1450,12 +1602,61 @@ impl Simulation {
                 let target = &mut self.population.agents[target_index];
                 target.state.health = (target.state.health - actual_damage * 0.2).max(0.0);
 
+                // Get IDs before borrowing
+                let attacker_id = self.population.agents[agent_index].id;
+                let target_id = self.population.agents[target_index].id;
+
+                // EMOTIONAL RESPONSE: Target responds emotionally to being attacked
+                {
+                    // Calculate attacker's apparent strength
+                    let attacker = &self.population.agents[agent_index];
+                    let attacker_health = attacker.state.health / 100.0;
+                    let attacker_armor = attacker.equipment.total_armor() / 100.0;
+                    let attacker_has_weapon = attacker.equipment.get_weapon().is_some();
+                    let attacker_strength = attacker_health * (1.0 + attacker_armor * 0.5)
+                        + if attacker_has_weapon { 0.3 } else { 0.0 };
+
+                    // Target responds to threat
+                    let target = &mut self.population.agents[target_index];
+                    let emotion_source = crate::agents::EmotionSource::Agent(attacker_id);
+
+                    // Record who attacked for potential retaliation
+                    target.emotions.record_attack(attacker_id, self.current_tick);
+
+                    // Scale emotional response by damage severity
+                    let damage_severity = (actual_damage / 50.0).min(1.0);
+
+                    // Use threat assessment to determine fear vs anger
+                    target.respond_to_threat(attacker_strength + damage_severity * 0.5, emotion_source);
+
+                    debug!(
+                        "Agent {} emotional response to attack: fear={:.2}, anger={:.2}, should_flee={}, should_attack={}",
+                        target_id, target.emotions.fear, target.emotions.anger,
+                        target.emotions.should_flee(), target.emotions.should_attack()
+                    );
+                }
+
                 // Check if target died from the attack
                 let target_alive = self.population.agents[target_index].body.is_alive()
                     && self.population.agents[target_index].state.health > 0.0;
 
-                let attacker_id = self.population.agents[agent_index].id;
                 let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
+
+                // Emit conflict event for timeline
+                {
+                    use crate::gui::events::{SimulationEvent, SimulationEventType};
+                    let event = SimulationEvent::new(
+                        self.current_tick,
+                        SimulationEventType::Conflict {
+                            attacker_id,
+                            target_id,
+                            damage: actual_damage,
+                            fatal: !target_alive,
+                        },
+                        Some((attacker_pos.0, attacker_pos.1)),
+                    );
+                    self.population.pending_events.push(event);
+                }
 
                 debug!(
                     "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({}, mounted: {}, bonus: +{:.0}%)",
@@ -1468,6 +1669,12 @@ impl Simulation {
                     if attacker_mounted { "yes" } else { "no" },
                     mount_bonus * 100.0
                 );
+
+                // Grant combat XP (more for kills, check weapon type for skill)
+                let attacker = &mut self.population.agents[agent_index];
+                let combat_xp = if !target_alive { 5 } else { 2 };
+                // TODO: Check weapon type for Archery vs MeleeCombat
+                attacker.skills.gain_experience(crate::agents::skills::SkillType::MeleeCombat, combat_xp);
 
                 if !target_alive {
                     ActionResult::success()
@@ -1938,6 +2145,9 @@ impl Simulation {
                             );
                         }
 
+                        let agent_id = agent.id;
+                        let agent_pos = (agent.state.position.0, agent.state.position.1);
+
                         debug!(
                             "Agent {} deposited {} {} to storehouse (storehouse now has {})",
                             agent.id,
@@ -1947,6 +2157,21 @@ impl Simulation {
                                 .map(|i| i.quantity)
                                 .unwrap_or(0)
                         );
+
+                        // Emit storehouse deposit event for timeline (only for significant deposits)
+                        if removed >= 3 {
+                            use crate::gui::events::{SimulationEvent, SimulationEventType};
+                            let event = SimulationEvent::new(
+                                self.current_tick,
+                                SimulationEventType::StorehouseDeposit {
+                                    agent_id,
+                                    resource: item_type.clone(),
+                                    amount: removed,
+                                },
+                                Some(agent_pos),
+                            );
+                            self.population.pending_events.push(event);
+                        }
 
                         ActionResult::success()
                             .with_drive_change(DriveType::Preparedness, -0.15)
@@ -2276,9 +2501,9 @@ impl Simulation {
                             agent.inventory.add_item(item);
                         }
 
-                        // Practice industry skill
+                        // Practice animal husbandry (Farming skill)
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.gain_experience(crate::agents::skills::SkillType::Mining, 1);
+                        agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
 
                         let products_str = collected_products.iter()
                             .map(|p| format!("{} {}", p.quantity, p.material_id))
@@ -2712,6 +2937,10 @@ impl Simulation {
                 }
 
                 if success {
+                    // Grant Social skill XP
+                    let initiator = &mut self.population.agents[agent_index];
+                    initiator.skills.gain_experience(crate::agents::skills::SkillType::Social, 1);
+
                     // Record that this agent satisfied our social drive
                     let tick = self.current_tick;
                     let initiator = &mut self.population.agents[agent_index];
@@ -2858,7 +3087,7 @@ impl Simulation {
             },
 
             Action::Mate { target_agent_id } => {
-                use crate::agents::reproduction::{can_mate, reproduce, MateSelectionCriteria};
+                use crate::agents::reproduction::{can_mate, MateSelectionCriteria};
                 use crate::agents::gossip::{Information, InformationType};
 
                 // Find the target agent
@@ -2922,76 +3151,109 @@ impl Simulation {
 
                 // Attempt mating
                 if rng.gen_bool(success_probability as f64) {
-                    // Mating successful - create offspring
-                    // Clone parent positions before creating offspring to avoid borrow issues
-                    let parent1_pos = self.population.agents[agent_index].state.position;
-                    let offspring = {
-                        let parent1 = &self.population.agents[agent_index];
-                        let parent2 = &self.population.agents[target_index];
-                        let current_tick = self.current_tick;
-                        reproduce(parent1, parent2, current_tick)
+                    // Mating successful - determine male/female and attempt impregnation
+                    use crate::agents::reproduction::attempt_impregnation;
+                    use crate::agents::Gender;
+
+                    let initiator = &self.population.agents[agent_index];
+                    let target = &self.population.agents[target_index];
+
+                    // Get male and female from the pair
+                    let (male_index, female_index) = match (initiator.gender, target.gender) {
+                        (Gender::Male, Gender::Female) => (agent_index, target_index),
+                        (Gender::Female, Gender::Male) => (target_index, agent_index),
+                        _ => {
+                            return ActionResult::failure("Same-gender mating not possible".to_string());
+                        }
                     };
-                    let offspring_id = offspring.id;
 
-                    // Add offspring to population
-                    self.population.agents.push(offspring);
-
-                    debug!(
-                        "Agent {} and agent {} successfully mated! Offspring: {}",
-                        initiator_id, target_id, offspring_id
-                    );
-
-                    // Generate gossip about the birth
+                    // Attempt impregnation
+                    let male = &self.population.agents[male_index];
+                    let female = &self.population.agents[female_index];
                     let current_tick = self.current_tick;
-                    let birth_info = Information::new(
-                        InformationType::Childbirth {
-                            agent: initiator_id,
-                            child: offspring_id,
-                        },
-                        initiator_id,
-                        true, // This is true information
-                        current_tick as u64,
-                    );
 
-                    // Share birth information with nearby agents
-                    for other_agent in &mut self.population.agents {
-                        if other_agent.id != initiator_id && other_agent.id != target_id && other_agent.id != offspring_id {
-                            // Calculate distance
-                            let distance = {
-                                let dx = (other_agent.state.position.0 - parent1_pos.0) as f32;
-                                let dy = (other_agent.state.position.1 - parent1_pos.1) as f32;
-                                (dx * dx + dy * dy).sqrt()
-                            };
+                    if let Some(pregnancy) = attempt_impregnation(male, female, current_tick) {
+                        // Pregnancy started!
+                        let female = &mut self.population.agents[female_index];
+                        female.pregnancy = Some(pregnancy);
 
-                            // Share with agents within 20 tiles
-                            if distance <= 20.0 {
-                                other_agent.knowledge.receive_information(
-                                    birth_info.clone(),
-                                    initiator_id,
-                                    other_agent.id,
-                                    &other_agent.traits,
-                                    current_tick as u64,
-                                );
+                        debug!(
+                            "Agent {} (male) and agent {} (female) mated - pregnancy started!",
+                            self.population.agents[male_index].id,
+                            self.population.agents[female_index].id
+                        );
+
+                        // Generate gossip about the pregnancy
+                        let female_id = self.population.agents[female_index].id;
+                        let female_pos = self.population.agents[female_index].state.position;
+                        let pregnancy_info = Information::new(
+                            InformationType::Pregnancy {
+                                agent: female_id,
+                            },
+                            female_id,
+                            true,
+                            current_tick as u64,
+                        );
+
+                        // Share pregnancy information with nearby agents
+                        for other_agent in &mut self.population.agents {
+                            if other_agent.id != initiator_id && other_agent.id != target_id {
+                                let distance = {
+                                    let dx = (other_agent.state.position.0 - female_pos.0) as f32;
+                                    let dy = (other_agent.state.position.1 - female_pos.1) as f32;
+                                    (dx * dx + dy * dy).sqrt()
+                                };
+
+                                if distance <= 15.0 {
+                                    other_agent.knowledge.receive_information(
+                                        pregnancy_info.clone(),
+                                        female_id,
+                                        other_agent.id,
+                                        &other_agent.traits,
+                                        current_tick as u64,
+                                    );
+                                }
                             }
                         }
-                    }
 
-                    // Update relationships - parents bond with child
-                    // Update reproduction drives for both parents
-                    let agent = &mut self.population.agents[agent_index];
-                    if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
-                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
-                    }
+                        // Update reproduction drives for both parents
+                        let male = &mut self.population.agents[male_index];
+                        if let Some(repro_drive) = male.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.5); // Male drive reduces moderately
+                        }
 
-                    let target = &mut self.population.agents[target_index];
-                    if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
-                        repro_drive.decrease(0.8); // Significantly reduce reproduction drive
-                    }
+                        let female = &mut self.population.agents[female_index];
+                        if let Some(repro_drive) = female.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.9); // Female drive significantly reduces (pregnant)
+                        }
 
-                    ActionResult::success()
-                        .with_drive_change(DriveType::Reproduction, -0.8)
-                        .with_energy_cost(15.0) // Mating is energy-intensive
-                        .with_message(format!("Successfully mated with agent, offspring: {}", offspring_id))
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Reproduction, -0.7)
+                            .with_energy_cost(15.0)
+                            .with_message("Mating successful - pregnancy started!".to_string())
+                    } else {
+                        // Conception failed (fertility roll failed)
+                        debug!(
+                            "Agent {} and agent {} mated but conception failed",
+                            initiator_id, target_id
+                        );
+
+                        // Still reduce drives somewhat
+                        let agent = &mut self.population.agents[agent_index];
+                        if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.3);
+                        }
+
+                        let target = &mut self.population.agents[target_index];
+                        if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
+                            repro_drive.decrease(0.3);
+                        }
+
+                        ActionResult::success()
+                            .with_drive_change(DriveType::Reproduction, -0.3)
+                            .with_energy_cost(10.0)
+                            .with_message("Mating occurred but no conception".to_string())
+                    }
                 } else {
                     // Mating attempt rejected
                     debug!(
@@ -3125,6 +3387,11 @@ impl Simulation {
                     "Agent {} explored to ({}, {}, {}), discovered {} new tiles",
                     agent_id, target_x, target_y, target_z, newly_explored_count
                 );
+
+                // Grant Navigation XP for exploration (more for new discoveries)
+                let agent = &mut self.population.agents[agent_index];
+                let nav_xp = if newly_explored_count > 0 { 2 } else { 1 };
+                agent.skills.gain_experience(crate::agents::skills::SkillType::Navigation, nav_xp);
 
                 // Exploration is rewarding
                 let curiosity_satisfaction = if newly_explored_count > 0 { 0.3 } else { 0.1 };
@@ -3442,6 +3709,228 @@ impl Simulation {
 
             // Call the agent's lie detection processing
             agent.process_information_verification(self.current_tick);
+    /// Process pregnancies and handle births
+    fn process_pregnancies_and_births(&mut self) {
+        use crate::agents::reproduction::give_birth;
+        use crate::agents::gossip::{Information, InformationType};
+
+        let current_tick = self.current_tick;
+
+        // Collect births to process (to avoid borrowing issues)
+        let mut births_to_process: Vec<(usize, uuid::Uuid)> = Vec::new();
+
+        // First pass: update pregnancies and collect due births
+        for (idx, agent) in self.population.agents.iter_mut().enumerate() {
+            if let Some(ref mut pregnancy) = agent.pregnancy {
+                // Update prenatal nutrition based on mother's current state
+                let hunger_drive = agent.drives.get(DriveType::Hunger)
+                    .map(|d| d.value)
+                    .unwrap_or(0.0);
+                pregnancy.update_nutrition(hunger_drive, agent.state.health);
+
+                // Check if due
+                if pregnancy.is_due(current_tick) {
+                    births_to_process.push((idx, pregnancy.father_id));
+                }
+            }
+        }
+
+        // Second pass: process births
+        for (mother_idx, father_id) in births_to_process {
+            // Find the father
+            let father_idx = self.population.agents.iter()
+                .position(|a| a.id == father_id);
+
+            // Get pregnancy data before clearing it
+            let pregnancy = self.population.agents[mother_idx].pregnancy.take();
+
+            if let Some(preg) = pregnancy {
+                // Create offspring
+                let offspring = if let Some(f_idx) = father_idx {
+                    let mother = &self.population.agents[mother_idx];
+                    let father = &self.population.agents[f_idx];
+                    give_birth(mother, father, &preg, current_tick)
+                } else {
+                    // Father not found (dead?), use mother twice (not ideal but handles edge case)
+                    let mother = &self.population.agents[mother_idx];
+                    give_birth(mother, mother, &preg, current_tick)
+                };
+
+                let offspring_id = offspring.id;
+                let mother_id = self.population.agents[mother_idx].id;
+                let mother_pos = self.population.agents[mother_idx].state.position;
+
+                // Add offspring to population
+                self.population.agents.push(offspring);
+                self.population.stats.total_births += 1;
+
+                debug!(
+                    "Agent {} gave birth to {}! Prenatal nutrition: {:.2}",
+                    mother_id, offspring_id, preg.nutrition_quality
+                );
+
+                // Generate gossip about the birth
+                let birth_info = Information::new(
+                    InformationType::Childbirth {
+                        agent: mother_id,
+                        child: offspring_id,
+                    },
+                    mother_id,
+                    true,
+                    current_tick as u64,
+                );
+
+                // Share birth information with nearby agents
+                for other_agent in &mut self.population.agents {
+                    if other_agent.id != mother_id && other_agent.id != offspring_id {
+                        let distance = {
+                            let dx = (other_agent.state.position.0 - mother_pos.0) as f32;
+                            let dy = (other_agent.state.position.1 - mother_pos.1) as f32;
+                            (dx * dx + dy * dy).sqrt()
+                        };
+
+                        if distance <= 20.0 {
+                            other_agent.knowledge.receive_information(
+                                birth_info.clone(),
+                                mother_id,
+                                other_agent.id,
+                                &other_agent.traits,
+                                current_tick as u64,
+                            );
+                        }
+                    }
+                }
+
+                // Add parent-child relationships
+                let offspring_idx = self.population.agents.len() - 1;
+
+                // Mother bonds with child
+                use crate::agents::emotions::{Relationship, RelationshipType};
+                self.population.agents[mother_idx].relationships.add_relationship(
+                    Relationship::new(offspring_id, RelationshipType::Child)
+                );
+
+                // Father bonds with child (if alive)
+                if let Some(f_idx) = father_idx {
+                    self.population.agents[f_idx].relationships.add_relationship(
+                        Relationship::new(offspring_id, RelationshipType::Child)
+                    );
+                }
+            }
+        }
+    }
+
+    /// Process nursing for infants
+    fn process_nursing(&mut self) {
+        use crate::agents::childcare::{MAX_CAREGIVER_DISTANCE, NURSING_ENERGY_GAIN};
+        use crate::agents::LifeStage;
+
+        let current_tick = self.current_tick;
+
+        // Collect caregiver positions for distance checks
+        let caregiver_positions: std::collections::HashMap<uuid::Uuid, (i32, i32, i32)> =
+            self.population.agents.iter()
+                .filter(|a| a.state.is_alive)
+                .map(|a| (a.id, a.state.position))
+                .collect();
+
+        for agent in &mut self.population.agents {
+            // Only process living infants with nursing state
+            if !agent.state.is_alive || agent.state.life_stage != LifeStage::Infant {
+                continue;
+            }
+
+            if let Some(ref mut nursing) = agent.nursing {
+                // Check if still in nursing period
+                if !nursing.needs_nursing(current_tick) {
+                    // Nursing period ended
+                    agent.nursing = None;
+                    continue;
+                }
+
+                // Check if caregiver is nearby
+                let agent_pos = agent.state.position;
+                let caregiver_nearby = nursing.is_caregiver(nursing.primary_caregiver)
+                    && caregiver_positions.get(&nursing.primary_caregiver)
+                        .map(|&pos| {
+                            let dx = (pos.0 - agent_pos.0) as f32;
+                            let dy = (pos.1 - agent_pos.1) as f32;
+                            (dx * dx + dy * dy).sqrt() <= MAX_CAREGIVER_DISTANCE
+                        })
+                        .unwrap_or(false);
+
+                // Also check secondary caregivers
+                let secondary_nearby = nursing.secondary_caregivers.iter()
+                    .any(|&cg_id| {
+                        caregiver_positions.get(&cg_id)
+                            .map(|&pos| {
+                                let dx = (pos.0 - agent_pos.0) as f32;
+                                let dy = (pos.1 - agent_pos.1) as f32;
+                                (dx * dx + dy * dy).sqrt() <= MAX_CAREGIVER_DISTANCE
+                            })
+                            .unwrap_or(false)
+                    });
+
+                if caregiver_nearby || secondary_nearby {
+                    // Being nursed
+                    nursing.nurse();
+
+                    // Gain energy from nursing
+                    agent.state.energy = (agent.state.energy + NURSING_ENERGY_GAIN).min(100.0);
+
+                    // Update developmental nutrition (well nursed)
+                    let hunger_satisfaction = 1.0 - agent.drives.get(DriveType::Hunger)
+                        .map(|d| d.value)
+                        .unwrap_or(0.0);
+                    agent.developmental_nutrition.update_infant_nutrition(hunger_satisfaction, true);
+                } else {
+                    // Not being nursed
+                    nursing.tick_without_nursing();
+
+                    // Apply health penalty if suffering
+                    let penalty = nursing.health_penalty();
+                    if penalty > 0.0 {
+                        agent.state.health = (agent.state.health - penalty).max(0.0);
+                        debug!(
+                            "Infant {} suffering from lack of nursing: -{:.1} health",
+                            agent.id, penalty
+                        );
+                    }
+
+                    // Update developmental nutrition (not nursed)
+                    let hunger_satisfaction = 1.0 - agent.drives.get(DriveType::Hunger)
+                        .map(|d| d.value)
+                        .unwrap_or(0.0);
+                    agent.developmental_nutrition.update_infant_nutrition(hunger_satisfaction, false);
+                }
+            }
+
+            // Update child nutrition for children
+            if agent.state.life_stage == LifeStage::Child {
+                let hunger_satisfaction = 1.0 - agent.drives.get(DriveType::Hunger)
+                    .map(|d| d.value)
+                    .unwrap_or(0.0);
+                agent.developmental_nutrition.update_child_nutrition(hunger_satisfaction, agent.state.health);
+            }
+
+            // Finalize developmental stats when transitioning to adult
+            if agent.state.life_stage == LifeStage::Adult && !agent.developmental_nutrition.finalized {
+                let became_infertile = agent.developmental_nutrition.finalize();
+
+                if became_infertile {
+                    // Severe malnutrition caused permanent infertility
+                    agent.traits.add_trait(crate::core::traits::Trait::Infertile);
+                    debug!(
+                        "Agent {} reached adulthood but severe malnutrition caused INFERTILITY",
+                        agent.id
+                    );
+                }
+
+                debug!(
+                    "Agent {} reached adulthood with development: {:?}",
+                    agent.id, agent.developmental_nutrition.stat_modifiers
+                );
+            }
         }
     }
 
@@ -3884,6 +4373,86 @@ impl Simulation {
         checkpoint_files.reverse();
 
         Ok(checkpoint_files[0].clone())
+    }
+
+    /// Apply religious building effects to agent happiness
+    /// Believers gain happiness near Shrines/Temples, Atheists feel uncomfortable
+    fn apply_religious_effects(&mut self) {
+        use crate::world::{BuildingType, Position};
+        use crate::agents::Trait;
+
+        // Collect religious buildings (position, type, is_completed)
+        let religious_buildings: Vec<(Position, BuildingType, bool)> = self.world.buildings
+            .iter()
+            .filter(|b| b.building_type.is_religious())
+            .map(|b| (b.position, b.building_type, b.is_completed()))
+            .collect();
+
+        // If no religious buildings, skip processing
+        if religious_buildings.is_empty() {
+            return;
+        }
+
+        // First, count believers near each agent for zealot community bonuses
+        // Pre-calculate positions and traits
+        let agent_data: Vec<_> = self.population.agents.iter()
+            .filter(|a| a.state.is_alive)
+            .map(|a| {
+                let pos = Position::new(a.state.position.0, a.state.position.1);
+                let is_believer = a.traits.has(Trait::Believer) || a.traits.has(Trait::Zealot);
+                (a.id, pos, is_believer)
+            })
+            .collect();
+
+        // Calculate nearby believers for each agent
+        let nearby_believers: std::collections::HashMap<_, _> = agent_data.iter()
+            .map(|(id, pos, _)| {
+                let count = agent_data.iter()
+                    .filter(|(other_id, other_pos, is_believer)| {
+                        *is_believer
+                            && other_id != id
+                            && pos.distance_to(other_pos) <= RELIGIOUS_EFFECT_RADIUS
+                    })
+                    .count() as u32;
+                (*id, count)
+            })
+            .collect();
+
+        // Apply religious effects to each agent
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
+            let believers_nearby = *nearby_believers.get(&agent.id).unwrap_or(&0);
+
+            // Calculate religious effects for this agent
+            let effects = calculate_religious_effects(
+                agent_pos,
+                &agent.traits,
+                &religious_buildings,
+                believers_nearby,
+            );
+
+            // Apply effects
+            let total_modifier = total_happiness_modifier(&effects);
+            if total_modifier.abs() > 0.001 {
+                // Generate a combined source description
+                let source = if total_modifier > 0.0 {
+                    format!("Religious fulfillment ({})", effects.len())
+                } else {
+                    format!("Religious discomfort ({})", effects.len())
+                };
+
+                agent.apply_religious_happiness(total_modifier, &source);
+
+                debug!(
+                    "Agent {} received religious effect: {:.3} happiness from {} sources",
+                    agent.id, total_modifier, effects.len()
+                );
+            }
+        }
     }
 }
 

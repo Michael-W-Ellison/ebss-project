@@ -13,6 +13,10 @@ pub mod temperature;
 pub mod observational_learning;
 pub mod transport;
 pub mod drive_satisfaction;
+pub mod gender;
+pub mod pregnancy;
+pub mod childcare;
+pub mod fatigue;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};
@@ -32,7 +36,8 @@ pub use crate::core::traits::{Trait, TraitSet};
 pub use crate::core::EmotionType; // EmotionType now unified in core
 pub use gossip::{
     Information, InformationType, InformationDistortion, DistortionType,
-    Belief, TrustRating, KnowledgeBase,
+    Belief, TrustRating, KnowledgeBase, OpinionTransferResult,
+    calculate_opinion_transfer_chance, attempt_opinion_transfer,
 };
 pub use equipment::{
     Equipment, EquipmentSlot, ClothingMaterial, ClothingTemplate,
@@ -52,6 +57,10 @@ pub use transport::{
 pub use drive_satisfaction::{
     SatisfactionTracker, DriveSatisfactionTracker, SatisfactionRecord,
 };
+pub use gender::Gender;
+pub use pregnancy::PregnancyState;
+pub use childcare::{DevelopmentalNutrition, NursingState, StatModifiers};
+pub use fatigue::{FatigueState, FatigueSeverity, SleepQualityFactors};
 
 #[cfg(test)]
 mod tests;
@@ -66,6 +75,8 @@ pub mod storage_management;
 pub mod storage_integration;
 pub mod sensory_processing;
 pub mod observation_processing;
+pub mod job_happiness;
+pub mod religious_effects;
 
 pub use population::{Population, PopulationConfig, PopulationLearningStats};
 pub use reproduction::{can_mate, reproduce, MateSelectionCriteria};
@@ -105,4 +116,15 @@ pub use observation_processing::{
     BroadcastAction, BehaviorContext, NeedType, LearningStats,
     process_observations, auto_adopt_ready_behaviors,
     apply_skill_learning, should_imitate_behavior, get_learning_stats,
+};
+pub use job_happiness::{
+    JobCategory, calculate_job_happiness, find_preferred_job,
+    rank_jobs_by_happiness, calculate_effective_priority,
+    should_override_happiness, trait_job_happiness,
+};
+pub use religious_effects::{
+    ReligiousEffect, RELIGIOUS_EFFECT_RADIUS,
+    calculate_religious_effects, total_happiness_modifier,
+    should_seek_religious_building, should_avoid_religious_building,
+    secular_knowledge_bonus,
 };

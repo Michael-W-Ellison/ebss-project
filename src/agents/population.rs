@@ -2,6 +2,7 @@
 use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
 use crate::environment::technology::TechnologyRegistry;
+use crate::gui::events::{SimulationEvent, SimulationEventType, DeathCause};
 use uuid::Uuid;
 use std::collections::HashMap;
 
@@ -56,6 +57,8 @@ pub struct Population {
     pub current_tick: u32, // Current simulation tick for survival mechanics
     pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
     pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
+    /// Events that occurred this tick (for GUI timeline)
+    pub pending_events: Vec<SimulationEvent>,
 }
 
 impl Population {
@@ -73,6 +76,7 @@ impl Population {
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
+            pending_events: Vec::new(),
         }
     }
 
@@ -91,6 +95,7 @@ impl Population {
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
+            pending_events: Vec::new(),
         }
     }
 
@@ -470,7 +475,8 @@ impl Population {
         let current_tick = self.current_tick;
 
         // Collect discoveries to be made (to avoid borrowing issues)
-        let mut discoveries: Vec<(usize, String, Uuid)> = Vec::new();
+        // (agent_idx, tech_id, agent_uuid, position)
+        let mut discoveries: Vec<(usize, String, Uuid, (i32, i32))> = Vec::new();
 
         // Get list of discoverable technologies for each agent
         for agent_idx in 0..self.agents.len() {
@@ -512,19 +518,31 @@ impl Population {
                 let discovery_roll: f32 = rng.gen();
                 if discovery_roll < tech.discovery_chance * curiosity {
                     // Record discovery for later
-                    discoveries.push((agent_idx, tech.id.clone(), agent.id));
+                    let pos = (agent.state.position.0, agent.state.position.1);
+                    discoveries.push((agent_idx, tech.id.clone(), agent.id, pos));
                     break; // Only one discovery per tick per agent
                 }
             }
         }
 
         // Now apply all discoveries
-        for (agent_idx, tech_id, agent_id) in discoveries {
+        for (agent_idx, tech_id, agent_id, pos) in discoveries {
             let is_world_first = self.technology_registry.record_first_discovery(
                 tech_id.clone(),
                 agent_id,
                 current_tick as u64,
             );
+
+            // Emit technology discovery event
+            self.pending_events.push(SimulationEvent::new(
+                self.current_tick,
+                SimulationEventType::TechnologyDiscovered {
+                    tech_id: tech_id.clone(),
+                    discoverer_id: agent_id,
+                    is_world_first,
+                },
+                Some(pos),
+            ));
 
             self.agents[agent_idx].technology_knowledge.discover_technology(
                 tech_id,
@@ -540,18 +558,32 @@ impl Population {
     fn process_deaths(&mut self) {
         use crate::agents::EmotionSource;
 
-        // Identify dead agents before removing them
-        let dead_agents: Vec<(uuid::Uuid, String)> = self.agents
+        // Identify dead agents before removing them, collecting position and detailed cause
+        let dead_agents: Vec<(uuid::Uuid, String, (i32, i32), DeathCause)> = self.agents
             .iter()
             .filter(|agent| !agent.state.is_alive)
             .map(|agent| {
-                // Determine cause of death from health context
-                let cause = if agent.state.health <= 0.0 {
-                    "health depletion".to_string()
+                // Determine cause of death from agent state
+                let (cause_str, cause_enum) = if agent.state.is_starving() {
+                    ("starvation".to_string(), DeathCause::Starvation)
+                } else if agent.state.is_dehydrated() {
+                    ("dehydration".to_string(), DeathCause::Dehydration)
+                } else if agent.state.age >= agent.state.max_age {
+                    ("old age".to_string(), DeathCause::OldAge)
+                } else if agent.state.health <= 0.0 {
+                    // Could be combat or other damage
+                    if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                        ("combat".to_string(), DeathCause::Combat { killer_id: Some(attacker_id) })
+                    } else {
+                        ("health depletion".to_string(), DeathCause::Unknown)
+                    }
+                } else if agent.state.energy <= 0.0 {
+                    ("exhaustion".to_string(), DeathCause::Exhaustion)
                 } else {
-                    "unknown cause".to_string()
+                    ("unknown cause".to_string(), DeathCause::Unknown)
                 };
-                (agent.id, cause)
+                let pos = (agent.state.position.0, agent.state.position.1);
+                (agent.id, cause_str, pos, cause_enum)
             })
             .collect();
 
@@ -559,8 +591,20 @@ impl Population {
             return; // No deaths to process
         }
 
+        // Emit death events for timeline
+        for (deceased_id, _cause_str, pos, cause_enum) in &dead_agents {
+            self.pending_events.push(SimulationEvent::new(
+                self.current_tick,
+                SimulationEventType::Death {
+                    agent_id: *deceased_id,
+                    cause: cause_enum.clone(),
+                },
+                Some(*pos),
+            ));
+        }
+
         // Process grief for each death
-        for (deceased_id, cause_description) in &dead_agents {
+        for (deceased_id, cause_description, _, _) in &dead_agents {
             let cause_source = EmotionSource::Event(cause_description.clone());
 
             // Notify all surviving agents about the death
@@ -633,7 +677,7 @@ impl Population {
         self.stats.deaths_this_tick += deaths as u32;
 
         // Clean up tracking for dead agents
-        for (deceased_id, _) in &dead_agents {
+        for (deceased_id, _, _, _) in &dead_agents {
             self.unhappiness_tracker.remove(deceased_id);
             self.reproduction_cooldown.remove(deceased_id);
         }
@@ -645,8 +689,8 @@ impl Population {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        // Track unhappiness and identify agents who should abandon
-        let mut agents_to_remove = Vec::new();
+        // Track unhappiness and identify agents who should abandon (with position)
+        let mut agents_to_remove: Vec<(Uuid, (i32, i32))> = Vec::new();
 
         for agent in &self.agents {
             if !agent.state.is_alive {
@@ -668,7 +712,7 @@ impl Population {
                 if *unhappy_duration >= self.config.abandonment_unhappy_duration {
                     // Probabilistic abandonment
                     if rng.gen::<f32>() < self.config.abandonment_probability {
-                        agents_to_remove.push(agent.id);
+                        agents_to_remove.push((agent.id, (agent.state.position.0, agent.state.position.1)));
                     }
                 }
             } else {
@@ -679,13 +723,23 @@ impl Population {
 
         // Remove agents who are abandoning
         if !agents_to_remove.is_empty() {
-            let abandonment_count = agents_to_remove.len();
-            self.agents.retain(|agent| !agents_to_remove.contains(&agent.id));
-            self.stats.total_abandonments += abandonment_count as u64;
-            self.stats.abandonments_this_tick += abandonment_count as u32;
+            // Emit abandonment events
+            for (agent_id, pos) in &agents_to_remove {
+                self.pending_events.push(SimulationEvent::new(
+                    self.current_tick,
+                    SimulationEventType::Abandonment {
+                        agent_id: *agent_id,
+                    },
+                    Some(*pos),
+                ));
+            }
+
+            let agent_ids: Vec<Uuid> = agents_to_remove.iter().map(|(id, _)| *id).collect();
+            self.agents.retain(|agent| !agent_ids.contains(&agent.id));
+            self.stats.total_abandonments += agents_to_remove.len() as u64;
 
             // Clean up tracking for abandoned agents
-            for agent_id in agents_to_remove {
+            for (agent_id, _) in agents_to_remove {
                 self.unhappiness_tracker.remove(&agent_id);
                 self.reproduction_cooldown.remove(&agent_id);
             }
@@ -731,7 +785,23 @@ impl Population {
                     if drive1 && drive2 {
                         // Successful reproduction
                         let offspring = reproduce(agent1, agent2, self.current_tick);
+                        let child_id = offspring.id;
+                        let child_pos = (offspring.state.position.0, offspring.state.position.1);
+                        let parent1_id = agent1.id;
+                        let parent2_id = agent2.id;
+
                         new_offspring.push(offspring);
+
+                        // Emit birth event
+                        self.pending_events.push(SimulationEvent::new(
+                            self.current_tick,
+                            SimulationEventType::Birth {
+                                mother_id: parent1_id,
+                                child_id,
+                                father_id: Some(parent2_id),
+                            },
+                            Some(child_pos),
+                        ));
 
                         // Add cooldown (prevent immediate re-reproduction)
                         self.reproduction_cooldown.insert(agent1.id, 500); // 500 ticks cooldown
@@ -1032,6 +1102,222 @@ impl Population {
                 drive.partial_satisfy(satisfaction_2);
             }
         }
+    }
+
+    /// Process gossip spreading between nearby agents
+    ///
+    /// Agents share information from their knowledge base with nearby agents.
+    /// Information is distorted based on the sharer's personality traits.
+    /// Trust ratings affect how much weight the receiver gives to information.
+    pub fn process_gossip(&mut self) {
+        use crate::agents::gossip::{Information, InformationType};
+        use crate::core::DriveType;
+        use rand::seq::SliceRandom;
+        use rand::Rng;
+
+        const GOSSIP_RANGE_SQUARED: f32 = 36.0; // 6 tiles - slightly further than social range
+
+        let mut rng = rand::thread_rng();
+        let current_tick = self.current_tick;
+
+        // Collect gossip pairs and what info to share
+        let mut gossip_events: Vec<(usize, usize, Information)> = Vec::new();
+
+        // Find nearby agent pairs who might gossip
+        for i in 0..self.agents.len() {
+            if !self.agents[i].state.is_alive {
+                continue;
+            }
+
+            // Skip agents with active survival drives
+            let hunger_active = self.agents[i].drives.get(DriveType::Hunger)
+                .map(|d| d.value > 0.7)
+                .unwrap_or(false);
+            let thirst_active = self.agents[i].drives.get(DriveType::Thirst)
+                .map(|d| d.value > 0.7)
+                .unwrap_or(false);
+            if hunger_active || thirst_active {
+                continue;
+            }
+
+            // Calculate gossip probability based on traits
+            let gossip_probability = self.calculate_gossip_probability(&self.agents[i]);
+            if gossip_probability <= 0.0 {
+                continue;
+            }
+
+            // Check if agent has any information to share
+            if self.agents[i].knowledge.known_information.is_empty() {
+                continue;
+            }
+
+            let agent1_pos = self.agents[i].state.position;
+
+            for j in (i + 1)..self.agents.len() {
+                if !self.agents[j].state.is_alive {
+                    continue;
+                }
+
+                // Skip agents with active survival drives
+                let hunger_active_2 = self.agents[j].drives.get(DriveType::Hunger)
+                    .map(|d| d.value > 0.7)
+                    .unwrap_or(false);
+                let thirst_active_2 = self.agents[j].drives.get(DriveType::Thirst)
+                    .map(|d| d.value > 0.7)
+                    .unwrap_or(false);
+                if hunger_active_2 || thirst_active_2 {
+                    continue;
+                }
+
+                let agent2_pos = self.agents[j].state.position;
+
+                // Calculate squared distance
+                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
+                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
+                let distance_squared = dx * dx + dy * dy;
+
+                if distance_squared > GOSSIP_RANGE_SQUARED {
+                    continue;
+                }
+
+                // Roll for gossip attempt
+                if rng.gen::<f32>() > gossip_probability {
+                    continue;
+                }
+
+                // Select random information to share from agent i
+                let info_ids: Vec<_> = self.agents[i].knowledge.known_information.keys().cloned().collect();
+                if let Some(info_id) = info_ids.choose(&mut rng) {
+                    if let Some(info) = self.agents[i].knowledge.known_information.get(info_id) {
+                        // Don't share very old information (older than 10000 ticks)
+                        if current_tick as u64 - info.timestamp < 10000 {
+                            // Filter: don't share information about the recipient
+                            let is_about_recipient = match &info.info_type {
+                                InformationType::Death { agent, .. } => *agent == self.agents[j].id,
+                                InformationType::Conflict { agent1, agent2 } => {
+                                    *agent1 == self.agents[j].id || *agent2 == self.agents[j].id
+                                }
+                                InformationType::EmotionalOutburst { agent, .. } => *agent == self.agents[j].id,
+                                InformationType::Accusation { accused, .. } => *accused == self.agents[j].id,
+                                InformationType::AgentTrait { agent, .. } => *agent == self.agents[j].id,
+                                _ => false,
+                            };
+
+                            if !is_about_recipient {
+                                gossip_events.push((i, j, info.clone()));
+                            }
+                        }
+                    }
+                }
+
+                // Agent j might also share with agent i (bidirectional gossip)
+                let gossip_probability_j = self.calculate_gossip_probability(&self.agents[j]);
+                if gossip_probability_j > 0.0 && rng.gen::<f32>() < gossip_probability_j {
+                    if !self.agents[j].knowledge.known_information.is_empty() {
+                        let info_ids_j: Vec<_> = self.agents[j].knowledge.known_information.keys().cloned().collect();
+                        if let Some(info_id) = info_ids_j.choose(&mut rng) {
+                            if let Some(info) = self.agents[j].knowledge.known_information.get(info_id) {
+                                if current_tick as u64 - info.timestamp < 10000 {
+                                    let is_about_recipient = match &info.info_type {
+                                        InformationType::Death { agent, .. } => *agent == self.agents[i].id,
+                                        InformationType::Conflict { agent1, agent2 } => {
+                                            *agent1 == self.agents[i].id || *agent2 == self.agents[i].id
+                                        }
+                                        InformationType::EmotionalOutburst { agent, .. } => *agent == self.agents[i].id,
+                                        InformationType::Accusation { accused, .. } => *accused == self.agents[i].id,
+                                        InformationType::AgentTrait { agent, .. } => *agent == self.agents[i].id,
+                                        _ => false,
+                                    };
+
+                                    if !is_about_recipient {
+                                        gossip_events.push((j, i, info.clone()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process all gossip events (share information with distortion)
+        for (sharer_idx, receiver_idx, info) in gossip_events {
+            let sharer_id = self.agents[sharer_idx].id;
+            let sharer_traits = self.agents[sharer_idx].traits.clone();
+
+            // Apply distortion based on sharer's traits
+            let distorted_info = if let Some(distortion_trait) = sharer_traits.would_distort_info() {
+                info.distort(distortion_trait, sharer_id)
+            } else if self.agents[sharer_idx].traits.has(Trait::Gossip) {
+                // Gossip trait also causes exaggeration
+                info.distort(Trait::Gossip, sharer_id)
+            } else {
+                info.clone()
+            };
+
+            // Check if receiver already knows this exact information
+            let already_knows = self.agents[receiver_idx].knowledge
+                .known_information
+                .values()
+                .any(|existing| existing.info_type == distorted_info.info_type);
+
+            if !already_knows {
+                // Receiver processes the information
+                let receiver_id = self.agents[receiver_idx].id;
+                let receiver_traits = self.agents[receiver_idx].traits.clone();
+
+                self.agents[receiver_idx].knowledge.receive_information(
+                    distorted_info,
+                    sharer_id,
+                    receiver_id,
+                    &receiver_traits,
+                    current_tick as u64,
+                );
+
+                // Gossip trait agents get happiness from sharing
+                if self.agents[sharer_idx].traits.has(Trait::Gossip) {
+                    self.agents[sharer_idx].emotions.happiness =
+                        (self.agents[sharer_idx].emotions.happiness + 0.02).min(1.0);
+                }
+            }
+        }
+    }
+
+    /// Calculate gossip probability for an agent based on traits
+    pub fn calculate_gossip_probability(&self, agent: &Agent) -> f32 {
+        let mut probability: f32 = 0.15; // Base 15% chance to gossip when nearby
+
+        // Gossip trait: much more likely to share
+        if agent.traits.has(Trait::Gossip) {
+            probability += 0.35;
+        }
+
+        // Extrovert: more likely to share
+        if agent.traits.has(Trait::Extrovert) {
+            probability += 0.15;
+        }
+
+        // Charismatic: more likely to engage
+        if agent.traits.has(Trait::Charismatic) {
+            probability += 0.10;
+        }
+
+        // Introvert: less likely to share
+        if agent.traits.has(Trait::Introvert) || agent.traits.has(Trait::Introverted) {
+            probability -= 0.20;
+        }
+
+        // Stoic: less chatty
+        if agent.traits.has(Trait::Stoic) {
+            probability -= 0.10;
+        }
+
+        // Honest: won't spread unverified info as freely
+        if agent.traits.has(Trait::Honest) {
+            probability -= 0.05;
+        }
+
+        probability.max(0.0).min(0.8) // Clamp between 0% and 80%
     }
 
     /// Process exploration for all living agents
@@ -1741,6 +2027,18 @@ impl Population {
         }
 
         learning_pairs
+    }
+
+    /// Drain and return all pending events
+    ///
+    /// This is called by the GUI snapshot system to collect events for the timeline.
+    pub fn drain_events(&mut self) -> Vec<SimulationEvent> {
+        std::mem::take(&mut self.pending_events)
+    }
+
+    /// Get pending events without draining (for read-only access)
+    pub fn get_pending_events(&self) -> &[SimulationEvent] {
+        &self.pending_events
     }
 }
 
