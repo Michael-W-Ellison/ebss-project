@@ -542,6 +542,11 @@ impl AgentState {
 
     /// Age the agent by one tick
     pub fn age_tick(&mut self, current_tick: u32) {
+        self.age_tick_with_modifier(current_tick, 1.0);
+    }
+
+    /// Age the agent by one tick with an energy multiplier (e.g., for pregnancy)
+    pub fn age_tick_with_modifier(&mut self, current_tick: u32, energy_multiplier: f32) {
         if !self.is_alive {
             return;
         }
@@ -557,7 +562,7 @@ impl AgentState {
         self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
         // Energy depletion (normal metabolism)
-        let base_energy_loss = 0.05; // Base energy loss per tick
+        let base_energy_loss = 0.05 * energy_multiplier; // Apply pregnancy/other multiplier
         let mut energy_loss = base_energy_loss;
 
         // After 24 hours (1440 ticks) without food: energy depletes faster
@@ -708,6 +713,10 @@ pub struct Agent {
     pub reproduction_drive_modifier: f32,
     /// Fatigue state tracking tiredness, sleep debt, and penalties
     pub fatigue: super::fatigue::FatigueState,
+    /// Cached healing bonus from nearby religious buildings
+    pub cached_healing_bonus: f32,
+    /// Cached defense bonus from nearby religious buildings
+    pub cached_defense_bonus: f32,
 }
 
 impl Agent {
@@ -754,6 +763,8 @@ impl Agent {
             developmental_nutrition: super::childcare::DevelopmentalNutrition::default(),
             reproduction_drive_modifier: Self::generate_reproduction_modifier(),
             fatigue: super::fatigue::FatigueState::new(),
+            cached_healing_bonus: 1.0,
+            cached_defense_bonus: 1.0,
         };
 
         // Initialize default behavior trees for each drive type
@@ -1168,8 +1179,13 @@ impl Agent {
         // First do the regular tick
         self.tick();
 
-        // Then handle aging and survival mechanics
-        self.state.age_tick(current_tick);
+        // Calculate pregnancy energy multiplier (if pregnant)
+        let energy_multiplier = self.pregnancy.as_ref()
+            .map(|p| p.energy_multiplier(current_tick))
+            .unwrap_or(1.0);
+
+        // Then handle aging and survival mechanics with pregnancy modifier
+        self.state.age_tick_with_modifier(current_tick, energy_multiplier);
 
         // Process nutrition metabolism
         self.tick_nutrition(current_tick);
@@ -1926,8 +1942,13 @@ impl Agent {
         self.inventory.max_weight = total_capacity;
     }
 
-    /// Get movement speed including transport and fatigue penalties
+    /// Get movement speed including transport, fatigue, and pregnancy penalties
     pub fn movement_speed(&self) -> f32 {
+        self.movement_speed_at_tick(0) // Default for backward compatibility
+    }
+
+    /// Get movement speed at a specific tick (includes pregnancy modifier)
+    pub fn movement_speed_at_tick(&self, current_tick: u32) -> f32 {
         let body_speed = self.body.movement_speed_multiplier();
         let transport_speed = self.transport.speed_modifier();
         let weight_penalty = if self.inventory.is_overweight() {
@@ -1936,8 +1957,11 @@ impl Agent {
             1.0 - (self.inventory.weight_percentage() * 0.3) // Up to 30% slower at max weight
         };
         let fatigue_penalty = self.fatigue.movement_speed_modifier();
+        let pregnancy_penalty = self.pregnancy.as_ref()
+            .map(|p| p.speed_modifier(current_tick))
+            .unwrap_or(1.0);
 
-        body_speed * transport_speed * weight_penalty * fatigue_penalty
+        body_speed * transport_speed * weight_penalty * fatigue_penalty * pregnancy_penalty
     }
 
     /// Check if agent can carry additional weight
