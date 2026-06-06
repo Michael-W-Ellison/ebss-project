@@ -304,7 +304,7 @@ impl Planner {
             .filter(|o| {
                 o.success
                     && std::mem::discriminant(&o.action_type) == std::mem::discriminant(action_type)
-                    && o.tool_used.as_ref().map(|t| t.as_str()) == Some(tool)
+                    && o.tool_used.as_deref() == Some(tool)
             })
             .collect();
 

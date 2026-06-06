@@ -408,11 +408,12 @@ impl TechnologyRegistry {
 
     /// Record first discovery
     pub fn record_first_discovery(&mut self, tech_id: String, discoverer: Uuid, timestamp: u64) -> bool {
-        if self.first_discoverers.contains_key(&tech_id) {
-            false // Already discovered
-        } else {
-            self.first_discoverers.insert(tech_id, (discoverer, timestamp));
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(e) = self.first_discoverers.entry(tech_id) {
+            e.insert((discoverer, timestamp));
             true
+        } else {
+            false // Already discovered
         }
     }
 

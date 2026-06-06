@@ -375,7 +375,7 @@ impl Simulation {
                 );
 
                 // Generate goals periodically based on drives and emotions
-                if self.current_tick % 50 == 0 {
+                if self.current_tick.is_multiple_of(50) {
                     let agent = &mut self.population.agents[agent_index];
 
                     // Collect current drive types and emotion values
@@ -409,15 +409,15 @@ impl Simulation {
                     use crate::core::GoalWorldState;
 
                     // Calculate storehouse contents
-                    let food_types = vec![
+                    let food_types = [
                         ItemType::Food, ItemType::Bread, ItemType::Cheese,
                         ItemType::Meat, ItemType::Fish, ItemType::Honey, ItemType::Ale,
                     ];
-                    let resource_types = vec![
+                    let resource_types = [
                         ItemType::Wood, ItemType::Stone, ItemType::Iron,
                         ItemType::Clay, ItemType::Sand, ItemType::Coal,
                     ];
-                    let tool_types = vec![
+                    let tool_types = [
                         ItemType::WoodenAxe, ItemType::StoneAxe, ItemType::IronAxe,
                         ItemType::WoodenPickaxe, ItemType::StonePickaxe, ItemType::IronPickaxe,
                         ItemType::WoodenHammer, ItemType::StoneHammer, ItemType::IronHammer,
@@ -552,7 +552,7 @@ impl Simulation {
                     &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
                     EventCategory::AgentAction,
                     "Action result: {} (satisfaction: {:.2})",
-                    action_result.message.as_ref().map(|s| s.as_str()).unwrap_or("No message"),
+                    action_result.message.as_deref().unwrap_or("No message"),
                     action_result.drive_satisfaction
                 );
 
@@ -611,7 +611,7 @@ impl Simulation {
 
                 // Try to create a plan for goals if agent doesn't have one
                 // Only do this periodically to avoid constant replanning
-                if !agent.has_active_plan() && self.current_tick % 50 == 0 {
+                if !agent.has_active_plan() && self.current_tick.is_multiple_of(50) {
                     // Use a default resource/return location (should be enhanced with real world data)
                     let resource_loc = (50, 50, 0);
                     let return_loc = (0, 0, 0);
@@ -668,7 +668,7 @@ impl Simulation {
                 }
 
                 // Cleanup completed goals periodically
-                if self.current_tick % 100 == 0 {
+                if self.current_tick.is_multiple_of(100) {
                     let agent = &mut self.population.agents[agent_index];
                     agent.goals.cleanup_completed();
                 }
@@ -676,7 +676,7 @@ impl Simulation {
 
             // Check if agent should interact with storehouse (every 20 ticks, or when Preparedness is high)
             // This happens independently of drive-based actions to enable cooperative resource sharing
-            if self.current_tick % 20 == 0 || {
+            if self.current_tick.is_multiple_of(20) || {
                 let agent = &self.population.agents[agent_index];
                 agent.drives.get(DriveType::Preparedness)
                     .map(|d| d.value > 0.6)
@@ -687,11 +687,11 @@ impl Simulation {
                     use crate::world::ItemType;
                     
 
-                    let food_types = vec![
+                    let food_types = [
                         ItemType::Food, ItemType::Bread, ItemType::Cheese,
                         ItemType::Meat, ItemType::Fish, ItemType::Honey, ItemType::Ale,
                     ];
-                    let resource_types = vec![
+                    let resource_types = [
                         ItemType::Wood, ItemType::Stone, ItemType::Iron,
                         ItemType::Clay, ItemType::Sand, ItemType::Coal,
                     ];
@@ -728,7 +728,7 @@ impl Simulation {
                         &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
                         EventCategory::Economy,
                         "Storage action result: {}",
-                        action_result.message.as_ref().map(|s| s.as_str()).unwrap_or("No message")
+                        action_result.message.as_deref().unwrap_or("No message")
                     );
                 }
             }
@@ -791,7 +791,7 @@ impl Simulation {
         }
 
         // Log statistics every 10 ticks
-        if self.current_tick % 10 == 0 {
+        if self.current_tick.is_multiple_of(10) {
             self.log_statistics();
         }
 
@@ -2753,9 +2753,9 @@ impl Simulation {
 
                 // Get relationship data (clone to avoid borrow issues)
                 let initiator_traits: Vec<Trait> = self.population.agents[agent_index]
-                    .traits.get_traits().iter().copied().collect();
+                    .traits.get_traits().to_vec();
                 let recipient_traits: Vec<Trait> = self.population.agents[target_index]
-                    .traits.get_traits().iter().copied().collect();
+                    .traits.get_traits().to_vec();
 
                 // Get or create relationship
                 let current_tick = self.current_tick;
@@ -3024,7 +3024,7 @@ impl Simulation {
                 // Capture initiator data before mutable borrows
                 let (initiator_id, info_to_share) = {
                     let initiator = &self.population.agents[agent_index];
-                    let _initiator_traits: Vec<Trait> = initiator.traits.get_traits().iter().copied().collect();
+                    let _initiator_traits: Vec<Trait> = initiator.traits.get_traits().to_vec();
                     let initiator_id = initiator.id;
 
                     // Select information to share from initiator's knowledge base
@@ -3081,7 +3081,7 @@ impl Simulation {
                             resource, location.0, location.1, location.2)
                     }
                     InformationType::Conflict { agent1: _, agent2: _ } => {
-                        format!("Gossiped about conflict between agents")
+                        "Gossiped about conflict between agents".to_string()
                     }
                     InformationType::Death { agent: _, cause } => {
                         format!("Shared news of death: {}", cause)

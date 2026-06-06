@@ -186,7 +186,7 @@ fn consolidate_percepts(percepts: &mut Vec<Percept>) {
 
     for (idx, percept) in percepts.iter().enumerate() {
         if let Percept::AgentDetected { agent_id, .. } = percept {
-            agent_detections.entry(*agent_id).or_insert_with(Vec::new).push(idx);
+            agent_detections.entry(*agent_id).or_default().push(idx);
         }
     }
 

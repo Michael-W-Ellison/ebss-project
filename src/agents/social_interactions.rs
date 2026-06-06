@@ -272,22 +272,22 @@ pub fn select_conversation_topic(
     match relationship {
         RelationshipLevel::Loves(_) => {
             // Family and stories with loved ones
-            let topics = vec![
+            let topics = [
                 ConversationTopic::Family,
                 ConversationTopic::Stories,
                 ConversationTopic::Work,
             ];
-            *topics.get(rng.gen_range(0..topics.len())).unwrap()
+            topics[rng.gen_range(0..topics.len())]
         }
         RelationshipLevel::Likes(_) => {
             // Varied topics with friends
-            let topics = vec![
+            let topics = [
                 ConversationTopic::SmallTalk,
                 ConversationTopic::Work,
                 ConversationTopic::Stories,
                 ConversationTopic::Technology,
             ];
-            *topics.get(rng.gen_range(0..topics.len())).unwrap()
+            topics[rng.gen_range(0..topics.len())]
         }
         _ => {
             // Stick to safe topics with strangers or enemies
@@ -358,12 +358,12 @@ pub fn would_accept_gift(
     };
 
     // Trust affects acceptance
-    let trust_modifier = (trust.value() as f32 / 12.0).max(-0.3).min(0.3);
+    let trust_modifier = (trust.value() as f32 / 12.0).clamp(-0.3, 0.3);
 
     let acceptance_rate = (base_rate + trust_modifier) * suspicion_modifier;
 
     use rand::Rng;
-    rand::thread_rng().gen_bool(acceptance_rate.max(0.0).min(1.0) as f64)
+    rand::thread_rng().gen_bool(acceptance_rate.clamp(0.0, 1.0) as f64)
 }
 
 #[cfg(test)]

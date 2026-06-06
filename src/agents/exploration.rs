@@ -105,8 +105,9 @@ impl ExplorationKnowledge {
         resource_type: ResourceType,
         current_tick: u32,
     ) -> bool {
-        if !self.known_resources.contains_key(&position) {
-            self.known_resources.insert(position, resource_type);
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(e) = self.known_resources.entry(position) {
+            e.insert(resource_type);
 
             // Record discovery
             self.discoveries.push(Discovery {
@@ -131,8 +132,9 @@ impl ExplorationKnowledge {
         building_type: BuildingType,
         current_tick: u32,
     ) -> bool {
-        if !self.known_buildings.contains_key(&position) {
-            self.known_buildings.insert(position, building_type);
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(e) = self.known_buildings.entry(position) {
+            e.insert(building_type);
 
             // Record discovery
             self.discoveries.push(Discovery {
@@ -158,8 +160,9 @@ impl ExplorationKnowledge {
         capacity: f32,
         current_tick: u32,
     ) -> bool {
-        if !self.known_storage.contains_key(&position) {
-            self.known_storage.insert(position, (storage_type.clone(), capacity));
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(e) = self.known_storage.entry(position) {
+            e.insert((storage_type.clone(), capacity));
 
             // Record discovery
             self.discoveries.push(Discovery {

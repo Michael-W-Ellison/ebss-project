@@ -457,7 +457,7 @@ impl World {
 
             self.resource_nodes
                 .entry(type_name)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(pos_tuple);
         }
     }
@@ -1190,7 +1190,7 @@ impl World {
         self.plants.tick();
 
         // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
-        if self.tick % 10 == 0 {
+        if self.tick.is_multiple_of(10) {
             self.regenerate_resources();
         }
 
@@ -1393,7 +1393,7 @@ impl World {
     pub fn place_resource_node(&mut self, resource_type: &str, position: (i32, i32, i32)) {
         self.resource_nodes
             .entry(resource_type.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(position);
     }
 

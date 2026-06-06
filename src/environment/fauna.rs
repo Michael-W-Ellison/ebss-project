@@ -2265,7 +2265,7 @@ impl AnimalManager {
             if animal.can_breed() {
                 breeding_candidates
                     .entry(animal.species_id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(idx);
             }
         }
@@ -2629,7 +2629,7 @@ impl AnimalManager {
                 }
                 let climate = terrain_to_climate_zone(terrain);
                 positions_by_climate.entry(climate)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push((x as i32, y as i32));
             }
         }

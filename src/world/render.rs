@@ -129,7 +129,7 @@ impl AsciiRenderer {
         output.push_str(&format!("  Food nodes: {} units\n", stats.food_available));
 
         // Resources in storehouse
-        output.push_str(&format!("\nStorehouse Inventory:\n"));
+        output.push_str("\nStorehouse Inventory:\n");
         output.push_str(&format!("  Wood: {}\n", stats.wood_stored));
         output.push_str(&format!("  Stone: {}\n", stats.stone_stored));
         output.push_str(&format!("  Iron: {}\n", stats.iron_stored));

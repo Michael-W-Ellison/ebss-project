@@ -184,22 +184,22 @@ impl Population {
         self.update_relationships();
 
         // Decay distant relationships (every 100 ticks to reduce overhead)
-        if current_tick % 100 == 0 {
+        if current_tick.is_multiple_of(100) {
             self.decay_relationships();
         }
 
         // Process social interactions (every 10 ticks to reduce overhead)
-        if current_tick % 10 == 0 {
+        if current_tick.is_multiple_of(10) {
             self.process_social_interactions();
         }
 
         // Process gossip spreading (every 15 ticks)
-        if current_tick % 15 == 0 {
+        if current_tick.is_multiple_of(15) {
             self.process_gossip();
         }
 
         // Process observational learning (every 20 ticks to reduce overhead)
-        if current_tick % 20 == 0 {
+        if current_tick.is_multiple_of(20) {
             self.process_observational_learning();
         }
 
@@ -210,7 +210,7 @@ impl Population {
         self.share_technologies();
 
         // Attempt technology discovery (every 50 ticks to reduce overhead)
-        if current_tick % 50 == 0 {
+        if current_tick.is_multiple_of(50) {
             self.discover_technologies();
         }
 
@@ -1023,8 +1023,8 @@ impl Population {
                 .clone();
 
             // Get traits
-            let agent1_traits: Vec<Trait> = self.agents[i].traits.get_traits().iter().cloned().collect();
-            let agent2_traits: Vec<Trait> = self.agents[j].traits.get_traits().iter().cloned().collect();
+            let agent1_traits: Vec<Trait> = self.agents[i].traits.get_traits().to_vec();
+            let agent2_traits: Vec<Trait> = self.agents[j].traits.get_traits().to_vec();
 
             // Determine interaction type
             let interaction_type = if should_greet(
@@ -1303,7 +1303,7 @@ impl Population {
             probability -= 0.05;
         }
 
-        probability.max(0.0).min(0.8) // Clamp between 0% and 80%
+        probability.clamp(0.0, 0.8) // Clamp between 0% and 80%
     }
 
     /// Process exploration for all living agents

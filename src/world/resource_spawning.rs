@@ -257,7 +257,7 @@ impl<'a> NaturalisticSpawner<'a> {
                 // Spawn nodes in cluster around center
                 for i in 0..nodes_per_cluster {
                     let pos = if i == 0 {
-                        center_pos.clone()
+                        center_pos
                     } else {
                         self.offset_position(&center_pos, cluster_radius)
                     };

@@ -335,8 +335,8 @@ impl Grid {
                     }
                 }
 
-                if !visited.contains_key(&neighbor) {
-                    visited.insert(neighbor, true);
+                if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {
+                    e.insert(true);
                     came_from.insert(neighbor, current);
                     queue.push_back(neighbor);
                 }
@@ -406,8 +406,8 @@ impl Grid {
                     }
                 }
 
-                if !visited.contains_key(&neighbor) {
-                    visited.insert(neighbor, true);
+                if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbor) {
+                    e.insert(true);
                     came_from.insert(neighbor, current);
                     queue.push_back(neighbor);
                 }

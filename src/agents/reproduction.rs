@@ -317,8 +317,8 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
     ];
 
     // Collect all parent traits
-    let parent1_traits: Vec<_> = traits1.get_traits().iter().copied().collect();
-    let parent2_traits: Vec<_> = traits2.get_traits().iter().copied().collect();
+    let parent1_traits: Vec<_> = traits1.get_traits().to_vec();
+    let parent2_traits: Vec<_> = traits2.get_traits().to_vec();
 
     // Inherit traits from parent 1 (50% chance for each trait)
     for &trait_item in &parent1_traits {

@@ -101,22 +101,22 @@ impl Preferences {
 
     /// Check if eating specific food
     pub fn is_favorite_food(&self, food: &str) -> bool {
-        self.favorite_food.as_ref().map_or(false, |f| f == food)
+        self.favorite_food.as_ref().is_some_and(|f| f == food)
     }
 
     /// Check if doing favorite job
     pub fn is_favorite_job(&self, job: &str) -> bool {
-        self.favorite_job.as_ref().map_or(false, |j| j == job)
+        self.favorite_job.as_ref().is_some_and(|j| j == job)
     }
 
     /// Check if near favorite animal
     pub fn is_favorite_animal(&self, animal: &str) -> bool {
-        self.favorite_animal.as_ref().map_or(false, |a| a == animal)
+        self.favorite_animal.as_ref().is_some_and(|a| a == animal)
     }
 
     /// Check if using favorite tool
     pub fn is_favorite_tool(&self, tool: &str) -> bool {
-        self.favorite_tool.as_ref().map_or(false, |t| t == tool)
+        self.favorite_tool.as_ref().is_some_and(|t| t == tool)
     }
 
     /// Check if near favorite person

@@ -83,7 +83,7 @@ impl SimulationController {
 
     /// Set the simulation speed (ticks per second)
     pub fn set_tick_rate(&mut self, rate: f32) {
-        self.tick_rate = rate.max(0.1).min(1000.0);
+        self.tick_rate = rate.clamp(0.1, 1000.0);
     }
 
     /// Get reference to population

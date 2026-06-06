@@ -435,7 +435,7 @@ impl EmergenceDetector {
                     if severity >= self.detection_threshold {
                         self.report_pattern(EmergentPattern {
                             pattern_type: PatternType::TraitClustering {
-                                trait_item: trait_item.clone(),
+                                trait_item: *trait_item,
                                 prevalence: count,
                             },
                             detected_at_tick: current_tick,
@@ -572,7 +572,7 @@ impl EmergenceDetector {
                     if severity >= self.detection_threshold {
                         self.report_pattern(EmergentPattern {
                             pattern_type: PatternType::DriveCrisis {
-                                drive: drive_type.clone(),
+                                drive: *drive_type,
                                 critical_percentage,
                             },
                             detected_at_tick: current_tick,
@@ -608,7 +608,7 @@ impl EmergenceDetector {
 
                         self.report_pattern(EmergentPattern {
                             pattern_type: PatternType::EmotionalEpidemic {
-                                emotion: emotion_type.clone(),
+                                emotion: *emotion_type,
                                 intensity,
                             },
                             detected_at_tick: current_tick,

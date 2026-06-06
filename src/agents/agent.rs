@@ -1287,7 +1287,7 @@ impl Agent {
     pub fn update_preferences_from_traits(&mut self) {
         self.preferences = Preferences::from_traits(&self.traits);
         // Also update storage preferences
-        let trait_vec: Vec<_> = self.traits.get_traits().iter().copied().collect();
+        let trait_vec: Vec<_> = self.traits.get_traits().to_vec();
         self.storage_preferences = super::storage_management::StoragePreferences::from_traits(&trait_vec);
     }
 
@@ -2953,7 +2953,7 @@ impl Agent {
                 reasons.push(format!("I deeply cared about them (bond: {:.1})", relationship.bond_strength));
             } else if relationship.bond_strength > 0.3 {
                 // Meaningful positive relationship
-                reasons.push(format!("We had a bond"));
+                reasons.push("We had a bond".to_string());
             }
         }
 
@@ -3219,7 +3219,7 @@ impl Agent {
         );
 
         // Check if plan is acceptable for this agent's traits
-        let traits: Vec<_> = self.traits.get_traits().iter().copied().collect();
+        let traits: Vec<_> = self.traits.get_traits().to_vec();
         if !plan.exceeds_complexity_limit(&traits) {
             log::debug!(
                 "Agent {} created plan: {} ({} steps, est. {} ticks)",
@@ -3253,7 +3253,7 @@ impl Agent {
         let goal = goal.unwrap();
 
         // Get traits for complexity check
-        let traits: Vec<_> = self.traits.get_traits().iter().copied().collect();
+        let traits: Vec<_> = self.traits.get_traits().to_vec();
 
         // Handle internal goals first
         if let Some(internal_goal) = &goal.internal {

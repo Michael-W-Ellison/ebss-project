@@ -113,7 +113,7 @@ impl SmeltingRegistry {
         // Add to input index
         self.by_input
             .entry(recipe.input_material.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(recipe.id.clone());
 
         // Add to recipes

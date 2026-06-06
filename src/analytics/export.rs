@@ -44,11 +44,11 @@ impl DataExporter {
 
         let json = if pretty {
             serde_json::to_string_pretty(metrics).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::Other, e)
+                std::io::Error::other(e)
             })?
         } else {
             serde_json::to_string(metrics).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::Other, e)
+                std::io::Error::other(e)
             })?
         };
 
@@ -113,11 +113,11 @@ impl DataExporter {
 
         let json = if pretty {
             serde_json::to_string_pretty(&detector.detected_patterns).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::Other, e)
+                std::io::Error::other(e)
             })?
         } else {
             serde_json::to_string(&detector.detected_patterns).map_err(|e| {
-                std::io::Error::new(std::io::ErrorKind::Other, e)
+                std::io::Error::other(e)
             })?
         };
 
@@ -242,7 +242,7 @@ impl DataExporter {
         // Export summary
         let summary = metrics.summary();
         let summary_json = serde_json::to_string_pretty(&summary)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(|e| std::io::Error::other(e))?;
         let mut summary_file = File::create(dir.join("summary.json"))?;
         summary_file.write_all(summary_json.as_bytes())?;
 

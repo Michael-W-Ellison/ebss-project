@@ -49,20 +49,20 @@ impl RelationshipLevel {
     pub fn from_value(value: i8) -> Self {
         match value {
             v if v <= -16 => {
-                let level = ((v + 30) / 3 - 5).max(-5).min(-1);
+                let level = ((v + 30) / 3 - 5).clamp(-5, -1);
                 RelationshipLevel::Hates(level)
             }
             v if v <= -3 => {
-                let level = ((v + 15) / 3 - 5).max(-5).min(-1);
+                let level = ((v + 15) / 3 - 5).clamp(-5, -1);
                 RelationshipLevel::Dislikes(level)
             }
-            v if v <= 2 => RelationshipLevel::Neutral(v.max(-2).min(2)),
+            v if v <= 2 => RelationshipLevel::Neutral(v.clamp(-2, 2)),
             v if v <= 15 => {
-                let level = ((v - 3) / 3 + 1).max(1).min(5);
+                let level = ((v - 3) / 3 + 1).clamp(1, 5);
                 RelationshipLevel::Likes(level)
             }
             _ => {
-                let level = ((value - 16) / 3 + 1).max(1).min(5);
+                let level = ((value - 16) / 3 + 1).clamp(1, 5);
                 RelationshipLevel::Loves(level)
             }
         }
@@ -70,7 +70,7 @@ impl RelationshipLevel {
 
     /// Adjust relationship by delta, transitioning between levels
     pub fn adjust(&mut self, delta: i8) {
-        let new_value = (self.value() + delta).max(-30).min(30);
+        let new_value = (self.value() + delta).clamp(-30, 30);
         *self = RelationshipLevel::from_value(new_value);
     }
 
@@ -142,21 +142,21 @@ impl TrustLevel {
     /// Create from numeric value
     pub fn from_value(value: i8) -> Self {
         match value {
-            v if v <= -10 => TrustLevel::DistrustCompletely((v + 12).max(-3).min(-1)),
-            v if v <= -7 => TrustLevel::MostlyDistrusts((v + 9).max(-3).min(-1)),
-            v if v <= -4 => TrustLevel::GenerallyDistrusts((v + 6).max(-3).min(-1)),
-            v if v <= -1 => TrustLevel::SlightlyDistrusts((v + 3).max(-3).min(-1)),
+            v if v <= -10 => TrustLevel::DistrustCompletely((v + 12).clamp(-3, -1)),
+            v if v <= -7 => TrustLevel::MostlyDistrusts((v + 9).clamp(-3, -1)),
+            v if v <= -4 => TrustLevel::GenerallyDistrusts((v + 6).clamp(-3, -1)),
+            v if v <= -1 => TrustLevel::SlightlyDistrusts((v + 3).clamp(-3, -1)),
             0 => TrustLevel::Neutral,
-            v if v <= 3 => TrustLevel::SlightlyTrusts(v.max(1).min(3)),
-            v if v <= 6 => TrustLevel::GenerallyTrusts((v - 3).max(1).min(3)),
-            v if v <= 9 => TrustLevel::MostlyTrusts((v - 6).max(1).min(3)),
-            _ => TrustLevel::TrustsCompletely((value - 9).max(1).min(3)),
+            v if v <= 3 => TrustLevel::SlightlyTrusts(v.clamp(1, 3)),
+            v if v <= 6 => TrustLevel::GenerallyTrusts((v - 3).clamp(1, 3)),
+            v if v <= 9 => TrustLevel::MostlyTrusts((v - 6).clamp(1, 3)),
+            _ => TrustLevel::TrustsCompletely((value - 9).clamp(1, 3)),
         }
     }
 
     /// Adjust trust by delta
     pub fn adjust(&mut self, delta: i8) {
-        let new_value = (self.value() + delta).max(-12).min(12);
+        let new_value = (self.value() + delta).clamp(-12, 12);
         *self = TrustLevel::from_value(new_value);
     }
 

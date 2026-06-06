@@ -104,7 +104,7 @@ impl SimulationMetrics {
 
     /// Record a snapshot if it's time to sample
     pub fn record_if_time(&mut self, tick: u32, population: &Population) {
-        if tick % self.sampling_interval == 0 {
+        if tick.is_multiple_of(self.sampling_interval) {
             self.record_snapshot(tick, population);
         }
     }
@@ -170,8 +170,8 @@ impl SimulationMetrics {
         for agent in &population.agents {
             for drive in &agent.drives.drives {
                 drive_map
-                    .entry(drive.drive_type.clone())
-                    .or_insert_with(Vec::new)
+                    .entry(drive.drive_type)
+                    .or_default()
                     .push(drive.value);
             }
         }
@@ -202,27 +202,27 @@ impl SimulationMetrics {
             // Collect negative emotion values (0.0 to 1.0 range)
             emotion_map
                 .entry(crate::core::EmotionType::Anger)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(agent.emotions.anger);
             emotion_map
                 .entry(crate::core::EmotionType::Fear)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(agent.emotions.fear);
             emotion_map
                 .entry(crate::core::EmotionType::Sadness)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(agent.emotions.sadness);
 
             // Collect happiness (calculated from negative emotions, -1.0 to 1.0 range)
             emotion_map
                 .entry(crate::core::EmotionType::Happiness)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(agent.emotions.happiness);
 
             // Collect curiosity from agent's emotion state
             emotion_map
                 .entry(crate::core::EmotionType::Curiosity)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(agent.emotions.curiosity);
         }
 
@@ -542,7 +542,7 @@ impl SimulationMetrics {
                 .traits
                 .iter()
                 .max_by_key(|(_, &count)| count)
-                .map(|(trait_item, _)| trait_item.clone())
+                .map(|(&trait_item, _)| trait_item)
         } else {
             None
         }

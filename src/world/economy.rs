@@ -96,7 +96,7 @@ impl MarketData {
         let demand_f = self.demand as f32;
 
         // Ratio of demand to supply (0.1 to 10.0 range)
-        let ratio = (demand_f / supply_f).max(0.1).min(10.0);
+        let ratio = (demand_f / supply_f).clamp(0.1, 10.0);
 
         // New price = base_price * ratio
         let new_price = (self.base_price as f32 * ratio).round() as u32;

@@ -221,7 +221,7 @@ impl ObservationalLearning {
     pub fn observe_action(&mut self, action: ObservedAction) {
         let key = (action.performer, action.action_type);
 
-        let progress = self.observations.entry(key).or_insert_with(LearningProgress::new);
+        let progress = self.observations.entry(key).or_default();
         progress.record_observation(&action);
 
         // Add to recent observations

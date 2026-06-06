@@ -76,7 +76,7 @@ impl<'a> SpatialPlanner<'a> {
             let pos = (building.position.x, building.position.y, 0);
             self.building_locations
                 .entry(building.building_type)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(pos);
         }
     }

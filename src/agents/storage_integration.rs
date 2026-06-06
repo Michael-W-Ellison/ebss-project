@@ -191,7 +191,7 @@ pub fn count_in_agent_inventory(inventory: &Inventory, item_type: ItemType) -> u
 
 /// Count all food items in agent inventory
 pub fn count_food_in_inventory(inventory: &Inventory) -> u32 {
-    let food_types = vec![
+    let food_types = [
         ItemType::Food,
         ItemType::Bread,
         ItemType::Cheese,
@@ -208,7 +208,7 @@ pub fn count_food_in_inventory(inventory: &Inventory) -> u32 {
 
 /// Count all resource items (wood, stone, iron) in agent inventory
 pub fn count_resources_in_inventory(inventory: &Inventory) -> u32 {
-    let resource_types = vec![
+    let resource_types = [
         ItemType::Wood,
         ItemType::Stone,
         ItemType::Iron,
