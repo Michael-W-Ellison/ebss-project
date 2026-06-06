@@ -1,6 +1,7 @@
 // src/analytics/mod.rs
 //! Analytics, data logging, and emergence detection.
 
+use crate::config::GameConfig;
 use crate::world::World;
 use crate::agents::Population;
 use crate::world::spatial_planning::{SpatialPlanner, PlacementStrategy, PlacementCriteria};
@@ -228,6 +229,13 @@ impl Simulation {
             autosave_config: None,
             last_autosave_tick: 0,
         }
+    }
+
+    /// Get combat configuration from global config or use defaults.
+    fn get_combat_config() -> crate::config::CombatConfig {
+        GameConfig::try_global()
+            .map(|c| c.combat.clone())
+            .unwrap_or_default()
     }
 
     /// Enable ASCII visualization
@@ -1407,15 +1415,20 @@ impl Simulation {
                 let weapon_damage = attacker.equipment.weapon_damage();
                 let weapon_speed = attacker.equipment.weapon_attack_speed();
 
+                // Get combat config
+                let combat_config = Self::get_combat_config();
+
                 // Get combat skill bonus (MeleeCombat for melee, Archery for ranged)
                 let skill_level = attacker.skills.get_skill_if_exists(crate::agents::SkillType::MeleeCombat)
                     .map(|s| s.level)
                     .unwrap_or(0);
-                let skill_modifier = 1.0 + (skill_level as f32 / 20.0); // -10 to 10 -> 0.5 to 1.5
+                let skill_modifier = 1.0 + (skill_level as f32 * combat_config.experience.skill_damage_bonus);
 
-                // Calculate base damage with variance
+                // Calculate base damage with variance from config
                 // Weapon speed affects damage: faster weapons deal slightly less damage per hit
-                let damage_variance = rng.gen_range(0.8..1.2); // +/- 20% randomness
+                let damage_variance = rng.gen_range(
+                    combat_config.damage.variance_min..combat_config.damage.variance_max
+                );
                 let speed_factor = (2.0 - weapon_speed).max(0.5); // Fast weapons (1.5) -> 0.5, slow (0.6) -> 1.4
                 let base_damage = weapon_damage * damage_variance * skill_modifier * speed_factor;
 
@@ -1454,15 +1467,15 @@ impl Simulation {
                     }
                 }
 
-                // Determine injury type based on damage and weapon
-                let injury_type = if actual_damage >= 30.0 {
+                // Determine injury type based on damage and config thresholds
+                let injury_type = if actual_damage >= combat_config.injuries.severe_threshold {
                     // High damage can cause crippling injuries
                     if rng.gen_bool(0.3) {
                         InjuryType::Crippling(crate::agents::body::CripplingType::Partial)
                     } else {
                         InjuryType::Major
                     }
-                } else if actual_damage >= 15.0 {
+                } else if actual_damage >= combat_config.injuries.moderate_threshold {
                     InjuryType::Major
                 } else {
                     InjuryType::Minor
@@ -1548,7 +1561,11 @@ impl Simulation {
 
                 // Grant combat XP (more for kills, determine skill based on weapon type)
                 let attacker = &mut self.population.agents[agent_index];
-                let combat_xp = if !target_alive { 5 } else { 2 };
+                let combat_xp = if !target_alive {
+                    combat_config.experience.xp_per_kill
+                } else {
+                    combat_config.experience.xp_per_hit
+                };
 
                 // Determine appropriate skill based on equipped weapon
                 let skill_type = attacker.equipment
