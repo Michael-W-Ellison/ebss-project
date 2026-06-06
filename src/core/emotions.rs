@@ -3,8 +3,12 @@
 //!
 //! Tracks 5 core emotions: Fear, Anger, Sadness, Happiness, Curiosity
 //! Emotions are influenced by traits and affect agent behavior.
+//!
+//! Configuration values can be loaded from `config/default.toml` or customized
+//! via the `GameConfig` system. See `crate::config` for details.
 
 use serde::{Deserialize, Serialize};
+use crate::config::GameConfig;
 
 /// The 5 core emotions that drive agent behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,12 +31,22 @@ impl EmotionType {
         ]
     }
 
-    /// Get default decay rate per tick (emotions naturally return to neutral)
+    /// Get default decay rate per tick (emotions naturally return to neutral).
+    /// Uses global config if available, otherwise falls back to hardcoded defaults.
     pub fn default_decay_rate(&self) -> f32 {
+        if let Some(config) = GameConfig::try_global() {
+            config.emotions.decay_rates.get(*self)
+        } else {
+            self.hardcoded_decay_rate()
+        }
+    }
+
+    /// Get the hardcoded decay rate (used when no config is loaded)
+    fn hardcoded_decay_rate(&self) -> f32 {
         match self {
-            EmotionType::Fear => 0.01,      // Fear decays quickly
-            EmotionType::Anger => 0.005,    // Anger lingers
-            EmotionType::Sadness => 0.003,  // Sadness decays slowly
+            EmotionType::Fear => 0.01,       // Fear decays quickly
+            EmotionType::Anger => 0.005,     // Anger lingers
+            EmotionType::Sadness => 0.003,   // Sadness decays slowly
             EmotionType::Happiness => 0.008, // Happiness fades moderately
             EmotionType::Curiosity => 0.002, // Curiosity persists
         }

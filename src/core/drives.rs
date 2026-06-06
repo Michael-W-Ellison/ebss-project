@@ -7,8 +7,12 @@
 //! - A threshold for activation
 //! - A weight (agent personality)
 //! - Increase/decrease conditions
+//!
+//! Configuration values can be loaded from `config/default.toml` or customized
+//! via the `GameConfig` system. See `crate::config` for details.
 
 use serde::{Deserialize, Serialize};
+use crate::config::GameConfig;
 
 /// The 14 core drives that motivate agent behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -64,8 +68,18 @@ impl DriveType {
         ]
     }
 
-    /// Get the default threshold for this drive type
+    /// Get the default threshold for this drive type.
+    /// Uses global config if available, otherwise falls back to hardcoded defaults.
     pub fn default_threshold(&self) -> f32 {
+        if let Some(config) = GameConfig::try_global() {
+            config.drives.thresholds.get(*self)
+        } else {
+            self.hardcoded_threshold()
+        }
+    }
+
+    /// Get the hardcoded default threshold (used when no config is loaded)
+    fn hardcoded_threshold(&self) -> f32 {
         match self {
             DriveType::Hunger => 0.7,
             DriveType::Thirst => 0.75,
@@ -84,14 +98,24 @@ impl DriveType {
         }
     }
 
-    /// Get the base accumulation rate per tick
+    /// Get the base accumulation rate per tick.
+    /// Uses global config if available, otherwise falls back to hardcoded defaults.
     pub fn base_accumulation_rate(&self) -> f32 {
+        if let Some(config) = GameConfig::try_global() {
+            config.drives.accumulation_rates.get(*self)
+        } else {
+            self.hardcoded_accumulation_rate()
+        }
+    }
+
+    /// Get the hardcoded accumulation rate (used when no config is loaded)
+    fn hardcoded_accumulation_rate(&self) -> f32 {
         match self {
             DriveType::Hunger => 0.01,
             DriveType::Thirst => 0.012,  // Slightly faster than hunger
             DriveType::Rest => 0.008,
             DriveType::Shelter => 0.005,
-            DriveType::Safety => 0.02,  // Spikes with threats
+            DriveType::Safety => 0.02,   // Spikes with threats
             DriveType::Preparedness => 0.002,
             DriveType::Industry => 0.003,
             DriveType::Sustenance => 0.003,
