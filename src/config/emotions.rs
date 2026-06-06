@@ -6,7 +6,7 @@ use crate::core::EmotionType;
 use super::validation::{ConfigError, ConfigValidation};
 
 /// Configuration for the emotion system.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmotionsConfig {
     /// Natural decay rates per tick (emotions return to neutral)
     pub decay_rates: EmotionDecayRates,
@@ -109,16 +109,6 @@ impl Default for EmotionInteractionModifiers {
             sadness_efficiency_penalty: 0.25,
             curiosity_exploration_boost: 0.3,
             grief_relationship_multiplier: 1.5,
-        }
-    }
-}
-
-impl Default for EmotionsConfig {
-    fn default() -> Self {
-        Self {
-            decay_rates: EmotionDecayRates::default(),
-            intensity_thresholds: EmotionIntensityThresholds::default(),
-            interaction_modifiers: EmotionInteractionModifiers::default(),
         }
     }
 }

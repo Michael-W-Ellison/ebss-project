@@ -6,7 +6,7 @@ use crate::core::DriveType;
 use super::validation::{ConfigError, ConfigValidation};
 
 /// Configuration for the drive system that motivates agent behavior.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DrivesConfig {
     /// Threshold values at which drives become "urgent" (0.0 - 1.0)
     pub thresholds: DriveThresholds,
@@ -195,17 +195,6 @@ impl Default for DriveUrgencyWeights {
             safety: 1.5,
             social: 1.0,
             self_actualization: 0.5,
-        }
-    }
-}
-
-impl Default for DrivesConfig {
-    fn default() -> Self {
-        Self {
-            thresholds: DriveThresholds::default(),
-            accumulation_rates: DriveAccumulationRates::default(),
-            satisfaction_amounts: DriveSatisfactionAmounts::default(),
-            urgency_weights: DriveUrgencyWeights::default(),
         }
     }
 }

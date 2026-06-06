@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::validation::{ConfigError, ConfigValidation};
 
 /// Configuration for the combat system.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CombatConfig {
     /// Damage calculation parameters
     pub damage: DamageConfig,
@@ -147,18 +147,6 @@ impl Default for InjuryConfig {
             severe_threshold: 30.0,
             bleed_damage_per_tick: 0.5,
             infection_chance: 0.1,
-        }
-    }
-}
-
-impl Default for CombatConfig {
-    fn default() -> Self {
-        Self {
-            damage: DamageConfig::default(),
-            defense: DefenseConfig::default(),
-            weapons: WeaponConfig::default(),
-            experience: CombatExperienceConfig::default(),
-            injuries: InjuryConfig::default(),
         }
     }
 }

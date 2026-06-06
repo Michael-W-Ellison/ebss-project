@@ -343,10 +343,9 @@ impl Simulation {
                 }
             };
 
-            if drive_type.is_none() {
+            let Some(drive_type) = drive_type else {
                 continue;
-            }
-            let drive_type = drive_type.unwrap();
+            };
 
             sim_debug!(
                 &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
@@ -367,12 +366,12 @@ impl Simulation {
                 }
             };
 
-            if tree_name.is_some() {
+            if let (Some(name), Some(result)) = (&tree_name, &execution_result) {
                 sim_debug!(
                     &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
                     EventCategory::AgentAction,
                     "Executed tree: {} -> {:?}",
-                    tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
+                    name, result
                 );
 
                 // Generate goals periodically based on drives and emotions
@@ -1230,10 +1229,9 @@ impl Simulation {
                     _ => None,
                 };
 
-                if resource_type_enum.is_none() {
+                let Some(resource_type_enum) = resource_type_enum else {
                     return ActionResult::failure(format!("Unknown resource type: {}", resource_type));
-                }
-                let resource_type_enum = resource_type_enum.unwrap();
+                };
 
                 // Get agent position
                 let agent = &self.population.agents[agent_index];
@@ -1504,10 +1502,9 @@ impl Simulation {
                 let target_index = self.population.agents.iter()
                     .position(|a| &a.id == target_agent_id);
 
-                if target_index.is_none() {
+                let Some(target_index) = target_index else {
                     return ActionResult::failure("Target agent not found".to_string());
-                }
-                let target_index = target_index.unwrap();
+                };
 
                 // Can't attack yourself
                 if target_index == agent_index {
@@ -1871,7 +1868,7 @@ impl Simulation {
                 });
 
                 // If no recipe found in available recipes, check if it exists but agent doesn't meet requirements
-                if recipe_match.is_none() {
+                let Some((recipe, _, _)) = recipe_match else {
                     // Find the recipe in the full list to give a helpful error message
                     let full_recipe = skill_gated_recipes.iter().find(|(r, _, _)| {
                         r.outputs.iter().any(|output| {
@@ -1905,8 +1902,7 @@ impl Simulation {
                             item_type
                         ));
                     }
-                }
-                let (recipe, _, _) = recipe_match.unwrap();
+                };
 
                 // Check if agent has all required materials in inventory
                 let agent = &self.population.agents[agent_index];
@@ -2746,11 +2742,9 @@ impl Simulation {
                 use crate::core::traits::Trait;
 
                 // Find the target agent
-                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
-                if target_index.is_none() {
+                let Some(target_index) = self.population.agents.iter().position(|a| a.id == *target_agent_id) else {
                     return ActionResult::failure("Target agent not found".to_string());
-                }
-                let target_index = target_index.unwrap();
+                };
 
                 // Don't socialize with self
                 if target_index == agent_index {
@@ -3016,11 +3010,9 @@ impl Simulation {
                 use crate::core::traits::Trait;
 
                 // Find the target agent
-                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
-                if target_index.is_none() {
+                let Some(target_index) = self.population.agents.iter().position(|a| a.id == *target_agent_id) else {
                     return ActionResult::failure("Target agent not found".to_string());
-                }
-                let target_index = target_index.unwrap();
+                };
 
                 // Don't share with self
                 if target_index == agent_index {
@@ -3127,11 +3119,9 @@ impl Simulation {
                 use crate::agents::gossip::{Information, InformationType};
 
                 // Find the target agent
-                let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
-                if target_index.is_none() {
+                let Some(target_index) = self.population.agents.iter().position(|a| a.id == *target_agent_id) else {
                     return ActionResult::failure("Target agent not found".to_string());
-                }
-                let target_index = target_index.unwrap();
+                };
 
                 // Don't mate with self
                 if target_index == agent_index {
@@ -4068,14 +4058,14 @@ impl Simulation {
             fs::create_dir_all(&config.save_directory)?;
         }
 
-        self.autosave_config = Some(config);
-        self.last_autosave_tick = self.current_tick;
-
         let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
         sim_info!(&log_ctx, EventCategory::Simulation, "Auto-save enabled: interval={}, max_checkpoints={}, directory={:?}",
-              self.autosave_config.as_ref().unwrap().interval_ticks,
-              self.autosave_config.as_ref().unwrap().max_checkpoints,
-              self.autosave_config.as_ref().unwrap().save_directory);
+              config.interval_ticks,
+              config.max_checkpoints,
+              config.save_directory);
+
+        self.autosave_config = Some(config);
+        self.last_autosave_tick = self.current_tick;
 
         Ok(())
     }

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::validation::{ConfigError, ConfigValidation};
 
 /// Configuration for learning and skill progression systems.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LearningConfig {
     /// General skill progression parameters
     pub skills: SkillProgressionConfig,
@@ -121,17 +121,6 @@ impl Default for MemoryConfig {
             consolidation_threshold: 0.5,
             decay_rate: 0.01,
             teaching_effectiveness: 0.7,
-        }
-    }
-}
-
-impl Default for LearningConfig {
-    fn default() -> Self {
-        Self {
-            skills: SkillProgressionConfig::default(),
-            observational: ObservationalLearningConfig::default(),
-            discovery: DiscoveryConfig::default(),
-            memory: MemoryConfig::default(),
         }
     }
 }

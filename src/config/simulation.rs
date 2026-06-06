@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::validation::{ConfigError, ConfigValidation};
 
 /// Configuration for general simulation parameters.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SimulationConfig {
     /// Time and tick configuration
     pub time: TimeConfig,
@@ -135,17 +135,6 @@ impl Default for PerformanceConfig {
             pathfinding_cache_ticks: 10,
             autosave_interval: 10000,
             max_checkpoints: 5,
-        }
-    }
-}
-
-impl Default for SimulationConfig {
-    fn default() -> Self {
-        Self {
-            time: TimeConfig::default(),
-            population: PopulationConfig::default(),
-            world: WorldSimConfig::default(),
-            performance: PerformanceConfig::default(),
         }
     }
 }

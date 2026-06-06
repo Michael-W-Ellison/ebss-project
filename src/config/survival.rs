@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::validation::{ConfigError, ConfigValidation};
 
 /// Configuration for survival mechanics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SurvivalConfig {
     /// Starvation mechanics (food deprivation)
     pub starvation: StarvationConfig,
@@ -140,17 +140,6 @@ impl Default for EnvironmentHazardConfig {
             fall_damage_per_height: (3.0, 8.0),
             moderate_fall_damage_threshold: 12.0,
             severe_fall_damage_threshold: 25.0,
-        }
-    }
-}
-
-impl Default for SurvivalConfig {
-    fn default() -> Self {
-        Self {
-            starvation: StarvationConfig::default(),
-            dehydration: DehydrationConfig::default(),
-            energy: EnergyConfig::default(),
-            environment: EnvironmentHazardConfig::default(),
         }
     }
 }
