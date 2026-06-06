@@ -404,6 +404,20 @@ impl EquipmentType {
         )
     }
 
+    /// Is this a ranged weapon?
+    pub fn is_ranged(&self) -> bool {
+        matches!(self, EquipmentType::Bow | EquipmentType::Crossbow)
+    }
+
+    /// Get the combat skill type used by this weapon
+    pub fn combat_skill_type(&self) -> crate::agents::skills::SkillType {
+        if self.is_ranged() {
+            crate::agents::skills::SkillType::Archery
+        } else {
+            crate::agents::skills::SkillType::MeleeCombat
+        }
+    }
+
     /// Get base damage for this weapon type
     pub fn base_damage(&self) -> f32 {
         match self {

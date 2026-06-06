@@ -1546,11 +1546,17 @@ impl Simulation {
                     mount_bonus * 100.0
                 );
 
-                // Grant combat XP (more for kills, check weapon type for skill)
+                // Grant combat XP (more for kills, determine skill based on weapon type)
                 let attacker = &mut self.population.agents[agent_index];
                 let combat_xp = if !target_alive { 5 } else { 2 };
-                // TODO: Check weapon type for Archery vs MeleeCombat
-                attacker.skills.gain_experience(crate::agents::skills::SkillType::MeleeCombat, combat_xp);
+
+                // Determine appropriate skill based on equipped weapon
+                let skill_type = attacker.equipment
+                    .get_weapon()
+                    .map(|w| w.equipment_type.combat_skill_type())
+                    .unwrap_or(crate::agents::skills::SkillType::MeleeCombat); // Unarmed = melee
+
+                attacker.skills.gain_experience(skill_type, combat_xp);
 
                 if !target_alive {
                     ActionResult::success()
@@ -3503,7 +3509,7 @@ impl Simulation {
                 }
 
                 // Add parent-child relationships
-                let offspring_idx = self.population.agents.len() - 1;
+                let _offspring_idx = self.population.agents.len() - 1;
 
                 // Mother bonds with child
                 use crate::agents::emotions::{Relationship, RelationshipType};

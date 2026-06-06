@@ -1,5 +1,10 @@
 // src/environment/action.rs
 //! Action system for agent-environment interactions.
+//!
+//! Note: The `Action` struct is part of the modular plugin system
+//! and will be integrated when plugin-based actions are enabled.
+
+#![allow(dead_code)] // Plugin system types reserved for future modular action support
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

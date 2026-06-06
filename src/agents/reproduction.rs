@@ -358,6 +358,8 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
 }
 
 /// Calculate offspring position (near parents)
+/// Calculate a position for offspring near parents (reserved for future use)
+#[allow(dead_code)]
 fn offspring_position(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> (i32, i32, i32) {
     let mut rng = rand::thread_rng();
 

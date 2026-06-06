@@ -341,6 +341,8 @@ impl World {
         }
     }
 
+    /// Execute a crafting action (reserved for future crafting system integration)
+    #[allow(dead_code)]
     fn execute_craft_item(
         &mut self,
         agent_id: Uuid,

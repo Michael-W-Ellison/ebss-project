@@ -198,7 +198,7 @@ impl Preferences {
     /// This derives the favorite job from the agent's personality traits,
     /// ensuring agents naturally gravitate toward work that makes them happy.
     pub fn from_traits(traits: &crate::core::traits::TraitSet) -> Self {
-        use crate::agents::job_happiness::{find_preferred_job, JobCategory};
+        use crate::agents::job_happiness::find_preferred_job;
         use rand::Rng;
         use rand::seq::SliceRandom;
 
