@@ -1,6 +1,7 @@
 // src/agents/agent.rs
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
+use crate::config::GameConfig;
 use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
 use crate::core::planning::{ActionPlan, ActionType as PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
@@ -522,6 +523,28 @@ impl AgentState {
         }
     }
 
+    /// Get survival configuration from global config or use defaults.
+    /// Returns (StarvationConfig, DehydrationConfig, EnergyConfig) tuple.
+    fn get_survival_config() -> (
+        crate::config::survival::StarvationConfig,
+        crate::config::survival::DehydrationConfig,
+        crate::config::survival::EnergyConfig,
+    ) {
+        if let Some(config) = GameConfig::try_global() {
+            (
+                config.survival.starvation.clone(),
+                config.survival.dehydration.clone(),
+                config.survival.energy.clone(),
+            )
+        } else {
+            (
+                crate::config::survival::StarvationConfig::default(),
+                crate::config::survival::DehydrationConfig::default(),
+                crate::config::survival::EnergyConfig::default(),
+            )
+        }
+    }
+
     /// Age the agent by one tick
     pub fn age_tick(&mut self, current_tick: u32) {
         if !self.is_alive {
@@ -538,43 +561,42 @@ impl AgentState {
         // Track dehydration (faster than starvation - 3 days vs 7 days)
         self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
+        // Get survival config (with fallback to defaults)
+        let (starvation, dehydration, energy_config) = Self::get_survival_config();
+
         // Energy depletion (normal metabolism)
-        let base_energy_loss = 0.05; // Base energy loss per tick
-        let mut energy_loss = base_energy_loss;
+        let mut energy_loss = energy_config.base_loss_per_tick;
 
-        // After 24 hours (1440 ticks) without food: energy depletes faster
-        if self.ticks_without_food > 1440 {
-            energy_loss *= 2.0; // 2x faster energy depletion
+        // === STARVATION MECHANICS ===
+        // After threshold without food: energy depletes faster
+        if self.ticks_without_food > starvation.energy_acceleration_threshold {
+            energy_loss *= starvation.energy_acceleration_multiplier;
         }
 
-        // After 3 days (4320 ticks) without food: health starts decreasing
-        if self.ticks_without_food > 4320 {
-            let health_loss = 0.1; // Slow health degradation
-            self.health = (self.health - health_loss).max(0.0);
+        // After longer threshold: health starts decreasing
+        if self.ticks_without_food > starvation.health_damage_threshold {
+            self.health = (self.health - starvation.health_damage_per_tick).max(0.0);
         }
 
-        // After 7 days (10080 ticks) without food: rapid health loss (death imminent)
-        if self.ticks_without_food > 10080 {
-            let severe_health_loss = 1.0; // Rapid health loss
-            self.health = (self.health - severe_health_loss).max(0.0);
+        // After critical threshold: rapid health loss (death imminent)
+        if self.ticks_without_food > starvation.critical_threshold {
+            self.health = (self.health - starvation.critical_damage_per_tick).max(0.0);
         }
 
         // === DEHYDRATION MECHANICS (faster than starvation) ===
-        // After 12 hours (720 ticks) without water: energy depletes faster
-        if self.ticks_without_water > 720 {
-            energy_loss *= 1.5; // Additional 50% energy depletion
+        // After threshold without water: energy depletes faster
+        if self.ticks_without_water > dehydration.energy_acceleration_threshold {
+            energy_loss *= dehydration.energy_acceleration_multiplier;
         }
 
-        // After 1.5 days (2160 ticks) without water: health starts decreasing
-        if self.ticks_without_water > 2160 {
-            let health_loss = 0.15; // Moderate health degradation
-            self.health = (self.health - health_loss).max(0.0);
+        // After longer threshold: health starts decreasing
+        if self.ticks_without_water > dehydration.health_damage_threshold {
+            self.health = (self.health - dehydration.health_damage_per_tick).max(0.0);
         }
 
-        // After 3 days (4320 ticks) without water: rapid health loss (death imminent)
-        if self.ticks_without_water > 4320 {
-            let severe_health_loss = 1.5; // Rapid health loss (faster than starvation)
-            self.health = (self.health - severe_health_loss).max(0.0);
+        // After critical threshold: rapid health loss (death imminent)
+        if self.ticks_without_water > dehydration.critical_threshold {
+            self.health = (self.health - dehydration.critical_damage_per_tick).max(0.0);
         }
 
         // Apply energy loss
@@ -582,7 +604,7 @@ impl AgentState {
 
         // When energy is depleted, health starts decreasing too
         if self.energy <= 0.0 {
-            self.health = (self.health - 0.05).max(0.0);
+            self.health = (self.health - energy_config.depleted_health_damage).max(0.0);
         }
 
         // Check for death from old age
