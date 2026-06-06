@@ -268,7 +268,7 @@ impl Simulation {
             self.tick();
 
             // Render visualization at intervals
-            if self.current_tick % update_interval == 0 {
+            if self.current_tick.is_multiple_of(update_interval) {
                 if let Some(renderer) = &self.renderer {
                     renderer.render(&self.population, self.current_tick);
                 }
@@ -1097,10 +1097,7 @@ impl Simulation {
         }
 
         // PRIORITY 2: Check for high-salience percepts (danger, resources, social opportunities)
-        let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
-            .iter()
-            .cloned()
-            .collect();
+        let recent_percepts = agent.recent_percepts.clone();
 
         if let Some(percept_action) = Self::generate_action_from_percepts(
             &recent_percepts,

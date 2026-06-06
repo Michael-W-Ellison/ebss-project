@@ -390,11 +390,11 @@ impl ResourceNode {
         let temp_modifier = match self.resource_type {
             ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => {
                 // Plants prefer 15-25°C
-                if temperature >= 15.0 && temperature <= 25.0 {
+                if (15.0..=25.0).contains(&temperature) {
                     1.5 // Ideal conditions
-                } else if temperature >= 5.0 && temperature <= 35.0 {
+                } else if (5.0..=35.0).contains(&temperature) {
                     1.0 // Acceptable
-                } else if temperature < -10.0 || temperature > 40.0 {
+                } else if !(-10.0..=40.0).contains(&temperature) {
                     0.1 // Extreme temps slow growth severely
                 } else {
                     0.5 // Suboptimal
@@ -402,7 +402,7 @@ impl ResourceNode {
             },
             ResourceType::Wood => {
                 // Trees are hardier
-                if temperature >= -5.0 && temperature <= 30.0 {
+                if (-5.0..=30.0).contains(&temperature) {
                     1.0
                 } else {
                     0.3
@@ -410,7 +410,7 @@ impl ResourceNode {
             },
             ResourceType::Cotton => {
                 // Cotton prefers warmer climates
-                if temperature >= 20.0 && temperature <= 30.0 {
+                if (20.0..=30.0).contains(&temperature) {
                     1.5
                 } else if temperature >= 15.0 {
                     1.0
@@ -425,7 +425,7 @@ impl ResourceNode {
         let precip_modifier = match self.resource_type {
             ResourceType::Food | ResourceType::Grain | ResourceType::Herbs | ResourceType::Flax => {
                 // Most crops need moderate precipitation
-                if precipitation >= 0.4 && precipitation <= 0.8 {
+                if (0.4..=0.8).contains(&precipitation) {
                     1.5 // Good rainfall
                 } else if precipitation >= 0.2 {
                     1.0 // Adequate
@@ -445,7 +445,7 @@ impl ResourceNode {
             },
             ResourceType::Cotton => {
                 // Cotton prefers drier conditions
-                if precipitation >= 0.2 && precipitation <= 0.5 {
+                if (0.2..=0.5).contains(&precipitation) {
                     1.3
                 } else if precipitation > 0.8 {
                     0.6 // Too wet

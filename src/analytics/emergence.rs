@@ -856,7 +856,7 @@ impl EmergenceDetector {
                 let critical_percentage = drive_snapshot.critical_count as f32 / total_pop as f32;
 
                 if critical_percentage > 0.2 { // Lower threshold for compound detection
-                    crisis_drives.push(drive_type.clone());
+                    crisis_drives.push(*drive_type);
                     total_crisis_severity += critical_percentage;
                 }
             }

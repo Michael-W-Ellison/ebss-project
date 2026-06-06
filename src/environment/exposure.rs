@@ -130,7 +130,7 @@ impl ExposureStatus {
         }
 
         // Sun exposure during daytime (6 AM to 6 PM)
-        if !has_shelter && time_of_day >= 6.0 && time_of_day <= 18.0 {
+        if !has_shelter && (6.0..=18.0).contains(&time_of_day) {
             self.sun_exposure += 0.01;
 
             // Sunburn after prolonged exposure

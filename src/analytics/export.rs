@@ -190,7 +190,7 @@ impl DataExporter {
         let mut all_traits = std::collections::HashSet::new();
         for snapshot in &metrics.snapshots {
             for trait_item in snapshot.traits.keys() {
-                all_traits.insert(trait_item.clone());
+                all_traits.insert(*trait_item);
             }
         }
 
