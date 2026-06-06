@@ -1,9 +1,13 @@
 // src/agents/skills.rs
 //! Skill system for agent proficiency and progression.
+//!
+//! Configuration values can be loaded from `config/default.toml` or customized
+//! via the `GameConfig` system. See `crate::config` for details.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use rand::Rng;
+use crate::config::GameConfig;
 
 /// Types of skills agents can develop
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -459,23 +463,50 @@ impl Skill {
         }
     }
 
+    /// Get skill configuration from global config or use defaults.
+    fn get_skill_config() -> crate::config::learning::SkillProgressionConfig {
+        GameConfig::try_global()
+            .map(|c| c.learning.skills.clone())
+            .unwrap_or_default()
+    }
+
+    /// Calculate XP required for the next level based on current level.
+    fn xp_for_next_level(&self) -> u32 {
+        let config = Self::get_skill_config();
+        let base_xp = config.base_xp_per_level;
+        let scaling = config.xp_scaling_factor;
+        // Scale XP requirement: higher levels need more XP
+        // Level -10 to 0: base_xp, Level 1+: base_xp * scaling^level
+        if self.level < 0 {
+            base_xp
+        } else {
+            (base_xp as f32 * scaling.powi(self.level)) as u32
+        }
+    }
+
     /// Gain experience from successful completion
     pub fn gain_experience(&mut self, amount: u32) {
+        let config = Self::get_skill_config();
+        let max_level = config.max_level as i32;
+
         self.experience += amount;
 
-        // Level up if enough experience (simple: 100 exp per level)
-        while self.experience >= 100 && self.level < 10 {
-            self.experience -= 100;
+        // Level up if enough experience
+        let mut xp_needed = self.xp_for_next_level();
+        while self.experience >= xp_needed && self.level < max_level {
+            self.experience -= xp_needed;
             self.level += 1;
+            xp_needed = self.xp_for_next_level();
         }
     }
 
     /// Get progress to next level (0.0 to 1.0)
     pub fn progress_to_next_level(&self) -> f32 {
-        if self.level >= 10 {
+        let config = Self::get_skill_config();
+        if self.level >= config.max_level as i32 {
             1.0
         } else {
-            self.experience as f32 / 100.0
+            self.experience as f32 / self.xp_for_next_level() as f32
         }
     }
 

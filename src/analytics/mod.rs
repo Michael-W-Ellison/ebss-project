@@ -238,6 +238,13 @@ impl Simulation {
             .unwrap_or_default()
     }
 
+    /// Get survival configuration (includes environment hazards) from global config or use defaults.
+    fn get_survival_config() -> crate::config::SurvivalConfig {
+        GameConfig::try_global()
+            .map(|c| c.survival.clone())
+            .unwrap_or_default()
+    }
+
     /// Enable ASCII visualization
     pub fn with_visualization(mut self) -> Self {
         self.renderer = Some(AsciiRenderer::default());
@@ -3319,12 +3326,15 @@ impl Simulation {
             // Assume baseline comfortable temperature, extreme cold/heat causes damage
             // In a full implementation, this would check world.get_temperature_at(position)
 
+            // Get environment hazard config
+            let env_config = Self::get_survival_config().environment;
+
             // Cold exposure (lack of insulation)
             if cold_insulation < 1.0 {
                 // Missing adequate cold protection
                 let exposure_severity = 1.0 - cold_insulation;
                 if rng.gen_bool(exposure_severity as f64 * 0.01) { // 1% chance per severity point
-                    let cold_damage = rng.gen_range(1.0..5.0);
+                    let cold_damage = rng.gen_range(env_config.cold_damage_range.0..env_config.cold_damage_range.1);
                     // Cold affects extremities most
                     let affected_parts = [
                         BodyPartType::LeftArm,
@@ -3346,7 +3356,7 @@ impl Simulation {
             if heat_resistance < 0.5 {
                 let exposure_severity = 0.5 - heat_resistance;
                 if rng.gen_bool(exposure_severity as f64 * 0.005) { // 0.5% chance per severity
-                    let heat_damage = rng.gen_range(2.0..8.0);
+                    let heat_damage = rng.gen_range(env_config.heat_damage_range.0..env_config.heat_damage_range.1);
                     // Heat affects torso and head
                     let affected_parts = [BodyPartType::Head, BodyPartType::Torso];
                     let part = affected_parts[rng.gen_range(0..affected_parts.len())];
@@ -3364,7 +3374,9 @@ impl Simulation {
             // For now, simulate random accidents
             if rng.gen_bool(0.0001) { // 0.01% chance per tick (~14 falls per million ticks)
                 let fall_height = rng.gen_range(1..=5); // Units of height
-                let fall_damage = (fall_height as f32) * rng.gen_range(3.0..8.0);
+                let fall_damage = (fall_height as f32) * rng.gen_range(
+                    env_config.fall_damage_per_height.0..env_config.fall_damage_per_height.1
+                );
 
                 // Falls primarily affect legs, with chance of head/torso on severe falls
                 let injured_part = if fall_height >= 4 && rng.gen_bool(0.3) {
@@ -3383,9 +3395,9 @@ impl Simulation {
                     }
                 };
 
-                let injury_severity = if fall_damage >= 25.0 {
+                let injury_severity = if fall_damage >= env_config.severe_fall_damage_threshold {
                     InjuryType::Crippling(CripplingType::Partial)
-                } else if fall_damage >= 12.0 {
+                } else if fall_damage >= env_config.moderate_fall_damage_threshold {
                     InjuryType::Major
                 } else {
                     InjuryType::Minor
