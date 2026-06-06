@@ -269,7 +269,7 @@ impl WorkingMemory {
             .max_by(|a, b| {
                 a.score(self.current_time)
                     .partial_cmp(&b.score(self.current_time))
-                    .unwrap()
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
     }
 
@@ -288,7 +288,7 @@ impl WorkingMemory {
         tasks.sort_by(|a, b| {
             b.score(self.current_time)
                 .partial_cmp(&a.score(self.current_time))
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         tasks

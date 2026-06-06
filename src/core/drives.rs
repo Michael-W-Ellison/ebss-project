@@ -263,7 +263,7 @@ impl DriveState {
         self.drives
             .iter()
             .filter(|d| d.is_active())
-            .max_by(|a, b| a.urgency().partial_cmp(&b.urgency()).unwrap())
+            .max_by(|a, b| a.urgency().partial_cmp(&b.urgency()).unwrap_or(std::cmp::Ordering::Equal))
     }
 
     /// Alias for most_urgent (used in TDD tests)
@@ -285,7 +285,7 @@ impl DriveState {
             .filter(|d| d.is_active())
             .collect();
 
-        active.sort_by(|a, b| b.urgency().partial_cmp(&a.urgency()).unwrap());
+        active.sort_by(|a, b| b.urgency().partial_cmp(&a.urgency()).unwrap_or(std::cmp::Ordering::Equal));
         active
     }
 }

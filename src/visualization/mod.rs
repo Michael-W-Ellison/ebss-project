@@ -705,7 +705,7 @@ impl AsciiRenderer {
 
         // Show top 3 drives
         let mut sorted_drives = stats.drive_averages.clone();
-        sorted_drives.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        sorted_drives.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         for (dt, val) in sorted_drives.iter().take(3) {
             print!("{:?}:{:.2} ", dt, val);

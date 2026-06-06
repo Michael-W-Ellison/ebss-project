@@ -238,7 +238,7 @@ impl AgentInspectorData {
             .count();
 
         let strongest_bond = all_relationships.values()
-            .max_by(|a, b| a.bond_strength.partial_cmp(&b.bond_strength).unwrap())
+            .max_by(|a, b| a.bond_strength.partial_cmp(&b.bond_strength).unwrap_or(std::cmp::Ordering::Equal))
             .map(|r| (r.other_agent, r.relationship_type, r.bond_strength));
 
         let relationship_summary = RelationshipSummary {
@@ -282,7 +282,7 @@ impl AgentInspectorData {
     /// Get drives sorted by urgency (highest first)
     pub fn drives_by_urgency(&self) -> Vec<&DriveInspectorData> {
         let mut drives: Vec<&DriveInspectorData> = self.drives.iter().collect();
-        drives.sort_by(|a, b| b.urgency.partial_cmp(&a.urgency).unwrap());
+        drives.sort_by(|a, b| b.urgency.partial_cmp(&a.urgency).unwrap_or(std::cmp::Ordering::Equal));
         drives
     }
 

@@ -94,7 +94,7 @@ impl DriveSatisfactionTracker {
         self.sources
             .values()
             .max_by(|a, b| {
-                a.importance().partial_cmp(&b.importance()).unwrap()
+                a.importance().partial_cmp(&b.importance()).unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|record| record.source_id)
     }

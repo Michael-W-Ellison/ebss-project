@@ -277,7 +277,7 @@ impl<'a> SpatialPlanner<'a> {
                     // Find closest resource
                     let min_distance = resource_positions.iter()
                         .map(|&res_pos| Self::distance(pos, res_pos))
-                        .min_by(|a, b| a.partial_cmp(b).unwrap())
+                        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                         .unwrap_or(f32::MAX);
 
                     // Closer is better (inverse score)
@@ -293,7 +293,7 @@ impl<'a> SpatialPlanner<'a> {
                     if let Some(prereq_positions) = self.building_locations.get(&prereq) {
                         let min_distance = prereq_positions.iter()
                             .map(|&prereq_pos| Self::distance(pos, prereq_pos))
-                            .min_by(|a, b| a.partial_cmp(b).unwrap())
+                            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                             .unwrap_or(f32::MAX);
 
                         // Strongly prefer being near prerequisites
@@ -307,7 +307,7 @@ impl<'a> SpatialPlanner<'a> {
                     if let Some(consumer_positions) = self.building_locations.get(&consumer) {
                         let min_distance = consumer_positions.iter()
                             .map(|&consumer_pos| Self::distance(pos, consumer_pos))
-                            .min_by(|a, b| a.partial_cmp(b).unwrap())
+                            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                             .unwrap_or(f32::MAX);
 
                         score += 150.0 / (1.0 + min_distance);

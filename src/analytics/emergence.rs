@@ -919,7 +919,7 @@ impl EmergenceDetector {
     /// Get most severe patterns
     pub fn most_severe_patterns(&self, count: usize) -> Vec<&EmergentPattern> {
         let mut patterns: Vec<&EmergentPattern> = self.detected_patterns.iter().collect();
-        patterns.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap());
+        patterns.sort_by(|a, b| b.severity.partial_cmp(&a.severity).unwrap_or(std::cmp::Ordering::Equal));
         patterns.into_iter().take(count).collect()
     }
 }

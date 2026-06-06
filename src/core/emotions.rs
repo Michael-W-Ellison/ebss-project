@@ -124,7 +124,7 @@ impl EmotionalState {
     pub fn dominant_emotion(&self) -> Option<&Emotion> {
         self.emotions
             .iter()
-            .max_by(|a, b| a.intensity().partial_cmp(&b.intensity()).unwrap())
+            .max_by(|a, b| a.intensity().partial_cmp(&b.intensity()).unwrap_or(std::cmp::Ordering::Equal))
     }
 
     /// Check if any emotions are at extreme levels

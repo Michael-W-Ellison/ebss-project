@@ -292,7 +292,7 @@ impl EpisodicMemory {
             .collect();
 
         // Sort by strength (strongest first)
-        matching.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap());
+        matching.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap_or(std::cmp::Ordering::Equal));
 
         matching.into_iter().take(limit).collect()
     }
@@ -316,7 +316,7 @@ impl EpisodicMemory {
             .collect();
 
         // Sort by probability
-        episodes_with_prob.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        episodes_with_prob.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Capture current_time and indices before mutable borrow
         let current_time = self.current_time;
@@ -368,7 +368,7 @@ impl EpisodicMemory {
     /// Get strongest memories
     pub fn strongest_memories(&self, limit: usize) -> Vec<&Episode> {
         let mut episodes: Vec<&Episode> = self.episodes.iter().collect();
-        episodes.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap());
+        episodes.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap_or(std::cmp::Ordering::Equal));
         episodes.into_iter().take(limit).collect()
     }
 

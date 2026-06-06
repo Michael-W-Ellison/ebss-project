@@ -165,7 +165,7 @@ impl ZoneManager {
         // Return the maximum bonus from any applicable zone
         zones_at_pos.iter()
             .map(|zone_type| zone_type.get_placement_bonus(building_type))
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(0.0)
     }
 
@@ -176,7 +176,7 @@ impl ZoneManager {
             .min_by(|a, b| {
                 let dist_a = a.distance_from_center(position);
                 let dist_b = b.distance_from_center(position);
-                dist_a.partial_cmp(&dist_b).unwrap()
+                dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
             })
     }
 }

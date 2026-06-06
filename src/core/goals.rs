@@ -300,7 +300,7 @@ impl GoalManager {
         self.goals
             .iter()
             .filter(|g| !g.completed)
-            .max_by(|a, b| a.priority.partial_cmp(&b.priority).unwrap())
+            .max_by(|a, b| a.priority.partial_cmp(&b.priority).unwrap_or(std::cmp::Ordering::Equal))
     }
 
     /// Get all active goals of a specific type
