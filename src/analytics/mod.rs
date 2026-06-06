@@ -35,7 +35,8 @@ use crate::visualization::AsciiRenderer;
 use crate::agents::religious_effects::{
     calculate_religious_effects, total_happiness_modifier, RELIGIOUS_EFFECT_RADIUS,
 };
-use log::{info, debug, warn};
+use crate::logging::{SimulationContext, EventCategory};
+use crate::{sim_info, sim_debug, sim_warn};
 use serde::{Serialize, Deserialize};
 use std::path::{Path, PathBuf};
 use std::fs::{File, self};
@@ -256,7 +257,8 @@ impl Simulation {
         for _ in 0..ticks {
             self.tick();
         }
-        info!("Simulation completed {} ticks", ticks);
+        let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+        sim_info!(&log_ctx, EventCategory::Simulation, "Simulation completed {} ticks", ticks);
     }
 
     /// Run the simulation with visualization
@@ -288,6 +290,9 @@ impl Simulation {
         // Sync simulation tick with population tick
         self.current_tick = self.population.current_tick;
 
+        // Create logging context for this tick
+        let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+
         // Tick world systems (fauna and flora AI, growth, etc.)
         self.world.climate.tick();
         self.world.animals.tick();
@@ -296,7 +301,7 @@ impl Simulation {
         // Update exposure damage for all agents
         self.update_agent_exposure();
 
-        debug!("=== Tick {} ===", self.current_tick);
+        sim_debug!(&log_ctx, EventCategory::Simulation, "=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
         // Note: agents have already been updated by population.tick() above
@@ -337,9 +342,11 @@ impl Simulation {
             }
             let drive_type = drive_type.unwrap();
 
-            debug!(
-                "Agent {} - Most urgent drive: {:?} (value: {:.2})",
-                agent_id, drive_type, drive_value
+            sim_debug!(
+                &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                EventCategory::AgentAction,
+                "Most urgent drive: {:?} (value: {:.2})",
+                drive_type, drive_value
             );
 
             // Select and execute behavior tree
@@ -355,9 +362,11 @@ impl Simulation {
             };
 
             if tree_name.is_some() {
-                debug!(
-                    "Agent {} - Executed tree: {} -> {:?}",
-                    agent_id, tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                    EventCategory::AgentAction,
+                    "Executed tree: {} -> {:?}",
+                    tree_name.as_ref().unwrap(), execution_result.as_ref().unwrap()
                 );
 
                 // Generate goals periodically based on drives and emotions
@@ -483,9 +492,11 @@ impl Simulation {
                                 let flee_x = agent_position.0 + ((dx as f32 / distance) * flee_distance as f32) as i32;
                                 let flee_y = agent_position.1 + ((dy as f32 / distance) * flee_distance as f32) as i32;
 
-                                debug!(
-                                    "Agent {} FLEEING from attacker {} (fear={:.2})",
-                                    agent_id, attacker_id, agent.emotions.fear
+                                sim_debug!(
+                                    &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                                    EventCategory::AgentAction,
+                                    "FLEEING from attacker {} (fear={:.2})",
+                                    attacker_id, agent.emotions.fear
                                 );
 
                                 (crate::environment::Action::Move {
@@ -509,9 +520,11 @@ impl Simulation {
                     } else if agent.emotions.should_attack() {
                         // High anger, low fear - retaliate against attacker
                         if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
-                            debug!(
-                                "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
-                                agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
+                            sim_debug!(
+                                &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                                EventCategory::Combat,
+                                "RETALIATING against {} (anger={:.2}, fear={:.2})",
+                                attacker_id, agent.emotions.anger, agent.emotions.fear
                             );
 
                             (crate::environment::Action::Attack {
@@ -530,9 +543,10 @@ impl Simulation {
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
 
-                debug!(
-                    "Agent {} - Action result: {} (satisfaction: {:.2})",
-                    agent_id,
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                    EventCategory::AgentAction,
+                    "Action result: {} (satisfaction: {:.2})",
                     action_result.message.as_ref().map(|s| s.as_str()).unwrap_or("No message"),
                     action_result.drive_satisfaction
                 );
@@ -556,6 +570,7 @@ impl Simulation {
                 }
 
                 // Apply feedback to agent (drive satisfaction)
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
 
@@ -564,9 +579,10 @@ impl Simulation {
                     if action_result.success {
                         // Successful action - advance to next plan step
                         agent.advance_plan_step(true, agent.plan_step_ticks + 1);
-                        debug!(
-                            "Agent {} completed plan step, progress: {:?}",
-                            agent_id,
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent_id),
+                            EventCategory::AgentAction,
+                            "Completed plan step, progress: {:?}",
                             agent.plan_progress()
                         );
                     } else {
@@ -574,7 +590,11 @@ impl Simulation {
                         agent.tick_plan_step();
                         if !agent.should_execute_plan() {
                             // Plan has timed out or is no longer viable
-                            debug!("Agent {} abandoning plan due to failure/timeout", agent_id);
+                            sim_debug!(
+                                &SimulationContext::with_agent(self.current_tick, agent_count, agent_id),
+                                EventCategory::AgentAction,
+                                "Abandoning plan due to failure/timeout"
+                            );
                             agent.abandon_plan();
                         }
                     }
@@ -591,9 +611,10 @@ impl Simulation {
                     let resource_loc = (50, 50, 0);
                     let return_loc = (0, 0, 0);
                     if agent.create_plan_for_goal(resource_loc, return_loc, self.current_tick) {
-                        debug!(
-                            "Agent {} created new plan: {:?}",
-                            agent_id,
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent_id),
+                            EventCategory::AgentAction,
+                            "Created new plan: {:?}",
                             agent.current_plan_step_description()
                         );
                     }
@@ -691,12 +712,17 @@ impl Simulation {
 
                 // Execute storage action if one was decided
                 if let Some(action) = storage_action {
-                    debug!("Agent {} performing storage action: {:?}", agent_id, action);
+                    sim_debug!(
+                        &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                        EventCategory::Economy,
+                        "Performing storage action: {:?}", action
+                    );
                     let action_result = self.execute_action(&action, agent_index);
 
-                    debug!(
-                        "Agent {} - Storage action result: {}",
-                        agent_id,
+                    sim_debug!(
+                        &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                        EventCategory::Economy,
+                        "Storage action result: {}",
                         action_result.message.as_ref().map(|s| s.as_str()).unwrap_or("No message")
                     );
                 }
@@ -725,7 +751,7 @@ impl Simulation {
 
         // Check if autosave should trigger
         if let Err(e) = self.check_autosave() {
-            warn!("Auto-save failed: {}", e);
+            sim_warn!(&log_ctx, EventCategory::Error, "Auto-save failed: {}", e);
         }
     }
 
@@ -1084,12 +1110,15 @@ impl Simulation {
                         let energy_restored = rng.gen_range(20.0..40.0);
 
                         // Agent eats the food
+                        let agent_count = self.population.agents.len();
                         let agent = &mut self.population.agents[agent_index];
                         agent.state.eat(self.current_tick, energy_restored);
 
-                        debug!(
-                            "Agent {} ate food, restored {:.1} energy, reset starvation timer",
-                            agent.id, energy_restored
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::AgentAction,
+                            "Ate food, restored {:.1} energy, reset starvation timer",
+                            energy_restored
                         );
 
                         ActionResult::success()
@@ -1176,6 +1205,7 @@ impl Simulation {
                     if harvested > 0 {
                         // Water is consumed immediately (drinking), not stored
                         if resource_type_enum == ResourceType::Water {
+                            let agent_count = self.population.agents.len();
                             let agent = &mut self.population.agents[agent_index];
 
                             // Satisfy thirst drive
@@ -1190,9 +1220,11 @@ impl Simulation {
                             // Fill containers if agent has any
                             let filled = agent.inventory.fill_containers(harvested as f32);
 
-                            debug!(
-                                "Agent {} drank water and filled {:.1} units into containers",
-                                agent.id, filled
+                            sim_debug!(
+                                &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                                EventCategory::AgentAction,
+                                "Drank water and filled {:.1} units into containers",
+                                filled
                             );
 
                             return ActionResult::success()
@@ -1222,6 +1254,7 @@ impl Simulation {
                             }
                         );
 
+                        let agent_count = self.population.agents.len();
                         let agent = &mut self.population.agents[agent_index];
                         if agent.inventory.add_item(item) {
                             // Grant skill XP based on resource type
@@ -1233,9 +1266,11 @@ impl Simulation {
                             };
                             agent.skills.gain_experience(skill_type, 2);
 
-                            debug!(
-                                "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
-                                agent.id, harvested, item_id,
+                            sim_debug!(
+                                &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                                EventCategory::Economy,
+                                "Gathered {} {} (total weight: {:.1}/{:.1})",
+                                harvested, item_id,
                                 agent.inventory.current_weight, agent.inventory.max_weight
                             );
 
@@ -1317,7 +1352,11 @@ impl Simulation {
 
                 // Use optimal position if found, otherwise fall back to agent's position
                 let build_tuple_pos = optimal_pos.unwrap_or_else(|| {
-                    debug!("No optimal position found for {:?}, using agent position", building_type);
+                    sim_debug!(
+                        &SimulationContext::new(self.current_tick, self.population.agents.len()),
+                        EventCategory::Economy,
+                        "No optimal position found for {:?}, using agent position", building_type
+                    );
                     *position
                 });
 
@@ -1371,12 +1410,15 @@ impl Simulation {
                     BuildingType::Farm => 10,
                     _ => 5,
                 };
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
                 agent.skills.gain_experience(crate::agents::skills::SkillType::Construction, construction_xp);
 
-                debug!(
-                    "Agent {} started construction of {:?} at ({}, {})",
-                    agent.id, building_type, position.0, position.1
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::Economy,
+                    "Started construction of {:?} at ({}, {})",
+                    building_type, position.0, position.1
                 );
 
                 ActionResult::success()
@@ -1513,6 +1555,7 @@ impl Simulation {
                         + if attacker_has_weapon { 0.3 } else { 0.0 };
 
                     // Target responds to threat
+                    let agent_count = self.population.agents.len();
                     let target = &mut self.population.agents[target_index];
                     let emotion_source = crate::agents::EmotionSource::Agent(attacker_id);
 
@@ -1525,9 +1568,11 @@ impl Simulation {
                     // Use threat assessment to determine fear vs anger
                     target.respond_to_threat(attacker_strength + damage_severity * 0.5, emotion_source);
 
-                    debug!(
-                        "Agent {} emotional response to attack: fear={:.2}, anger={:.2}, should_flee={}, should_attack={}",
-                        target_id, target.emotions.fear, target.emotions.anger,
+                    sim_debug!(
+                        &SimulationContext::with_agent(self.current_tick, agent_count, target_id),
+                        EventCategory::Combat,
+                        "Emotional response to attack: fear={:.2}, anger={:.2}, should_flee={}, should_attack={}",
+                        target.emotions.fear, target.emotions.anger,
                         target.emotions.should_flee(), target.emotions.should_attack()
                     );
                 }
@@ -1554,9 +1599,10 @@ impl Simulation {
                     self.population.pending_events.push(event);
                 }
 
-                debug!(
-                    "Agent {} attacked Agent {} ({:?}): {:.1} damage to {:?} ({}, mounted: {}, bonus: +{:.0}%)",
-                    attacker_id,
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), attacker_id),
+                    EventCategory::Combat,
+                    "Attacked Agent {} ({:?}): {:.1} damage to {:?} ({}, mounted: {}, bonus: +{:.0}%)",
                     self.population.agents[target_index].id,
                     weapon.as_ref().unwrap_or(&"unarmed".to_string()),
                     actual_damage,
@@ -1827,6 +1873,7 @@ impl Simulation {
                 }
 
                 // Get agent's crafting skill level (-10 to 10)
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
                 let skill_level = agent.skills.get_skill_mut(SkillType::Crafting).level;
 
@@ -1864,9 +1911,11 @@ impl Simulation {
                     );
 
                     if !agent.inventory.add_item(item) {
-                        debug!(
-                            "Agent {} crafted {} but inventory full, item dropped",
-                            agent.id, item_id
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::Economy,
+                            "Crafted {} but inventory full, item dropped",
+                            item_id
                         );
                     }
                 }
@@ -1882,9 +1931,11 @@ impl Simulation {
 
                 agent.skills.get_skill_mut(SkillType::Crafting).gain_experience(experience_gained);
 
-                debug!(
-                    "Agent {} crafted {} (quality: {:?}, skill: {}, exp: +{})",
-                    agent.id, recipe.name, quality, skill_level, experience_gained
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::Economy,
+                    "Crafted {} (quality: {:?}, skill: {}, exp: +{})",
+                    recipe.name, quality, skill_level, experience_gained
                 );
 
                 ActionResult::success()
@@ -1976,15 +2027,18 @@ impl Simulation {
                 };
 
                 // Update agent position (including Z-axis)
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
                 agent.state.position = (next_x, next_y, next_z);
 
                 // Calculate remaining 3D distance
                 let remaining_distance = ((target.0 - next_x).abs() + (target.1 - next_y).abs() + (target.2 - next_z).abs()) as u32;
 
-                debug!(
-                    "Agent {} moved from ({}, {}, {}) to ({}, {}, {}) (distance to target: {}, speed: {:.2}x, mounted: {})",
-                    agent.id, current_pos.0, current_pos.1, current_pos.2, next_x, next_y, next_z,
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::AgentAction,
+                    "Moved from ({}, {}, {}) to ({}, {}, {}) (distance to target: {}, speed: {:.2}x, mounted: {})",
+                    current_pos.0, current_pos.1, current_pos.2, next_x, next_y, next_z,
                     remaining_distance, movement_speed,
                     if agent.transport.is_mounted() { "yes" } else { "no" }
                 );
@@ -2013,6 +2067,7 @@ impl Simulation {
                     count_in_agent_inventory
                 };
 
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
 
                 // Try to convert string item_type to ItemType
@@ -2054,9 +2109,10 @@ impl Simulation {
                         let agent_id = agent.id;
                         let agent_pos = (agent.state.position.0, agent.state.position.1);
 
-                        debug!(
-                            "Agent {} deposited {} {} to storehouse (storehouse now has {})",
-                            agent.id,
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::Economy,
+                            "Deposited {} {} to storehouse (storehouse now has {})",
                             removed,
                             item_type,
                             self.world.storehouse_inventory.items.get(&item)
@@ -2102,6 +2158,7 @@ impl Simulation {
                     id_to_item_type, add_to_agent_inventory
                 };
 
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
 
                 // Try to convert string item_type to ItemType
@@ -2137,9 +2194,10 @@ impl Simulation {
                             }
                         }
 
-                        debug!(
-                            "Agent {} retrieved {} {} from storehouse (storehouse now has {})",
-                            agent.id,
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::Economy,
+                            "Retrieved {} {} from storehouse (storehouse now has {})",
                             added,
                             item_type,
                             self.world.storehouse_inventory.items.get(&item)
@@ -2864,9 +2922,10 @@ impl Simulation {
                     let target = &mut self.population.agents[target_index];
                     target.process_helper_happiness(initiator_id, social_satisfaction);
 
-                    debug!(
-                        "Agent {} socialized with agent {}: {} (relationship change: {:+}, satisfaction: {:.2})",
-                        initiator_id,
+                    sim_debug!(
+                        &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), initiator_id),
+                        EventCategory::Social,
+                        "Socialized with agent {}: {} (relationship change: {:+}, satisfaction: {:.2})",
                         target_agent_id,
                         message,
                         relationship_change,
@@ -2978,9 +3037,10 @@ impl Simulation {
                 let distortion_penalty = if info_to_share.distortion.is_some() { 0.05 } else { 0.0 };
                 let social_satisfaction = 0.15 - distortion_penalty;
 
-                debug!(
-                    "Agent {} shared information with agent {} (distorted: {}, reliability: {:.2})",
-                    initiator_id,
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), initiator_id),
+                    EventCategory::Social,
+                    "Shared information with agent {} (distorted: {}, reliability: {:.2})",
                     target_agent_id,
                     info_to_share.distortion.is_some(),
                     info_to_share.reliability
@@ -3083,9 +3143,10 @@ impl Simulation {
                         let female = &mut self.population.agents[female_index];
                         female.pregnancy = Some(pregnancy);
 
-                        debug!(
-                            "Agent {} (male) and agent {} (female) mated - pregnancy started!",
-                            self.population.agents[male_index].id,
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), self.population.agents[male_index].id),
+                            EventCategory::Social,
+                            "Mated with agent {} - pregnancy started!",
                             self.population.agents[female_index].id
                         );
 
@@ -3139,9 +3200,11 @@ impl Simulation {
                             .with_message("Mating successful - pregnancy started!".to_string())
                     } else {
                         // Conception failed (fertility roll failed)
-                        debug!(
-                            "Agent {} and agent {} mated but conception failed",
-                            initiator_id, target_id
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), initiator_id),
+                            EventCategory::Social,
+                            "Mated with agent {} but conception failed",
+                            target_id
                         );
 
                         // Still reduce drives somewhat
@@ -3162,9 +3225,11 @@ impl Simulation {
                     }
                 } else {
                     // Mating attempt rejected
-                    debug!(
-                        "Agent {} mating attempt with agent {} was rejected",
-                        initiator_id, target_id
+                    sim_debug!(
+                        &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), initiator_id),
+                        EventCategory::Social,
+                        "Mating attempt with agent {} was rejected",
+                        target_id
                     );
 
                     ActionResult::failure("Mating attempt rejected by partner".to_string())
@@ -3172,12 +3237,17 @@ impl Simulation {
             },
 
             Action::Mount { transport_id } => {
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
 
                 // Try to mount the transport
                 match agent.transport.mount_transport(transport_id) {
                     Ok(()) => {
-                        debug!("Agent {} mounted transport {}", agent.id, transport_id);
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::AgentAction,
+                            "Mounted transport {}", transport_id
+                        );
 
                         ActionResult::success()
                             .with_drive_change(DriveType::Utility, -0.1)
@@ -3189,6 +3259,7 @@ impl Simulation {
             },
 
             Action::Dismount => {
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
 
                 if !agent.transport.is_mounted() {
@@ -3196,7 +3267,11 @@ impl Simulation {
                 }
 
                 agent.transport.dismount_current();
-                debug!("Agent {} dismounted", agent.id);
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::AgentAction,
+                    "Dismounted"
+                );
 
                 ActionResult::success()
                     .with_energy_cost(1.0)
@@ -3205,6 +3280,7 @@ impl Simulation {
 
             Action::Wait => {
                 // Wait/rest action - restores energy, calms emotions
+                let agent_count = self.population.agents.len();
                 let agent = &mut self.population.agents[agent_index];
 
                 // Restore a small amount of energy (resting)
@@ -3215,9 +3291,11 @@ impl Simulation {
                 agent.emotions.anger = (agent.emotions.anger - 0.02).max(0.0);
                 agent.emotions.fear = (agent.emotions.fear - 0.02).max(0.0);
 
-                debug!(
-                    "Agent {} waited, restored {:.1} energy, reduced stress",
-                    agent.id, energy_restored
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::AgentAction,
+                    "Waited, restored {:.1} energy, reduced stress",
+                    energy_restored
                 );
 
                 ActionResult::success()
@@ -3289,9 +3367,11 @@ impl Simulation {
                     message.push_str(&format!(", found: {}", discoveries.join(", ")));
                 }
 
-                debug!(
-                    "Agent {} explored to ({}, {}, {}), discovered {} new tiles",
-                    agent_id, target_x, target_y, target_z, newly_explored_count
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), agent_id),
+                    EventCategory::AgentAction,
+                    "Explored to ({}, {}, {}), discovered {} new tiles",
+                    target_x, target_y, target_z, newly_explored_count
                 );
 
                 // Grant Navigation XP for exploration (more for new discoveries)
@@ -3316,6 +3396,7 @@ impl Simulation {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
+        let agent_count = self.population.agents.len();
         for agent in &mut self.population.agents {
             // 1. EXPOSURE DAMAGE - Cold/Heat based on environment
             // Check if agent has adequate protection from equipment
@@ -3346,8 +3427,12 @@ impl Simulation {
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
                         body_part.apply_injury(InjuryType::Minor, cold_damage, self.current_tick as u64);
-                        debug!("Agent {} suffered cold exposure: {:.1} damage to {:?}",
-                            agent.id, cold_damage, part);
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::World,
+                            "Suffered cold exposure: {:.1} damage to {:?}",
+                            cold_damage, part
+                        );
                     }
                 }
             }
@@ -3363,8 +3448,12 @@ impl Simulation {
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
                         body_part.apply_injury(InjuryType::Minor, heat_damage, self.current_tick as u64);
-                        debug!("Agent {} suffered heat exposure: {:.1} damage to {:?}",
-                            agent.id, heat_damage, part);
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::World,
+                            "Suffered heat exposure: {:.1} damage to {:?}",
+                            heat_damage, part
+                        );
                     }
                 }
             }
@@ -3405,8 +3494,12 @@ impl Simulation {
 
                 if let Some(body_part) = agent.body.get_part_mut(injured_part) {
                     body_part.apply_injury(injury_severity, fall_damage, self.current_tick as u64);
-                    debug!("Agent {} suffered fall damage: {:.1} damage to {:?} ({:?})",
-                        agent.id, fall_damage, injured_part, injury_severity);
+                    sim_debug!(
+                        &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                        EventCategory::World,
+                        "Suffered fall damage: {:.1} damage to {:?} ({:?})",
+                        fall_damage, injured_part, injury_severity
+                    );
                 }
 
                 // Also reduce overall health
@@ -3434,7 +3527,11 @@ impl Simulation {
                                 severity: rng.gen_range(0.3..0.8),
                                 duration: rng.gen_range(100..500), // Lasts 100-500 ticks
                             });
-                            debug!("Agent {} developed infection on {:?}", agent.id, part);
+                            sim_debug!(
+                                &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                                EventCategory::World,
+                                "Developed infection on {:?}", part
+                            );
                         }
                     }
                 }
@@ -3500,9 +3597,11 @@ impl Simulation {
                 self.population.agents.push(offspring);
                 self.population.stats.total_births += 1;
 
-                debug!(
-                    "Agent {} gave birth to {}! Prenatal nutrition: {:.2}",
-                    mother_id, offspring_id, preg.nutrition_quality
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, self.population.agents.len(), mother_id),
+                    EventCategory::Social,
+                    "Gave birth to {}! Prenatal nutrition: {:.2}",
+                    offspring_id, preg.nutrition_quality
                 );
 
                 // Generate gossip about the birth
@@ -3570,6 +3669,7 @@ impl Simulation {
                 .map(|a| (a.id, a.state.position))
                 .collect();
 
+        let agent_count = self.population.agents.len();
         for agent in &mut self.population.agents {
             // Only process living infants with nursing state
             if !agent.state.is_alive || agent.state.life_stage != LifeStage::Infant {
@@ -3627,9 +3727,11 @@ impl Simulation {
                     let penalty = nursing.health_penalty();
                     if penalty > 0.0 {
                         agent.state.health = (agent.state.health - penalty).max(0.0);
-                        debug!(
-                            "Infant {} suffering from lack of nursing: -{:.1} health",
-                            agent.id, penalty
+                        sim_debug!(
+                            &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                            EventCategory::AgentAction,
+                            "Infant suffering from lack of nursing: -{:.1} health",
+                            penalty
                         );
                     }
 
@@ -3656,15 +3758,18 @@ impl Simulation {
                 if became_infertile {
                     // Severe malnutrition caused permanent infertility
                     agent.traits.add_trait(crate::core::traits::Trait::Infertile);
-                    debug!(
-                        "Agent {} reached adulthood but severe malnutrition caused INFERTILITY",
-                        agent.id
+                    sim_debug!(
+                        &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                        EventCategory::AgentAction,
+                        "Reached adulthood but severe malnutrition caused INFERTILITY"
                     );
                 }
 
-                debug!(
-                    "Agent {} reached adulthood with development: {:?}",
-                    agent.id, agent.developmental_nutrition.stat_modifiers
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::AgentAction,
+                    "Reached adulthood with development: {:?}",
+                    agent.developmental_nutrition.stat_modifiers
                 );
             }
         }
@@ -3672,8 +3777,9 @@ impl Simulation {
 
     /// Log simulation statistics
     fn log_statistics(&self) {
-        info!("--- Tick {} Statistics ---", self.current_tick);
-        info!("Population size: {}", self.population.agents.len());
+        let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+        sim_info!(&log_ctx, EventCategory::Simulation, "--- Statistics ---");
+        sim_info!(&log_ctx, EventCategory::Simulation, "Population size: {}", self.population.agents.len());
 
         // Aggregate drive statistics
         let mut total_hunger = 0.0;
@@ -3694,9 +3800,9 @@ impl Simulation {
 
         let agent_count = self.population.agents.len() as f32;
         if agent_count > 0.0 {
-            info!("Average Hunger: {:.2}", total_hunger / agent_count);
-            info!("Average Rest: {:.2}", total_rest / agent_count);
-            info!("Average Curiosity: {:.2}", total_curiosity / agent_count);
+            sim_info!(&log_ctx, EventCategory::Simulation, "Average Hunger: {:.2}", total_hunger / agent_count);
+            sim_info!(&log_ctx, EventCategory::Simulation, "Average Rest: {:.2}", total_rest / agent_count);
+            sim_info!(&log_ctx, EventCategory::Simulation, "Average Curiosity: {:.2}", total_curiosity / agent_count);
         }
     }
 
@@ -3725,6 +3831,7 @@ impl Simulation {
             })
             .collect();
 
+        let agent_count = self.population.agents.len();
         for agent in &mut self.population.agents {
             if !agent.state.is_alive {
                 continue;
@@ -3783,30 +3890,38 @@ impl Simulation {
 
             // Log critical exposure events
             if damage > 0.05 {
-                debug!(
-                    "Agent {} taking exposure damage: {:.3} (exposures: {:?})",
-                    agent.id, damage, agent.exposure_status.active_exposures
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::World,
+                    "Taking exposure damage: {:.3} (exposures: {:?})",
+                    damage, agent.exposure_status.active_exposures
                 );
             }
 
             // Log body temperature issues
             if agent.body_temperature.is_hypothermic() {
-                debug!(
-                    "Agent {} is hypothermic! Body temp: {:.1}°C",
-                    agent.id, agent.body_temperature.current
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::World,
+                    "Hypothermic! Body temp: {:.1}°C",
+                    agent.body_temperature.current
                 );
             } else if agent.body_temperature.is_hyperthermic() {
-                debug!(
-                    "Agent {} is hyperthermic! Body temp: {:.1}°C",
-                    agent.id, agent.body_temperature.current
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::World,
+                    "Hyperthermic! Body temp: {:.1}°C",
+                    agent.body_temperature.current
                 );
             }
 
             // If agent is in critical exposure condition, they may die
             if agent.exposure_status.is_critical() && agent.state.health < 20.0 {
-                warn!(
-                    "Agent {} in critical exposure condition! Health: {:.1}, Exposure: {:.2}",
-                    agent.id, agent.state.health, agent.exposure_status.exposure_damage
+                sim_warn!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::World,
+                    "Critical exposure condition! Health: {:.1}, Exposure: {:.2}",
+                    agent.state.health, agent.exposure_status.exposure_damage
                 );
             }
         }
@@ -3834,7 +3949,8 @@ impl Simulation {
         let mut file = File::create(path)?;
         file.write_all(&bytes)?;
 
-        info!("Simulation saved at tick {}", self.current_tick);
+        let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+        sim_info!(&log_ctx, EventCategory::Simulation, "Simulation saved");
         Ok(())
     }
 
@@ -3870,7 +3986,8 @@ impl Simulation {
         // Re-initialize fields that were skipped during deserialization
         sim.world.initialize_after_load();
 
-        info!("Simulation loaded from tick {}", sim.current_tick);
+        let log_ctx = SimulationContext::new(sim.current_tick, sim.population.agents.len());
+        sim_info!(&log_ctx, EventCategory::Simulation, "Simulation loaded");
         Ok(sim)
     }
 
@@ -3884,7 +4001,8 @@ impl Simulation {
         self.autosave_config = Some(config);
         self.last_autosave_tick = self.current_tick;
 
-        info!("Auto-save enabled: interval={}, max_checkpoints={}, directory={:?}",
+        let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+        sim_info!(&log_ctx, EventCategory::Simulation, "Auto-save enabled: interval={}, max_checkpoints={}, directory={:?}",
               self.autosave_config.as_ref().unwrap().interval_ticks,
               self.autosave_config.as_ref().unwrap().max_checkpoints,
               self.autosave_config.as_ref().unwrap().save_directory);
@@ -3895,7 +4013,8 @@ impl Simulation {
     /// Disable auto-save
     pub fn disable_autosave(&mut self) {
         self.autosave_config = None;
-        info!("Auto-save disabled");
+        let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+        sim_info!(&log_ctx, EventCategory::Simulation, "Auto-save disabled");
     }
 
     /// Execute a building action for an agent, using spatial planning to determine optimal location
@@ -3962,9 +4081,10 @@ impl Simulation {
         let (criteria, strategy) = determine_placement_approach(building_type);
         let planner = SpatialPlanner::new(&self.world);
 
-        debug!("Spatial planning for {:?}: criteria={:?}, strategy={:?}",
+        let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+        sim_debug!(&log_ctx, EventCategory::Economy, "Spatial planning for {:?}: criteria={:?}, strategy={:?}",
                building_type, criteria, strategy);
-        debug!("World has {} resource node types", self.world.resource_nodes.len());
+        sim_debug!(&log_ctx, EventCategory::Economy, "World has {} resource node types", self.world.resource_nodes.len());
 
         let optimal_pos = planner.find_optimal_location_for_agent(
             building_type,
@@ -3972,7 +4092,7 @@ impl Simulation {
             strategy
         );
 
-        debug!("Optimal position found: {:?}", optimal_pos);
+        sim_debug!(&log_ctx, EventCategory::Economy, "Optimal position found: {:?}", optimal_pos);
 
         // Use optimal position if found, otherwise fall back to agent's position
         let build_tuple_pos = optimal_pos.ok_or_else(|| {
@@ -4003,7 +4123,9 @@ impl Simulation {
         // Add building to world
         self.world.add_building(building);
 
-        debug!(
+        sim_debug!(
+            &log_ctx,
+            EventCategory::Economy,
             "Agent {} started construction of {:?} at ({}, {}, {})",
             agent_index, building_type, build_tuple_pos.0, build_tuple_pos.1, build_tuple_pos.2
         );
@@ -4039,7 +4161,8 @@ impl Simulation {
             // Save the simulation
             self.save(&checkpoint_path)?;
 
-            info!("Auto-save checkpoint created: {}", filename);
+            let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
+            sim_info!(&log_ctx, EventCategory::Simulation, "Auto-save checkpoint created: {}", filename);
 
             // Clean up old checkpoints
             self.cleanup_old_checkpoints()?;
@@ -4073,9 +4196,10 @@ impl Simulation {
 
             // Remove old checkpoints beyond max_checkpoints
             if checkpoint_files.len() > config.max_checkpoints {
+                let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
                 for old_checkpoint in checkpoint_files.iter().skip(config.max_checkpoints) {
                     fs::remove_file(old_checkpoint)?;
-                    debug!("Removed old checkpoint: {:?}", old_checkpoint.file_name());
+                    sim_debug!(&log_ctx, EventCategory::Simulation, "Removed old checkpoint: {:?}", old_checkpoint.file_name());
                 }
             }
         }
@@ -4158,6 +4282,7 @@ impl Simulation {
             .collect();
 
         // Apply religious effects to each agent
+        let agent_count = self.population.agents.len();
         for agent in &mut self.population.agents {
             if !agent.state.is_alive {
                 continue;
@@ -4186,9 +4311,11 @@ impl Simulation {
 
                 agent.apply_religious_happiness(total_modifier, &source);
 
-                debug!(
-                    "Agent {} received religious effect: {:.3} happiness from {} sources",
-                    agent.id, total_modifier, effects.len()
+                sim_debug!(
+                    &SimulationContext::with_agent(self.current_tick, agent_count, agent.id),
+                    EventCategory::Social,
+                    "Received religious effect: {:.3} happiness from {} sources",
+                    total_modifier, effects.len()
                 );
             }
         }

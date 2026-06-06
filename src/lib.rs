@@ -36,6 +36,7 @@ pub mod agents;
 pub mod environment;
 pub mod world;
 pub mod analytics;
+pub mod logging;
 pub mod visualization;
 
 #[cfg(feature = "gui")]
