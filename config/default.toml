@@ -1,0 +1,221 @@
+# EBSS Default Configuration
+# This file contains all game balance and simulation parameters.
+# Copy this file and modify values to customize your simulation.
+
+# ============================================================================
+# DRIVE SYSTEM - Agent motivation and behavior
+# ============================================================================
+
+[drives.thresholds]
+# Threshold values (0.0-1.0) at which drives become urgent
+hunger = 0.7
+thirst = 0.75
+rest = 0.6
+shelter = 0.5
+safety = 0.8
+preparedness = 0.4
+industry = 0.3
+sustenance = 0.3
+curiosity = 0.2
+social = 0.5
+reproduction = 0.6
+luxury = 0.1
+utility = 0.4
+construction = 0.3
+
+[drives.accumulation_rates]
+# Base accumulation rates per tick (how fast drives build up)
+hunger = 0.01
+thirst = 0.012      # Slightly faster than hunger
+rest = 0.008
+shelter = 0.005
+safety = 0.02       # Spikes with threats
+preparedness = 0.002
+industry = 0.003
+sustenance = 0.003
+curiosity = 0.004
+social = 0.006
+reproduction = 0.001
+luxury = 0.001
+utility = 0.002
+construction = 0.002
+
+[drives.satisfaction_amounts]
+# How much drives decrease when satisfied
+hunger_per_meal = 0.5
+thirst_per_drink = 0.6
+rest_per_sleep_tick = 0.02
+shelter_inside_building = 0.3
+safety_with_weapon = 0.2
+social_per_interaction = 0.15
+
+[drives.urgency_weights]
+# Weight multipliers for drive urgency calculations
+survival = 2.0          # Hunger, thirst, rest
+safety = 1.5
+social = 1.0
+self_actualization = 0.5
+
+# ============================================================================
+# EMOTION SYSTEM - Agent emotional states
+# ============================================================================
+
+[emotions.decay_rates]
+# Natural decay rates per tick (emotions return to neutral)
+fear = 0.01         # Fear decays quickly
+anger = 0.005       # Anger lingers
+sadness = 0.003     # Sadness decays slowly
+happiness = 0.008   # Happiness fades moderately
+curiosity = 0.002   # Curiosity persists
+
+[emotions.intensity_thresholds]
+# Thresholds for emotion effect levels
+mild = 0.2
+moderate = 0.4
+strong = 0.6
+extreme = 0.8
+
+[emotions.interaction_modifiers]
+# How emotions affect behavior
+fear_safety_reduction = 0.3
+happiness_social_boost = 0.15
+anger_combat_boost = 0.2
+sadness_efficiency_penalty = 0.25
+curiosity_exploration_boost = 0.3
+grief_relationship_multiplier = 1.5
+
+# ============================================================================
+# SURVIVAL MECHANICS - Starvation, dehydration, hazards
+# ============================================================================
+
+[survival.starvation]
+# Starvation timing (ticks, 60 ticks = 1 hour)
+energy_acceleration_threshold = 1440   # 24 hours
+energy_acceleration_multiplier = 2.0
+health_damage_threshold = 4320         # 3 days
+health_damage_per_tick = 0.1
+critical_threshold = 10080             # 7 days
+critical_damage_per_tick = 1.0
+
+[survival.dehydration]
+# Dehydration timing (faster than starvation)
+energy_acceleration_threshold = 720    # 12 hours
+energy_acceleration_multiplier = 1.5
+health_damage_threshold = 2160         # 1.5 days
+health_damage_per_tick = 0.15
+critical_threshold = 4320              # 3 days
+critical_damage_per_tick = 1.5
+
+[survival.energy]
+# Energy mechanics
+base_loss_per_tick = 0.05
+depleted_health_damage = 0.05
+sleep_recovery_per_tick = 0.1
+heavy_labor_multiplier = 2.0
+combat_multiplier = 3.0
+
+[survival.environment]
+# Environmental hazard damage
+cold_damage_range = [1.0, 5.0]
+heat_damage_range = [2.0, 8.0]
+fall_damage_per_height = [3.0, 8.0]
+moderate_fall_damage_threshold = 12.0
+severe_fall_damage_threshold = 25.0
+
+# ============================================================================
+# COMBAT SYSTEM - Damage, defense, weapons
+# ============================================================================
+
+[combat.damage]
+base_unarmed = 5.0
+variance_min = 0.8
+variance_max = 1.2
+critical_multiplier = 2.0
+critical_chance = 0.1
+strength_scaling = 0.5
+
+[combat.defense]
+max_damage_reduction = 0.75
+armor_degradation_per_hit = 0.01
+shield_block_bonus = 0.15
+base_dodge_chance = 0.05
+
+[combat.weapons]
+melee_range = 1.5
+bow_range = 15.0
+crossbow_range = 20.0
+durability_loss_per_use = 0.02
+
+[combat.experience]
+xp_per_hit = 2
+xp_per_kill = 5
+difficulty_xp_multiplier = 1.5
+skill_damage_bonus = 0.05
+
+[combat.injuries]
+minor_threshold = 10.0
+moderate_threshold = 15.0
+severe_threshold = 30.0
+bleed_damage_per_tick = 0.5
+infection_chance = 0.1
+
+# ============================================================================
+# LEARNING SYSTEM - Skills, observation, discovery
+# ============================================================================
+
+[learning.skills]
+base_xp_per_level = 100
+xp_scaling_factor = 1.5
+max_level = 100
+decay_rate = 0.0001
+minimum_level = -10
+
+[learning.observational]
+min_observations = 3
+efficiency_multiplier = 0.5
+max_observation_distance = 10.0
+observation_decay = 0.001
+master_observation_bonus = 0.3
+
+[learning.discovery]
+base_discovery_chance = 0.1
+skill_discovery_bonus = 0.02
+permanent_memory_chance = 0.8
+discovery_attempt_time = 60
+
+[learning.memory]
+working_memory_capacity = 5
+episodic_memory_capacity = 100
+consolidation_threshold = 0.5
+decay_rate = 0.01
+teaching_effectiveness = 0.7
+
+# ============================================================================
+# SIMULATION PARAMETERS - Time, population, performance
+# ============================================================================
+
+[simulation.time]
+ticks_per_hour = 60
+hours_per_day = 24
+days_per_season = 30
+seasons_per_year = 4
+
+[simulation.population]
+max_agents = 1000
+min_agents = 0
+initial_population = 10
+interaction_radius = 15.0
+max_relationships = 50
+
+[simulation.world]
+resource_regen_interval = 100
+weather_change_interval = 500
+day_night_cycle_enabled = true
+seasonal_effects_enabled = true
+
+[simulation.performance]
+agent_batch_size = 100
+spatial_partitioning = true
+pathfinding_cache_ticks = 10
+autosave_interval = 10000
+max_checkpoints = 5
