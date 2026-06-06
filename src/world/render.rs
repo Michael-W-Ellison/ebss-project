@@ -162,7 +162,7 @@ impl AsciiRenderer {
             output.push_str(&format!("  Farms: {}\n", stats.farms));
         }
 
-        output.push_str("\n");
+        output.push('\n');
         output
     }
 
@@ -194,7 +194,7 @@ impl AsciiRenderer {
         output.push_str("  ^ = Mountain\n");
         output.push_str("  ~ = Water\n");
 
-        output.push_str("\n");
+        output.push('\n');
         output
     }
 

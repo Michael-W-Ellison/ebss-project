@@ -242,7 +242,7 @@ impl DataExporter {
         // Export summary
         let summary = metrics.summary();
         let summary_json = serde_json::to_string_pretty(&summary)
-            .map_err(|e| std::io::Error::other(e))?;
+            .map_err(std::io::Error::other)?;
         let mut summary_file = File::create(dir.join("summary.json"))?;
         summary_file.write_all(summary_json.as_bytes())?;
 
