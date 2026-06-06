@@ -36,6 +36,7 @@ use crate::agents::religious_effects::{
     calculate_religious_effects, total_happiness_modifier, RELIGIOUS_EFFECT_RADIUS,
 };
 use crate::logging::{SimulationContext, EventCategory};
+use crate::core::errors::{TickErrorCollector, ErrorCategory, RecoveryAction};
 use crate::{sim_info, sim_debug, sim_warn};
 use serde::{Serialize, Deserialize};
 use std::path::{Path, PathBuf};
@@ -293,6 +294,9 @@ impl Simulation {
         // Create logging context for this tick
         let log_ctx = SimulationContext::new(self.current_tick, self.population.agents.len());
 
+        // Create error collector for this tick
+        let mut error_collector = TickErrorCollector::new(self.current_tick);
+
         // Tick world systems (fauna and flora AI, growth, etc.)
         self.world.climate.tick();
         self.world.animals.tick();
@@ -311,12 +315,14 @@ impl Simulation {
         let agent_ids: Vec<_> = self.population.agents.iter().map(|a| a.id).collect();
 
         for agent_id in agent_ids {
-            // Find the agent
-            let agent_index = self.population.agents.iter().position(|a| a.id == agent_id);
-            if agent_index.is_none() {
-                continue;
-            }
-            let agent_index = agent_index.unwrap();
+            // Find the agent - skip if agent was removed (e.g., died)
+            let agent_index = match self.population.agents.iter().position(|a| a.id == agent_id) {
+                Some(idx) => idx,
+                None => {
+                    // Agent no longer exists - this is normal (death, etc.), not an error
+                    continue;
+                }
+            };
 
             // Get agent data we need
             // Use happiness-aware drive selection so agents prefer enjoyable work
@@ -730,19 +736,60 @@ impl Simulation {
         }
 
         // Process environmental damage (exposure, falling, disease)
-        self.process_environmental_damage();
+        // These subsystems are resilient but we record any issues
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.process_environmental_damage();
+        })) {
+            error_collector.recover(
+                ErrorCategory::AgentProcessing,
+                format!("Environmental damage processing failed: {:?}", e),
+                RecoveryAction::SkipOperation,
+            );
+        }
 
         // Process pregnancies and births
-        self.process_pregnancies_and_births();
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.process_pregnancies_and_births();
+        })) {
+            error_collector.recover(
+                ErrorCategory::PopulationLifecycle,
+                format!("Pregnancy/birth processing failed: {:?}", e),
+                RecoveryAction::SkipOperation,
+            );
+        }
 
         // Process nursing for infants
-        self.process_nursing();
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.process_nursing();
+        })) {
+            error_collector.recover(
+                ErrorCategory::PopulationLifecycle,
+                format!("Nursing processing failed: {:?}", e),
+                RecoveryAction::SkipOperation,
+            );
+        }
 
         // Tick world (building construction progress, etc.)
-        self.world.tick();
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.world.tick();
+        })) {
+            error_collector.recover(
+                ErrorCategory::WorldUpdate,
+                format!("World tick failed: {:?}", e),
+                RecoveryAction::SkipOperation,
+            );
+        }
 
         // Apply religious building effects to agent happiness
-        self.apply_religious_effects();
+        if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.apply_religious_effects();
+        })) {
+            error_collector.recover(
+                ErrorCategory::AgentProcessing,
+                format!("Religious effects processing failed: {:?}", e),
+                RecoveryAction::SkipOperation,
+            );
+        }
 
         // Log statistics every 10 ticks
         if self.current_tick % 10 == 0 {
@@ -751,7 +798,30 @@ impl Simulation {
 
         // Check if autosave should trigger
         if let Err(e) = self.check_autosave() {
-            sim_warn!(&log_ctx, EventCategory::Error, "Auto-save failed: {}", e);
+            error_collector.recover(
+                ErrorCategory::Persistence,
+                format!("Auto-save failed: {}", e),
+                RecoveryAction::SkipOperation,
+            );
+        }
+
+        // Log any errors that occurred during this tick
+        if error_collector.has_errors() {
+            sim_warn!(
+                &log_ctx,
+                EventCategory::Error,
+                "Tick completed with {} error(s)",
+                error_collector.error_count()
+            );
+        }
+
+        // Fatal errors would halt simulation - check and handle
+        if error_collector.has_fatal() {
+            sim_warn!(
+                &log_ctx,
+                EventCategory::Error,
+                "FATAL error during tick - simulation may be unstable"
+            );
         }
     }
 
