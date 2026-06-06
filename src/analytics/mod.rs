@@ -1332,7 +1332,7 @@ impl Simulation {
 
                 // Emit building started event for timeline
                 {
-                    use crate::gui::events::{SimulationEvent, SimulationEventType};
+                    use crate::core::events::{SimulationEvent, SimulationEventType};
                     let agent = &self.population.agents[agent_index];
                     let event = SimulationEvent::new(
                         self.current_tick,
@@ -1520,7 +1520,7 @@ impl Simulation {
 
                 // Emit conflict event for timeline
                 {
-                    use crate::gui::events::{SimulationEvent, SimulationEventType};
+                    use crate::core::events::{SimulationEvent, SimulationEventType};
                     let event = SimulationEvent::new(
                         self.current_tick,
                         SimulationEventType::Conflict {
@@ -2036,7 +2036,7 @@ impl Simulation {
 
                         // Emit storehouse deposit event for timeline (only for significant deposits)
                         if removed >= 3 {
-                            use crate::gui::events::{SimulationEvent, SimulationEventType};
+                            use crate::core::events::{SimulationEvent, SimulationEventType};
                             let event = SimulationEvent::new(
                                 self.current_tick,
                                 SimulationEventType::StorehouseDeposit {
@@ -3823,7 +3823,7 @@ impl Simulation {
         population.stats.total_abandonments = state.population_stats.total_abandonments;
 
         // Reconstruct Simulation
-        let sim = Simulation {
+        let mut sim = Simulation {
             world: state.world,
             population,
             current_tick: state.current_tick,
@@ -3831,6 +3831,9 @@ impl Simulation {
             autosave_config: None,
             last_autosave_tick: 0,
         };
+
+        // Re-initialize fields that were skipped during deserialization
+        sim.world.initialize_after_load();
 
         info!("Simulation loaded from tick {}", sim.current_tick);
         Ok(sim)

@@ -1439,7 +1439,7 @@ pub struct PlantManager {
     plants: Vec<Plant>,
     max_population: usize,
     natural_spawn_rate: f32,
-    #[serde(skip)]
+    #[serde(skip, default)]
     registry: Option<FloraRegistry>,
 }
 
@@ -1450,6 +1450,16 @@ impl PlantManager {
             max_population,
             natural_spawn_rate: 0.01,
             registry: Some(FloraRegistry::new()),
+        }
+    }
+
+    /// Re-initialize the registry after deserialization.
+    ///
+    /// This must be called after loading a saved PlantManager to ensure
+    /// the flora registry is properly initialized.
+    pub fn initialize_registry(&mut self) {
+        if self.registry.is_none() {
+            self.registry = Some(FloraRegistry::new());
         }
     }
 

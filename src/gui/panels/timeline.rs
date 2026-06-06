@@ -5,7 +5,7 @@ use egui::{Ui, Color32, RichText, ScrollArea};
 use uuid::Uuid;
 
 use crate::gui::state::{GuiState, EntitySelection};
-use crate::gui::events::{EventFilterType, SimulationEvent};
+use crate::gui::events::{EventFilterType, SimulationEvent, SimulationEventExt};
 
 const TILE_SIZE: f32 = 12.0;
 

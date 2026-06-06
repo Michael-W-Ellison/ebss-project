@@ -3,6 +3,7 @@
 
 pub mod behavior_tree;
 pub mod drives;
+pub mod events;
 pub mod learning;
 pub mod memory;
 pub mod episodic_memory;
@@ -21,6 +22,7 @@ mod tests;
 
 pub use behavior_tree::{BehaviorTree, BehaviorNode, NodeType, ExecutionResult, BehaviorContext, DefaultBehaviorContext};
 pub use drives::{Drive, DriveType, DriveState};
+pub use events::{SimulationEvent, SimulationEventType, DeathCause};
 pub use learning::{ObservableEvent, ObservableEventType, LearningResult, LearningExposure, observe_and_learn, process_population_learning};
 pub use memory::{Memory, SpatialMemoryType, KnowledgeMemory};
 pub use episodic_memory::{EpisodicMemory, Episode, EpisodeType, EpisodicMemoryStats};

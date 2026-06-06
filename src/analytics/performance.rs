@@ -54,7 +54,7 @@ pub struct PerformanceMonitor {
     pub snapshots: Vec<PerformanceSnapshot>,
     pub max_snapshots: usize,
 
-    #[serde(skip)]
+    #[serde(skip, default)]
     pub last_tick_start: Option<Instant>,
 }
 

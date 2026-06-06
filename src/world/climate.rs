@@ -125,11 +125,11 @@ pub struct ClimateManager {
     pub base_climate: Climate,
 
     /// Biome data per position (cached for performance)
-    #[serde(skip)]
+    #[serde(skip, default)]
     biome_cache: HashMap<Position, Biome>,
 
     /// Precipitation accumulation per region (chunked for performance)
-    #[serde(skip)]
+    #[serde(skip, default)]
     precipitation_map: HashMap<(i32, i32), PrecipitationAccumulation>,
 
     /// Recent lightning strikes
@@ -205,6 +205,15 @@ impl ClimateManager {
     pub fn set_dominant_biome(&mut self, biome: BiomeType) {
         self.dominant_biome = Some(biome);
         self.weather_gen.set_biome(biome);
+    }
+
+    /// Rebuild caches after deserialization.
+    ///
+    /// Clears biome and precipitation caches so they can be regenerated
+    /// on demand. This is necessary because caches are not serialized.
+    pub fn rebuild_caches(&mut self) {
+        self.biome_cache.clear();
+        self.precipitation_map.clear();
     }
 
     /// Tick the climate system

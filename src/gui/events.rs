@@ -1,237 +1,17 @@
 // src/gui/events.rs
-//! Simulation event types and event log for the timeline panel.
+//! GUI-specific event logging and timeline display components.
+//!
+//! Re-exports core event types and provides GUI-specific functionality
+//! like event filtering, logging, and timeline state management.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
-use uuid::Uuid;
-use crate::world::{BuildingType, Position};
+
+// Re-export core event types for backward compatibility
+pub use crate::core::events::{SimulationEvent, SimulationEventType, DeathCause};
 
 /// Maximum number of events to store in the event log
 pub const MAX_EVENTS: usize = 1000;
-
-/// Types of simulation events that can be displayed in the timeline
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SimulationEventType {
-    /// A new agent was born
-    Birth {
-        mother_id: Uuid,
-        child_id: Uuid,
-        father_id: Option<Uuid>,
-    },
-    /// An agent died
-    Death {
-        agent_id: Uuid,
-        cause: DeathCause,
-    },
-    /// Combat occurred between agents
-    Conflict {
-        attacker_id: Uuid,
-        target_id: Uuid,
-        damage: f32,
-        fatal: bool,
-    },
-    /// A new technology was discovered
-    TechnologyDiscovered {
-        tech_id: String,
-        discoverer_id: Uuid,
-        is_world_first: bool,
-    },
-    /// An agent became pregnant
-    Pregnancy {
-        mother_id: Uuid,
-        father_id: Uuid,
-    },
-    /// A building was started
-    BuildingStarted {
-        building_type: BuildingType,
-        position: Position,
-        builder_id: Uuid,
-    },
-    /// A building was completed
-    BuildingCompleted {
-        building_type: BuildingType,
-        position: Position,
-    },
-    /// A major emotional event occurred
-    MajorEmotionalEvent {
-        agent_id: Uuid,
-        emotion: String,
-        intensity: f32,
-        trigger: String,
-    },
-    /// An agent collapsed from exhaustion
-    Collapse {
-        agent_id: Uuid,
-    },
-    /// An agent was abandoned (left the simulation)
-    Abandonment {
-        agent_id: Uuid,
-    },
-    /// Resources were deposited to storehouse
-    StorehouseDeposit {
-        agent_id: Uuid,
-        resource: String,
-        amount: u32,
-    },
-}
-
-/// Cause of death for an agent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DeathCause {
-    OldAge,
-    Starvation,
-    Dehydration,
-    Combat { killer_id: Option<Uuid> },
-    Exhaustion,
-    Exposure,
-    Unknown,
-}
-
-impl DeathCause {
-    pub fn description(&self) -> String {
-        match self {
-            DeathCause::OldAge => "old age".to_string(),
-            DeathCause::Starvation => "starvation".to_string(),
-            DeathCause::Dehydration => "dehydration".to_string(),
-            DeathCause::Combat { killer_id: Some(_) } => "combat".to_string(),
-            DeathCause::Combat { killer_id: None } => "injuries".to_string(),
-            DeathCause::Exhaustion => "exhaustion".to_string(),
-            DeathCause::Exposure => "exposure".to_string(),
-            DeathCause::Unknown => "unknown causes".to_string(),
-        }
-    }
-}
-
-/// A single simulation event with metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimulationEvent {
-    /// Unique identifier for this event
-    pub id: Uuid,
-    /// Tick when the event occurred
-    pub tick: u32,
-    /// Type of event with associated data
-    pub event_type: SimulationEventType,
-    /// Position where the event occurred (if applicable)
-    pub position: Option<(i32, i32)>,
-}
-
-impl SimulationEvent {
-    /// Create a new simulation event
-    pub fn new(tick: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            tick,
-            event_type,
-            position,
-        }
-    }
-
-    /// Get a short description of the event
-    pub fn short_description(&self) -> String {
-        match &self.event_type {
-            SimulationEventType::Birth { .. } => "Birth".to_string(),
-            SimulationEventType::Death { cause, .. } => format!("Death ({})", cause.description()),
-            SimulationEventType::Conflict { fatal, .. } => {
-                if *fatal { "Fatal Attack".to_string() } else { "Attack".to_string() }
-            }
-            SimulationEventType::TechnologyDiscovered { tech_id, is_world_first, .. } => {
-                if *is_world_first {
-                    format!("Discovery: {}", tech_id)
-                } else {
-                    format!("Learned: {}", tech_id)
-                }
-            }
-            SimulationEventType::Pregnancy { .. } => "Pregnancy".to_string(),
-            SimulationEventType::BuildingStarted { building_type, .. } => {
-                format!("Building: {:?}", building_type)
-            }
-            SimulationEventType::BuildingCompleted { building_type, .. } => {
-                format!("Completed: {:?}", building_type)
-            }
-            SimulationEventType::MajorEmotionalEvent { emotion, .. } => {
-                format!("Emotional: {}", emotion)
-            }
-            SimulationEventType::Collapse { .. } => "Collapsed".to_string(),
-            SimulationEventType::Abandonment { .. } => "Left".to_string(),
-            SimulationEventType::StorehouseDeposit { resource, amount, .. } => {
-                format!("Stored: {} {}", amount, resource)
-            }
-        }
-    }
-
-    /// Get a detailed description of the event
-    pub fn detailed_description(&self) -> String {
-        match &self.event_type {
-            SimulationEventType::Birth { .. } => "A new agent was born".to_string(),
-            SimulationEventType::Death { cause, .. } => {
-                format!("An agent died from {}", cause.description())
-            }
-            SimulationEventType::Conflict { damage, fatal, .. } => {
-                if *fatal {
-                    format!("A fatal attack dealt {:.1} damage", damage)
-                } else {
-                    format!("An attack dealt {:.1} damage", damage)
-                }
-            }
-            SimulationEventType::TechnologyDiscovered { tech_id, is_world_first, .. } => {
-                if *is_world_first {
-                    format!("First discovery of {}", tech_id)
-                } else {
-                    format!("Agent learned {}", tech_id)
-                }
-            }
-            SimulationEventType::Pregnancy { .. } => "An agent became pregnant".to_string(),
-            SimulationEventType::BuildingStarted { building_type, .. } => {
-                format!("Construction started: {:?}", building_type)
-            }
-            SimulationEventType::BuildingCompleted { building_type, .. } => {
-                format!("Construction completed: {:?}", building_type)
-            }
-            SimulationEventType::MajorEmotionalEvent { emotion, intensity, trigger, .. } => {
-                format!("Strong {} ({:.0}%) from {}", emotion, intensity * 100.0, trigger)
-            }
-            SimulationEventType::Collapse { .. } => "An agent collapsed from exhaustion".to_string(),
-            SimulationEventType::Abandonment { .. } => "An agent left the settlement".to_string(),
-            SimulationEventType::StorehouseDeposit { resource, amount, .. } => {
-                format!("Deposited {} {} to storehouse", amount, resource)
-            }
-        }
-    }
-
-    /// Get the primary agent ID associated with this event (for selection)
-    pub fn primary_agent_id(&self) -> Option<Uuid> {
-        match &self.event_type {
-            SimulationEventType::Birth { child_id, .. } => Some(*child_id),
-            SimulationEventType::Death { agent_id, .. } => Some(*agent_id),
-            SimulationEventType::Conflict { attacker_id, .. } => Some(*attacker_id),
-            SimulationEventType::TechnologyDiscovered { discoverer_id, .. } => Some(*discoverer_id),
-            SimulationEventType::Pregnancy { mother_id, .. } => Some(*mother_id),
-            SimulationEventType::BuildingStarted { builder_id, .. } => Some(*builder_id),
-            SimulationEventType::BuildingCompleted { .. } => None,
-            SimulationEventType::MajorEmotionalEvent { agent_id, .. } => Some(*agent_id),
-            SimulationEventType::Collapse { agent_id } => Some(*agent_id),
-            SimulationEventType::Abandonment { agent_id } => Some(*agent_id),
-            SimulationEventType::StorehouseDeposit { agent_id, .. } => Some(*agent_id),
-        }
-    }
-
-    /// Get the event filter type for this event
-    pub fn filter_type(&self) -> EventFilterType {
-        match &self.event_type {
-            SimulationEventType::Birth { .. } => EventFilterType::Birth,
-            SimulationEventType::Death { .. } => EventFilterType::Death,
-            SimulationEventType::Conflict { .. } => EventFilterType::Conflict,
-            SimulationEventType::TechnologyDiscovered { .. } => EventFilterType::Technology,
-            SimulationEventType::Pregnancy { .. } => EventFilterType::Pregnancy,
-            SimulationEventType::BuildingStarted { .. } |
-            SimulationEventType::BuildingCompleted { .. } => EventFilterType::Building,
-            SimulationEventType::MajorEmotionalEvent { .. } => EventFilterType::Emotional,
-            SimulationEventType::Collapse { .. } => EventFilterType::Health,
-            SimulationEventType::Abandonment { .. } => EventFilterType::Other,
-            SimulationEventType::StorehouseDeposit { .. } => EventFilterType::Other,
-        }
-    }
-}
 
 /// Filter types for the timeline
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -278,7 +58,7 @@ impl EventFilterType {
         }
     }
 
-    /// Get color for the event type (egui Color32 format as RGB tuple)
+    /// Get color for the event type (RGB tuple)
     pub fn color(&self) -> (u8, u8, u8) {
         match self {
             EventFilterType::Birth => (100, 200, 100),      // Green
@@ -291,6 +71,35 @@ impl EventFilterType {
             EventFilterType::Health => (200, 200, 80),      // Yellow
             EventFilterType::Other => (150, 150, 150),      // Gray
         }
+    }
+
+    /// Get the filter type for a simulation event
+    pub fn from_event(event: &SimulationEvent) -> Self {
+        match &event.event_type {
+            SimulationEventType::Birth { .. } => EventFilterType::Birth,
+            SimulationEventType::Death { .. } => EventFilterType::Death,
+            SimulationEventType::Conflict { .. } => EventFilterType::Conflict,
+            SimulationEventType::TechnologyDiscovered { .. } => EventFilterType::Technology,
+            SimulationEventType::Pregnancy { .. } => EventFilterType::Pregnancy,
+            SimulationEventType::BuildingStarted { .. } |
+            SimulationEventType::BuildingCompleted { .. } => EventFilterType::Building,
+            SimulationEventType::MajorEmotionalEvent { .. } => EventFilterType::Emotional,
+            SimulationEventType::Collapse { .. } => EventFilterType::Health,
+            SimulationEventType::Abandonment { .. } => EventFilterType::Other,
+            SimulationEventType::StorehouseDeposit { .. } => EventFilterType::Other,
+        }
+    }
+}
+
+/// Extension trait to add GUI-specific methods to SimulationEvent
+pub trait SimulationEventExt {
+    /// Get the event filter type for this event
+    fn filter_type(&self) -> EventFilterType;
+}
+
+impl SimulationEventExt for SimulationEvent {
+    fn filter_type(&self) -> EventFilterType {
+        EventFilterType::from_event(self)
     }
 }
 
@@ -525,6 +334,7 @@ impl TimelineState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     #[test]
     fn test_event_log_capacity() {
@@ -605,5 +415,29 @@ mod tests {
         state.last_page();
         assert_eq!(state.current_page, 3);
         assert_eq!(state.get_page_events().len(), 1); // Last page has 1 event
+    }
+
+    #[test]
+    fn test_filter_type_from_event() {
+        let birth_event = SimulationEvent::new(
+            1,
+            SimulationEventType::Birth {
+                mother_id: Uuid::new_v4(),
+                child_id: Uuid::new_v4(),
+                father_id: None,
+            },
+            None,
+        );
+        assert_eq!(EventFilterType::from_event(&birth_event), EventFilterType::Birth);
+
+        let death_event = SimulationEvent::new(
+            2,
+            SimulationEventType::Death {
+                agent_id: Uuid::new_v4(),
+                cause: DeathCause::Starvation,
+            },
+            None,
+        );
+        assert_eq!(EventFilterType::from_event(&death_event), EventFilterType::Death);
     }
 }

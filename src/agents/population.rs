@@ -2,7 +2,7 @@
 use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, MateSelectionCriteria};
 use crate::environment::technology::TechnologyRegistry;
-use crate::gui::events::{SimulationEvent, SimulationEventType, DeathCause};
+use crate::core::events::{SimulationEvent, SimulationEventType, DeathCause};
 use uuid::Uuid;
 use std::collections::HashMap;
 

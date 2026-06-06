@@ -1865,7 +1865,7 @@ pub struct AnimalManager {
     max_population: usize,
 
     /// Reference to fauna registry (not serialized)
-    #[serde(skip)]
+    #[serde(skip, default)]
     registry: Option<FaunaRegistry>,
 }
 
@@ -1877,6 +1877,16 @@ impl AnimalManager {
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
             registry: Some(FaunaRegistry::new()),
+        }
+    }
+
+    /// Re-initialize the registry after deserialization.
+    ///
+    /// This must be called after loading a saved AnimalManager to ensure
+    /// the fauna registry is properly initialized.
+    pub fn initialize_registry(&mut self) {
+        if self.registry.is_none() {
+            self.registry = Some(FaunaRegistry::new());
         }
     }
 

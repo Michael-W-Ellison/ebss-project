@@ -111,15 +111,15 @@ pub struct World {
     pub buildings: Vec<Building>,
     pub storehouse_inventory: Inventory,
     pub marketplace: Marketplace,
-    #[serde(skip)]
+    #[serde(skip, default)]
     pub tech_tree: TechnologyTree, // Global technology tree (not serialized, recreated)
     pub climate: ClimateManager,
     pub heat_sources: HeatSourceRegistry,
     pub animals: AnimalManager,
     pub plants: PlantManager,
-    #[serde(skip)]
+    #[serde(skip, default)]
     pub combat_manager: combat::CombatManager, // Combat system (not serialized)
-    #[serde(skip)]
+    #[serde(skip, default)]
     pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
     pub tick: u32,
     pub config: WorldConfig, // Store configuration for spatial planning
@@ -300,6 +300,31 @@ impl World {
         world.animals.spawn_naturalistic(&world.grid, &spawn_config);
 
         world
+    }
+
+    /// Re-initialize fields that were skipped during deserialization.
+    ///
+    /// This method must be called after loading a saved World to ensure
+    /// all runtime-only fields are properly initialized.
+    pub fn initialize_after_load(&mut self) {
+        // Re-initialize managers that have Default implementations
+        // Note: These are already initialized to Default by serde(skip, default)
+        // but we call these explicitly in case custom initialization is needed
+
+        // Re-initialize the technology tree
+        self.tech_tree = TechnologyTree::new();
+
+        // Re-initialize combat and crafting managers
+        self.combat_manager = combat::CombatManager::new();
+        self.crafting_manager = crafting::CraftingManager::new();
+
+        // Re-initialize climate caches
+        self.climate.rebuild_caches();
+
+        // Re-initialize environment registries
+        self.animals.initialize_registry();
+        self.plants.initialize_registry();
+        self.heat_sources.initialize_registry();
     }
 
     fn generate_resources(&mut self, config: &ResourceConfig) {

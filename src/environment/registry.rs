@@ -140,19 +140,23 @@ impl Default for PluginRegistry {
     }
 }
 
-/// Global plugin registry instance
-static mut GLOBAL_REGISTRY: Option<PluginRegistry> = None;
-static REGISTRY_INIT: std::sync::Once = std::sync::Once::new();
+use std::sync::{OnceLock, Mutex, MutexGuard};
+
+/// Global plugin registry instance (thread-safe singleton)
+static GLOBAL_REGISTRY: OnceLock<Mutex<PluginRegistry>> = OnceLock::new();
 
 /// Get the global plugin registry
-#[allow(static_mut_refs)]
-pub fn global_registry() -> &'static mut PluginRegistry {
-    unsafe {
-        REGISTRY_INIT.call_once(|| {
-            GLOBAL_REGISTRY = Some(PluginRegistry::new());
-        });
-        GLOBAL_REGISTRY.as_mut().unwrap()
-    }
+///
+/// Returns a mutex guard that provides mutable access to the registry.
+/// The lock is automatically released when the guard goes out of scope.
+///
+/// # Panics
+/// Panics if the mutex is poisoned (a thread panicked while holding the lock).
+pub fn global_registry() -> MutexGuard<'static, PluginRegistry> {
+    GLOBAL_REGISTRY
+        .get_or_init(|| Mutex::new(PluginRegistry::new()))
+        .lock()
+        .expect("Plugin registry mutex poisoned - a thread panicked while holding the lock")
 }
 
 #[cfg(test)]

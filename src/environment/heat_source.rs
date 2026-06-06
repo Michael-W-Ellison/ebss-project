@@ -359,7 +359,7 @@ pub struct SmeltingResult {
 pub struct HeatSourceRegistry {
     heat_sources: HashMap<Uuid, HeatSource>,
     position_index: HashMap<(i32, i32, i32), Uuid>,
-    #[serde(skip)]
+    #[serde(skip, default)]
     smelting_registry: SmeltingRegistry,
 }
 
@@ -370,6 +370,14 @@ impl HeatSourceRegistry {
             position_index: HashMap::new(),
             smelting_registry: SmeltingRegistry::new(),
         }
+    }
+
+    /// Re-initialize the smelting registry after deserialization.
+    ///
+    /// This must be called after loading a saved HeatSourceRegistry to ensure
+    /// the smelting registry is properly initialized.
+    pub fn initialize_registry(&mut self) {
+        self.smelting_registry = SmeltingRegistry::new();
     }
 
     /// Add a heat source
