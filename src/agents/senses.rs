@@ -541,7 +541,7 @@ impl Attention {
 
     /// Get remaining attention time
     pub fn remaining_attention(&self) -> u32 {
-        if let Some(_) = self.focus {
+        if self.focus.is_some() {
             self.attention_span.saturating_sub(self.current_duration)
         } else {
             0

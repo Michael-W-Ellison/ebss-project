@@ -4000,7 +4000,7 @@ impl Simulation {
 
         // Serialize to MessagePack (supports complex HashMap keys like Position)
         let bytes = rmp_serde::to_vec(&state)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
 
         // Write to file
         let mut file = File::create(path)?;

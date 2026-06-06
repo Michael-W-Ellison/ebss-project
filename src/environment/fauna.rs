@@ -2656,7 +2656,7 @@ impl AnimalManager {
                     let pos = positions[rng.gen_range(0..positions.len())];
                     let herd_size = rng.gen_range(species.group_size.0..=species.group_size.1);
 
-                    if let Some(_) = self.spawn_group(species.id.clone(), pos, herd_size) {
+                    if self.spawn_group(species.id.clone(), pos, herd_size).is_some() {
                         spawned += herd_size as usize;
                     }
                 }
@@ -2686,7 +2686,7 @@ impl AnimalManager {
                         // Predator packs are typically smaller
                         let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
 
-                        if let Some(_) = self.spawn_group(species.id.clone(), pos, pack_size) {
+                        if self.spawn_group(species.id.clone(), pos, pack_size).is_some() {
                             spawned += pack_size as usize;
                         }
                     }
