@@ -2428,7 +2428,7 @@ impl Agent {
                 // Prefer fresher food (multiply by freshness)
                 let adjusted_score = score * food_data.freshness;
 
-                if best_item.is_none() || adjusted_score > best_item.as_ref().unwrap().1 {
+                if best_item.as_ref().is_none_or(|(_, best_score)| adjusted_score > *best_score) {
                     best_item = Some((item_id.clone(), adjusted_score));
                 }
             }
@@ -3251,12 +3251,9 @@ impl Agent {
         use crate::core::{ExternalGoal, InternalGoal, EmotionType};
 
         // Get the highest priority goal (internal or external)
-        let goal = self.goals.highest_priority_goal();
-        if goal.is_none() {
+        let Some(goal) = self.goals.highest_priority_goal() else {
             return false;
-        }
-
-        let goal = goal.unwrap();
+        };
 
         // Get traits for complexity check
         let traits: Vec<_> = self.traits.get_traits().to_vec();

@@ -121,7 +121,7 @@ impl ValidationBuilder {
     pub fn finish(self) -> Result<(), ConfigError> {
         match self.errors.len() {
             0 => Ok(()),
-            1 => Err(self.errors.into_iter().next().unwrap()),
+            1 => Err(self.errors.into_iter().next().expect("checked len is 1")),
             _ => Err(ConfigError::Multiple(self.errors)),
         }
     }

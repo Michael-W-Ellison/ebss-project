@@ -462,8 +462,12 @@ fn run_force_directed_iteration(state: &mut GuiState, snapshot: &RelationshipGra
             let id1 = node_ids[i];
             let id2 = node_ids[j];
 
-            let pos1 = state.relationship_graph_state.node_positions.get(&id1).unwrap();
-            let pos2 = state.relationship_graph_state.node_positions.get(&id2).unwrap();
+            let (Some(pos1), Some(pos2)) = (
+                state.relationship_graph_state.node_positions.get(&id1),
+                state.relationship_graph_state.node_positions.get(&id2),
+            ) else {
+                continue;
+            };
 
             let dx = pos2.x - pos1.x;
             let dy = pos2.y - pos1.y;
@@ -496,8 +500,12 @@ fn run_force_directed_iteration(state: &mut GuiState, snapshot: &RelationshipGra
                 continue;
             }
 
-            let pos1 = state.relationship_graph_state.node_positions.get(&node.agent_id).unwrap();
-            let pos2 = state.relationship_graph_state.node_positions.get(&edge.target_id).unwrap();
+            let (Some(pos1), Some(pos2)) = (
+                state.relationship_graph_state.node_positions.get(&node.agent_id),
+                state.relationship_graph_state.node_positions.get(&edge.target_id),
+            ) else {
+                continue;
+            };
 
             let dx = pos2.x - pos1.x;
             let dy = pos2.y - pos1.y;
@@ -519,7 +527,9 @@ fn run_force_directed_iteration(state: &mut GuiState, snapshot: &RelationshipGra
 
     // Center pull
     for id in &node_ids {
-        let pos = state.relationship_graph_state.node_positions.get(id).unwrap();
+        let Some(pos) = state.relationship_graph_state.node_positions.get(id) else {
+            continue;
+        };
         if let Some(f) = forces.get_mut(id) {
             f.0 -= pos.x * center_pull;
             f.1 -= pos.y * center_pull;

@@ -942,41 +942,25 @@ impl World {
     }
 
     /// Agent vs agent combat
+    ///
+    /// # Arguments
+    /// * `attacker_id` - UUID of the attacking agent
+    /// * `defender_id` - UUID of the defending agent
+    /// * `attacker_stats` - Combat stats for the attacker
+    /// * `defender_stats` - Combat stats for the defender
     pub fn agent_attack_agent(
         &mut self,
         attacker_id: uuid::Uuid,
         defender_id: uuid::Uuid,
-        attacker_weapon_damage: f32,
-        attacker_armor: f32,
-        attacker_mounted_bonus: f32,
-        defender_weapon_damage: f32,
-        defender_armor: f32,
-        defender_mounted_bonus: f32,
+        attacker_stats: &combat::CombatStats,
+        defender_stats: &combat::CombatStats,
     ) -> Result<combat::CombatResult, String> {
-        // Create attacker stats
-        let attacker_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: attacker_weapon_damage,
-            armor_rating: attacker_armor,
-            mounted_bonus: attacker_mounted_bonus,
-            ..Default::default()
-        };
-
-        // Create defender stats
-        let defender_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: defender_weapon_damage,
-            armor_rating: defender_armor,
-            mounted_bonus: defender_mounted_bonus,
-            ..Default::default()
-        };
-
         // Execute combat
         let result = self.combat_manager.execute_combat(
             attacker_id,
             defender_id,
-            &attacker_stats,
-            &defender_stats,
+            attacker_stats,
+            defender_stats,
             Some("weapon".to_string()),
         );
 

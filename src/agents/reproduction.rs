@@ -244,8 +244,8 @@ fn inherit_drives(drives1: &DriveState, drives2: &DriveState) -> DriveState {
     let mut new_drives = DriveState::new();
 
     for drive_type in DriveType::all().iter() {
-        let parent1_drive = drives1.get(*drive_type).unwrap();
-        let parent2_drive = drives2.get(*drive_type).unwrap();
+        let Some(parent1_drive) = drives1.get(*drive_type) else { continue };
+        let Some(parent2_drive) = drives2.get(*drive_type) else { continue };
 
         // Average parent weights with variation
         let base_weight = (parent1_drive.weight + parent2_drive.weight) / 2.0;

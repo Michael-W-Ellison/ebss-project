@@ -25,6 +25,26 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
     }
 }
 
+/// Data collected during birth processing
+struct BirthData {
+    species_id: String,
+    position: (i32, i32),
+    group_id: Option<Uuid>,
+    litter_size: u32,
+    #[allow(dead_code)]
+    breeding_cooldown: u32,
+}
+
+/// Data for predator hunting behavior
+struct PredatorData {
+    index: usize,
+    #[allow(dead_code)]
+    species_id: String,
+    prey_species: Vec<String>,
+    position: (i32, i32),
+    attack_damage: f32,
+}
+
 /// Configuration for naturalistic animal spawning during world generation
 #[derive(Debug, Clone)]
 pub struct AnimalSpawnConfig {
@@ -2205,7 +2225,7 @@ impl AnimalManager {
         };
 
         // Collect birth data
-        let births: Vec<(String, (i32, i32), Option<Uuid>, u32, u32)> = self.animals
+        let births: Vec<BirthData> = self.animals
             .iter_mut()
             .filter(|a| a.is_alive() && a.ready_to_give_birth())
             .filter_map(|a| {
@@ -2215,20 +2235,20 @@ impl AnimalManager {
                 // Complete birth
                 a.give_birth();
 
-                Some((
-                    a.species_id.clone(),
-                    a.position,
-                    a.group_id,
+                Some(BirthData {
+                    species_id: a.species_id.clone(),
+                    position: a.position,
+                    group_id: a.group_id,
                     litter_size,
-                    species.breeding_cooldown,
-                ))
+                    breeding_cooldown: species.breeding_cooldown,
+                })
             })
             .collect();
 
         // Spawn offspring
-        for (species_id, position, group_id, litter_size, _cooldown) in births {
-            if let Some(species) = registry.get(&species_id) {
-                for _ in 0..litter_size {
+        for birth in births {
+            if let Some(species) = registry.get(&birth.species_id) {
+                for _ in 0..birth.litter_size {
                     if self.animals.len() >= self.max_population {
                         break;
                     }
@@ -2236,13 +2256,13 @@ impl AnimalManager {
                     // Spawn near parent with some offset
                     let offset_x = rng.gen_range(-2..=2);
                     let offset_y = rng.gen_range(-2..=2);
-                    let offspring_pos = (position.0 + offset_x, position.1 + offset_y);
+                    let offspring_pos = (birth.position.0 + offset_x, birth.position.1 + offset_y);
 
                     let offspring = Animal::new_offspring(
-                        species_id.clone(),
+                        birth.species_id.clone(),
                         offspring_pos,
                         species,
-                        group_id,
+                        birth.group_id,
                     );
                     self.animals.push(offspring);
                 }
@@ -2355,7 +2375,7 @@ impl AnimalManager {
         }
 
         // Find hungry predators and their prey
-        let predator_data: Vec<(usize, String, Vec<String>, (i32, i32), f32)> = self.animals
+        let predator_data: Vec<PredatorData> = self.animals
             .iter()
             .enumerate()
             .filter(|(_, a)| a.is_alive() && a.is_hungry())
@@ -2364,33 +2384,33 @@ impl AnimalManager {
                 if species.prey_species.is_empty() {
                     return None;
                 }
-                Some((
-                    idx,
-                    a.species_id.clone(),
-                    species.prey_species.clone(),
-                    a.position,
-                    species.attack_damage,
-                ))
+                Some(PredatorData {
+                    index: idx,
+                    species_id: a.species_id.clone(),
+                    prey_species: species.prey_species.clone(),
+                    position: a.position,
+                    attack_damage: species.attack_damage,
+                })
             })
             .collect();
 
         // For each predator, look for nearby prey
         let mut kills = Vec::new();
-        for (pred_idx, _pred_species, prey_species, pred_pos, attack) in predator_data {
+        for predator in predator_data {
             // Find nearby prey
             for (prey_idx, prey) in self.animals.iter().enumerate() {
-                if !prey.is_alive() || prey_idx == pred_idx {
+                if !prey.is_alive() || prey_idx == predator.index {
                     continue;
                 }
 
                 // Check if this is a valid prey species
-                if !prey_species.contains(&prey.species_id) {
+                if !predator.prey_species.contains(&prey.species_id) {
                     continue;
                 }
 
                 // Check proximity (hunting range of 8 tiles)
-                let distance = ((pred_pos.0 - prey.position.0).abs()
-                    + (pred_pos.1 - prey.position.1).abs()) as f32;
+                let distance = ((predator.position.0 - prey.position.0).abs()
+                    + (predator.position.1 - prey.position.1).abs()) as f32;
                 if distance > 8.0 {
                     continue;
                 }
@@ -2398,7 +2418,7 @@ impl AnimalManager {
                 // Hunt success based on speed comparison and randomness
                 let prey_species_data = registry.get(&prey.species_id);
                 let prey_speed = prey_species_data.map(|s| s.speed).unwrap_or(1.0);
-                let pred_species_data = registry.get(&self.animals[pred_idx].species_id);
+                let pred_species_data = registry.get(&self.animals[predator.index].species_id);
                 let pred_speed = pred_species_data.map(|s| s.speed).unwrap_or(1.0);
 
                 let chase_chance = (pred_speed / prey_speed).min(1.0) * 0.4;
@@ -2406,7 +2426,7 @@ impl AnimalManager {
                 if rng.gen::<f32>() < chase_chance {
                     // Successful hunt - attack prey
                     let prey_food_value = prey_species_data.map(|s| s.food_value).unwrap_or(10.0);
-                    kills.push((pred_idx, prey_idx, attack, prey_food_value));
+                    kills.push((predator.index, prey_idx, predator.attack_damage, prey_food_value));
                     break; // One hunt per predator per tick
                 }
             }

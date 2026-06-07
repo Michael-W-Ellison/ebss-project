@@ -140,7 +140,7 @@ impl<'a> SpatialPlanner<'a> {
     /// Find optimal location considering agent's position.
     ///
     /// This is a convenience method that infers placement criteria from the building type.
-    /// For more control, use [`find_optimal_location_with_criteria`] to specify explicit criteria.
+    /// For more control, use [`Self::find_optimal_location_with_criteria`] to specify explicit criteria.
     ///
     /// # Arguments
     /// * `building_type` - The type of building to place (used to infer criteria)

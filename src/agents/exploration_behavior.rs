@@ -144,7 +144,7 @@ pub fn random_exploration_direction() -> (i32, i32) {
         (-1, -1), // Northwest
     ];
 
-    *directions.get(rng.gen_range(0..directions.len())).unwrap()
+    directions[rng.gen_range(0..directions.len())]
 }
 
 /// Calculate the best direction to move for exploration
