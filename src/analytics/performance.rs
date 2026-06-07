@@ -142,7 +142,7 @@ impl PerformanceMonitor {
         ops.sort_by(|a, b| {
             b.1.average_duration_micros
                 .partial_cmp(&a.1.average_duration_micros)
-                .unwrap()
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         ops.into_iter().take(count).collect()

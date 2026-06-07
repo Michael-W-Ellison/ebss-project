@@ -23,17 +23,10 @@ pub fn render_map(
     command_tx: &Sender<SimulationCommand>,
     agent_data_request: &Arc<Mutex<Option<Uuid>>>,
 ) {
-    if state.latest_snapshot.is_none() {
-        ui.centered_and_justified(|ui| {
-            ui.label("Waiting for simulation data...");
-        });
-        return;
-    }
-
     let available_size = ui.available_size();
 
     // Handle follow mode - center on selected agent each frame
-    // Must happen before we borrow snapshot
+    // Must happen before we borrow snapshot for the rest of the function
     if state.follow_selected {
         if let EntitySelection::Agent(id) = &state.selected {
             if let Some(snapshot) = &state.latest_snapshot {
@@ -53,8 +46,13 @@ pub fn render_map(
     // Handle keyboard input for panning and zooming
     handle_keyboard_input(ui, state);
 
-    // Now borrow snapshot for the rest of the function
-    let snapshot = state.latest_snapshot.as_ref().unwrap();
+    // Borrow snapshot for the rest of the function
+    let Some(snapshot) = state.latest_snapshot.as_ref() else {
+        ui.centered_and_justified(|ui| {
+            ui.label("Waiting for simulation data...");
+        });
+        return;
+    };
     let world = &snapshot.world;
 
     // Main map area

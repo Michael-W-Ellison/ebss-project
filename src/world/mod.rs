@@ -346,12 +346,13 @@ impl World {
     fn generate_basic_resources(&mut self, config: &ResourceConfig, rng: &mut impl Rng) {
         // Generate wood nodes (in forest areas)
         for _ in 0..config.wood_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Forest);
-            self.resources.push(ResourceNode::new(
-                ResourceType::Wood,
-                pos,
-                rng.gen_range(50..150),
-            ));
+            if let Some(pos) = self.find_random_terrain_position(TerrainType::Forest) {
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Wood,
+                    pos,
+                    rng.gen_range(50..150),
+                ));
+            }
         }
 
         // Generate stone nodes (in mountain and hills areas)
@@ -361,22 +362,24 @@ impl World {
             } else {
                 TerrainType::Hills
             };
-            let pos = self.find_random_terrain_position(terrain);
-            self.resources.push(ResourceNode::new(
-                ResourceType::Stone,
-                pos,
-                rng.gen_range(80..200),
-            ));
+            if let Some(pos) = self.find_random_terrain_position(terrain) {
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Stone,
+                    pos,
+                    rng.gen_range(80..200),
+                ));
+            }
         }
 
         // Generate iron nodes (rare, in mountains)
         for _ in 0..config.iron_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Mountain);
-            self.resources.push(ResourceNode::new(
-                ResourceType::Iron,
-                pos,
-                rng.gen_range(30..100),
-            ));
+            if let Some(pos) = self.find_random_terrain_position(TerrainType::Mountain) {
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Iron,
+                    pos,
+                    rng.gen_range(30..100),
+                ));
+            }
         }
 
         // Generate food nodes (in plains and meadows)
@@ -386,12 +389,13 @@ impl World {
             } else {
                 TerrainType::Meadow
             };
-            let pos = self.find_random_terrain_position(terrain);
-            self.resources.push(ResourceNode::new(
-                ResourceType::Food,
-                pos,
-                rng.gen_range(20..60),
-            ));
+            if let Some(pos) = self.find_random_terrain_position(terrain) {
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Food,
+                    pos,
+                    rng.gen_range(20..60),
+                ));
+            }
         }
 
         // Generate water sources (rivers, wells, springs)
@@ -404,13 +408,14 @@ impl World {
                 2 => TerrainType::Forest,   // Spring in forest
                 _ => TerrainType::Hills,    // Well in hills
             };
-            let pos = self.find_random_terrain_position(terrain);
-            // Water sources are renewable and have high capacity
-            self.resources.push(ResourceNode::new(
-                ResourceType::Water,
-                pos,
-                rng.gen_range(200..500), // High capacity, water is abundant at source
-            ));
+            if let Some(pos) = self.find_random_terrain_position(terrain) {
+                // Water sources are renewable and have high capacity
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Water,
+                    pos,
+                    rng.gen_range(200..500), // High capacity, water is abundant at source
+                ));
+            }
         }
     }
 
@@ -462,7 +467,7 @@ impl World {
         }
     }
 
-    fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
+    fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Option<Position> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
@@ -476,17 +481,14 @@ impl World {
                 if tile.terrain.terrain_type == terrain_type {
                     // Check if position is not occupied
                     if !self.is_position_occupied(&pos) {
-                        return pos;
+                        return Some(pos);
                     }
                 }
             }
         }
 
-        // Fallback: return random position
-        Position::new(
-            rng.gen_range(0..self.grid.width) as i32,
-            rng.gen_range(0..self.grid.height) as i32,
-        )
+        // Return None if no valid position found
+        None
     }
 
     pub fn is_position_occupied(&self, pos: &Position) -> bool {

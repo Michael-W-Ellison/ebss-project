@@ -512,12 +512,9 @@ impl SimulationMetrics {
 
     /// Get summary statistics for the entire simulation
     pub fn summary(&self) -> SimulationSummary {
-        if self.snapshots.is_empty() {
+        let (Some(first), Some(last)) = (self.snapshots.first(), self.snapshots.last()) else {
             return SimulationSummary::default();
-        }
-
-        let first = self.snapshots.first().unwrap();
-        let last = self.snapshots.last().unwrap();
+        };
 
         SimulationSummary {
             total_ticks: last.tick - first.tick,

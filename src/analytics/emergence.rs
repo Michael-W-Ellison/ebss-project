@@ -372,9 +372,9 @@ impl EmergenceDetector {
             }).collect();
 
             // Check if trending upward
-            if critical_rates.len() >= 2 {
-                let trend = critical_rates.last().unwrap() - critical_rates.first().unwrap();
-                let current = *critical_rates.last().unwrap();
+            if let [first, .., last] = critical_rates.as_slice() {
+                let trend = last - first;
+                let current = *last;
 
                 if trend > 0.05 && current > 0.15 && current < self.thresholds.drive_crisis {
                     return Some(PatternPrediction {
@@ -401,9 +401,9 @@ impl EmergenceDetector {
             .map(|s| s.curiosity.average_exploration_efficiency)
             .collect();
 
-        if efficiencies.len() >= 2 {
-            let trend = efficiencies.last().unwrap() - efficiencies.first().unwrap();
-            let current = *efficiencies.last().unwrap();
+        if let [first, .., last] = efficiencies.as_slice() {
+            let trend = last - first;
+            let current = *last;
 
             if trend < -0.1 && current < 0.5 {
                 return Some(PatternPrediction {
@@ -459,8 +459,11 @@ impl EmergenceDetector {
 
         // Look at last 5 snapshots
         let recent = &metrics.snapshots[len - 5..];
-        let first_pop = recent.first().unwrap().population.total as f32;
-        let last_pop = recent.last().unwrap().population.total as f32;
+        let (Some(first), Some(last)) = (recent.first(), recent.last()) else {
+            return;
+        };
+        let first_pop = first.population.total as f32;
+        let last_pop = last.population.total as f32;
 
         if first_pop == 0.0 {
             return;
