@@ -253,10 +253,13 @@ impl Grid {
             let nx = x as i32 + dx;
             let ny = y as i32 + dy;
 
-            if nx >= 0 && ny >= 0 && (nx as usize) < self.width && (ny as usize) < self.height {
-                if terrain_map[ny as usize][nx as usize] == terrain {
-                    count += 1;
-                }
+            if nx >= 0
+                && ny >= 0
+                && (nx as usize) < self.width
+                && (ny as usize) < self.height
+                && terrain_map[ny as usize][nx as usize] == terrain
+            {
+                count += 1;
             }
         }
 
@@ -265,7 +268,7 @@ impl Grid {
 
     // Simple noise function for terrain generation
     fn simple_noise(&self, x: f32, y: f32) -> f32 {
-        let value = (x.sin() * 43758.5453 + y.cos() * 12345.6789).sin();
+        let value = (x.sin() * 43758.55 + y.cos() * 12345.68).sin();
         (value + 1.0) / 2.0 // Normalize to 0-1
     }
 

@@ -326,8 +326,8 @@ impl Population {
         for agent in &mut self.agents {
             let agent_pos = agent.state.position;
             let current_relationships: Vec<_> = agent.relationships.get_all()
-                .iter()
-                .map(|(id, _)| *id)
+                .keys()
+                .copied()
                 .collect();
 
             for other_id in current_relationships {
@@ -1198,26 +1198,27 @@ impl Population {
 
                 // Agent j might also share with agent i (bidirectional gossip)
                 let gossip_probability_j = self.calculate_gossip_probability(&self.agents[j]);
-                if gossip_probability_j > 0.0 && rng.gen::<f32>() < gossip_probability_j {
-                    if !self.agents[j].knowledge.known_information.is_empty() {
-                        let info_ids_j: Vec<_> = self.agents[j].knowledge.known_information.keys().cloned().collect();
-                        if let Some(info_id) = info_ids_j.choose(&mut rng) {
-                            if let Some(info) = self.agents[j].knowledge.known_information.get(info_id) {
-                                if current_tick as u64 - info.timestamp < 10000 {
-                                    let is_about_recipient = match &info.info_type {
-                                        InformationType::Death { agent, .. } => *agent == self.agents[i].id,
-                                        InformationType::Conflict { agent1, agent2 } => {
-                                            *agent1 == self.agents[i].id || *agent2 == self.agents[i].id
-                                        }
-                                        InformationType::EmotionalOutburst { agent, .. } => *agent == self.agents[i].id,
-                                        InformationType::Accusation { accused, .. } => *accused == self.agents[i].id,
-                                        InformationType::AgentTrait { agent, .. } => *agent == self.agents[i].id,
-                                        _ => false,
-                                    };
-
-                                    if !is_about_recipient {
-                                        gossip_events.push((j, i, info.clone()));
+                if gossip_probability_j > 0.0
+                    && rng.gen::<f32>() < gossip_probability_j
+                    && !self.agents[j].knowledge.known_information.is_empty()
+                {
+                    let info_ids_j: Vec<_> = self.agents[j].knowledge.known_information.keys().cloned().collect();
+                    if let Some(info_id) = info_ids_j.choose(&mut rng) {
+                        if let Some(info) = self.agents[j].knowledge.known_information.get(info_id) {
+                            if current_tick as u64 - info.timestamp < 10000 {
+                                let is_about_recipient = match &info.info_type {
+                                    InformationType::Death { agent, .. } => *agent == self.agents[i].id,
+                                    InformationType::Conflict { agent1, agent2 } => {
+                                        *agent1 == self.agents[i].id || *agent2 == self.agents[i].id
                                     }
+                                    InformationType::EmotionalOutburst { agent, .. } => *agent == self.agents[i].id,
+                                    InformationType::Accusation { accused, .. } => *accused == self.agents[i].id,
+                                    InformationType::AgentTrait { agent, .. } => *agent == self.agents[i].id,
+                                    _ => false,
+                                };
+
+                                if !is_about_recipient {
+                                    gossip_events.push((j, i, info.clone()));
                                 }
                             }
                         }
@@ -1389,6 +1390,7 @@ impl Population {
                 continue;
             }
 
+            #[allow(clippy::needless_range_loop)]
             for j in (i + 1)..self.agents.len() {
                 let (_, pos_j, alive_j) = agent_positions[j];
                 if !alive_j {

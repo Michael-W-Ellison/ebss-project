@@ -1152,21 +1152,17 @@ impl World {
 
     /// Get detailed status of smelting in a heat source
     pub fn get_smelting_status(&self, heat_source_id: &uuid::Uuid) -> Option<HeatSourceStatus> {
-        if let Some(heat_source) = self.heat_sources.get(heat_source_id) {
-            Some(HeatSourceStatus {
-                is_lit: heat_source.is_lit,
-                current_temperature: heat_source.current_temperature,
-                fuel_remaining: heat_source.fuel.iter().map(|f| f.amount).sum(),
-                contents: heat_source.contents.iter().map(|c| (
-                    c.material_id.clone(),
-                    c.quantity,
-                    c.heating_time,
-                    c.current_temp,
-                )).collect(),
-            })
-        } else {
-            None
-        }
+        self.heat_sources.get(heat_source_id).map(|heat_source| HeatSourceStatus {
+            is_lit: heat_source.is_lit,
+            current_temperature: heat_source.current_temperature,
+            fuel_remaining: heat_source.fuel.iter().map(|f| f.amount).sum(),
+            contents: heat_source.contents.iter().map(|c| (
+                c.material_id.clone(),
+                c.quantity,
+                c.heating_time,
+                c.current_temp,
+            )).collect(),
+        })
     }
 
     pub fn tick(&mut self) {
@@ -1229,10 +1225,11 @@ impl World {
 
     /// Get statistics about the world
     pub fn stats(&self) -> WorldStats {
-        let mut stats = WorldStats::default();
-
-        stats.total_resources = self.resources.len();
-        stats.total_buildings = self.buildings.len();
+        let mut stats = WorldStats {
+            total_resources: self.resources.len(),
+            total_buildings: self.buildings.len(),
+            ..Default::default()
+        };
 
         for resource in &self.resources {
             match resource.resource_type {

@@ -501,8 +501,8 @@ pub struct AgentState {
     pub ticks_without_water: u32, // Count dehydration duration
 }
 
-impl AgentState {
-    pub fn new() -> Self {
+impl Default for AgentState {
+    fn default() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         // Max age varies between 9000-11000 ticks
@@ -521,6 +521,12 @@ impl AgentState {
             last_drank_tick: 0,
             ticks_without_water: 0,
         }
+    }
+}
+
+impl AgentState {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Get survival configuration from global config or use defaults.

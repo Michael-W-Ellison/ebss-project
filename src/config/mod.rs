@@ -28,7 +28,7 @@ pub use validation::{ConfigError, ConfigValidation};
 static GLOBAL_CONFIG: OnceLock<GameConfig> = OnceLock::new();
 
 /// Master configuration struct containing all game balance parameters.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GameConfig {
     /// Drive system configuration (hunger, thirst, rest, etc.)
     pub drives: DrivesConfig,
@@ -106,18 +106,6 @@ impl GameConfig {
     }
 }
 
-impl Default for GameConfig {
-    fn default() -> Self {
-        Self {
-            drives: DrivesConfig::default(),
-            emotions: EmotionsConfig::default(),
-            survival: SurvivalConfig::default(),
-            combat: CombatConfig::default(),
-            learning: LearningConfig::default(),
-            simulation: SimulationConfig::default(),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

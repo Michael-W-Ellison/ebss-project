@@ -5,11 +5,13 @@
 //! calculate efficiency of different methods, and learn from outcomes.
 //!
 //! Example: "Get wood" becomes:
+//!
 //! 1. Walk to forest (30 ticks)
 //! 2. Equip axe (5 ticks)
 //! 3. Chop tree (20 ticks with iron axe, 40 with stone)
 //! 4. Return to storehouse (30 ticks)
 //! 5. Deposit wood (5 ticks)
+//!
 //! Total: 90 ticks with iron axe vs 110 with stone axe
 
 use serde::{Deserialize, Serialize};

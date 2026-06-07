@@ -144,13 +144,19 @@ pub struct RecipeRegistry {
     recipes: HashMap<String, CraftingRecipe>,
 }
 
-impl RecipeRegistry {
-    pub fn new() -> Self {
+impl Default for RecipeRegistry {
+    fn default() -> Self {
         let mut registry = Self {
             recipes: HashMap::new(),
         };
         registry.register_all_recipes();
         registry
+    }
+}
+
+impl RecipeRegistry {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn register(&mut self, recipe: CraftingRecipe) {
@@ -549,12 +555,12 @@ impl CraftingManager {
         }
 
         // Check tool requirement
-        if recipe.tool_requirement != ToolRequirement::None {
-            if !available_tools.contains(&recipe.tool_requirement) {
-                return CraftingResult::MissingTool {
-                    tool: recipe.tool_requirement,
-                };
-            }
+        if recipe.tool_requirement != ToolRequirement::None
+            && !available_tools.contains(&recipe.tool_requirement)
+        {
+            return CraftingResult::MissingTool {
+                tool: recipe.tool_requirement,
+            };
         }
 
         // Check skill requirements

@@ -530,12 +530,18 @@ pub struct LearningSystem {
     pub learning_rate: f32,
 }
 
-impl LearningSystem {
-    pub fn new() -> Self {
+impl Default for LearningSystem {
+    fn default() -> Self {
         Self {
             pruning_threshold: 0.5,
             learning_rate: 1.0,
         }
+    }
+}
+
+impl LearningSystem {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Create offspring behavior tree with learned weights

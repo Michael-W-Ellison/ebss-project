@@ -350,9 +350,7 @@ impl ClimateManager {
         let biome_temp = biome.current_climate.temperature;
 
         // Apply weather modifier
-        let weather_temp = self.weather.effective_temperature(biome_temp);
-
-        weather_temp
+        self.weather.effective_temperature(biome_temp)
     }
 
     /// Get climate for a position (combines biome climate with weather)

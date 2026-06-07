@@ -267,7 +267,7 @@ impl SimulationMetrics {
         let mut conflicts = 0;
 
         for agent in &population.agents {
-            for (_, relationship) in agent.relationships.get_all() {
+            for relationship in agent.relationships.get_all().values() {
                 total_relationships += 1;
 
                 // Categorize by bond strength

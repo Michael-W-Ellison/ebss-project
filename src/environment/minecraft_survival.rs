@@ -308,11 +308,12 @@ impl MinecraftSurvivalPlugin {
                 }
 
                 // Add occasional trees on grass
-                if terrain_height > 66 && terrain_height < height - 5 {
-                    if (x * 7 + z * 13 + seed as i32) % 30 == 0 {
-                        for tree_y in 1..=4 {
-                            self.blocks.insert((x, terrain_height + tree_y, z), Block { material_id: "wood".to_string() });
-                        }
+                if terrain_height > 66
+                    && terrain_height < height - 5
+                    && (x * 7 + z * 13 + seed as i32) % 30 == 0
+                {
+                    for tree_y in 1..=4 {
+                        self.blocks.insert((x, terrain_height + tree_y, z), Block { material_id: "wood".to_string() });
                     }
                 }
             }

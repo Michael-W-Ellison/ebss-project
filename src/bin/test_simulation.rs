@@ -413,7 +413,7 @@ fn print_population_status(population: &Population, tick: u32) {
             let relationships = agent.relationships.get_all();
             total_relationships += relationships.len();
 
-            for (_, rel) in relationships {
+            for rel in relationships.values() {
                 if rel.bond_strength > 0.0 {
                     total_positive += 1;
                     total_bond_strength += rel.bond_strength;

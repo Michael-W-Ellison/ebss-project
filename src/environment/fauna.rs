@@ -172,14 +172,20 @@ pub struct FaunaRegistry {
     species: HashMap<String, AnimalSpecies>,
 }
 
-impl FaunaRegistry {
-    pub fn new() -> Self {
+impl Default for FaunaRegistry {
+    fn default() -> Self {
         let mut registry = Self {
             species: HashMap::new(),
         };
 
         registry.register_all_species();
         registry
+    }
+}
+
+impl FaunaRegistry {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn register(&mut self, species: AnimalSpecies) {

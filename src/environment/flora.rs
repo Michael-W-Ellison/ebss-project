@@ -94,14 +94,20 @@ pub struct FloraRegistry {
     species: HashMap<String, PlantSpecies>,
 }
 
-impl FloraRegistry {
-    pub fn new() -> Self {
+impl Default for FloraRegistry {
+    fn default() -> Self {
         let mut registry = Self {
             species: HashMap::new(),
         };
 
         registry.register_all_species();
         registry
+    }
+}
+
+impl FloraRegistry {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn register(&mut self, species: PlantSpecies) {

@@ -1121,7 +1121,7 @@ impl Simulation {
                 .map(|d| d.drive_type)
                 .unwrap_or(DriveType::Curiosity);
 
-            if let Some(goal_action) = Self::generate_action_for_goal(&goal, agent_position, fallback_drive) {
+            if let Some(goal_action) = Self::generate_action_for_goal(goal, agent_position, fallback_drive) {
                 return (goal_action, false);
             }
         }
@@ -3173,7 +3173,7 @@ impl Simulation {
                 }
 
                 // Attempt mating
-                if rng.gen_bool(success_probability as f64) {
+                if rng.gen_bool(success_probability) {
                     // Mating successful - determine male/female and attempt impregnation
                     use crate::agents::reproduction::attempt_impregnation;
                     use crate::agents::Gender;
@@ -3402,14 +3402,15 @@ impl Simulation {
                     let dx = (resource_pos.x - target_x).abs();
                     let dy = (resource_pos.y - target_y).abs();
 
-                    if dx <= exploration_radius && dy <= exploration_radius {
-                        if agent.exploration_knowledge.discover_resource(
+                    if dx <= exploration_radius
+                        && dy <= exploration_radius
+                        && agent.exploration_knowledge.discover_resource(
                             resource_pos,
                             resource.resource_type,
                             self.current_tick,
-                        ) {
-                            discoveries.push(format!("{:?}", resource.resource_type));
-                        }
+                        )
+                    {
+                        discoveries.push(format!("{:?}", resource.resource_type));
                     }
                 }
 

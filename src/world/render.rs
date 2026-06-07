@@ -39,10 +39,10 @@ impl AsciiRenderer {
 
             for x in start_x..end_x {
                 let pos = Position::new(x as i32, y as i32);
-                let char_to_render = self.get_char_at(&world, &population, &pos);
+                let char_to_render = self.get_char_at(world, population, pos);
 
                 if self.use_color {
-                    let color = self.get_color_at(&world, &pos);
+                    let color = self.get_color_at(world, pos);
                     output.push_str(color);
                     output.push(char_to_render);
                     output.push_str("\x1b[0m"); // Reset color
@@ -63,24 +63,24 @@ impl AsciiRenderer {
     }
 
     /// Get character to render at position
-    fn get_char_at(&self, world: &World, population: &Population, pos: &Position) -> char {
+    fn get_char_at(&self, world: &World, population: &Population, pos: Position) -> char {
         // Check for agents first (highest priority)
         if population.agents.iter().any(|a| a.state.position == (pos.x, pos.y, 0)) {
             return '@';
         }
 
         // Check for buildings
-        if let Some(building) = world.get_building_at(pos) {
+        if let Some(building) = world.get_building_at(&pos) {
             return building.building_type.ascii_char();
         }
 
         // Check for resources
-        if let Some(resource) = world.get_resource_at(pos) {
+        if let Some(resource) = world.get_resource_at(&pos) {
             return resource.resource_type.ascii_char();
         }
 
         // Show terrain
-        if let Some(tile) = world.grid.get_tile(pos) {
+        if let Some(tile) = world.grid.get_tile(&pos) {
             return tile.terrain.ascii_char();
         }
 
@@ -88,22 +88,22 @@ impl AsciiRenderer {
     }
 
     /// Get color code for position
-    fn get_color_at(&self, world: &World, pos: &Position) -> &'static str {
+    fn get_color_at(&self, world: &World, pos: Position) -> &'static str {
         // Check for agents
         // (Would need population access - skipping for now)
 
         // Check for buildings
-        if let Some(building) = world.get_building_at(pos) {
+        if let Some(building) = world.get_building_at(&pos) {
             return building.building_type.color_code();
         }
 
         // Check for resources
-        if let Some(resource) = world.get_resource_at(pos) {
+        if let Some(resource) = world.get_resource_at(&pos) {
             return resource.resource_type.color_code();
         }
 
         // Show terrain color
-        if let Some(tile) = world.grid.get_tile(pos) {
+        if let Some(tile) = world.grid.get_tile(&pos) {
             return tile.terrain.color_code();
         }
 
