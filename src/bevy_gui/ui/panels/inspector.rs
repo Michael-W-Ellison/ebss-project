@@ -8,13 +8,15 @@ use crate::bevy_gui::resources::{
     PanelVisibility, Selection, EntitySelection, SelectedEntityData, InspectorTab, InspectorState,
     CurrentSnapshot, NotificationQueue,
 };
-use crate::bevy_gui::events::{SimulationCommand, CenterMapRequest};
+use crate::bevy_gui::events::SimulationCommand;
 use crate::gui::state::{
     SelectedAgentData, SelectedBuildingData, SelectedResourceData,
     DriveData, SkillData, InventoryItemData, GoalData,
 };
 use crate::agents::Gender;
 
+// Bevy system: parameters are injected by the ECS scheduler
+#[allow(clippy::too_many_arguments)]
 pub fn render_inspector_panel(
     mut egui_ctx: EguiContexts,
     panels: Res<PanelVisibility>,
@@ -23,7 +25,6 @@ pub fn render_inspector_panel(
     mut inspector_state: ResMut<InspectorState>,
     snapshot: Res<CurrentSnapshot>,
     mut sim_commands: EventWriter<SimulationCommand>,
-    mut center_request: EventWriter<CenterMapRequest>,
     mut notifications: ResMut<NotificationQueue>,
     time: Res<Time>,
 ) {
@@ -79,14 +80,14 @@ pub fn render_inspector_panel(
                 EntitySelection::None => render_empty_state(ui),
                 EntitySelection::Agent(_) => {
                     if let Some(agent) = &entity_data.agent {
-                        render_agent_panel(ui, agent, &mut inspector_state, &snapshot, &mut selection, &mut sim_commands, &mut center_request, &mut notifications, current_time);
+                        render_agent_panel(ui, agent, &mut inspector_state, &mut selection, &mut sim_commands, &mut notifications, current_time);
                     } else {
                         render_loading(ui, "agent");
                     }
                 }
                 EntitySelection::Building(_) => {
                     if let Some(building) = &entity_data.building {
-                        render_building_panel(ui, building, &snapshot, &mut selection, &mut sim_commands, &mut center_request, &mut notifications, current_time);
+                        render_building_panel(ui, building, &mut selection, &mut sim_commands, &mut notifications, current_time);
                     } else {
                         render_loading(ui, "building");
                     }
@@ -150,10 +151,8 @@ fn render_agent_panel(
     ui: &mut egui::Ui,
     agent: &SelectedAgentData,
     state: &mut InspectorState,
-    snapshot: &Res<CurrentSnapshot>,
     selection: &mut ResMut<Selection>,
     sim_commands: &mut EventWriter<SimulationCommand>,
-    center_request: &mut EventWriter<CenterMapRequest>,
     notifications: &mut ResMut<NotificationQueue>,
     current_time: f64,
 ) {
@@ -180,7 +179,7 @@ fn render_agent_panel(
             InspectorTab::Skills => render_agent_skills(ui, &agent.skills, state),
             InspectorTab::Inventory => render_agent_inventory(ui, &agent.inventory),
             InspectorTab::Relationships => render_agent_relationships(
-                ui, agent, selection, sim_commands, center_request, notifications, current_time, state
+                ui, agent, selection, sim_commands, notifications, current_time, state
             ),
             InspectorTab::Goals => render_agent_goals(ui, agent, state),
         }
@@ -203,6 +202,15 @@ fn render_agent_header(ui: &mut egui::Ui, agent: &SelectedAgentData, notificatio
                 Gender::Female => "♀",
             }
         };
+        if !gender_symbol.is_empty() {
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                gender_symbol,
+                egui::FontId::proportional(12.0),
+                egui::Color32::WHITE,
+            );
+        }
 
         ui.vertical(|ui| {
             // Name or life stage
@@ -379,7 +387,7 @@ fn render_agent_overview(ui: &mut egui::Ui, agent: &SelectedAgentData) {
 
     // Family section
     if !agent.parent_ids.is_empty() {
-        ui.collapsing(egui::RichText::new(format!("👨‍👩‍👧 Family")).strong(), |ui| {
+        ui.collapsing(egui::RichText::new("👨‍👩‍👧 Family".to_string()).strong(), |ui| {
             ui.label(egui::RichText::new("Parents:").small().color(egui::Color32::GRAY));
             for parent_id in &agent.parent_ids {
                 ui.horizontal(|ui| {
@@ -623,7 +631,6 @@ fn render_skill_item(ui: &mut egui::Ui, skill: &SkillData) {
         });
 
         // XP progress to next level (assuming 100 XP per level)
-        let xp_for_next = ((skill.level + 1) * 100) as u32;
         let xp_progress = (skill.experience % 100) as f32 / 100.0;
         ui.add(egui::ProgressBar::new(xp_progress)
             .fill(egui::Color32::from_rgb(80, 120, 180))
@@ -677,7 +684,6 @@ fn render_agent_relationships(
     agent: &SelectedAgentData,
     selection: &mut ResMut<Selection>,
     sim_commands: &mut EventWriter<SimulationCommand>,
-    center_request: &mut EventWriter<CenterMapRequest>,
     notifications: &mut ResMut<NotificationQueue>,
     current_time: f64,
     state: &mut InspectorState,
@@ -707,7 +713,7 @@ fn render_agent_relationships(
     if !agent.parent_ids.is_empty() {
         ui.collapsing(egui::RichText::new(format!("👨‍👩‍👧 Family ({})", agent.parent_ids.len())).strong(), |ui| {
             for parent_id in &agent.parent_ids {
-                render_clickable_agent(ui, *parent_id, "Parent", selection, sim_commands, center_request, notifications, current_time);
+                render_clickable_agent(ui, *parent_id, "Parent", selection, sim_commands, notifications, current_time);
             }
         });
         ui.add_space(5.0);
@@ -730,6 +736,8 @@ fn render_agent_relationships(
         ui.label(egui::RichText::new(format!("{} relationships", relationships.len())).small());
         ui.separator();
         ui.label(egui::RichText::new(format!("{} strong bonds", strong_bonds)).small().color(egui::Color32::from_rgb(255, 200, 100)));
+        ui.separator();
+        ui.label(egui::RichText::new(format!("{} interactions", total_interactions)).small());
     });
     ui.separator();
 
@@ -785,7 +793,6 @@ fn render_clickable_agent(
     label: &str,
     selection: &mut ResMut<Selection>,
     sim_commands: &mut EventWriter<SimulationCommand>,
-    center_request: &mut EventWriter<CenterMapRequest>,
     notifications: &mut ResMut<NotificationQueue>,
     current_time: f64,
 ) {
@@ -932,10 +939,8 @@ fn render_goal_item(ui: &mut egui::Ui, goal: &GoalData, completed: bool) {
 fn render_building_panel(
     ui: &mut egui::Ui,
     building: &SelectedBuildingData,
-    snapshot: &Res<CurrentSnapshot>,
     selection: &mut ResMut<Selection>,
     sim_commands: &mut EventWriter<SimulationCommand>,
-    center_request: &mut EventWriter<CenterMapRequest>,
     notifications: &mut ResMut<NotificationQueue>,
     current_time: f64,
 ) {
@@ -996,7 +1001,7 @@ fn render_building_panel(
                     ui.add_space(5.0);
                     ui.collapsing(format!("👷 Workers ({})", building.worker_ids.len()), |ui| {
                         for worker_id in &building.worker_ids {
-                            render_clickable_agent(ui, *worker_id, "Worker", selection, sim_commands, center_request, notifications, current_time);
+                            render_clickable_agent(ui, *worker_id, "Worker", selection, sim_commands, notifications, current_time);
                         }
                     });
                 }
@@ -1008,7 +1013,7 @@ fn render_building_panel(
         // Ownership section
         ui.collapsing(egui::RichText::new("👤 Ownership").strong(), |ui| {
             if let Some(owner) = &building.owner_id {
-                render_clickable_agent(ui, *owner, "Owner", selection, sim_commands, center_request, notifications, current_time);
+                render_clickable_agent(ui, *owner, "Owner", selection, sim_commands, notifications, current_time);
             } else {
                 ui.label(egui::RichText::new("No owner (public)").color(egui::Color32::GRAY));
             }
@@ -1017,7 +1022,7 @@ fn render_building_panel(
                 ui.add_space(5.0);
                 ui.collapsing(format!("🏠 Occupants ({})", building.occupant_ids.len()), |ui| {
                     for occupant_id in &building.occupant_ids {
-                        render_clickable_agent(ui, *occupant_id, "Occupant", selection, sim_commands, center_request, notifications, current_time);
+                        render_clickable_agent(ui, *occupant_id, "Occupant", selection, sim_commands, notifications, current_time);
                     }
                 });
             }
@@ -1049,7 +1054,7 @@ fn render_building_panel(
 // RESOURCE INSPECTOR
 // ============================================================================
 
-fn render_resource_panel(ui: &mut egui::Ui, resource: &SelectedResourceData, snapshot: &Res<CurrentSnapshot>) {
+fn render_resource_panel(ui: &mut egui::Ui, resource: &SelectedResourceData, _snapshot: &Res<CurrentSnapshot>) {
     // Header with icon
     let resource_icon = resource_type_icon(resource.resource_type);
     ui.horizontal(|ui| {

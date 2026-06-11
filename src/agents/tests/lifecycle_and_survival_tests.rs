@@ -8,8 +8,8 @@
 //! - Health management
 //! - Eating and drinking mechanics
 
-use crate::agents::{Agent, AgentConfig, AgentState, LifeStage, InventoryItem};
-use crate::core::drives::{DriveType, DriveState};
+use crate::agents::{Agent, AgentConfig, LifeStage, InventoryItem};
+use crate::core::drives::DriveType;
 
 #[test]
 fn test_agent_starts_with_full_health_and_energy() {
@@ -241,7 +241,7 @@ fn test_drinking_water_reduces_thirst() {
     }
 
     // Add water container
-    let mut waterskin = InventoryItem::new_container("waterskin".to_string(), 1, 5.0);
+    let waterskin = InventoryItem::new_container("waterskin".to_string(), 1, 5.0);
     agent.inventory.add_item(waterskin);
     agent.inventory.fill_containers(5.0);
 
@@ -362,7 +362,7 @@ fn test_agent_survival_requires_food_water_rest() {
 
     // Give agent resources
     agent.inventory.add_item(InventoryItem::new("food".to_string(), 100));
-    let mut waterskin = InventoryItem::new_container("waterskin".to_string(), 1, 10.0);
+    let waterskin = InventoryItem::new_container("waterskin".to_string(), 1, 10.0);
     agent.inventory.add_item(waterskin);
     agent.inventory.fill_containers(10.0);
 

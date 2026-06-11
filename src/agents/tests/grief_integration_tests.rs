@@ -1,7 +1,7 @@
 // src/agents/tests/grief_integration_tests.rs
 //! Integration tests for grief processing when agents die
 
-use crate::agents::{Population, PopulationConfig, Agent, AgentConfig};
+use crate::agents::{Population, AgentConfig};
 use crate::agents::emotions::Relationship;
 use crate::core::DriveType;
 
@@ -13,7 +13,7 @@ fn test_death_triggers_both_relationship_and_functional_grief() {
     pop.spawn_agent(AgentConfig::default());
     pop.spawn_agent(AgentConfig::default());
 
-    let agent1_id = pop.agents[0].id;
+    let _agent1_id = pop.agents[0].id;
     let agent2_id = pop.agents[1].id;
 
     // Establish relationship (agent 1 loves agent 2)
@@ -66,8 +66,8 @@ fn test_death_without_dependency_causes_less_grief() {
     pop.spawn_agent(AgentConfig::default());
     pop.spawn_agent(AgentConfig::default());
 
-    let agent1_id = pop.agents[0].id;
-    let agent2_id = pop.agents[1].id;
+    let _agent1_id = pop.agents[0].id;
+    let _agent2_id = pop.agents[1].id;
 
     // NO relationship, NO drive dependency (strangers)
 

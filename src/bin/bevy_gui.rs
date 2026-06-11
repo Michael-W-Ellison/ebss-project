@@ -20,8 +20,7 @@ use ebss::agents::PopulationConfig;
 use ebss::world::TechnologyTree;
 use ebss::gui::{
     SimulationCommand as GuiCommand, SimulationSnapshot, SimState as GuiSimState,
-    EntitySelection as GuiEntitySelection, SelectedAgentData, SelectedBuildingData,
-    SelectedResourceData, TechTreeSnapshot, RelationshipGraphSnapshot,
+    EntitySelection as GuiEntitySelection, EntityDataChannels,
     simulation_to_snapshot, agent_to_detailed, building_to_detailed, resource_to_detailed,
     tech_tree_to_snapshot, relationship_graph_to_snapshot,
 };
@@ -45,48 +44,13 @@ fn main() {
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = Arc::clone(&shutdown_flag);
 
-    // Shared state for entity data requests
-    let agent_data_request: Arc<Mutex<Option<uuid::Uuid>>> = Arc::new(Mutex::new(None));
-    let agent_data_response: Arc<Mutex<Option<SelectedAgentData>>> = Arc::new(Mutex::new(None));
-    let building_data_request: Arc<Mutex<Option<ebss::world::Position>>> = Arc::new(Mutex::new(None));
-    let building_data_response: Arc<Mutex<Option<SelectedBuildingData>>> = Arc::new(Mutex::new(None));
-    let resource_data_request: Arc<Mutex<Option<ebss::world::Position>>> = Arc::new(Mutex::new(None));
-    let resource_data_response: Arc<Mutex<Option<SelectedResourceData>>> = Arc::new(Mutex::new(None));
-    let tech_tree_request: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
-    let tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>> = Arc::new(Mutex::new(None));
-    let relationship_graph_request: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
-    let relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>> = Arc::new(Mutex::new(None));
-
-    // Clone for simulation thread
-    let agent_request_clone = Arc::clone(&agent_data_request);
-    let agent_response_clone = Arc::clone(&agent_data_response);
-    let building_request_clone = Arc::clone(&building_data_request);
-    let building_response_clone = Arc::clone(&building_data_response);
-    let resource_request_clone = Arc::clone(&resource_data_request);
-    let resource_response_clone = Arc::clone(&resource_data_response);
-    let tech_tree_request_clone = Arc::clone(&tech_tree_request);
-    let tech_tree_response_clone = Arc::clone(&tech_tree_response);
-    let relationship_graph_request_clone = Arc::clone(&relationship_graph_request);
-    let relationship_graph_response_clone = Arc::clone(&relationship_graph_response);
+    // Shared state for entity data requests (cloning shares the underlying slots)
+    let channels = EntityDataChannels::default();
+    let sim_channels = channels.clone();
 
     // Spawn simulation thread
     thread::spawn(move || {
-        run_simulation_thread(
-            command_rx,
-            snapshot_tx,
-            error_tx,
-            shutdown_flag_clone,
-            agent_request_clone,
-            agent_response_clone,
-            building_request_clone,
-            building_response_clone,
-            resource_request_clone,
-            resource_response_clone,
-            tech_tree_request_clone,
-            tech_tree_response_clone,
-            relationship_graph_request_clone,
-            relationship_graph_response_clone,
-        );
+        run_simulation_thread(command_rx, snapshot_tx, error_tx, shutdown_flag_clone, sim_channels);
     });
 
     // Create the simulation bridge resource
@@ -95,16 +59,16 @@ fn main() {
         snapshot_rx: Arc::new(Mutex::new(snapshot_rx)),
         error_rx: Arc::new(Mutex::new(error_rx)),
         shutdown_flag,
-        agent_data_request,
-        agent_data_response,
-        building_data_request,
-        building_data_response,
-        resource_data_request,
-        resource_data_response,
-        tech_tree_request,
-        tech_tree_response,
-        relationship_graph_request,
-        relationship_graph_response,
+        agent_data_request: channels.agent_data_request,
+        agent_data_response: channels.agent_data_response,
+        building_data_request: channels.building_data_request,
+        building_data_response: channels.building_data_response,
+        resource_data_request: channels.resource_data_request,
+        resource_data_response: channels.resource_data_response,
+        tech_tree_request: channels.tech_tree_request,
+        tech_tree_response: channels.tech_tree_response,
+        relationship_graph_request: channels.relationship_graph_request,
+        relationship_graph_response: channels.relationship_graph_response,
     };
 
     // Build and run Bevy app
@@ -145,17 +109,21 @@ fn run_simulation_thread(
     snapshot_tx: Sender<SimulationSnapshot>,
     error_tx: Sender<BridgeError>,
     shutdown_flag: Arc<AtomicBool>,
-    agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
-    agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
-    building_data_request: Arc<Mutex<Option<ebss::world::Position>>>,
-    building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
-    resource_data_request: Arc<Mutex<Option<ebss::world::Position>>>,
-    resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
-    tech_tree_request: Arc<Mutex<bool>>,
-    tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
-    relationship_graph_request: Arc<Mutex<bool>>,
-    relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
+    channels: EntityDataChannels,
 ) {
+    let EntityDataChannels {
+        agent_data_request,
+        agent_data_response,
+        building_data_request,
+        building_data_response,
+        resource_data_request,
+        resource_data_response,
+        tech_tree_request,
+        tech_tree_response,
+        relationship_graph_request,
+        relationship_graph_response,
+    } = channels;
+
     log::info!("Simulation thread starting...");
 
     // Create world and population

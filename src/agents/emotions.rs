@@ -865,7 +865,7 @@ mod tests {
 
     #[test]
     fn test_trait_incompatibility_weakens_relationship() {
-        let agent1_id = Uuid::new_v4();
+        let _agent1_id = Uuid::new_v4();
         let agent2_id = Uuid::new_v4();
 
         let mut agent1_traits = TraitSet::new();
@@ -889,7 +889,7 @@ mod tests {
 
     #[test]
     fn test_compatible_traits_strengthen_relationship() {
-        let agent1_id = Uuid::new_v4();
+        let _agent1_id = Uuid::new_v4();
         let agent2_id = Uuid::new_v4();
 
         let mut agent1_traits = TraitSet::new();
@@ -915,7 +915,7 @@ mod tests {
 
     #[test]
     fn test_forgiving_trait_reduces_conflict_impact() {
-        let agent1_id = Uuid::new_v4();
+        let _agent1_id = Uuid::new_v4();
         let agent2_id = Uuid::new_v4();
 
         // Agent 1 is forgiving
@@ -946,7 +946,7 @@ mod tests {
 
     #[test]
     fn test_family_bonds_more_resilient() {
-        let parent_id = Uuid::new_v4();
+        let _parent_id = Uuid::new_v4();
         let child_id = Uuid::new_v4();
 
         let mut parent_traits = TraitSet::new();
@@ -993,7 +993,7 @@ mod tests {
     #[test]
     fn test_relationship_map_trait_update() {
         let mut map = RelationshipMap::new();
-        let agent1_id = Uuid::new_v4();
+        let _agent1_id = Uuid::new_v4();
         let agent2_id = Uuid::new_v4();
 
         map.add_relationship(Relationship::new(agent2_id, RelationshipType::Friend));

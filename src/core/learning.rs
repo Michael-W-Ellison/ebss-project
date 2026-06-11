@@ -628,7 +628,7 @@ mod tests {
         agent.state.age = 100; // Infant
         agent.state.life_stage = LifeStage::Infant;
 
-        let result = learn_action(&mut agent, "Mining", true, 2.0);
+        let _result = learn_action(&mut agent, "Mining", true, 2.0);
 
         // With high learning rate, should eventually learn
         // Note: This is probabilistic, so we can't assert learned=true deterministically

@@ -151,7 +151,7 @@ fn test_overweight_penalty() {
     let mut agent = Agent::new(AgentConfig::default());
 
     // Add items over capacity
-    let overweight_item = InventoryItem::new_with_weight("stone".to_string(), 150, 1.0);
+    let _overweight_item = InventoryItem::new_with_weight("stone".to_string(), 150, 1.0);
     agent.inventory.current_weight = 150.0; // Force overweight
 
     assert!(agent.inventory.is_overweight());

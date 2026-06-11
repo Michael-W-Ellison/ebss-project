@@ -1,7 +1,7 @@
 // src/agents/tests/gossip_spreading_tests.rs
 //! Integration tests for gossip spreading mechanism
 
-use crate::agents::{Agent, AgentConfig, Population, Trait};
+use crate::agents::{AgentConfig, Population, Trait};
 use crate::agents::gossip::{Information, InformationType};
 
 #[test]
@@ -9,8 +9,7 @@ fn test_gossip_spreads_between_nearby_agents() {
     let mut pop = Population::new();
 
     // Create two agents at the same position
-    let mut config = AgentConfig::default();
-    config.random_weights = false;
+    let config = AgentConfig { random_weights: false };
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
 
@@ -64,8 +63,7 @@ fn test_gossip_trait_increases_sharing_probability() {
     let mut pop = Population::new();
 
     // Create two agents - one with Gossip trait
-    let mut config = AgentConfig::default();
-    config.random_weights = false;
+    let config = AgentConfig { random_weights: false };
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
 
@@ -117,8 +115,7 @@ fn test_information_distortion_during_gossip() {
     let mut pop = Population::new();
 
     // Create agents - one with Imaginative trait (causes exaggeration)
-    let mut config = AgentConfig::default();
-    config.random_weights = false;
+    let config = AgentConfig { random_weights: false };
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
 
@@ -178,8 +175,7 @@ fn test_information_distortion_during_gossip() {
 fn test_distant_agents_dont_gossip() {
     let mut pop = Population::new();
 
-    let mut config = AgentConfig::default();
-    config.random_weights = false;
+    let config = AgentConfig { random_weights: false };
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
 
@@ -226,8 +222,7 @@ fn test_distant_agents_dont_gossip() {
 fn test_hungry_agents_dont_gossip() {
     let mut pop = Population::new();
 
-    let mut config = AgentConfig::default();
-    config.random_weights = false;
+    let config = AgentConfig { random_weights: false };
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
 
@@ -271,8 +266,7 @@ fn test_hungry_agents_dont_gossip() {
 fn test_introvert_gossips_less() {
     let mut pop = Population::new();
 
-    let mut config = AgentConfig::default();
-    config.random_weights = false;
+    let config = AgentConfig { random_weights: false };
 
     // Create introvert and extrovert
     pop.spawn_agent(config.clone());
@@ -305,8 +299,7 @@ fn test_introvert_gossips_less() {
 fn test_trust_affects_belief_confidence() {
     let mut pop = Population::new();
 
-    let mut config = AgentConfig::default();
-    config.random_weights = false;
+    let config = AgentConfig { random_weights: false };
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
 

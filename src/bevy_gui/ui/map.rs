@@ -27,6 +27,8 @@ const ZOOM_SPEED: f32 = 0.002;
 const VIEW_MARGIN_FACTOR: f32 = 0.5;
 
 /// Main map rendering system
+// Bevy system: parameters are injected by the ECS scheduler
+#[allow(clippy::too_many_arguments)]
 pub fn render_map(
     mut egui_ctx: EguiContexts,
     snapshot: Res<CurrentSnapshot>,

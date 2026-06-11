@@ -110,7 +110,7 @@ impl GameConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    
     use tempfile::NamedTempFile;
 
     #[test]
@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn test_config_file_roundtrip() {
         let config = GameConfig::default();
-        let mut file = NamedTempFile::new().unwrap();
+        let file = NamedTempFile::new().unwrap();
 
         config.to_toml(file.path()).unwrap();
         let loaded = GameConfig::from_toml(file.path()).unwrap();

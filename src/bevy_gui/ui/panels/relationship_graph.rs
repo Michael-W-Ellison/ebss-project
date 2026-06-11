@@ -200,13 +200,12 @@ fn render_graph_area(
         graph_data.needs_layout = false;
     }
 
-    if graph_data.layout_mode == GraphLayoutMode::ForceDirected {
-        if graph_data.layout_iterations < 100 {
+    if graph_data.layout_mode == GraphLayoutMode::ForceDirected
+        && graph_data.layout_iterations < 100 {
             run_force_directed_iteration(graph_data, &snapshot);
             graph_data.layout_iterations += 1;
             ui.ctx().request_repaint();
         }
-    }
 
     let (response, painter) = ui.allocate_painter(rect.size(), egui::Sense::click_and_drag());
     let graph_rect = response.rect;
@@ -402,7 +401,7 @@ fn compute_layout(graph_data: &mut RelationshipGraphData, snapshot: &Relationshi
     };
 
     let count = relevant_nodes.len();
-    let spread = (rect.width().min(rect.height()) * 0.35) as f32;
+    let spread = rect.width().min(rect.height()) * 0.35;
 
     match graph_data.layout_mode {
         GraphLayoutMode::Circular => {

@@ -371,7 +371,7 @@ mod tests {
     fn test_wetness_accumulation() {
         let mut status = ExposureStatus::new();
         let body_temp = BodyTemperature::new();
-        let mut weather = Weather::new(WeatherType::HeavyRain);
+        let weather = Weather::new(WeatherType::HeavyRain);
 
         for _ in 0..50 {
             status.update(&body_temp, 20.0, &weather, false, true, 12.0);

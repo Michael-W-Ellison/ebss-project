@@ -4,7 +4,7 @@
 //! These tests define the expected behavior for creating efficient paths
 //! between buildings to facilitate movement and trade.
 
-use crate::world::{World, WorldConfig, BuildingType, Position};
+use crate::world::{World, WorldConfig, BuildingType};
 use crate::world::path_planning::{PathPlanner, Road, RoadNetwork, PathNode};
 
 #[test]
@@ -69,7 +69,7 @@ fn test_path_avoids_impassable_terrain() {
 
 #[test]
 fn test_road_network_creation() {
-    let mut network = RoadNetwork::new();
+    let network = RoadNetwork::new();
 
     assert_eq!(network.get_roads().len(), 0, "New network should have no roads");
 }
@@ -300,10 +300,3 @@ fn test_road_intersection_handling() {
     println!("Found {} intersections", intersections.len());
 }
 
-// Helper functions
-fn calculate_distance(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> f32 {
-    let dx = (pos1.0 - pos2.0) as f32;
-    let dy = (pos1.1 - pos2.1) as f32;
-    let dz = (pos1.2 - pos2.2) as f32;
-    (dx * dx + dy * dy + dz * dz).sqrt()
-}

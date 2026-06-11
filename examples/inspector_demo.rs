@@ -21,8 +21,7 @@ fn main() {
     // Spawn some agents with different personalities
     println!("Creating agents with varied personalities...");
     for i in 0..5 {
-        let mut config = AgentConfig::default();
-        config.random_weights = true;
+        let config = AgentConfig { random_weights: true };
         population.spawn_agent(config);
         println!("  Agent {} spawned", i + 1);
     }
@@ -142,7 +141,7 @@ fn demo_agent_inspection(controller: &mut SimulationController, inspector: &mut 
     println!("\n  ✓ Agent data cached for quick access");
 }
 
-fn demo_drive_analysis(controller: &mut SimulationController, inspector: &mut Inspector) {
+fn demo_drive_analysis(controller: &mut SimulationController, _inspector: &mut Inspector) {
     println!("\n╔═══════════════════════════════════════════════════════════╗");
     println!("║  DEMONSTRATION: Drive State Analysis                      ║");
     println!("╚═══════════════════════════════════════════════════════════╝\n");

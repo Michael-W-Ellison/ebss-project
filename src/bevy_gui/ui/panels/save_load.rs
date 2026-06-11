@@ -93,7 +93,7 @@ pub fn render_save_dialog(
                         } else {
                             sim_commands.send(SimulationCommand::SaveGame(path.clone()));
                             notifications.success(
-                                &format!("Saving to {}", path),
+                                format!("Saving to {}", path),
                                 current_time,
                             );
                             save_state.set_success(format!("Save requested: {}", path));
@@ -211,7 +211,7 @@ pub fn render_load_dialog(
                         let path = save.path.clone();
                         sim_commands.send(SimulationCommand::LoadGame(path.clone()));
                         notifications.info(
-                            &format!("Loading from {}", save.filename),
+                            format!("Loading from {}", save.filename),
                             current_time,
                         );
                         close_dialog = true;

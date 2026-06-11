@@ -936,7 +936,7 @@ impl Default for EmergenceDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agents::{Population, AgentConfig};
+    
     use crate::analytics::metrics::SimulationMetrics;
 
     #[test]

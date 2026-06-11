@@ -2,10 +2,10 @@
 name = "ebss"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Michael W. Ellison"]
 description = "Emergent Behavior Society Simulator - A general-purpose AI platform for simulating autonomous agent societies"
 license = "MIT"
-repository = "https://github.com/yourusername/ebss-project"
+repository = "https://github.com/Michael-W-Ellison/ebss-project"
 keywords = ["ai", "simulation", "emergent-behavior", "multi-agent", "game-ai"]
 categories = ["simulation", "game-engines", "science"]
 
@@ -107,4 +107,4 @@ name = "visual_demo"
 path = "examples/visual_demo.rs"
 
 [workspace]
-members = ["plugins/*"]
+members = []

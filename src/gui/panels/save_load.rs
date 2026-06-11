@@ -180,7 +180,7 @@ fn refresh_save_list(state: &mut GuiState) {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "ebss") {
+            if path.extension().is_some_and(|ext| ext == "ebss") {
                 if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                     let modified = entry.metadata()
                         .and_then(|m| m.modified())

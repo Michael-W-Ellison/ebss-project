@@ -577,7 +577,7 @@ mod tests {
     #[test]
     fn test_complexity_limits() {
         let mut steps = Vec::new();
-        for i in 0..15 {
+        for _i in 0..15 {
             steps.push(PlanStep {
                 action: ActionType::Rest { duration: 1 },
                 estimated_ticks: 1,

@@ -8,7 +8,9 @@ use crate::world::Position;
 
 /// Types of entities that can be selected
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum EntitySelection {
+    #[default]
     None,
     Agent(Uuid),
     Building(Position),
@@ -16,11 +18,6 @@ pub enum EntitySelection {
     Terrain(Position),
 }
 
-impl Default for EntitySelection {
-    fn default() -> Self {
-        EntitySelection::None
-    }
-}
 
 impl EntitySelection {
     pub fn is_none(&self) -> bool {

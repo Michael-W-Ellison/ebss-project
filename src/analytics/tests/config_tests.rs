@@ -12,8 +12,8 @@ fn test_simulation_config_default() {
     // Should have reasonable defaults
     assert!(config.max_ticks.is_none(), "Default should have no tick limit");
     assert!(config.random_seed.is_some(), "Should have a random seed");
-    assert_eq!(config.enable_logging, true);
-    assert_eq!(config.enable_metrics, true);
+    assert!(config.enable_logging);
+    assert!(config.enable_metrics);
 }
 
 #[test]
@@ -34,14 +34,14 @@ fn test_simulation_config_with_max_ticks() {
 fn test_simulation_config_disable_logging() {
     let config = SimulationConfig::default().with_logging(false);
 
-    assert_eq!(config.enable_logging, false);
+    assert!(!config.enable_logging);
 }
 
 #[test]
 fn test_simulation_config_disable_metrics() {
     let config = SimulationConfig::default().with_metrics(false);
 
-    assert_eq!(config.enable_metrics, false);
+    assert!(!config.enable_metrics);
 }
 
 #[test]
@@ -54,8 +54,8 @@ fn test_simulation_config_builder_pattern() {
 
     assert_eq!(config.random_seed, Some(42));
     assert_eq!(config.max_ticks, Some(5000));
-    assert_eq!(config.enable_logging, true);
-    assert_eq!(config.enable_metrics, true);
+    assert!(config.enable_logging);
+    assert!(config.enable_metrics);
 }
 
 #[test]
@@ -68,8 +68,7 @@ fn test_simulation_config_validate_valid() {
 
 #[test]
 fn test_simulation_config_validate_zero_max_ticks() {
-    let mut config = SimulationConfig::default();
-    config.max_ticks = Some(0);
+    let config = SimulationConfig { max_ticks: Some(0), ..Default::default() };
 
     let result = config.validate();
     assert!(result.is_err(), "max_ticks of 0 should be invalid");
@@ -94,8 +93,7 @@ fn test_simulation_config_metrics_interval() {
 
 #[test]
 fn test_simulation_config_validate_metrics_interval() {
-    let mut config = SimulationConfig::default();
-    config.metrics_interval = 0;
+    let config = SimulationConfig { metrics_interval: 0, ..Default::default() };
 
     let result = config.validate();
     assert!(result.is_err(), "metrics_interval of 0 should be invalid");

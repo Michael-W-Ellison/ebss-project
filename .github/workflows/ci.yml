@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  build-test:
+    name: Build, lint, test (default + gui)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Clippy (gui feature, all targets, deny warnings)
+        run: cargo clippy --workspace --all-targets --features gui -- -D warnings
+
+      - name: Tests (gui feature)
+        run: cargo test --workspace --features gui
+
+      - name: Build examples
+        run: cargo build --examples
+
+      - name: Docs
+        run: cargo doc --no-deps --workspace
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  bevy-check:
+    name: Check bevy_gui feature
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Bevy Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libudev-dev pkg-config libx11-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: bevy
+
+      - name: Clippy (bevy_gui feature, deny warnings)
+        run: cargo clippy --features bevy_gui --bins --lib -- -D warnings
+
+      - name: Tests (bevy_gui feature)
+        run: cargo test --features bevy_gui

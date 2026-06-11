@@ -7,7 +7,6 @@
 use crate::analytics::Simulation;
 use crate::agents::{Population, AgentConfig};
 use crate::world::{World, WorldConfig, ResourceConfig, BuildingType};
-use crate::core::DriveType;
 
 #[test]
 fn test_agent_uses_spatial_planner_for_building() {
@@ -410,7 +409,7 @@ fn test_storehouse_placed_centrally() {
     let storehouse_pos = (storehouse.position.x, storehouse.position.y, 0);
 
     // Calculate average distance to all other buildings
-    let other_buildings = vec![(20, 20, 0), (30, 30, 0), (25, 15, 0)];
+    let other_buildings = [(20, 20, 0), (30, 30, 0), (25, 15, 0)];
     let avg_distance: f32 = other_buildings.iter()
         .map(|&pos| calculate_distance(storehouse_pos, pos))
         .sum::<f32>() / other_buildings.len() as f32;

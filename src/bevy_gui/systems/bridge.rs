@@ -17,7 +17,7 @@ use crate::world::Position;
 use crate::bevy_gui::resources::{
     CurrentSnapshot, SimulationControl, SimState, StatisticsHistory, HistoryPoint,
     EntitySelection, SelectedEntityData, PanelVisibility, TechTreeData, RelationshipGraphData,
-    TimelineData, Selection, SimulationErrors, SimulationError, NotificationQueue, NotificationType,
+    TimelineData, Selection, SimulationErrors, SimulationError, NotificationQueue,
 };
 use crate::bevy_gui::events::{SimulationCommand, ShutdownRequested, SelectionChanged, CenterMapRequest};
 
@@ -87,7 +87,7 @@ pub fn receive_errors_system(
                     notifications.error(&notification_msg, current_time);
                 }
                 crate::bevy_gui::resources::ErrorSeverity::Fatal => {
-                    notifications.error(&format!("FATAL: {}", notification_msg), current_time);
+                    notifications.error(format!("FATAL: {}", notification_msg), current_time);
                     log::error!("Fatal simulation error: {}", bridge_error.message);
                 }
             }
@@ -116,18 +116,25 @@ pub fn receive_snapshots_system(
             let tick = new_snapshot.tick;
             if stats_history.should_sample(tick) {
                 let stats = &new_snapshot.population.stats;
+                let buildings_completed = new_snapshot.world.buildings.iter()
+                    .filter(|b| b.progress >= 1.0)
+                    .count();
                 let point = HistoryPoint {
                     tick,
                     population: stats.total_agents,
+                    infants: stats.infants,
+                    children: stats.children,
+                    adolescents: stats.adolescents,
+                    adults: stats.adults,
+                    elderly: stats.elderly,
                     average_health: stats.average_health,
                     average_energy: stats.average_energy,
                     average_happiness: stats.average_happiness,
                     total_resources: new_snapshot.world.resources.iter()
                         .map(|r| r.amount)
                         .sum(),
-                    buildings_completed: new_snapshot.world.buildings.iter()
-                        .filter(|b| b.progress >= 1.0)
-                        .count(),
+                    buildings_completed,
+                    buildings_construction: new_snapshot.world.buildings.len() - buildings_completed,
                     births: stats.total_births,
                     deaths: stats.total_deaths,
                 };
@@ -193,17 +200,17 @@ pub fn entity_data_system(
     match &selection.current {
         EntitySelection::Agent(id) => {
             if let Ok(mut request) = bridge.agent_data_request.try_lock() {
-                *request = Some(id.clone());
+                *request = Some(*id);
             }
         }
         EntitySelection::Building(pos) => {
             if let Ok(mut request) = bridge.building_data_request.try_lock() {
-                *request = Some(pos.clone());
+                *request = Some(*pos);
             }
         }
         EntitySelection::Resource(pos) => {
             if let Ok(mut request) = bridge.resource_data_request.try_lock() {
-                *request = Some(pos.clone());
+                *request = Some(*pos);
             }
         }
         _ => {}

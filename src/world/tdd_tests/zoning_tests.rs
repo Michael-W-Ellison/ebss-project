@@ -4,13 +4,13 @@
 //! These tests define the expected behavior for zoning preferences where
 //! buildings are placed in appropriate zones (residential, industrial, agricultural).
 
-use crate::world::{World, WorldConfig, BuildingType, Position};
+use crate::world::{World, WorldConfig, BuildingType};
 use crate::world::spatial_planning::{SpatialPlanner, PlacementStrategy, PlacementCriteria};
 use crate::world::zoning::{ZoneType, ZoneManager};
 
 #[test]
 fn test_zone_manager_creation() {
-    let mut world = World::new(WorldConfig::default());
+    let _world = World::new(WorldConfig::default());
     let zone_manager = ZoneManager::new();
 
     assert!(zone_manager.get_zones().is_empty(), "New zone manager should have no zones");
@@ -59,7 +59,7 @@ fn test_overlapping_zones() {
 
     // Position in overlap should have both zones
     let zones = zone_manager.get_zones_at_position((23, 23, 0));
-    assert!(zones.len() >= 1, "Overlapping area should have at least one zone");
+    assert!(!zones.is_empty(), "Overlapping area should have at least one zone");
 }
 
 #[test]

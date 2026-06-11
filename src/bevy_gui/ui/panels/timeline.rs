@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::bevy_gui::resources::{PanelVisibility, TimelineData, Selection, EntitySelection, MapViewState};
 use crate::bevy_gui::events::SelectionChanged;
-use crate::gui::events::{EventFilterType, SimulationEvent};
+use crate::gui::events::{EventFilterType, SimulationEvent, SimulationEventExt};
 
 const TILE_SIZE: f32 = 12.0;
 

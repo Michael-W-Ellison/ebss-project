@@ -582,7 +582,7 @@ mod tests {
         let pos = Position::new(5, 5);
 
         // Test winter conditions (harsh)
-        let mut winter_node = ResourceNode::new(ResourceType::Food, pos.clone(), 40);
+        let mut winter_node = ResourceNode::new(ResourceType::Food, pos, 40);
         winter_node.harvest(40);
 
         // Winter: temp -5°C (suboptimal = 0.5x), precip 0.3 (adequate = 1.0x), season 0.3x
@@ -618,7 +618,7 @@ mod tests {
     #[test]
     fn test_non_renewable_resources_dont_regenerate() {
         let pos = Position::new(5, 5);
-        let mut stone_node = ResourceNode::new(ResourceType::Stone, pos.clone(), 100);
+        let mut stone_node = ResourceNode::new(ResourceType::Stone, pos, 100);
         let mut iron_node = ResourceNode::new(ResourceType::Iron, pos, 50);
 
         stone_node.harvest(50);

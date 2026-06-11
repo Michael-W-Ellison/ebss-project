@@ -161,11 +161,17 @@ mod tests {
         let point = HistoryPoint {
             tick: 10,
             population: 15,
+            infants: 2,
+            children: 3,
+            adolescents: 2,
+            adults: 6,
+            elderly: 2,
             average_health: 80.0,
             average_energy: 70.0,
             average_happiness: 60.0,
             total_resources: 100,
             buildings_completed: 5,
+            buildings_construction: 1,
             births: 3,
             deaths: 1,
         };

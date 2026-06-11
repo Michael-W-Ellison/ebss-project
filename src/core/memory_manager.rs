@@ -338,7 +338,7 @@ mod tests {
     fn test_record_event() {
         let mut manager = MemoryManager::new();
 
-        let episode_id = manager.record_event(
+        let _episode_id = manager.record_event(
             EpisodeType::Discovery,
             "Found a cave".to_string(),
             0.7,
@@ -353,7 +353,7 @@ mod tests {
     fn test_add_task() {
         let mut manager = MemoryManager::new();
 
-        let task_id = manager.add_task(
+        let _task_id = manager.add_task(
             "Gather wood".to_string(),
             TaskPriority::Normal,
         ).unwrap();

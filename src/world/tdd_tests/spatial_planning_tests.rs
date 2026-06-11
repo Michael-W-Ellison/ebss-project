@@ -296,7 +296,7 @@ fn test_storehouse_central_placement() {
     ).unwrap();
 
     // Calculate average distance to all buildings
-    let buildings = vec![(20, 20, 0), (25, 25, 0), (22, 18, 0), (18, 22, 0)];
+    let buildings = [(20, 20, 0), (25, 25, 0), (22, 18, 0), (18, 22, 0)];
     let avg_distance: f32 = buildings.iter()
         .map(|&pos| calculate_distance(pos, storehouse_pos))
         .sum::<f32>() / buildings.len() as f32;

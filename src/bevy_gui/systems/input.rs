@@ -8,6 +8,8 @@ use crate::bevy_gui::resources::*;
 use crate::bevy_gui::events::{SimulationCommand, CenterMapRequest};
 
 /// Handle global keyboard shortcuts
+// Bevy system: parameters are injected by the ECS scheduler
+#[allow(clippy::too_many_arguments)]
 pub fn keyboard_input_system(
     keys: Res<ButtonInput<KeyCode>>,
     mut egui_ctx: EguiContexts,

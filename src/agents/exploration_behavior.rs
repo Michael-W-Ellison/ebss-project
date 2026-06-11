@@ -190,8 +190,8 @@ mod tests {
         let (dx, dy) = random_exploration_direction();
 
         // Should be a valid direction
-        assert!(dx >= -1 && dx <= 1);
-        assert!(dy >= -1 && dy <= 1);
+        assert!((-1..=1).contains(&dx));
+        assert!((-1..=1).contains(&dy));
         assert!(dx != 0 || dy != 0); // Not both zero
     }
 

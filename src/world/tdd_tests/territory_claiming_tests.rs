@@ -5,7 +5,7 @@
 //! territories to organize settlement development and prevent building conflicts.
 
 use crate::world::{World, WorldConfig, BuildingType};
-use crate::world::territory::{Territory, TerritoryManager, TerritoryClaimResult};
+use crate::world::territory::TerritoryClaimResult;
 
 #[test]
 fn test_territory_manager_creation() {
@@ -163,7 +163,7 @@ fn test_building_placement_prefers_owned_territory() {
 
     // The optimal position should be in the agent's territory
     let pos = optimal_pos.unwrap();
-    let owner = world.territory_manager.get_owner_at(pos);
+    let _owner = world.territory_manager.get_owner_at(pos);
 
     // Note: This might be None if no territory bonus is implemented yet
     // Once integrated, uncomment:

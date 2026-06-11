@@ -175,12 +175,12 @@ fn render_graph_area(ui: &mut Ui, state: &mut GuiState, rect: Rect) {
     }
 
     // Run a few iterations of force-directed layout if using that mode
-    if state.relationship_graph_state.layout_mode == GraphLayoutMode::ForceDirected {
-        if state.relationship_graph_state.layout_iterations < 100 {
-            run_force_directed_iteration(state, &snapshot);
-            state.relationship_graph_state.layout_iterations += 1;
-            ui.ctx().request_repaint();
-        }
+    if state.relationship_graph_state.layout_mode == GraphLayoutMode::ForceDirected
+        && state.relationship_graph_state.layout_iterations < 100
+    {
+        run_force_directed_iteration(state, &snapshot);
+        state.relationship_graph_state.layout_iterations += 1;
+        ui.ctx().request_repaint();
     }
 
     // Get painter for custom drawing
@@ -389,7 +389,7 @@ fn compute_layout(state: &mut GuiState, snapshot: &RelationshipGraphSnapshot, re
     };
 
     let count = relevant_nodes.len();
-    let spread = (rect.width().min(rect.height()) * 0.35) as f32;
+    let spread = rect.width().min(rect.height()) * 0.35;
 
     match state.relationship_graph_state.layout_mode {
         GraphLayoutMode::Circular => {

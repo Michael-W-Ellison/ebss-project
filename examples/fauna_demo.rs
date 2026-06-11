@@ -213,7 +213,7 @@ fn main() {
     println!("--- Part 10: Combat and Damage ---");
 
     let wolf_species = registry.get("wolf").unwrap();
-    let mut wolf = Animal::new("wolf".to_string(), (12, 10), wolf_species);
+    let _wolf = Animal::new("wolf".to_string(), (12, 10), wolf_species);
 
     println!("Wolf attacks Sheep 1!");
     println!("  Wolf: Attack {:.0}", wolf_species.attack_damage);

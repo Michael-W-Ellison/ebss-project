@@ -362,7 +362,7 @@ mod tests {
         ];
 
         let performer_id = agents[0].id;
-        let observer_id = agents[1].id;
+        let _observer_id = agents[1].id;
 
         // Set positions close together
         agents[0].state.position = (0, 0, 0);

@@ -13,7 +13,7 @@
 //! - Stage-specific drops
 
 use ebss::environment::{
-    PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize,
+    FloraRegistry, ClimateZone, PlantSize,
     Plant, PlantManager,
 };
 use uuid::Uuid;
@@ -406,9 +406,9 @@ fn main() {
         "Seedling", "Growing", "Mature", "Flowering", "Fruiting"
     ];
 
-    for (idx, stage_name) in stage_names.iter().enumerate() {
+    for _stage_name in stage_names.iter() {
         // Grow until next stage
-        let start_stage = orange.growth_stage.clone();
+        let start_stage = orange.growth_stage;
         while orange.growth_stage == start_stage {
             orange.grow(orange_species);
         }

@@ -345,7 +345,7 @@ mod tests {
         let root = BehaviorNode::new(NodeType::Selector);
         let mut tree = BehaviorTree::new("test_tree".to_string(), root);
         
-        let result = tree.execute();
+        let _result = tree.execute();
         assert_eq!(tree.total_executions, 1);
     }
 

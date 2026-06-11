@@ -93,14 +93,3 @@ pub mod prelude {
     };
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_library_imports() {
-        // Verify all modules are accessible
-        use crate::prelude::*;
-        assert!(true);
-    }
-}

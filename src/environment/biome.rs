@@ -317,7 +317,7 @@ mod tests {
     #[test]
     fn test_climate_update() {
         let mut biome = Biome::new(BiomeType::Grassland);
-        let initial_temp = biome.current_climate.temperature;
+        let _initial_temp = biome.current_climate.temperature;
 
         // Move to nighttime
         biome.time_of_day = 2.0;

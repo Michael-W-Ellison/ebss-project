@@ -590,6 +590,6 @@ mod tests {
     #[test]
     fn test_generate_random_traits() {
         let trait_set = TraitSet::generate_random(3);
-        assert!(trait_set.traits.len() >= 1 && trait_set.traits.len() <= 3);
+        assert!(!trait_set.traits.is_empty() && trait_set.traits.len() <= 3);
     }
 }

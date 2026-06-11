@@ -10,8 +10,8 @@
 //! - Climate impact on agents
 
 use ebss::environment::{
-    BiomeType, Biome, Weather, WeatherType, WeatherGenerator,
-    Season, SeasonalCalendar, ExposureStatus, ExposureProtection, ExposureType,
+    BiomeType, Weather, WeatherType, WeatherGenerator,
+    Season, SeasonalCalendar, ExposureStatus, ExposureProtection,
 };
 use ebss::agents::temperature::BodyTemperature;
 use ebss::world::{ClimateManager, Position, TerrainType, terrain_to_biome};
@@ -235,7 +235,7 @@ fn main() {
     println!("--- Part 8: Full Year Simulation ---");
 
     let mut year_calendar = SeasonalCalendar::new(100);
-    let mut season_days = vec![0, 0, 0, 0]; // Count days in each season
+    let mut season_days = [0, 0, 0, 0]; // Count days in each season
 
     println!("Simulating one full year (365 days)...");
 

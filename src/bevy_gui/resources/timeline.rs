@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 use std::collections::HashSet;
-use crate::gui::events::{EventFilterType, SimulationEvent};
+use crate::gui::events::{EventFilterType, SimulationEvent, SimulationEventExt};
 
 /// Timeline panel data and UI state
 #[derive(Resource)]
@@ -121,7 +121,7 @@ impl TimelineData {
         if filtered_count == 0 {
             1
         } else {
-            (filtered_count + self.events_per_page - 1) / self.events_per_page
+            filtered_count.div_ceil(self.events_per_page)
         }
     }
 

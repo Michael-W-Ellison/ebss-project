@@ -157,8 +157,6 @@ fn main() {
             horse.effective_speed());
     }
 
-    // Restore stamina
-    horse.stamina = Some(horse.transport_type.max_stamina());
     println!();
 
     // ===== Part 7: Combat Effectiveness =====
@@ -203,7 +201,7 @@ fn main() {
     system.add_transport(warhorse);
 
     let camel = Transport::new(TransportType::RidingCamel);
-    let camel_id = camel.id;
+    let _camel_id = camel.id;
     system.add_transport(camel);
 
     let cart = Transport::new(TransportType::Cart);

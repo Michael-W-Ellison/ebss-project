@@ -55,8 +55,8 @@ fn main() {
         population.spawn_agent(config);
 
         // Position agents near the longhouse
-        let offset_x = (i % 3) as i32 - 1;
-        let offset_y = (i / 3) as i32 - 1;
+        let offset_x = (i % 3) - 1;
+        let offset_y = (i / 3) - 1;
 
         if let Some(agent) = population.agents.last_mut() {
             agent.state.position = (longhouse_pos.x + offset_x, longhouse_pos.y + offset_y, 0);
@@ -153,36 +153,6 @@ fn main() {
     }
 }
 
-/// Personal observation: agent discovers nearby resources (vision range of 10 tiles)
-fn observe_nearby_resources(world: &World, agent: &mut ebss::agents::Agent) {
-    const VISION_RANGE: u32 = 10;
-    let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
-
-    for resource in &world.resources {
-        if agent_pos.distance_to(&resource.position) <= VISION_RANGE && resource.amount > 0 {
-            // Agent personally observes this resource
-            agent.observe_resource(resource.position, resource.resource_type, resource.amount);
-        }
-    }
-}
-
-/// Verify information when agent reaches a resource location they learned about from others
-fn verify_information(
-    world: &World,
-    _agent: &mut ebss::agents::Agent,
-    resource_position: &Position,
-    resource_type: ResourceType,
-    _current_tick: u32,
-) {
-    // Check if the resource actually exists at this location
-    let _resource_exists = world.resources.iter().any(|r| {
-        r.position == *resource_position
-            && r.resource_type == resource_type
-            && r.amount > 0
-    });
-    // Note: Knowledge verification is handled by the gossip system
-}
-
 /// Find the closest resource of a given type
 fn find_closest_resource(world: &World, from: &Position, resource_type: ResourceType) -> Option<Position> {
     world.resources
@@ -214,17 +184,16 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             let has_food = agent.inventory.count_item("food") > 0;
 
             // Try to eat if we have food and are hungry
-            if has_food && (needs_food || is_critical) {
-                if agent.inventory.remove_item("food", 1).is_some() {
+            if has_food && (needs_food || is_critical)
+                && agent.inventory.remove_item("food", 1).is_some() {
                     agent.state.eat(tick, 25.0); // Restore 25 energy
                     if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
                         hunger_drive.partial_satisfy(0.3);
                     }
                 }
-            }
 
             // Debug logging
-            if tick % 50 == 0 && tick < 150 {
+            if tick.is_multiple_of(50) && tick < 150 {
                 eprintln!("[DEBUG Tick {}] Agent: critical={}, needs_food={}, hunger={:.2}, energy={:.1}, food_inv={}",
                     tick, is_critical, needs_food, hunger_value, agent.state.energy,
                     agent.inventory.count_item("food"));

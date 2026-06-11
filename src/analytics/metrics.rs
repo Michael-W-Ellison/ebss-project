@@ -562,7 +562,7 @@ pub struct SimulationSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agents::{Agent, AgentConfig};
+    use crate::agents::AgentConfig;
 
     #[test]
     fn test_metrics_creation() {

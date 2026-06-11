@@ -3,9 +3,7 @@
 
 use eframe::egui::{self, Key};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
 
-use crate::world::Position;
 use super::state::*;
 use super::panels;
 
@@ -29,25 +27,8 @@ pub struct EbssApp {
     /// Selected resource detailed data
     pub selected_resource_data: Option<SelectedResourceData>,
 
-    /// Shared agent data for fetching selected agent details
-    pub agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
-    pub agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
-
-    /// Shared building data for fetching selected building details
-    pub building_data_request: Arc<Mutex<Option<Position>>>,
-    pub building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
-
-    /// Shared resource data for fetching selected resource details
-    pub resource_data_request: Arc<Mutex<Option<Position>>>,
-    pub resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
-
-    /// Tech tree snapshot data (updated periodically)
-    pub tech_tree_request: Arc<Mutex<bool>>,
-    pub tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
-
-    /// Relationship graph snapshot data (updated periodically)
-    pub relationship_graph_request: Arc<Mutex<bool>>,
-    pub relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
+    /// Shared request/response slots for fetching entity details from the simulation thread
+    pub channels: EntityDataChannels,
 }
 
 impl EbssApp {
@@ -55,16 +36,7 @@ impl EbssApp {
         _cc: &eframe::CreationContext<'_>,
         command_tx: Sender<SimulationCommand>,
         snapshot_rx: Receiver<SimulationSnapshot>,
-        agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
-        agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
-        building_data_request: Arc<Mutex<Option<Position>>>,
-        building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
-        resource_data_request: Arc<Mutex<Option<Position>>>,
-        resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
-        tech_tree_request: Arc<Mutex<bool>>,
-        tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
-        relationship_graph_request: Arc<Mutex<bool>>,
-        relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
+        channels: EntityDataChannels,
     ) -> Self {
         Self {
             state: GuiState::new(),
@@ -73,16 +45,7 @@ impl EbssApp {
             selected_agent_data: None,
             selected_building_data: None,
             selected_resource_data: None,
-            agent_data_request,
-            agent_data_response,
-            building_data_request,
-            building_data_response,
-            resource_data_request,
-            resource_data_response,
-            tech_tree_request,
-            tech_tree_response,
-            relationship_graph_request,
-            relationship_graph_response,
+            channels,
         }
     }
 
@@ -101,7 +64,7 @@ impl EbssApp {
     /// Check for selected agent data response
     fn check_entity_data(&mut self) {
         // Check agent data
-        if let Ok(mut response) = self.agent_data_response.try_lock() {
+        if let Ok(mut response) = self.channels.agent_data_response.try_lock() {
             if response.is_some() {
                 self.selected_agent_data = response.take();
                 self.state.selected_agent_data = self.selected_agent_data.clone();
@@ -109,7 +72,7 @@ impl EbssApp {
         }
 
         // Check building data
-        if let Ok(mut response) = self.building_data_response.try_lock() {
+        if let Ok(mut response) = self.channels.building_data_response.try_lock() {
             if response.is_some() {
                 self.selected_building_data = response.take();
                 self.state.selected_building_data = self.selected_building_data.clone();
@@ -117,7 +80,7 @@ impl EbssApp {
         }
 
         // Check resource data
-        if let Ok(mut response) = self.resource_data_response.try_lock() {
+        if let Ok(mut response) = self.channels.resource_data_response.try_lock() {
             if response.is_some() {
                 self.selected_resource_data = response.take();
                 self.state.selected_resource_data = self.selected_resource_data.clone();
@@ -125,14 +88,14 @@ impl EbssApp {
         }
 
         // Check tech tree data
-        if let Ok(mut response) = self.tech_tree_response.try_lock() {
+        if let Ok(mut response) = self.channels.tech_tree_response.try_lock() {
             if response.is_some() {
                 self.state.tech_tree_snapshot = response.take();
             }
         }
 
         // Check relationship graph data
-        if let Ok(mut response) = self.relationship_graph_response.try_lock() {
+        if let Ok(mut response) = self.channels.relationship_graph_response.try_lock() {
             if response.is_some() {
                 self.state.relationship_graph_snapshot = response.take();
             }
@@ -143,17 +106,17 @@ impl EbssApp {
     fn request_selected_entity_data(&mut self) {
         match &self.state.selected {
             EntitySelection::Agent(id) => {
-                if let Ok(mut request) = self.agent_data_request.try_lock() {
+                if let Ok(mut request) = self.channels.agent_data_request.try_lock() {
                     *request = Some(*id);
                 }
             }
             EntitySelection::Building(pos) => {
-                if let Ok(mut request) = self.building_data_request.try_lock() {
+                if let Ok(mut request) = self.channels.building_data_request.try_lock() {
                     *request = Some(*pos);
                 }
             }
             EntitySelection::Resource(pos) => {
-                if let Ok(mut request) = self.resource_data_request.try_lock() {
+                if let Ok(mut request) = self.channels.resource_data_request.try_lock() {
                     *request = Some(*pos);
                 }
             }
@@ -162,14 +125,14 @@ impl EbssApp {
 
         // Request tech tree data when tech tree panel is visible
         if self.state.show_tech_tree {
-            if let Ok(mut request) = self.tech_tree_request.try_lock() {
+            if let Ok(mut request) = self.channels.tech_tree_request.try_lock() {
                 *request = true;
             }
         }
 
         // Request relationship graph data when relationship graph panel is visible
         if self.state.show_relationship_graph {
-            if let Ok(mut request) = self.relationship_graph_request.try_lock() {
+            if let Ok(mut request) = self.channels.relationship_graph_request.try_lock() {
                 *request = true;
             }
         }
@@ -298,7 +261,7 @@ impl eframe::App for EbssApp {
                 ui,
                 &mut self.state,
                 &self.command_tx,
-                &self.agent_data_request,
+                &self.channels.agent_data_request,
             );
 
             // Render notifications overlay

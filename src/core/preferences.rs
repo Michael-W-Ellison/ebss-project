@@ -331,8 +331,7 @@ mod tests {
 
     #[test]
     fn test_generate_random() {
-        let prefs = Preferences::generate_random();
         // Can't assert specific values due to randomness, but should not panic
-        assert!(true);
+        let _prefs = Preferences::generate_random();
     }
 }

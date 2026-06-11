@@ -4,7 +4,6 @@
 //! Run with: cargo run --bin ebss_gui --features gui
 
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -13,8 +12,7 @@ use ebss::agents::PopulationConfig;
 use ebss::world::TechnologyTree;
 use ebss::gui::{
     EbssApp, SimulationCommand, SimulationSnapshot, SimState,
-    EntitySelection, SelectedAgentData, SelectedBuildingData, SelectedResourceData,
-    TechTreeSnapshot, RelationshipGraphSnapshot,
+    EntitySelection, EntityDataChannels,
     simulation_to_snapshot, agent_to_detailed, building_to_detailed, resource_to_detailed,
     tech_tree_to_snapshot, relationship_graph_to_snapshot,
 };
@@ -31,45 +29,13 @@ fn main() -> Result<(), eframe::Error> {
     let (command_tx, command_rx): (Sender<SimulationCommand>, Receiver<SimulationCommand>) = channel();
     let (snapshot_tx, snapshot_rx): (Sender<SimulationSnapshot>, Receiver<SimulationSnapshot>) = channel();
 
-    // Shared state for entity data requests
-    let agent_data_request: Arc<Mutex<Option<uuid::Uuid>>> = Arc::new(Mutex::new(None));
-    let agent_data_response: Arc<Mutex<Option<SelectedAgentData>>> = Arc::new(Mutex::new(None));
-    let building_data_request: Arc<Mutex<Option<ebss::world::Position>>> = Arc::new(Mutex::new(None));
-    let building_data_response: Arc<Mutex<Option<SelectedBuildingData>>> = Arc::new(Mutex::new(None));
-    let resource_data_request: Arc<Mutex<Option<ebss::world::Position>>> = Arc::new(Mutex::new(None));
-    let resource_data_response: Arc<Mutex<Option<SelectedResourceData>>> = Arc::new(Mutex::new(None));
-    let tech_tree_request: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
-    let tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>> = Arc::new(Mutex::new(None));
-    let relationship_graph_request: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
-    let relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>> = Arc::new(Mutex::new(None));
-
-    let agent_request_clone = Arc::clone(&agent_data_request);
-    let agent_response_clone = Arc::clone(&agent_data_response);
-    let building_request_clone = Arc::clone(&building_data_request);
-    let building_response_clone = Arc::clone(&building_data_response);
-    let resource_request_clone = Arc::clone(&resource_data_request);
-    let resource_response_clone = Arc::clone(&resource_data_response);
-    let tech_tree_request_clone = Arc::clone(&tech_tree_request);
-    let tech_tree_response_clone = Arc::clone(&tech_tree_response);
-    let relationship_graph_request_clone = Arc::clone(&relationship_graph_request);
-    let relationship_graph_response_clone = Arc::clone(&relationship_graph_response);
+    // Shared state for entity data requests (cloning shares the underlying slots)
+    let channels = EntityDataChannels::default();
+    let sim_channels = channels.clone();
 
     // Spawn simulation thread
     thread::spawn(move || {
-        run_simulation_thread(
-            command_rx,
-            snapshot_tx,
-            agent_request_clone,
-            agent_response_clone,
-            building_request_clone,
-            building_response_clone,
-            resource_request_clone,
-            resource_response_clone,
-            tech_tree_request_clone,
-            tech_tree_response_clone,
-            relationship_graph_request_clone,
-            relationship_graph_response_clone,
-        );
+        run_simulation_thread(command_rx, snapshot_tx, sim_channels);
     });
 
     // Configure and run the GUI
@@ -85,21 +51,7 @@ fn main() -> Result<(), eframe::Error> {
         "EBSS",
         options,
         Box::new(move |cc| {
-            Ok(Box::new(EbssApp::new(
-                cc,
-                command_tx,
-                snapshot_rx,
-                agent_data_request,
-                agent_data_response,
-                building_data_request,
-                building_data_response,
-                resource_data_request,
-                resource_data_response,
-                tech_tree_request,
-                tech_tree_response,
-                relationship_graph_request,
-                relationship_graph_response,
-            )))
+            Ok(Box::new(EbssApp::new(cc, command_tx, snapshot_rx, channels)))
         }),
     )
 }
@@ -108,17 +60,21 @@ fn main() -> Result<(), eframe::Error> {
 fn run_simulation_thread(
     command_rx: Receiver<SimulationCommand>,
     snapshot_tx: Sender<SimulationSnapshot>,
-    agent_data_request: Arc<Mutex<Option<uuid::Uuid>>>,
-    agent_data_response: Arc<Mutex<Option<SelectedAgentData>>>,
-    building_data_request: Arc<Mutex<Option<ebss::world::Position>>>,
-    building_data_response: Arc<Mutex<Option<SelectedBuildingData>>>,
-    resource_data_request: Arc<Mutex<Option<ebss::world::Position>>>,
-    resource_data_response: Arc<Mutex<Option<SelectedResourceData>>>,
-    tech_tree_request: Arc<Mutex<bool>>,
-    tech_tree_response: Arc<Mutex<Option<TechTreeSnapshot>>>,
-    relationship_graph_request: Arc<Mutex<bool>>,
-    relationship_graph_response: Arc<Mutex<Option<RelationshipGraphSnapshot>>>,
+    channels: EntityDataChannels,
 ) {
+    let EntityDataChannels {
+        agent_data_request,
+        agent_data_response,
+        building_data_request,
+        building_data_response,
+        resource_data_request,
+        resource_data_response,
+        tech_tree_request,
+        tech_tree_response,
+        relationship_graph_request,
+        relationship_graph_response,
+    } = channels;
+
     log::info!("Simulation thread starting...");
 
     // Create world and population

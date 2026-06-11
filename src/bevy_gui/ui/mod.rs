@@ -10,6 +10,7 @@ use bevy_egui::{egui, EguiContexts};
 
 use crate::bevy_gui::resources::*;
 use crate::bevy_gui::events::{SimulationCommand, CenterMapRequest};
+use crate::gui::events::SimulationEventExt;
 
 pub use panels::{
     render_legend_panel, render_inspector_panel, render_statistics_panel,
@@ -19,6 +20,8 @@ pub use panels::{
 pub use map::render_map;
 
 /// Render the top menu bar
+// Bevy system: parameters are injected by the ECS scheduler
+#[allow(clippy::too_many_arguments)]
 pub fn render_menu_bar(
     mut egui_ctx: EguiContexts,
     mut panels: ResMut<PanelVisibility>,
@@ -26,7 +29,7 @@ pub fn render_menu_bar(
     mut selection: ResMut<Selection>,
     mut sim_control: ResMut<SimulationControl>,
     mut sim_commands: EventWriter<SimulationCommand>,
-    mut center_request: EventWriter<crate::bevy_gui::events::CenterMapRequest>,
+    mut center_request: EventWriter<CenterMapRequest>,
     mut notifications: ResMut<NotificationQueue>,
     snapshot: Res<CurrentSnapshot>,
     stats_history: Res<StatisticsHistory>,
@@ -66,8 +69,8 @@ pub fn render_menu_bar(
                     .clicked()
                 {
                     match export_statistics_csv(&stats_history) {
-                        Ok(path) => notifications.success(&format!("Statistics exported to {}", path), current_time),
-                        Err(e) => notifications.error(&format!("Export failed: {}", e), current_time),
+                        Ok(path) => notifications.success(format!("Statistics exported to {}", path), current_time),
+                        Err(e) => notifications.error(format!("Export failed: {}", e), current_time),
                     }
                     ui.close_menu();
                 }
@@ -77,8 +80,8 @@ pub fn render_menu_bar(
                     .clicked()
                 {
                     match export_timeline_csv(&timeline) {
-                        Ok(path) => notifications.success(&format!("Timeline exported to {}", path), current_time),
-                        Err(e) => notifications.error(&format!("Export failed: {}", e), current_time),
+                        Ok(path) => notifications.success(format!("Timeline exported to {}", path), current_time),
+                        Err(e) => notifications.error(format!("Export failed: {}", e), current_time),
                     }
                     ui.close_menu();
                 }
@@ -1005,9 +1008,9 @@ fn export_statistics_csv(stats_history: &StatisticsHistory) -> Result<String, st
             point.elderly,
             point.births,
             point.deaths,
-            point.avg_health,
-            point.avg_energy,
-            point.avg_happiness,
+            point.average_health,
+            point.average_energy,
+            point.average_happiness,
             point.total_resources,
             point.buildings_completed,
             point.buildings_construction,

@@ -25,7 +25,7 @@ fn main() {
     println!("--- Part 1: Episodic Memory (Autobiographical Events) ---");
 
     // Record a discovery event
-    let cave_episode = memory.record_event(
+    let _cave_episode = memory.record_event(
         EpisodeType::Discovery,
         "Discovered a dark cave entrance".to_string(),
         0.3, // Slightly positive (curiosity)
@@ -36,7 +36,7 @@ fn main() {
 
     // Record a social interaction
     let friend_id = Uuid::new_v4();
-    let social_episode = memory.record_event(
+    let _social_episode = memory.record_event(
         EpisodeType::SocialInteraction,
         "Had a great conversation with a friend".to_string(),
         0.8, // Very positive
@@ -49,7 +49,7 @@ fn main() {
     current_time += 100;
     memory.tick(current_time);
 
-    let combat_episode = memory.record_event(
+    let _combat_episode = memory.record_event(
         EpisodeType::Combat,
         "Fought off a wolf attack".to_string(),
         -0.7, // Negative (fear, stress)
@@ -68,25 +68,25 @@ fn main() {
     println!("--- Part 2: Working Memory (Current Tasks) ---");
 
     // Add tasks with different priorities
-    let task1 = memory.add_task(
+    let _task1 = memory.add_task(
         "Gather firewood for the night".to_string(),
         TaskPriority::High,
     ).unwrap();
     println!("✓ Added task: Gather firewood (High priority)");
 
-    let task2 = memory.add_task(
+    let _task2 = memory.add_task(
         "Explore the cave we found".to_string(),
         TaskPriority::Normal,
     ).unwrap();
     println!("✓ Added task: Explore cave (Normal priority)");
 
-    let task3 = memory.add_task(
+    let _task3 = memory.add_task(
         "Find water source".to_string(),
         TaskPriority::Critical,
     ).unwrap();
     println!("✓ Added task: Find water (Critical priority)");
 
-    let task4 = memory.add_task(
+    let _task4 = memory.add_task(
         "Craft a better spear".to_string(),
         TaskPriority::Low,
     ).unwrap();

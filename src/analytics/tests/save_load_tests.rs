@@ -6,7 +6,6 @@
 use crate::analytics::Simulation;
 use crate::agents::{Population, AgentConfig};
 use crate::world::{World, WorldConfig};
-use std::path::Path;
 use tempfile::TempDir;
 
 #[test]

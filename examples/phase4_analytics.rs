@@ -9,10 +9,9 @@
 //!
 //! Run with: cargo run --example phase4_analytics
 
-use ebss::prelude::*;
 use ebss::agents::{Population, PopulationConfig, AgentConfig};
 use ebss::analytics::{
-    SimulationMetrics, EmergenceDetector, DataExporter, PerformanceMonitor, ExportFormat,
+    SimulationMetrics, EmergenceDetector, DataExporter, PerformanceMonitor,
 };
 
 fn main() {

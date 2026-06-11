@@ -2,8 +2,6 @@
 //! Integration tests for technology progression from Stone Age to Bronze Age
 
 use crate::environment::*;
-use crate::agents::{Agent, AgentConfig};
-use crate::core::DriveType;
 use uuid::Uuid;
 
 #[test]
@@ -121,7 +119,7 @@ fn test_knowledge_sharing_via_teaching() {
 
 #[test]
 fn test_gossip_creates_rumors() {
-    let discoverer_id = Uuid::new_v4();
+    let _discoverer_id = Uuid::new_v4();
     let gossip_recipient_id = Uuid::new_v4();
 
     let mut recipient_knowledge = TechnologyKnowledge::new();

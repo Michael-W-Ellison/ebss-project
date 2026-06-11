@@ -9,7 +9,7 @@
 //! - Broadcasting actions to nearby observers
 
 use ebss::agents::{
-    Agent, AgentConfig, Population, ActionType, BroadcastAction,
+    Agent, AgentConfig, Population, ActionType,
     Relationship, RelationshipType, LifeStage,
     get_learning_stats, auto_adopt_ready_behaviors,
 };

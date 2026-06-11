@@ -228,7 +228,7 @@ pub fn render_search_panel(
         if let Some(result) = search_state.get_selected() {
             let pos = result.position();
             center_request.send(CenterMapRequest { x: pos.0, y: pos.1 });
-            notifications.info(&format!("Centered on ({}, {})", pos.0, pos.1), current_time);
+            notifications.info(format!("Centered on ({}, {})", pos.0, pos.1), current_time);
         }
     }
 

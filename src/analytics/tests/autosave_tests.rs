@@ -5,7 +5,6 @@ use crate::analytics::Simulation;
 use crate::agents::{Population, AgentConfig};
 use crate::world::{World, WorldConfig};
 use crate::analytics::AutoSaveConfig;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]

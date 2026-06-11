@@ -48,7 +48,7 @@ fn main() {
                 let social_drive = agent.drives.get(DriveType::Social)
                     .map(|d| d.value)
                     .unwrap_or(0.0);
-                let relationships = agent.relationships.get_all();
+                let _relationships = agent.relationships.get_all();
 
                 println!("  Agent {}: Social Drive: {:.3}", idx, social_drive);
 

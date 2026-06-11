@@ -22,8 +22,9 @@ pub enum SimulationCommand {
 }
 
 /// Entity selection types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum EntitySelection {
+    #[default]
     None,
     Agent(Uuid),
     Building(Position),
@@ -31,24 +32,13 @@ pub enum EntitySelection {
     Terrain(Position),
 }
 
-impl Default for EntitySelection {
-    fn default() -> Self {
-        EntitySelection::None
-    }
-}
-
 /// Current simulation state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SimState {
     Running,
+    #[default]
     Paused,
     Stepping,
-}
-
-impl Default for SimState {
-    fn default() -> Self {
-        SimState::Paused
-    }
 }
 
 /// Lightweight snapshot of world state for GUI rendering
@@ -666,6 +656,24 @@ impl AgentMapFilter {
     }
 }
 
+/// Shared request/response slots between the GUI thread and the simulation thread.
+///
+/// Cloning shares the underlying slots: each `Arc` is cloned, so the GUI and
+/// simulation threads communicate through the same mutex-guarded values.
+#[derive(Clone, Default)]
+pub struct EntityDataChannels {
+    pub agent_data_request: std::sync::Arc<std::sync::Mutex<Option<Uuid>>>,
+    pub agent_data_response: std::sync::Arc<std::sync::Mutex<Option<SelectedAgentData>>>,
+    pub building_data_request: std::sync::Arc<std::sync::Mutex<Option<Position>>>,
+    pub building_data_response: std::sync::Arc<std::sync::Mutex<Option<SelectedBuildingData>>>,
+    pub resource_data_request: std::sync::Arc<std::sync::Mutex<Option<Position>>>,
+    pub resource_data_response: std::sync::Arc<std::sync::Mutex<Option<SelectedResourceData>>>,
+    pub tech_tree_request: std::sync::Arc<std::sync::Mutex<bool>>,
+    pub tech_tree_response: std::sync::Arc<std::sync::Mutex<Option<TechTreeSnapshot>>>,
+    pub relationship_graph_request: std::sync::Arc<std::sync::Mutex<bool>>,
+    pub relationship_graph_response: std::sync::Arc<std::sync::Mutex<Option<RelationshipGraphSnapshot>>>,
+}
+
 /// GUI application state
 pub struct GuiState {
     pub simulation_state: SimState,
@@ -1188,7 +1196,7 @@ impl GuiState {
             }
             EntitySelection::None | EntitySelection::Terrain(_) => {
                 // Select last alive agent
-                if let Some(agent) = snapshot.population.agents.iter().filter(|a| a.is_alive).last() {
+                if let Some(agent) = snapshot.population.agents.iter().rfind(|a| a.is_alive) {
                     self.selected = EntitySelection::Agent(agent.id);
                 }
             }

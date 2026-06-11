@@ -84,7 +84,7 @@ fn main() {
         renderer.record_history(&population, tick);
 
         // Log periodic events
-        if tick % 10 == 0 {
+        if tick.is_multiple_of(10) {
             let alive = population.agents.iter().filter(|a| a.state.health > 0.0).count();
             renderer.log_event(format!("Tick {}: {} agents alive", tick, alive));
         }
@@ -93,7 +93,7 @@ fn main() {
         renderer.render(&population, tick);
 
         // For compact mode, add a newline periodically
-        if mode == RenderMode::Compact && tick % 10 == 0 {
+        if mode == RenderMode::Compact && tick.is_multiple_of(10) {
             println!();
         }
 

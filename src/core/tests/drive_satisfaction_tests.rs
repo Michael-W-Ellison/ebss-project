@@ -124,7 +124,7 @@ fn test_satisfying_one_drive_doesnt_affect_others() {
         thirst.tick();
     }
 
-    let hunger_before = hunger.value;
+    let _hunger_before = hunger.value;
     let thirst_before = thirst.value;
 
     // Satisfy hunger (eat food)

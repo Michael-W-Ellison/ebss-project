@@ -23,10 +23,7 @@ fn main() {
     // ===== Part 1: Creating an Agent =====
     println!("--- Part 1: Creating Agent with Inventory ---");
 
-    let config = AgentConfig {
-        random_weights: false,
-        ..Default::default()
-    };
+    let config = AgentConfig { random_weights: false };
 
     let mut agent = Agent::new(config);
     println!("Created agent: {}", agent.id);
@@ -151,7 +148,7 @@ fn main() {
     println!("--- Part 4: Equipment Stats ---");
 
     println!("Equipping iron pickaxe for mining...");
-    let pickaxe = EquipmentItem::new(
+    let _pickaxe = EquipmentItem::new(
         "iron_pickaxe".to_string(),
         EquipmentType::Pickaxe,
         EquipmentSlot::MainHand,

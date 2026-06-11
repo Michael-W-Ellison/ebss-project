@@ -2,7 +2,7 @@
 //! Integration tests for observational learning between agents
 
 use crate::agents::{
-    Agent, AgentConfig, ActionType, ObservedAction, Relationship, RelationshipType,
+    Agent, AgentConfig, ActionType, Relationship, RelationshipType,
 };
 use uuid::Uuid;
 

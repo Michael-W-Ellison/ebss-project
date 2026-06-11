@@ -5,7 +5,7 @@
 //! should trigger emotional responses, creating functional grief and drive frustration.
 
 use crate::agents::{Agent, AgentConfig};
-use crate::core::{DriveType, EmotionType};
+use crate::core::DriveType;
 use uuid::Uuid;
 
 #[test]
@@ -405,7 +405,7 @@ fn test_helping_others_creates_happiness() {
 
 #[test]
 fn test_empathetic_trait_bonus_for_helping() {
-    use crate::core::traits::{Trait, TraitSet};
+    use crate::core::traits::Trait;
     
     let mut regular_agent = Agent::new(AgentConfig::default());
     let mut empathetic_agent = Agent::new(AgentConfig::default());

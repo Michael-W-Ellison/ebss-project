@@ -13,8 +13,7 @@ fn test_valid_world_config() {
 
 #[test]
 fn test_world_config_zero_width() {
-    let mut config = WorldConfig::default();
-    config.size = (0, 50);
+    let config = WorldConfig { size: (0, 50), ..Default::default() };
 
     let result = config.validate();
     assert!(result.is_err());
@@ -23,8 +22,7 @@ fn test_world_config_zero_width() {
 
 #[test]
 fn test_world_config_zero_height() {
-    let mut config = WorldConfig::default();
-    config.size = (50, 0);
+    let config = WorldConfig { size: (50, 0), ..Default::default() };
 
     let result = config.validate();
     assert!(result.is_err());
@@ -33,8 +31,7 @@ fn test_world_config_zero_height() {
 
 #[test]
 fn test_world_config_too_small() {
-    let mut config = WorldConfig::default();
-    config.size = (5, 5); // Too small for agents to move around
+    let config = WorldConfig { size: (5, 5), ..Default::default() }; // Too small for agents to move around
 
     let result = config.validate();
     assert!(result.is_err());
@@ -43,8 +40,7 @@ fn test_world_config_too_small() {
 
 #[test]
 fn test_world_config_too_large() {
-    let mut config = WorldConfig::default();
-    config.size = (10000, 10000); // Unreasonably large
+    let config = WorldConfig { size: (10000, 10000), ..Default::default() }; // Unreasonably large
 
     let result = config.validate();
     assert!(result.is_err());
@@ -53,16 +49,14 @@ fn test_world_config_too_large() {
 
 #[test]
 fn test_world_config_minimum_size_valid() {
-    let mut config = WorldConfig::default();
-    config.size = (10, 10); // Minimum reasonable size
+    let config = WorldConfig { size: (10, 10), ..Default::default() }; // Minimum reasonable size
 
     assert!(config.validate().is_ok());
 }
 
 #[test]
 fn test_world_config_large_but_valid() {
-    let mut config = WorldConfig::default();
-    config.size = (1000, 1000); // Large but valid
+    let config = WorldConfig { size: (1000, 1000), ..Default::default() }; // Large but valid
 
     assert!(config.validate().is_ok());
 }
@@ -89,8 +83,7 @@ fn test_resource_config_can_have_zero_nodes() {
 
 #[test]
 fn test_resource_config_excessive_resources() {
-    let mut config = WorldConfig::default();
-    config.size = (50, 50); // 2500 tiles
+    let mut config = WorldConfig { size: (50, 50), ..Default::default() }; // 2500 tiles
     config.initial_resources.wood_nodes = 5000; // More resources than tiles
 
     let result = config.validate();
