@@ -735,6 +735,12 @@ impl Simulation {
             self.process_building_maintenance();
         }
 
+        // Process equipment repair needs (every 75 ticks)
+        // Agents with damaged equipment may seek to repair it
+        if self.current_tick % 75 == 0 {
+            self.process_equipment_repair_needs();
+        }
+
         // Process information verification and lie detection (every 100 ticks)
         // Agents verify information they've received against their knowledge
         if self.current_tick % 100 == 0 {
@@ -1073,9 +1079,20 @@ impl Simulation {
                 ExternalGoal::FormRelationship(_relationship_type) => {
                     Some(Action::Socialize { target_agent_id: uuid::Uuid::nil() })
                 },
-                ExternalGoal::CompleteJob(_job_name) => {
-                    // Jobs are complex, fall back to drive-based action
-                    None
+                ExternalGoal::CompleteJob(job_name) => {
+                    // Handle specific job types
+                    if job_name.starts_with("repair_") {
+                        // Equipment repair job
+                        let slot = job_name.strip_prefix("repair_").unwrap_or("main_hand");
+                        Some(Action::Repair { slot: slot.to_string() })
+                    } else if job_name.starts_with("maintain_") {
+                        // Building maintenance - needs tools and movement to building
+                        // For now, just craft tools (agents need appropriate tools for maintenance)
+                        Some(Action::Craft { item_type: "hammer".to_string() })
+                    } else {
+                        // Other complex jobs - fall back to drive-based action
+                        None
+                    }
                 },
                 ExternalGoal::ContributeMaterialsToStorehouse(amount) => {
                     Some(Action::Store {
@@ -1341,6 +1358,21 @@ impl Simulation {
                                 _ => crate::agents::skills::SkillType::Mining,
                             };
                             agent.skills.gain_experience(skill_type, 2);
+
+                            // Apply tool wear based on resource type gathered
+                            let task_type = match resource_type_enum {
+                                ResourceType::Stone | ResourceType::Iron => "mining",
+                                ResourceType::Wood => "woodcutting",
+                                _ => "harvesting",
+                            };
+                            // Tool wear: 0.5-2.0 durability per gather depending on resource hardness
+                            let wear_amount = match resource_type_enum {
+                                ResourceType::Iron => 2.0,   // Mining iron is hard on tools
+                                ResourceType::Stone => 1.5,  // Stone is moderately hard
+                                ResourceType::Wood => 1.0,   // Wood is standard
+                                _ => 0.5,                    // Other resources are easy
+                            };
+                            agent.equipment.apply_tool_wear(task_type, wear_amount);
 
                             debug!(
                                 "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
@@ -1642,6 +1674,16 @@ impl Simulation {
                     && self.population.agents[target_index].state.health > 0.0;
 
                 let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
+
+                // Apply weapon wear from combat (weapons degrade with use)
+                // Wear amount based on damage dealt and hit type
+                let weapon_wear = match target_part {
+                    BodyPartType::Head => 2.0,  // Critical hit - more stress on weapon
+                    BodyPartType::Torso | BodyPartType::Back => 1.5,  // Solid hit
+                    _ => 1.0,  // Standard hit on limbs
+                };
+                let attacker = &mut self.population.agents[agent_index];
+                attacker.equipment.apply_combat_wear(weapon_wear);
 
                 // Emit conflict event for timeline
                 #[cfg(feature = "gui")]
@@ -2312,6 +2354,10 @@ impl Simulation {
                         let combat_multiplier = 1.0 + mount_bonus;
                         let damage = base_damage * combat_multiplier;
                         animal.take_damage(damage);
+
+                        // Apply weapon wear from hunting (if weapon equipped)
+                        let agent = &mut self.population.agents[agent_index];
+                        agent.equipment.apply_combat_wear(1.5); // Hunting is hard on weapons
 
                         // If killed, get drops
                         let mut items_gained = Vec::new();
@@ -3300,6 +3346,86 @@ impl Simulation {
                     .with_message("Dismounted from transport".to_string())
             },
 
+            Action::Repair { slot } => {
+                use crate::agents::equipment::EquipmentSlot;
+
+                // Map slot string to EquipmentSlot
+                let equipment_slot = match slot.to_lowercase().as_str() {
+                    "main_hand" | "mainhand" | "weapon" | "tool" => EquipmentSlot::MainHand,
+                    "off_hand" | "offhand" | "shield" => EquipmentSlot::OffHand,
+                    "head" | "helmet" => EquipmentSlot::Head,
+                    "torso" | "chest" | "body" => EquipmentSlot::Torso,
+                    "back" | "cloak" => EquipmentSlot::Back,
+                    "arms" | "gloves" => EquipmentSlot::Arms,
+                    "legs" | "pants" => EquipmentSlot::Legs,
+                    "hands" | "gauntlets" => EquipmentSlot::Hands,
+                    "feet" | "boots" => EquipmentSlot::Feet,
+                    _ => return ActionResult::failure(format!("Unknown equipment slot: {}", slot)),
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // Check if there's equipment in the slot
+                let equipment = match agent.equipment.get_equipped(equipment_slot) {
+                    Some(e) => e,
+                    None => return ActionResult::failure(format!("No equipment in slot {:?}", equipment_slot)),
+                };
+
+                // Check if equipment needs repair (below 90% durability)
+                let durability_pct = equipment.durability_percentage();
+                if durability_pct >= 0.9 {
+                    return ActionResult::failure("Equipment doesn't need repair".to_string());
+                }
+
+                // Determine repair materials needed based on equipment material
+                let repair_material = match &equipment.material {
+                    crate::agents::equipment::EquipmentMaterial::Cloth(_) => "leather",
+                    crate::agents::equipment::EquipmentMaterial::Metal(_) => "iron",
+                    crate::agents::equipment::EquipmentMaterial::Wood(_) => "wood",
+                    crate::agents::equipment::EquipmentMaterial::Stone(_) => "stone",
+                };
+
+                // Check if agent has repair materials in inventory
+                let has_materials = agent.inventory.get_item(repair_material)
+                    .map(|item| item.quantity >= 1)
+                    .unwrap_or(false);
+
+                if !has_materials {
+                    return ActionResult::failure(format!("Need {} to repair equipment", repair_material));
+                }
+
+                // Get crafting skill for repair quality bonus
+                let crafting_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::Crafting)
+                    .map(|s| s.level)
+                    .unwrap_or(0);
+                let skill_bonus = 1.0 + (crafting_skill as f32 * 0.05);
+
+                // Calculate repair amount (base 20-40% + skill bonus)
+                let base_repair = rng.gen_range(0.2..0.4);
+                let repair_amount = (base_repair * skill_bonus).min(1.0 - durability_pct);
+
+                // Remove repair material from inventory
+                agent.inventory.remove_item(repair_material, 1);
+
+                // Apply repair to equipment
+                if let Err(e) = agent.repair_equipment(equipment_slot, repair_amount * 100.0) {
+                    return ActionResult::failure(e);
+                }
+
+                // Gain crafting experience
+                agent.skills.gain_experience(crate::agents::skills::SkillType::Crafting, 1);
+
+                debug!(
+                    "Agent {} repaired {:?} by {:.0}% using {}",
+                    agent.id, equipment_slot, repair_amount * 100.0, repair_material
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.2)
+                    .with_energy_cost(5.0)
+                    .with_message(format!("Repaired {:?} (+{:.0}%)", equipment_slot, repair_amount * 100.0))
+            },
+
             Action::Wait => {
                 // Wait/rest action - restores energy, calms emotions
                 let agent = &mut self.population.agents[agent_index];
@@ -3697,6 +3823,87 @@ impl Simulation {
                         "Agent {} aware of degraded {:?} at ({}, {}) - condition: {:.0}%",
                         agent.id, building_type, building_pos.x, building_pos.y, condition * 100.0
                     );
+                }
+            }
+        }
+    }
+
+    /// Process equipment repair needs
+    /// Agents with damaged equipment may generate repair goals
+    fn process_equipment_repair_needs(&mut self) {
+        use crate::core::goals::{Goal, ExternalGoal};
+        use crate::agents::equipment::EquipmentSlot;
+
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            // Check all equipped items for damage
+            let slots_to_check = [
+                EquipmentSlot::MainHand,
+                EquipmentSlot::OffHand,
+                EquipmentSlot::Head,
+                EquipmentSlot::Torso,
+                EquipmentSlot::Back,
+                EquipmentSlot::Legs,
+                EquipmentSlot::Feet,
+            ];
+
+            for slot in slots_to_check {
+                if let Some(equipment) = agent.equipment.get_equipped(slot) {
+                    let durability_pct = equipment.durability_percentage();
+
+                    // Generate repair goal if equipment is significantly damaged
+                    if durability_pct < 0.5 {
+                        let slot_name = match slot {
+                            EquipmentSlot::MainHand => "main_hand",
+                            EquipmentSlot::OffHand => "off_hand",
+                            EquipmentSlot::Head => "head",
+                            EquipmentSlot::Torso => "torso",
+                            EquipmentSlot::Back => "back",
+                            EquipmentSlot::Legs => "legs",
+                            EquipmentSlot::Feet => "feet",
+                            EquipmentSlot::Arms => "arms",
+                            EquipmentSlot::Hands => "hands",
+                            EquipmentSlot::Neck => "neck",
+                            EquipmentSlot::Finger => "finger",
+                        };
+
+                        let repair_job = format!("repair_{}", slot_name);
+
+                        // Check if agent already has a repair goal for this slot
+                        let has_repair_goal = agent.goals.goals.iter().any(|g| {
+                            if let Some(ExternalGoal::CompleteJob(job)) = &g.external {
+                                job == &repair_job
+                            } else {
+                                false
+                            }
+                        });
+
+                        if !has_repair_goal {
+                            // Priority based on damage level and whether it's a tool
+                            let priority = if durability_pct < 0.25 {
+                                0.8 // Critical - equipment almost broken
+                            } else if slot == EquipmentSlot::MainHand {
+                                0.7 // Important - main tool
+                            } else {
+                                0.5 // Normal priority
+                            };
+
+                            let goal = Goal::new_external(
+                                ExternalGoal::CompleteJob(repair_job.clone()),
+                                priority,
+                                self.current_tick,
+                            );
+                            agent.goals.add_goal(goal);
+
+                            debug!(
+                                "Agent {} generated repair goal for {:?} ({:.0}% durability)",
+                                agent.id, slot, durability_pct * 100.0
+                            );
+                        }
+                    }
                 }
             }
         }

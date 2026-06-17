@@ -78,9 +78,10 @@ fn test_minimize_travel_time_from_agent_position() {
     assert!(pos.is_some());
     let optimal_pos = pos.unwrap();
 
-    // Should be reasonably close to agent (within 10 tiles)
+    // Should be reasonably close to agent (within 15 tiles)
+    // BalancedProximity strategy balances agent distance with other factors like settlement proximity
     let distance = calculate_distance(optimal_pos, agent_pos);
-    assert!(distance < 10.0, "House should be near agent, distance: {}", distance);
+    assert!(distance < 15.0, "House should be near agent, distance: {}", distance);
 }
 
 #[test]

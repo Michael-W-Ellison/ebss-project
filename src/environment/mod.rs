@@ -202,6 +202,10 @@ pub enum Action {
     Dismount,
     /// Seek shelter from dangerous weather
     SeekShelter,
+    /// Repair equipment or tools
+    Repair {
+        slot: String, // Equipment slot to repair ("main_hand", "torso", etc.)
+    },
     /// Wait/idle
     Wait,
 }
@@ -229,6 +233,7 @@ impl Action {
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
+            Action::Repair { .. } => Some(DriveType::Utility), // Maintaining equipment
             Action::Move { .. } => None,
             Action::Wait => None,
         }
