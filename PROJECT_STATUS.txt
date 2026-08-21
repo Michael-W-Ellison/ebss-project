@@ -18,10 +18,10 @@ itself, waters itself, shelters from the weather, and reproduces over tens of
 thousands of ticks without intervention.
 
 What remains is not "write the systems" but "connect what exists": several
-analytics components are libraries nobody calls, agents perceive the world by
-smell alone because nothing feeds their other senses, and a handful of
-behaviours the design calls for (agents making clothing, for one) have
-supporting code but nothing that drives them.
+analytics components are libraries nobody calls, agents still cannot see one
+another or hear anything, and a handful of behaviours the design calls for
+(agents making clothing, for one) have supporting code but nothing that
+drives them.
 
 
 SIZE AND ACTIVITY
@@ -83,6 +83,9 @@ Verified as reached by Simulation::tick():
                   nursing, inheritance of traits and behaviour
   Behaviour       drives, behaviour trees with weight learning, goals,
                   plans, foraging, drinking, sheltering, exploration
+  Perception      smell of food and water within 25 tiles; sight of terrain,
+                  resources and buildings within 10, negated by the Blind
+                  trait; sharing of known resource locations between agents
   Social          proximity relationships, social interactions, gossip,
                   observational learning, shared knowledge, technology
                   discovery and spread
@@ -111,12 +114,13 @@ missing features:
                             bonuses, but nothing outside tests ever creates a
                             zone or claims territory, so both are always empty
 
-  Vision and hearing        Nothing feeds world state into agent vision or
-                            hearing. Agents perceive resources by smell only
-                            (food and water), which is what the simulation
-                            emits. Percept-driven sight and sound are
-                            therefore dead paths in a live run, though the
-                            code and its tests exist.
+  Vision as a percept       Sight drives exploration and resource discovery,
+                            but nothing populates vision.visible_agents, so
+                            agents never see each other and
+                            Percept::AgentDetected is never produced.
+
+  Hearing                   Nothing feeds sounds from the world, so every
+                            sound-derived percept is a dead path.
 
 
 KNOWN GAPS IN BEHAVIOUR

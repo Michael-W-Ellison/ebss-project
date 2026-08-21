@@ -1472,6 +1472,7 @@ impl Population {
     /// Process exploration for all living agents
     /// Agents discover tiles within their vision range
     pub fn process_exploration_with_world(&mut self, world: &mut crate::world::World) {
+        use crate::core::memory::SpatialMemoryType;
         use crate::core::DriveType;
 
         let current_tick = self.current_tick;
@@ -1487,8 +1488,13 @@ impl Population {
                 agent.state.position.1,
             );
 
-            // Vision range based on terrain and conditions (default 10 tiles)
-            let vision_range = 10;
+            // How far this agent can make out detail, which is zero if it
+            // cannot see: a blind agent discovers nothing by sight, and finds
+            // the world by smell and memory instead.
+            let vision_range = agent.sight_range();
+            if vision_range == 0 {
+                continue;
+            }
 
             // Process exploration - discovers tiles, resources, buildings
             let new_discoveries = world.process_exploration(
@@ -1510,16 +1516,44 @@ impl Population {
                 agent.skills.gain_experience(super::SkillType::Navigation, new_discoveries as u32 * 2);
             }
 
-            // Learn skills from discovered resources
-            for (pos, resource_type) in &agent.exploration_knowledge.known_resources {
-                // Only give XP for recently discovered resources (within last 10 ticks)
-                if let Some(&discover_tick) = agent.exploration_knowledge.resource_discovery_ticks.get(pos) {
-                    if current_tick.saturating_sub(discover_tick) < 10 {
-                        let skill_xp = Self::get_skill_for_resource_discovery(resource_type);
-                        for (skill_type, xp) in skill_xp {
-                            agent.skills.gain_experience(skill_type, xp);
-                        }
-                    }
+            // Learn skills from discovered resources, and remember where the
+            // food and water are.
+            //
+            // Foraging reads spatial memory, not the exploration record, so
+            // without this an agent would catalogue a berry patch it had seen
+            // and still starve walking past it.
+            let recently_seen: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
+                .exploration_knowledge
+                .known_resources
+                .iter()
+                .filter(|(pos, _)| {
+                    agent
+                        .exploration_knowledge
+                        .resource_discovery_ticks
+                        .get(pos)
+                        .map(|&tick| current_tick.saturating_sub(tick) < 10)
+                        .unwrap_or(false)
+                })
+                .map(|(pos, resource_type)| (*pos, *resource_type))
+                .collect();
+
+            for (pos, resource_type) in recently_seen {
+                for (skill_type, xp) in Self::get_skill_for_resource_discovery(&resource_type) {
+                    agent.skills.gain_experience(skill_type, xp);
+                }
+
+                let remembered_as = if resource_type.is_edible() {
+                    Some(SpatialMemoryType::Food)
+                } else if resource_type == crate::world::ResourceType::Water {
+                    Some(SpatialMemoryType::Water)
+                } else {
+                    None
+                };
+
+                if let Some(memory_type) = remembered_as {
+                    agent
+                        .memory
+                        .remember_location(memory_type, (pos.x, pos.y, 0));
                 }
             }
 

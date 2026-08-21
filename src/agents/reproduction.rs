@@ -193,6 +193,10 @@ fn give_birth_internal(
     // Inherit traits from parents (mix of both with mutation)
     offspring.traits = inherit_traits(&parent1.traits, &parent2.traits);
 
+    // Traits are assigned after construction, so let the inherited ones reach
+    // the senses: a child born blind or deaf must actually be so
+    offspring.apply_trait_sensory_modifications();
+
     // Inherit reproduction drive modifier from parents with mutation
     offspring.reproduction_drive_modifier = inherit_reproduction_modifier(
         parent1.reproduction_drive_modifier,
@@ -316,7 +320,7 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
         Trait::Peaceful, Trait::Trusting, Trait::Honest, Trait::Dishonest,
         Trait::Callous, Trait::Diligent, Trait::Manipulator, Trait::Imaginative,
         Trait::Paranoid, Trait::Archivist, Trait::Masochist, Trait::Copycat,
-        Trait::Repressed, Trait::Mute, Trait::Deaf, Trait::Ignorant,
+        Trait::Repressed, Trait::Mute, Trait::Deaf, Trait::Blind, Trait::Ignorant,
     ];
 
     // Collect all parent traits

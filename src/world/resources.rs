@@ -62,6 +62,17 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
+    /// Whether an agent can eat this straight from the land.
+    ///
+    /// The single answer to "is this food", used by foraging, by what an agent
+    /// remembers seeing, and by the scents the world gives off.
+    pub fn is_edible(&self) -> bool {
+        matches!(
+            self,
+            ResourceType::Food | ResourceType::Grain | ResourceType::Fish | ResourceType::Meat
+        )
+    }
+
     /// Get ASCII character for rendering
     pub fn ascii_char(&self) -> char {
         match self {

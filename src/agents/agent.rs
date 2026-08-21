@@ -779,6 +779,11 @@ impl Agent {
         // Initialize default behavior trees for each drive type
         agent.initialize_behavior_trees();
 
+        // Let the traits reach the senses. Without this a Deaf agent hears
+        // normally and a Blind one sees normally, because nothing else calls
+        // this - it had no callers at all.
+        agent.apply_trait_sensory_modifications();
+
         agent
     }
 
@@ -837,6 +842,30 @@ impl Agent {
         agent
     }
 
+    /// How far the agent can make out detail on the ground, in tiles.
+    ///
+    /// This is shorter than `Vision::detection_range`, which is about spotting
+    /// movement at a distance: recognising a berry bush or a seam of ore is
+    /// nearer work. Acuity scales it, so a blind agent gets zero and sees
+    /// nothing of the world around it.
+    pub fn sight_range(&self) -> u32 {
+        /// How far an unimpaired agent recognises what it is looking at
+        const BASE_SIGHT_RANGE: f32 = 10.0;
+
+        if self.traits.has(crate::core::traits::Trait::Blind)
+            || self.senses.vision.impaired
+        {
+            return 0;
+        }
+
+        (BASE_SIGHT_RANGE * self.senses.vision.acuity.clamp(0.0, 1.0)).round() as u32
+    }
+
+    /// Whether the agent can see at all
+    pub fn can_see(&self) -> bool {
+        self.sight_range() > 0
+    }
+
     /// Apply trait-based sensory and physical modifications
     /// Should be called after traits are set/modified
     pub fn apply_trait_sensory_modifications(&mut self) {
@@ -846,6 +875,12 @@ impl Agent {
         if self.traits.has(Trait::Deaf) {
             self.senses.hearing.sensitivity = 0.0;
             self.senses.hearing.set_impaired(true);
+        }
+
+        // Blind trait: no sight at all
+        if self.traits.has(Trait::Blind) {
+            self.senses.vision.acuity = 0.0;
+            self.senses.vision.set_impaired(true);
         }
 
         // Suspicious trait: Increase noise curiosity rate (already handled in emotion_modifiers)

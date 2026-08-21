@@ -54,6 +54,16 @@ Verified reachable from `Simulation::tick()`.
   developmental nutrition that modifies adult stats
 - Inheritance of traits and behaviour trees from both parents
 
+### Perception
+- Smell: the world emits food and water scents to agents in range, which
+  become percepts and spatial memories
+- Sight: agents discover terrain, resources and buildings within their sight
+  range each tick, and what they see of food and water reaches the same
+  spatial memory that foraging reads. The `Blind` trait sets sight range to
+  zero, leaving such agents to smell and word of mouth
+- Agents share what they know of resource locations with neighbours, so a
+  blind agent can be told where the food is
+
 ### Behaviour
 - 14 drives with per-agent weights and thresholds
 - Behaviour trees with weight-based learning and pruning
@@ -99,16 +109,25 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::metrics` (`SimulationMetrics`) | Works when driven; `examples/ascii_simulation.rs` and `examples/phase4_analytics.rs` show how |
 | `analytics::emergence` (`EmergenceDetector`) | Same — driven by those two examples only |
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
-| Vision (`senses::Vision`) | Nothing calls `update_visible_agents` or `update_visible_positions`, so agents never see anything |
+| Vision, as a percept channel (`senses::Vision`) | Sight now drives exploration and resource discovery, but nothing calls `update_visible_agents` or `update_visible_positions`, so `visible_agents` stays empty and agents still never see *each other* |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
 | `world::zoning`, `world::territory` | Read by building placement scoring (`spatial_planning.rs`), but nothing outside tests ever calls `add_zone` or `claim_territory`, so both managers are always empty and every bonus they contribute is zero |
 
-**Consequence for perception:** the only sensory channel the simulation feeds
-is smell, and only for food and water. Agents locate resources by scent and
-by remembering where they have been. They do not see each other; social
-proximity is computed directly by `Population`, not perceived. Any reasoning
-that depends on `Percept::AgentDetected` or on sound is a dead path in a live
-run.
+**Consequence for perception:** agents find the world by smell and sight —
+scent for food and water up to 25 tiles, sight for everything within 10 —
+but the percept pipeline itself is still fed only by smell. `Percept::
+ResourceDetected` comes from scents; `Percept::AgentDetected` comes from
+`visible_agents`, which nothing populates, so agents do not see each other and
+social proximity is computed directly by `Population` rather than perceived.
+Anything depending on sound is likewise a dead path.
+
+Note that smell reaches further than sight for food (25 against 10), so
+wiring sight up changed what agents *know* far more than what they eat: it
+roughly doubled the resources an agent has catalogued, while the fraction fed
+moved from 99.3% to 100%. Sight earns its place by finding what smell never
+reports — wood, stone, ore, buildings and the shape of the ground.
+`BASE_SIGHT_RANGE` in `Agent::sight_range` is the dial if sight should
+outrange smell.
 
 ---
 

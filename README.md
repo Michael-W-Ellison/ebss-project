@@ -24,7 +24,8 @@ across 181 source files, with 1,055 library tests.
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,092 tests across the workspace.
 The work left is connecting rather than building — several analytics
-components are libraries with no caller, and perception is smell-only. See
+components are libraries with no caller, and agents cannot yet see each other
+or hear anything. See
 [PROJECT_STATUS.txt](PROJECT_STATUS.txt) for measured detail and
 [ISSUES_FOUND.md](ISSUES_FOUND.md) for the current defect list. The
 [Software Design Document](EBSS_Software_Design_Document.docx) holds the
@@ -41,8 +42,10 @@ original specifications.
 - ✅ Environment Abstraction: plugin interface, crafting, technology progression
 - 🚧 Analytics: emergence detection, metrics and replay exist but the
   simulation loop does not drive them — examples do
-- 🚧 Perception: agents smell food and water; vision and hearing are built but
-  nothing feeds them from the world
+- ✅ Perception: agents smell food and water, and see terrain, resources and
+  buildings around them; the Blind trait takes sight away
+- 🚧 Agents cannot yet see each other or hear anything: those percept channels
+  are built but unfed
 - 📋 Clothing behavior: recipes and equipment exist, but no agent is driven to
   make or wear anything, so insulation is always zero
 
@@ -160,7 +163,8 @@ the code actually does, verified by running it — not what was planned.
 ### Beyond the original plan
 - [ ] Give world generation a seed, so runs are reproducible and two flaky
       tests become deterministic
-- [ ] Feed vision and hearing from the world, so perception is not smell-only
+- [ ] Feed the remaining percept channels: agents discover the world by sight
+      now, but still cannot see each other or hear anything
 - [ ] Drive agents to make and wear clothing, so cold is solvable
 - [ ] Characterise long-run behaviour past 100k ticks
 

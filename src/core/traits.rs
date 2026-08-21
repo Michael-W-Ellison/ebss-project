@@ -76,6 +76,7 @@ pub enum Trait {
     // Investigation and Awareness Traits
     Suspicious,     // Noise curiosity increases at twice rate
     Deaf,           // Immune to noise events
+    Blind,          // Cannot see: no sight-based discovery of the world
     Uncaring,       // Reduces noise curiosity by half
     Paranoid,       // Doesn't trust word, assumes malice
 
@@ -179,6 +180,7 @@ impl Trait {
             Trait::Curious => "Happiness from learning and discovering",
             Trait::Suspicious => "Noise curiosity increases at twice rate",
             Trait::Deaf => "Immune to noise events",
+            Trait::Blind => "Cannot see; finds the world by smell and memory alone",
             Trait::Uncaring => "Reduces noise curiosity by half",
             Trait::Paranoid => "Doesn't trust others, assumes malice",
             Trait::Vengeful => "Prevents anger loss unless action taken against target",
@@ -266,6 +268,7 @@ impl Trait {
             Trait::Curious => "Curious",
             Trait::Suspicious => "Suspicious",
             Trait::Deaf => "Deaf",
+            Trait::Blind => "Blind",
             Trait::Uncaring => "Uncaring",
             Trait::Paranoid => "Paranoid",
             Trait::Vengeful => "Vengeful",

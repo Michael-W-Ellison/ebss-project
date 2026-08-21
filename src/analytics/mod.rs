@@ -293,6 +293,11 @@ impl Simulation {
         // Sync simulation tick with population tick
         self.current_tick = self.population.current_tick;
 
+        // Let agents look around them. Sight needs both the population and the
+        // world, which only exist together here, so this is the one place it
+        // can happen - and until it did, agents found food by smell alone.
+        self.population.process_exploration_with_world(&mut self.world);
+
         // Tick world systems (fauna and flora AI, growth, etc.)
         self.world.climate.tick();
         self.world.animals.tick();
@@ -1558,7 +1563,14 @@ impl Simulation {
     }
 
     /// The inventory item a resource yields when eaten, if it is edible at all
+    ///
+    /// `ResourceType::is_edible` is the authority on whether something counts
+    /// as food; this only says what it turns into in a pack.
     fn edible_item_for(resource: crate::world::ResourceType) -> Option<crate::world::ItemType> {
+        if !resource.is_edible() {
+            return None;
+        }
+
         Self::edible_resources()
             .into_iter()
             .find(|(resource_type, _)| *resource_type == resource)

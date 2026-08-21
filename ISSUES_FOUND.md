@@ -65,12 +65,15 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 5. Perception is smell-only
+### 5. Agents still cannot see each other, or hear anything
 
-Agents smell food and water. Nothing feeds vision or hearing from the world,
-so `Percept::AgentDetected` and every sound-derived percept are dead paths in
-a live run. Social behaviour works because `Population` computes proximity
-directly rather than perceiving it. See SIMULATION_AUDIT.md.
+Sight now discovers terrain, resources and buildings, but only through the
+exploration path. The percept pipeline's own vision channel reads
+`vision.visible_agents`, which nothing populates, so `Percept::AgentDetected`
+is still never produced and agents do not perceive one another — social
+behaviour works because `Population` computes proximity directly. Hearing is
+unfed entirely, so every sound-derived percept is a dead path. See
+SIMULATION_AUDIT.md.
 
 ### 6. Zoning and territory are never established
 
@@ -138,6 +141,15 @@ Listed so nobody re-investigates them. Each has regression tests in
   keeps their costs and requirements in an `ActionProfile` beside them, which
   also gives `ActionType`, `ActionEffects` and `ActionRequirements` a user
   again — they were orphaned.
+- **Sight did nothing.** `process_exploration_with_world`, the only path that
+  discovers the world by line of sight, had no callers, so agents found food by
+  smell alone. It now runs each tick from `Simulation::tick`, scaled by the
+  agent's visual acuity, and what an agent sees of food and water reaches the
+  spatial memory that foraging reads. A new `Blind` trait sets sight range to
+  zero.
+- **Sensory traits never reached the senses.**
+  `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
+  perfectly well. It now runs at creation and when a newborn inherits traits.
 - **Conception crashed the simulation.** Fertility could exceed 1.0 and was
   used as a probability; 44.7% of adult pairs produced odds above 1.0, which
   panics the sampler. Only reachable once agents could feed and water
