@@ -1259,7 +1259,11 @@ impl Simulation {
                 });
             }
 
-            return Some(Action::Gather { resource_type: "food".to_string() });
+            // Hungry but not yet starving, with nothing in reach and nowhere
+            // known to try: let the tick go to whatever comes next - sheltering
+            // from the cold, a plan, a goal. Gathering thin air on the spot
+            // accomplishes nothing and blocks everything the agent could
+            // usefully be doing, including getting out of the weather.
         }
 
         // Collapse-level fatigue takes precedence over everything but hunger
@@ -1283,7 +1287,12 @@ impl Simulation {
         }
 
         // PRIORITY 2: Check if agent needs shelter due to exposure
-        if agent.exposure_status.exposure_damage > 0.5 {
+        //
+        // Triggered on what the agent is suffering right now, not on the
+        // running total of damage taken: that total only ever rises, so once
+        // it passed the threshold an agent sought shelter forever, whatever
+        // the weather had done since.
+        if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }
 
@@ -1332,6 +1341,76 @@ impl Simulation {
     /// How far an agent will walk to reach a resource while foraging, in
     /// walking (Manhattan) distance
     const FORAGE_RADIUS: u32 = 25;
+
+    /// Whether standing on this tile counts as being under cover
+    fn is_shelter_tile(&self, position: &crate::world::Position) -> bool {
+        use crate::world::TerrainType;
+
+        let in_building = self
+            .world
+            .get_building_at(position)
+            .map(|building| building.is_completed())
+            .unwrap_or(false);
+
+        let in_woodland = self
+            .world
+            .grid
+            .get_tile(position)
+            .map(|tile| matches!(tile.terrain.terrain_type, TerrainType::Forest))
+            .unwrap_or(false);
+
+        in_building || in_woodland
+    }
+
+    /// Closest cover the agent can actually walk to, by walking distance.
+    ///
+    /// Reachability rather than raw proximity: a hut across a lake is no use,
+    /// and heading for one leaves the agent stepping back and forth in the
+    /// weather instead of sheltering. `None` means there is nowhere to go, and
+    /// the agent is better off getting on with something it can accomplish.
+    fn nearest_shelter_from(&self, position: (i32, i32, i32)) -> Option<crate::world::Position> {
+        use crate::world::Position;
+        use std::collections::{HashSet, VecDeque};
+
+        const MAX_VISITED: usize = 4096;
+
+        let start = (position.0, position.1);
+
+        let mut queue = VecDeque::new();
+        let mut seen = HashSet::new();
+
+        queue.push_back(start);
+        seen.insert(start);
+
+        let mut visited = 0usize;
+
+        while let Some(current) = queue.pop_front() {
+            visited += 1;
+            if visited > MAX_VISITED {
+                break;
+            }
+
+            let candidate = Position::new(current.0, current.1);
+
+            if self.is_shelter_tile(&candidate) {
+                return Some(candidate);
+            }
+
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let next = (current.0 + dx, current.1 + dy);
+
+                if !seen.insert(next) {
+                    continue;
+                }
+
+                if self.is_passable_tile(next.0, next.1) {
+                    queue.push_back(next);
+                }
+            }
+        }
+
+        None
+    }
 
     /// Position of the closest edible resource within `radius` walking steps
     fn nearest_edible_within(
@@ -1456,7 +1535,18 @@ impl Simulation {
             }
         }
 
-        !self.world.is_position_occupied(&pos)
+        // A finished building is somewhere to go, not an obstacle: agents take
+        // shelter by standing in one, so refusing to walk onto its tile makes
+        // shelter unreachable by any route the pathfinder will take. A site
+        // still under construction is scaffolding, and does block.
+        if let Some(building) = self.world.get_building_at(&pos) {
+            return building.is_completed();
+        }
+
+        // Resources sit on the ground rather than walling it off - a berry
+        // patch or a stand of trees is somewhere to walk to, not around, and
+        // treating them as solid cuts agents off from woodland shelter.
+        true
     }
 
     /// First step of a route from `from` to `target`, routing around obstacles.
@@ -3248,64 +3338,29 @@ impl Simulation {
                         ));
                 }
 
-                // Find nearest shelter
-                let mut nearest_shelter: Option<crate::world::Position> = None;
-                let mut min_distance = u32::MAX;
+                let nearest_shelter = self.nearest_shelter_from(agent_tuple_pos);
 
-                // Check buildings
-                for building in &self.world.buildings {
-                    if building.is_completed() {
-                        let dist = agent_pos.distance_to(&building.position);
-                        if dist < min_distance {
-                            min_distance = dist;
-                            nearest_shelter = Some(building.position);
-                        }
-                    }
-                }
-
-                // Check for forest tiles (within reasonable search radius)
-                for dx in -5..=5 {
-                    for dy in -5..=5 {
-                        let check_pos = crate::world::Position::new(
-                            agent_pos.x + dx,
-                            agent_pos.y + dy
-                        );
-
-                        if let Some(tile) = self.world.grid.get_tile(&check_pos) {
-                            if matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest) {
-                                let dist = agent_pos.distance_to(&check_pos);
-                                if dist < min_distance {
-                                    min_distance = dist;
-                                    nearest_shelter = Some(check_pos);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Move towards nearest shelter
+                // Move towards nearest shelter, routing around obstacles.
+                // Stepping straight at it stalls against the first lake or
+                // building in the way, which strands the agent in the weather
+                // it was trying to escape.
                 if let Some(shelter_pos) = nearest_shelter {
-                    let agent = &mut self.population.agents[agent_index];
-                    let dx = (shelter_pos.x - agent_pos.x).signum();
-                    let dy = (shelter_pos.y - agent_pos.y).signum();
-                    let new_pos = crate::world::Position::new(
-                        agent_pos.x + dx,
-                        agent_pos.y + dy
-                    );
+                    let target = (shelter_pos.x, shelter_pos.y, agent_tuple_pos.2);
 
-                    // Check if path is walkable
-                    if self.world.grid.get_tile(&new_pos).map(|t| t.terrain.is_walkable()).unwrap_or(false) {
-                        agent.state.position = (new_pos.x, new_pos.y, 0);
+                    match self.next_step_toward(agent_tuple_pos, target) {
+                        Some(step) => {
+                            let agent = &mut self.population.agents[agent_index];
+                            agent.state.position = step;
 
-                        ActionResult::success()
-                            .with_drive_change(DriveType::Safety, -0.1)
-                            .with_energy_cost(5.0)
-                            .with_message(format!(
-                                "Moving towards shelter at ({}, {})",
-                                shelter_pos.x, shelter_pos.y
-                            ))
-                    } else {
-                        ActionResult::failure("Path to shelter blocked".to_string())
+                            ActionResult::success()
+                                .with_drive_change(DriveType::Safety, -0.1)
+                                .with_energy_cost(5.0)
+                                .with_message(format!(
+                                    "Moving towards shelter at ({}, {})",
+                                    shelter_pos.x, shelter_pos.y
+                                ))
+                        }
+                        None => ActionResult::failure("Path to shelter blocked".to_string()),
                     }
                 } else {
                     ActionResult::failure("No shelter found nearby".to_string())
@@ -4620,14 +4675,15 @@ impl Simulation {
 
             let environmental_temp = climate.temperature;
 
-            // Update agent's body temperature based on climate
-            agent.update_temperature(&climate);
-
             // Check if agent has shelter
             // Agent has shelter if they're in a completed building
             let has_shelter = self.world.buildings.iter().any(|b| {
                 b.position == agent_pos && b.is_completed()
             }) || matches!(terrain_type, crate::world::TerrainType::Forest); // Forest provides partial shelter
+
+            // Update agent's body temperature based on climate, taking cover
+            // into account so that reaching shelter actually warms the agent
+            agent.update_temperature_with_shelter(&climate, has_shelter);
 
             // Check if agent has water access:
             // 1. Water containers in inventory (waterskin, water_flask, water_bucket)

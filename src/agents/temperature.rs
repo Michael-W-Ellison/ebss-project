@@ -72,7 +72,30 @@ impl BodyTemperature {
         (excess / 10.0).min(1.0)
     }
 
+    /// How fast the body exchanges heat with its surroundings, per tick,
+    /// per degree of difference
+    const BASE_TRANSFER_RATE: f32 = 0.02;
+
+    /// Degrees per tick the body can generate by shivering and burning fuel
+    const WARMING_CAPACITY: f32 = 0.6;
+
+    /// Degrees per tick the body can shed by sweating. Lower than the warming
+    /// capacity: shedding heat is the harder direction for a body.
+    const COOLING_CAPACITY: f32 = 0.1;
+
     /// Update body temperature based on environment and insulation
+    ///
+    /// Core temperature is held near the ideal by metabolic regulation, not
+    /// left to drift toward the air: a person standing in 10°C weather is
+    /// uncomfortable, not 10°C inside. Regulation counteracts what the
+    /// environment is doing up to a fixed capacity, and only once the
+    /// environment outpaces that capacity does the core actually move -
+    /// which is what insulation buys, by slowing the exchange enough for
+    /// regulation to keep up.
+    ///
+    /// Modelling regulation as a weak pull toward the ideal instead leaves
+    /// every agent's temperature settling near ambient, so in ordinary
+    /// weather they are permanently hypothermic.
     pub fn update(
         &mut self,
         environmental_temp: Temperature,
@@ -81,26 +104,31 @@ impl BodyTemperature {
     ) {
         let temp_diff = environmental_temp - self.current;
 
-        // Calculate heat transfer rate
-        let base_transfer_rate = 0.1; // How fast temperature changes
-
         let effective_transfer = if temp_diff > 0.0 {
             // Environment is warmer - agent heats up
             // Heat resistance reduces heating
-            base_transfer_rate * (1.0 - heat_resistance.min(0.9))
+            Self::BASE_TRANSFER_RATE * (1.0 - heat_resistance.clamp(0.0, 0.9))
         } else {
             // Environment is cooler - agent cools down
             // Cold insulation reduces cooling
-            base_transfer_rate * (1.0 - cold_insulation.min(0.9))
+            Self::BASE_TRANSFER_RATE * (1.0 - cold_insulation.clamp(0.0, 0.9))
         };
 
-        // Apply temperature change
-        let change = temp_diff * effective_transfer;
-        self.current += change;
+        let environmental_change = temp_diff * effective_transfer;
 
-        // Body tries to regulate back to ideal (metabolic regulation)
-        let regulation = (self.ideal - self.current) * 0.05; // Slow regulation
-        self.current += regulation;
+        // Regulation opposes the environment, but only as far as the body can
+        // manage and never further than the environment is pushing
+        let regulation = if environmental_change < 0.0 {
+            (-environmental_change).min(Self::WARMING_CAPACITY)
+        } else {
+            -environmental_change.min(Self::COOLING_CAPACITY)
+        };
+
+        self.current += environmental_change + regulation;
+
+        // Recovering the last of the deviation once conditions allow
+        let recovery = (self.ideal - self.current) * 0.05;
+        self.current += recovery;
     }
 }
 
@@ -135,6 +163,29 @@ impl Climate {
     }
 
     /// Get effective temperature (accounting for wind chill / heat index)
+    /// Temperature the body experiences while under cover.
+    ///
+    /// Shelter blocks the wind and holds some warmth, so the inside of a hut
+    /// during a cold snap is milder than the field outside it. It does not
+    /// make the weather pleasant - it takes the edge off, which is the
+    /// difference between sheltering being worth the walk and being pointless.
+    pub fn sheltered_effective_temperature(&self) -> Temperature {
+        /// What a sheltered space tends toward: cool, but survivable
+        const INDOOR_COMFORT: Temperature = 18.0;
+        /// How far shelter closes the gap to that
+        const SHELTER_MODERATION: f32 = 0.6;
+
+        // Out of the wind, so no wind chill
+        let out_of_the_wind = Climate {
+            wind_speed: 0.0,
+            ..self.clone()
+        };
+
+        let outside = out_of_the_wind.effective_temperature();
+
+        outside + (INDOOR_COMFORT - outside) * SHELTER_MODERATION
+    }
+
     pub fn effective_temperature(&self) -> Temperature {
         let mut temp = self.temperature;
 

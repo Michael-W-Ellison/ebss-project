@@ -1306,9 +1306,23 @@ impl Agent {
     /// # Arguments
     /// * `climate` - Environmental climate conditions
     pub fn update_temperature(&mut self, climate: &super::Climate) {
+        self.update_temperature_with_shelter(climate, false);
+    }
+
+    /// Update body temperature, accounting for whether the agent is under cover
+    ///
+    /// Shelter has to reach the body to be worth seeking: without this an
+    /// agent inside a building cools exactly as fast as one standing in the
+    /// open, so sheltering never resolves the exposure that sent it indoors.
+    pub fn update_temperature_with_shelter(&mut self, climate: &super::Climate, has_shelter: bool) {
         let cold_insulation = self.body.total_cold_insulation();
         let heat_resistance = self.body.total_heat_resistance();
-        let effective_temp = climate.effective_temperature();
+
+        let effective_temp = if has_shelter {
+            climate.sheltered_effective_temperature()
+        } else {
+            climate.effective_temperature()
+        };
 
         self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
     }
