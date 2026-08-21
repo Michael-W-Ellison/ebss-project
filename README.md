@@ -21,9 +21,10 @@ simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
 across 181 source files, with 1,055 library tests.
 
-The work left is connecting and hardening rather than building: the Bevy front
-end and the bundled plugin crate no longer compile against the current API, and
-several analytics components are libraries with no caller. See
+Every build configuration compiles: default, `--features gui`,
+`--features bevy_gui` and `--workspace`, with 1,092 tests across the workspace.
+The work left is connecting rather than building — several analytics
+components are libraries with no caller, and perception is smell-only. See
 [PROJECT_STATUS.txt](PROJECT_STATUS.txt) for measured detail and
 [ISSUES_FOUND.md](ISSUES_FOUND.md) for the current defect list. The
 [Software Design Document](EBSS_Software_Design_Document.docx) holds the
@@ -134,8 +135,8 @@ the code actually does, verified by running it — not what was planned.
 - [x] Template-based crafting, smelting and clothing recipes
 - [x] Minecraft-style environment (`src/environment/minecraft_survival.rs`)
 - [x] Tool effectiveness calculations
-- [ ] The bundled `plugins/minecraft_survival` crate is a stale copy and no
-      longer compiles; the in-tree module above is the current one
+- [x] Bundled `plugins/minecraft_survival` crate, a worked example of the
+      plugin interface — though it duplicates the in-tree module above
 
 ### Phase 3: Social Systems ✅
 - [x] Reproduction, pregnancy, birth and nursing
@@ -153,7 +154,7 @@ the code actually does, verified by running it — not what was planned.
       caller feeds them, as `examples/ascii_simulation.rs` does
 - [ ] Web-based visualization: an HTTP API exists in `analytics/web_api.rs`
       but has no call sites and no front end
-- [ ] Bevy front end does not compile (see ISSUES_FOUND.md)
+- [x] Bevy front end (`cargo run --features bevy_gui --bin ebss_bevy`)
 - [ ] Performance has not been profiled at scale
 
 ### Beyond the original plan

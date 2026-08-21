@@ -17,10 +17,10 @@ been implemented, and a default simulation now runs a society that feeds
 itself, waters itself, shelters from the weather, and reproduces over tens of
 thousands of ticks without intervention.
 
-What remains is not "write the systems" but "connect and harden what exists":
-one GUI front end and one plugin crate no longer compile against the current
-API, several analytics components are libraries nobody calls, and a handful
-of behaviours the design calls for (agents making clothing, for one) have
+What remains is not "write the systems" but "connect what exists": several
+analytics components are libraries nobody calls, agents perceive the world by
+smell alone because nothing feeds their other senses, and a handful of
+behaviours the design calls for (agents making clothing, for one) have
 supporting code but nothing that drives them.
 
 
@@ -44,29 +44,22 @@ SIZE AND ACTIVITY
 
 BUILD STATUS
 ------------
+  Every configuration builds.
+
   cargo build                          WORKS (15 warnings, all unused
                                        variables and imports)
   cargo build --features gui           WORKS (egui front end)
-  cargo test                           WORKS (see TEST STATUS)
-
-  cargo check --features bevy_gui      BROKEN - 9 errors
-      src/bevy_gui/ui/mod.rs:1001-1013 reads fields (infants, children,
-      adolescents, adults, elderly, avg_health, avg_energy, avg_happiness,
-      buildings_construction) that no longer exist on HistoryPoint. A struct
-      was refactored and this call site was not updated. Mechanical to fix.
-
-  cargo check --workspace              BROKEN - 17 errors
-      plugins/minecraft_survival is written against an older API where
-      environment::Action was a struct with `new()`, `.effects`, `.id` and
-      `.action_type`. Action is now an enum. The in-tree equivalent,
-      src/environment/minecraft_survival.rs, is current; the plugin crate is
-      a stale copy.
+  cargo build --features bevy_gui      WORKS (Bevy front end)
+  cargo check --workspace              WORKS (includes the plugin crate)
+  cargo test --workspace               WORKS (see TEST STATUS)
 
 
 TEST STATUS
 -----------
+  1,092 tests across the workspace:
   1,055 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
+     21 plugin tests (plugins/minecraft_survival)
       1 doc test
 
   All pass, with two known flaky tests that fail intermittently:
@@ -140,15 +133,18 @@ KNOWN GAPS IN BEHAVIOUR
 
 SUGGESTED NEXT STEPS
 --------------------
-  1. Fix the two compile breaks (bevy_gui call site, minecraft_survival
-     plugin). Both are mechanical and both currently block `cargo check
-     --workspace` and the Bevy front end.
-  2. Seed world generation so the two flaky tests become deterministic.
-  3. Decide the fate of the unconnected analytics: wire metrics, emergence
+  1. Seed world generation so the two flaky tests become deterministic and
+     runs become reproducible.
+  2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  4. Give agents a reason to make clothing, so cold is something they solve
+  3. Give agents a reason to make clothing, so cold is something they solve
      rather than endure.
+  4. Decide whether plugins/minecraft_survival should exist at all: it now
+     compiles and its tests pass, but it duplicates
+     src/environment/minecraft_survival.rs. Either merge what is unique to it
+     (Perlin world generation, water structures) into the in-tree module, or
+     keep it as the worked example of writing a plugin.
   5. Clean up the 15 build warnings and the committed
      src/analytics/mod.rs.backup.
   6. Characterise long-run behaviour: population dynamics, technology
@@ -168,8 +164,8 @@ HOW TO BUILD AND RUN
   cargo run --example ascii_simulation  Example that also drives the
                                         analytics modules
 
-  Note: `cargo test --workspace` and `--features bevy_gui` fail today. See
-  BUILD STATUS.
+  cargo run --features bevy_gui --bin ebss_bevy
+                                        Bevy front end
 
 
 A NOTE ON THIS DOCUMENT

@@ -8,11 +8,19 @@ use bevy::prelude::*;
 pub struct HistoryPoint {
     pub tick: u32,
     pub population: usize,
+    /// Population by life stage, as recorded at this tick
+    pub infants: usize,
+    pub children: usize,
+    pub adolescents: usize,
+    pub adults: usize,
+    pub elderly: usize,
     pub average_health: f32,
     pub average_energy: f32,
     pub average_happiness: f32,
     pub total_resources: u32,
     pub buildings_completed: usize,
+    /// Buildings still under construction at this tick
+    pub buildings_construction: usize,
     pub births: u64,
     pub deaths: u64,
 }

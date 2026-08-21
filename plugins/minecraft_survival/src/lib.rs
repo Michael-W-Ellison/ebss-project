@@ -11,9 +11,37 @@ use ebss::environment::*;
 use ebss::core::DriveType;
 use std::any::Any;
 use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use rand::Rng;
-use noise::{NoiseFn, Perlin, Seedable};
+use noise::{NoiseFn, Perlin};
+
+/// What an action costs and demands in this environment.
+///
+/// `Action` itself is an enum of what an agent is doing, and carries no cost
+/// or requirement data, so the plugin keeps that alongside it. Profiles are
+/// keyed by the same action id as `actions`.
+#[derive(Debug, Clone)]
+pub struct ActionProfile {
+    pub action_type: ActionType,
+    pub description: String,
+    pub requirements: ActionRequirements,
+    pub effects: ActionEffects,
+}
+
+impl ActionProfile {
+    fn new(action_type: ActionType, description: &str, effects: ActionEffects) -> Self {
+        Self {
+            action_type,
+            description: description.to_string(),
+            requirements: ActionRequirements::none(),
+            effects,
+        }
+    }
+
+    fn with_requirements(mut self, requirements: ActionRequirements) -> Self {
+        self.requirements = requirements;
+        self
+    }
+}
 
 /// Minecraft-style survival environment plugin
 pub struct MinecraftSurvivalPlugin {
@@ -21,6 +49,8 @@ pub struct MinecraftSurvivalPlugin {
     world_state: WorldState,
     materials: HashMap<String, Material>,
     actions: HashMap<String, Action>,
+    /// Cost and requirement data for each registered action, by the same id
+    action_profiles: HashMap<String, ActionProfile>,
     recipe_book: RecipeBook,
     world_map: HashMap<Position, String>, // Position -> Material ID
     structures: StructureRegistry,
@@ -47,6 +77,7 @@ impl MinecraftSurvivalPlugin {
             world_state: WorldState::new(0),
             materials: HashMap::new(),
             actions: HashMap::new(),
+            action_profiles: HashMap::new(),
             recipe_book: RecipeBook::new(),
             world_map: HashMap::new(),
             structures: StructureRegistry::new(),
@@ -377,142 +408,161 @@ impl MinecraftSurvivalPlugin {
     }
 
     fn register_actions(&mut self) {
-        // Harvest wood
-        let chop_tree = Action::new(
-            "chop_tree".to_string(),
-            "Chop Tree".to_string(),
-            ActionType::Harvest,
-        )
-        .with_description("Chop down a tree for wood".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(5.0)
-                .with_time_cost(100)
-                .with_drive_effect(DriveType::Industry, -0.1)
-                .with_experience("woodcutting".to_string(), 10.0),
-        );
+        // Each action is registered twice: as the `Action` value an agent
+        // performs, and as the profile describing what it costs. The action
+        // enum carries no cost or requirement data of its own.
+        let registrations: Vec<(&str, Action, ActionProfile)> = vec![
+            (
+                "chop_tree",
+                Action::Gather { resource_type: "wood".to_string() },
+                ActionProfile::new(
+                    ActionType::Harvest,
+                    "Chop down a tree for wood",
+                    ActionEffects::none()
+                        .with_energy_cost(5.0)
+                        .with_time_cost(100)
+                        .with_drive_effect(DriveType::Industry, -0.1)
+                        .with_experience("woodcutting".to_string(), 10.0),
+                ),
+            ),
+            (
+                "mine_stone",
+                Action::Gather { resource_type: "stone".to_string() },
+                ActionProfile::new(
+                    ActionType::Harvest,
+                    "Mine stone with a pickaxe",
+                    ActionEffects::none()
+                        .with_energy_cost(8.0)
+                        .with_time_cost(150)
+                        .with_drive_effect(DriveType::Industry, -0.15)
+                        .with_experience("mining".to_string(), 15.0),
+                )
+                .with_requirements(
+                    ActionRequirements::none().with_tool(ToolType::Pickaxe, ToolTier::Wooden),
+                ),
+            ),
+            (
+                "craft",
+                Action::Craft { item_type: String::new() },
+                ActionProfile::new(
+                    ActionType::Craft,
+                    "Craft an item from materials",
+                    ActionEffects::none()
+                        .with_energy_cost(2.0)
+                        .with_time_cost(20)
+                        .with_drive_effect(DriveType::Utility, -0.2)
+                        .with_experience("crafting".to_string(), 5.0),
+                ),
+            ),
+            (
+                "eat",
+                Action::Eat { food_type: String::new() },
+                ActionProfile::new(
+                    ActionType::Eat,
+                    "Consume food to restore hunger",
+                    ActionEffects::none()
+                        .with_time_cost(10)
+                        .with_drive_effect(DriveType::Hunger, -0.5),
+                ),
+            ),
+            (
+                "drink_water",
+                Action::Eat { food_type: "water".to_string() },
+                ActionProfile::new(
+                    ActionType::Eat,
+                    "Drink water to restore thirst",
+                    ActionEffects::none()
+                        .with_time_cost(5)
+                        .with_drive_effect(DriveType::Thirst, -0.6),
+                ),
+            ),
+            (
+                "fill_container",
+                Action::Store { item_type: "water".to_string(), amount: 1 },
+                ActionProfile::new(
+                    ActionType::Store,
+                    "Fill water containers from a water source or structure",
+                    ActionEffects::none().with_energy_cost(2.0).with_time_cost(30),
+                ),
+            ),
+            (
+                "build_structure",
+                Action::Build {
+                    structure_type: String::new(),
+                    position: (0, 0, 0),
+                },
+                ActionProfile::new(
+                    ActionType::Build,
+                    "Construct a building or structure",
+                    ActionEffects::none()
+                        .with_energy_cost(15.0)
+                        .with_time_cost(200)
+                        .with_drive_effect(DriveType::Construction, -0.3)
+                        .with_experience("construction".to_string(), 50.0),
+                ),
+            ),
+            (
+                "draw_water",
+                Action::Retrieve { item_type: "water".to_string(), amount: 1 },
+                ActionProfile::new(
+                    ActionType::Retrieve,
+                    "Draw water from a well, cistern, or water tower",
+                    ActionEffects::none().with_energy_cost(1.0).with_time_cost(15),
+                ),
+            ),
+            (
+                "upgrade_structure",
+                Action::Build {
+                    structure_type: "upgrade".to_string(),
+                    position: (0, 0, 0),
+                },
+                ActionProfile::new(
+                    ActionType::Build,
+                    "Upgrade a structure to the next level",
+                    ActionEffects::none()
+                        .with_energy_cost(20.0)
+                        .with_time_cost(300)
+                        .with_drive_effect(DriveType::Construction, -0.4)
+                        .with_experience("construction".to_string(), 75.0),
+                ),
+            ),
+        ];
 
-        // Mine stone
-        let mine_stone = Action::new(
-            "mine_stone".to_string(),
-            "Mine Stone".to_string(),
-            ActionType::Harvest,
-        )
-        .with_description("Mine stone with a pickaxe".to_string())
-        .with_requirements(
-            ActionRequirements::none()
-                .with_tool(ToolType::Pickaxe, ToolTier::Wooden),
-        )
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(8.0)
-                .with_time_cost(150)
-                .with_drive_effect(DriveType::Industry, -0.15)
-                .with_experience("mining".to_string(), 15.0),
-        );
-
-        // Craft
-        let craft = Action::new(
-            "craft".to_string(),
-            "Craft".to_string(),
-            ActionType::Craft,
-        )
-        .with_description("Craft an item from materials".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(2.0)
-                .with_time_cost(20)
-                .with_drive_effect(DriveType::Utility, -0.2)
-                .with_experience("crafting".to_string(), 5.0),
-        );
-
-        // Eat food
-        let eat = Action::new(
-            "eat".to_string(),
-            "Eat".to_string(),
-            ActionType::Eat,
-        )
-        .with_description("Consume food to restore hunger".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_time_cost(10)
-                .with_drive_effect(DriveType::Hunger, -0.5),
-        );
-
-        // Drink water
-        let drink = Action::new(
-            "drink_water".to_string(),
-            "Drink Water".to_string(),
-            ActionType::Eat, // Reusing Eat action type for consumption
-        )
-        .with_description("Drink water to restore thirst".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_time_cost(5)
-                .with_drive_effect(DriveType::Thirst, -0.6),
-        );
-
-        // Fill water container from source
-        let fill_container = Action::new(
-            "fill_container".to_string(),
-            "Fill Water Container".to_string(),
-            ActionType::Store,
-        )
-        .with_description("Fill water containers from a water source or structure".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(2.0)
-                .with_time_cost(30),
-        );
-
-        // Build structure
-        let build_structure = Action::new(
-            "build_structure".to_string(),
-            "Build Structure".to_string(),
-            ActionType::Build,
-        )
-        .with_description("Construct a building or structure".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(15.0)
-                .with_time_cost(200)
-                .with_drive_effect(DriveType::Construction, -0.3)
-                .with_experience("construction".to_string(), 50.0),
-        );
-
-        // Draw water from structure
-        let draw_water = Action::new(
-            "draw_water".to_string(),
-            "Draw Water".to_string(),
-            ActionType::Retrieve,
-        )
-        .with_description("Draw water from a well, cistern, or water tower".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(1.0)
-                .with_time_cost(15),
-        );
-
-        // Upgrade structure
-        let upgrade_structure = Action::new(
-            "upgrade_structure".to_string(),
-            "Upgrade Structure".to_string(),
-            ActionType::Build,
-        )
-        .with_description("Upgrade a structure to the next level".to_string())
-        .with_effects(
-            ActionEffects::none()
-                .with_energy_cost(20.0)
-                .with_time_cost(300)
-                .with_drive_effect(DriveType::Construction, -0.4)
-                .with_experience("construction".to_string(), 75.0),
-        );
-
-        // Register all actions
-        for action in vec![chop_tree, mine_stone, craft, eat, drink, fill_container,
-                           build_structure, draw_water, upgrade_structure] {
-            self.actions.insert(action.id.clone(), action);
+        for (id, action, profile) in registrations {
+            self.actions.insert(id.to_string(), action);
+            self.action_profiles.insert(id.to_string(), profile);
         }
+    }
+
+    /// Find the registered id for an action an agent is performing.
+    ///
+    /// Actions arrive as enum values with no id attached, so this matches them
+    /// back against what was registered. Gathering and eating vary by what is
+    /// being gathered or eaten, so those are matched on the payload.
+    fn action_id_for(&self, action: &Action) -> Option<&str> {
+        match action {
+            Action::Gather { resource_type } => match resource_type.as_str() {
+                "wood" => Some("chop_tree"),
+                "stone" => Some("mine_stone"),
+                _ => None,
+            },
+            Action::Craft { .. } => Some("craft"),
+            Action::Eat { food_type } if food_type == "water" => Some("drink_water"),
+            Action::Eat { .. } => Some("eat"),
+            Action::Store { item_type, .. } if item_type == "water" => Some("fill_container"),
+            Action::Retrieve { item_type, .. } if item_type == "water" => Some("draw_water"),
+            Action::Build { structure_type, .. } if structure_type == "upgrade" => {
+                Some("upgrade_structure")
+            }
+            Action::Build { .. } => Some("build_structure"),
+            _ => None,
+        }
+    }
+
+    /// Cost and requirement data for an action, if this environment has any
+    pub fn profile_for(&self, action: &Action) -> Option<&ActionProfile> {
+        self.action_id_for(action)
+            .and_then(|id| self.action_profiles.get(id))
     }
 
     fn register_recipes(&mut self) {
@@ -684,7 +734,7 @@ impl MinecraftSurvivalPlugin {
 
     fn generate_world(&mut self) {
         let config = self.config.as_ref().unwrap();
-        let (width, depth, max_height) = config.world_size;
+        let (width, depth, _max_height) = config.world_size;
         let mut rng = rand::thread_rng();
 
         // Initialize Perlin noise generators with different seeds for varied terrain
@@ -847,23 +897,25 @@ impl EnvironmentPlugin for MinecraftSurvivalPlugin {
         action: &Action,
         context: ActionContext,
     ) -> EnvironmentResult<ActionResult> {
-        // Simple action execution logic
-        let mut result = ActionResult::success()
-            .with_energy_cost(action.effects.energy_cost);
+        let mut result = ActionResult::success();
 
-        // Add drive changes
-        for (drive, amount) in &action.effects.drive_effects {
-            result = result.with_drive_change(*drive, *amount);
+        // Apply the registered costs for this action, if it is one this
+        // environment knows about. Unregistered actions simply carry no cost.
+        if let Some(profile) = self.profile_for(action) {
+            result = result.with_energy_cost(profile.effects.energy_cost);
+
+            for (drive, amount) in &profile.effects.drive_effects {
+                result = result.with_drive_change(*drive, *amount);
+            }
+
+            for exp in profile.effects.experience_gain.values() {
+                result.experience += exp;
+            }
         }
 
-        // Add experience
-        for (skill, exp) in &action.effects.experience_gain {
-            result.experience += exp;
-        }
-
-        // Handle specific action types
-        match &action.action_type {
-            ActionType::Harvest => {
+        // Then whatever the action actually does
+        match action {
+            Action::Gather { .. } => {
                 if let Some(material_id) = context.target_material {
                     if let Some(material) = self.materials.get(&material_id) {
                         let quantity = rand::thread_rng().gen_range(
@@ -873,7 +925,7 @@ impl EnvironmentPlugin for MinecraftSurvivalPlugin {
                     }
                 }
             }
-            ActionType::Eat => {
+            Action::Eat { .. } => {
                 if let Some(material_id) = context.target_material {
                     if let Some(material) = self.materials.get(&material_id) {
                         // Handle food
@@ -891,27 +943,23 @@ impl EnvironmentPlugin for MinecraftSurvivalPlugin {
                     }
                 }
             }
-            ActionType::Store => {
+            Action::Store { item_type, .. } if item_type == "water" => {
                 // Fill water containers from source or structure
-                if action.id == "fill_container" {
-                    result = result.with_message("Water containers filled".to_string());
-                    // Note: Actual container filling would be handled by the agent's inventory system
-                }
+                result = result.with_message("Water containers filled".to_string());
+                // Note: Actual container filling would be handled by the agent's inventory system
             }
-            ActionType::Build => {
+            Action::Retrieve { item_type, .. } if item_type == "water" => {
+                // Draw water from structures
+                result = result.with_message("Water drawn from structure".to_string());
+                // Note: Would check for nearby water storage structures
+            }
+            Action::Build { structure_type, .. } => {
                 // Build or upgrade structures
-                if action.id == "build_structure" {
+                if structure_type == "upgrade" {
+                    result = result.with_message("Structure upgrade in progress".to_string());
+                } else {
                     result = result.with_message("Structure construction in progress".to_string());
                     // Note: Structure construction would create a Structure instance
-                } else if action.id == "upgrade_structure" {
-                    result = result.with_message("Structure upgrade in progress".to_string());
-                }
-            }
-            ActionType::Retrieve => {
-                // Draw water from structures
-                if action.id == "draw_water" {
-                    result = result.with_message("Water drawn from structure".to_string());
-                    // Note: Would check for nearby water storage structures
                 }
             }
             _ => {}
@@ -1016,5 +1064,98 @@ mod tests {
 
         assert!(book.get_recipe("planks").is_some());
         assert!(book.get_recipe("wooden_pickaxe").is_some());
+    }
+
+    /// Registered actions must be findable by id and carry their costs.
+    #[test]
+    fn test_actions_registered_with_profiles() {
+        let plugin = MinecraftSurvivalPlugin::new();
+
+        for id in [
+            "chop_tree",
+            "mine_stone",
+            "craft",
+            "eat",
+            "drink_water",
+            "fill_container",
+            "build_structure",
+            "draw_water",
+            "upgrade_structure",
+        ] {
+            let action = plugin
+                .get_action(id)
+                .unwrap_or_else(|| panic!("action {id} should be registered"));
+
+            let profile = plugin
+                .profile_for(action)
+                .unwrap_or_else(|| panic!("action {id} should have a cost profile"));
+
+            assert!(
+                !profile.description.is_empty(),
+                "action {id} should describe itself"
+            );
+        }
+
+        // Mining needs a pickaxe; chopping does not
+        let mine = plugin.get_action("mine_stone").unwrap();
+        assert!(plugin.profile_for(mine).unwrap().requirements.required_tool.is_some());
+
+        let chop = plugin.get_action("chop_tree").unwrap();
+        assert!(plugin.profile_for(chop).unwrap().requirements.required_tool.is_none());
+    }
+
+    /// An action performed by an agent must map back to what was registered,
+    /// since actions arrive as enum values with no id attached.
+    #[test]
+    fn test_performed_actions_map_back_to_their_profiles() {
+        let plugin = MinecraftSurvivalPlugin::new();
+
+        let chopping = Action::Gather { resource_type: "wood".to_string() };
+        assert_eq!(
+            plugin.profile_for(&chopping).map(|p| p.effects.energy_cost),
+            Some(5.0)
+        );
+
+        // Drinking and eating are both Eat, told apart by what is consumed
+        let drinking = Action::Eat { food_type: "water".to_string() };
+        let eating = Action::Eat { food_type: "apple".to_string() };
+        assert!(plugin
+            .profile_for(&drinking)
+            .unwrap()
+            .effects
+            .drive_effects
+            .contains_key(&DriveType::Thirst));
+        assert!(plugin
+            .profile_for(&eating)
+            .unwrap()
+            .effects
+            .drive_effects
+            .contains_key(&DriveType::Hunger));
+
+        // An action this environment does not define carries no profile
+        let sleeping = Action::Sleep { duration: 10 };
+        assert!(plugin.profile_for(&sleeping).is_none());
+    }
+
+    /// Executing an action applies the registered costs to the result.
+    #[test]
+    fn test_execute_action_applies_registered_costs() {
+        let mut plugin = MinecraftSurvivalPlugin::new();
+
+        let chopping = Action::Gather { resource_type: "wood".to_string() };
+        let context = ActionContext::new("test_agent".to_string(), Position::new(0, 0, 0))
+            .with_target_material("wood".to_string());
+
+        let result = plugin
+            .execute_action(&chopping, context)
+            .expect("chopping should execute");
+
+        assert!(result.success);
+        assert_eq!(result.energy_cost, 5.0);
+        assert!(result.experience > 0.0, "chopping should teach woodcutting");
+        assert!(
+            !result.items_gained.is_empty(),
+            "chopping a tree should yield wood"
+        );
     }
 }
