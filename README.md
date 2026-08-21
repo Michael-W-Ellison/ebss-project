@@ -42,8 +42,11 @@ original specifications.
 - ✅ Environment Abstraction: plugin interface, crafting, technology progression
 - 🚧 Analytics: emergence detection, metrics and replay exist but the
   simulation loop does not drive them — examples do
-- ✅ Perception: agents smell food and water, and see terrain, resources and
-  buildings around them; the Blind trait takes sight away
+- ✅ Perception: sight is how agents find things — terrain, resources and
+  buildings within 25 tiles, refreshed every tick, and the Blind trait takes
+  it away. Smell is scaled to what a thing actually gives off: a berry on the
+  bush carries about two tiles, water three, flesh six, food that has turned
+  nine to twenty, and cooking the whole range
 - 🚧 Agents cannot yet see each other or hear anything: those percept channels
   are built but unfed
 - 📋 Clothing behavior: recipes and equipment exist, but no agent is driven to
@@ -161,11 +164,13 @@ the code actually does, verified by running it — not what was planned.
 - [ ] Performance has not been profiled at scale
 
 ### Beyond the original plan
-- [ ] Give world generation a seed, so runs are reproducible and two flaky
+- [ ] Give world generation a seed, so runs are reproducible and three flaky
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
 - [ ] Drive agents to make and wear clothing, so cold is solvable
+- [ ] Drive agents to cook: fires, fuel and cooked food all exist, and cooking
+      is the strongest smell in the model, but nothing has ever lit one
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts

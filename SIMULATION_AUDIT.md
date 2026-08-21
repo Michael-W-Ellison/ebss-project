@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `b8e557e`
+**Last verified:** August 2026, against commit `ea1f67d`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -55,12 +55,25 @@ Verified reachable from `Simulation::tick()`.
 - Inheritance of traits and behaviour trees from both parents
 
 ### Perception
-- Smell: the world emits food and water scents to agents in range, which
-  become percepts and spatial memories
-- Sight: agents discover terrain, resources and buildings within their sight
-  range each tick, and what they see of food and water reaches the same
-  spatial memory that foraging reads. The `Blind` trait sets sight range to
-  zero, leaving such agents to smell and word of mouth
+- Sight, which is how food is actually found: agents discover terrain,
+  resources and buildings within 25 tiles, refreshed every tick rather than
+  once per tile, and what they see of food and water reaches the same spatial
+  memory that foraging reads. The `Blind` trait sets sight range to zero,
+  leaving such agents to smell and word of mouth
+- Smell, scaled to what a thing gives off rather than a flat full-strength
+  scent on everything. As a fraction of the nose's 25-tile range:
+
+  | Source | Strength | Reaches |
+  | --- | --- | --- |
+  | Berries, grain, herbs on the land | 0.08 | ~2 tiles |
+  | Water | 0.12 | ~3 tiles |
+  | Meat, fish | 0.24 | ~6 tiles |
+  | Rotting food, wherever carried | 0.35-0.80 | 9-20 tiles |
+  | Food over a lit fire | 1.00 | 25 tiles |
+
+  Rot is emitted as `ScentType::Decay`, not food: it reports that something is
+  off, and does not send an agent over to eat it. Nothing lights a fire during
+  a run, so the cooking scent is dormant - see **Built, not connected**.
 - Agents share what they know of resource locations with neighbours, so a
   blind agent can be told where the food is
 
@@ -111,23 +124,22 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
 | Vision, as a percept channel (`senses::Vision`) | Sight now drives exploration and resource discovery, but nothing calls `update_visible_agents` or `update_visible_positions`, so `visible_agents` stays empty and agents still never see *each other* |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
+| Cooking | `Simulation` emits the strongest scent in the model from any lit heat source with food in it, but nothing calls `light_heat_source` or `add_to_heat_source` during a run, so no agent has ever smelled cooking |
 | `world::zoning`, `world::territory` | Read by building placement scoring (`spatial_planning.rs`), but nothing outside tests ever calls `add_zone` or `claim_territory`, so both managers are always empty and every bonus they contribute is zero |
 
-**Consequence for perception:** agents find the world by smell and sight —
-scent for food and water up to 25 tiles, sight for everything within 10 —
-but the percept pipeline itself is still fed only by smell. `Percept::
+**Consequence for perception:** agents find the world by sight and smell, but
+the percept pipeline itself is still fed only by smell. `Percept::
 ResourceDetected` comes from scents; `Percept::AgentDetected` comes from
 `visible_agents`, which nothing populates, so agents do not see each other and
 social proximity is computed directly by `Population` rather than perceived.
 Anything depending on sound is likewise a dead path.
 
-Note that smell reaches further than sight for food (25 against 10), so
-wiring sight up changed what agents *know* far more than what they eat: it
-roughly doubled the resources an agent has catalogued, while the fraction fed
-moved from 99.3% to 100%. Sight earns its place by finding what smell never
-reports — wood, stone, ore, buildings and the shape of the ground.
-`BASE_SIGHT_RANGE` in `Agent::sight_range` is the dial if sight should
-outrange smell.
+Sight reaches 25 tiles and every smell food gives off where it lies reaches
+between 2 and 6, so looking is what finds dinner and smelling is what warns
+you the pack has turned. Spatial memory is fed by both, which is why a blind
+agent still eats: rot, a fire, and what the neighbours tell it. The dials are
+`BASE_SIGHT_RANGE` in `Agent::sight_range`,
+`ResourceType::raw_scent_strength` and `FoodData::scent_strength`.
 
 ---
 
@@ -147,18 +159,22 @@ outrange smell.
 
 ## Measured behaviour
 
-From ten independent worlds, twelve starting agents each, eight thousand ticks
-(`Simulation::tick` driven directly, no GUI):
+From forty independent worlds, twelve starting agents each, eight thousand
+ticks (`Simulation::tick` driven directly, no GUI), measured both on this
+commit and on the flat-scent model that preceded it:
 
-| Measure | Result |
-| --- | --- |
-| Populations dying out | 0 of 10 |
-| Population trajectory | 12 → 18-37, by live births |
-| Agents fed at the end | 296 of 299 |
-| Agents hydrated at the end | 291 of 299 |
-| Agents critically exposed | 0 |
-| Typical core temperature | 35-37 °C |
-| Typical time since last drink | ~30 ticks |
+| Measure | Before | After |
+| --- | --- | --- |
+| Populations dying out | 0 of 40 | 0 of 40 |
+| Population at the end | 985 from 480 | 944 from 480 |
+| Agents fed at the end | 934 of 985 (94.8%) | 906 of 944 (96.0%) |
+| Agents hydrated at the end | 970 of 985 (98.5%) | 937 of 944 (99.3%) |
+| Agents critically exposed | 0 | 0 |
+| Typical core temperature | 35-37 °C | 35-37 °C |
+
+Worth knowing before reading too much into a single run: the spread between
+worlds is wide. Twenty-world samples of the same build came out anywhere
+between 92% and 98% fed, which is why the comparison above is over forty.
 
 Thermal model behaviour, by settled core temperature of an unclothed agent:
 
@@ -175,10 +191,12 @@ Thermal model behaviour, by settled core temperature of an unclothed agent:
 
 ## Test coverage
 
-1,055 library tests, 15 integration tests, 1 doc test. All pass, except two
-known flaky tests (`test_resource_clustering`,
-`test_minimize_travel_time_from_agent_position`) that assert on properties a
-randomly generated world does not always have.
+1,070 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
+pass, except three known flaky tests (`test_resource_clustering`,
+`test_minimize_travel_time_from_agent_position`,
+`test_production_building_placed_near_resources`) that assert on properties a
+randomly generated world does not always have. The third was measured at
+4 failures in 120 runs on the commit before this one, so it is not new.
 
 Coverage is dense at the unit level and thin at the "does this run in a real
 simulation" level, which is precisely how the wiring defects survived. The
