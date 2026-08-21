@@ -6,3 +6,4 @@ pub mod survival_loop_tests;
 pub mod shelter_and_exposure_tests;
 pub mod thirst_tests;
 pub mod sight_tests;
+pub mod scent_tests;

@@ -848,9 +848,14 @@ impl Agent {
     /// movement at a distance: recognising a berry bush or a seam of ore is
     /// nearer work. Acuity scales it, so a blind agent gets zero and sees
     /// nothing of the world around it.
+    ///
+    /// It is set to outrange every smell food gives off where it lies - a
+    /// berry carries two tiles, flesh six - because looking, not sniffing, is
+    /// how a person finds dinner. The one thing that beats an eye is a cooking
+    /// fire, which reaches just as far. See `ResourceType::raw_scent_strength`.
     pub fn sight_range(&self) -> u32 {
         /// How far an unimpaired agent recognises what it is looking at
-        const BASE_SIGHT_RANGE: f32 = 10.0;
+        const BASE_SIGHT_RANGE: f32 = 25.0;
 
         if self.traits.has(crate::core::traits::Trait::Blind)
             || self.senses.vision.impaired

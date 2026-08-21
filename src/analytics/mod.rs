@@ -284,7 +284,7 @@ impl Simulation {
     pub fn tick(&mut self) {
         // Let agents smell nearby food and water before they perceive and act,
         // so world resources reach the percept/memory pipeline this tick.
-        self.emit_resource_scents();
+        self.emit_scents();
 
         // Process population lifecycle (aging, starvation, deaths, reproduction)
         // This also increments the tick counter and updates all agents
@@ -1577,14 +1577,21 @@ impl Simulation {
             .map(|(_, item_type)| item_type)
     }
 
-    /// Emit food and water scents from world resources to nearby agents.
+    /// Emit the smells of the world to agents in range.
     ///
     /// Resource percepts are only ever derived from smell, so without this the
-    /// agents never perceive resources at all: they build no spatial memory of
-    /// where food is and starve next to it.
-    fn emit_resource_scents(&mut self) {
+    /// agents never perceive resources at all. What carries how far is
+    /// deliberate: a human nose is poor, and finds food mainly when the food is
+    /// cooking or rotting. Agents find whole, raw food by looking instead.
+    ///
+    /// Three things give themselves away:
+    /// - what lies on the ground, faintly, and mostly if it is flesh
+    /// - food that has turned, wherever it is being carried
+    /// - a lit fire with something in it, which carries furthest of all
+    fn emit_scents(&mut self) {
         use crate::agents::senses::{Scent, ScentType};
-        use crate::world::ResourceType;
+
+        let sources = self.collect_scent_sources();
 
         for agent in &mut self.population.agents {
             if !agent.state.is_alive {
@@ -1593,45 +1600,100 @@ impl Simulation {
 
             let agent_pos = agent.state.position;
 
-            // Resource scents are re-derived from the world every tick, so the
-            // previous set is dropped first. Appending instead would pile up
-            // thousands of duplicate scents, and stale ones would keep
-            // rebuilding memories of patches that no longer exist - sending
-            // agents back to empty ground indefinitely.
-            agent
-                .senses
-                .smell
-                .detected_scents
-                .retain(|scent| !matches!(scent.scent_type, ScentType::Food | ScentType::Water));
+            // Scents are re-derived from the world every tick, so the previous
+            // set is dropped first. Appending instead would pile up thousands
+            // of duplicates, and stale ones would keep rebuilding memories of
+            // patches that no longer exist.
+            agent.senses.smell.detected_scents.retain(|scent| {
+                !matches!(
+                    scent.scent_type,
+                    ScentType::Food | ScentType::Water | ScentType::Decay
+                )
+            });
 
-            for resource in &self.world.resources {
-                if resource.amount == 0 {
-                    continue;
-                }
-
-                let scent_type = if Self::edible_item_for(resource.resource_type).is_some() {
-                    ScentType::Food
-                } else if resource.resource_type == ResourceType::Water {
-                    ScentType::Water
-                } else {
-                    continue;
-                };
-
-                let source_position = (resource.position.x, resource.position.y, 0);
-
-                // Larger deposits smell stronger and carry further
-                let strength = (resource.amount as f32 / 50.0).clamp(0.2, 1.0);
-
-                if agent.senses.smell.can_smell(agent_pos, source_position, strength) {
+            for (source_position, scent_type, strength) in &sources {
+                if agent.senses.smell.can_smell(agent_pos, *source_position, *strength) {
                     agent.senses.smell.detect_scent(Scent {
-                        source_position,
-                        scent_type,
-                        strength,
+                        source_position: *source_position,
+                        scent_type: scent_type.clone(),
+                        strength: *strength,
                         age: 0,
                     });
                 }
             }
         }
+    }
+
+    /// Everything in the world currently giving off a smell
+    fn collect_scent_sources(
+        &self,
+    ) -> Vec<((i32, i32, i32), crate::agents::senses::ScentType, f32)> {
+        use crate::agents::senses::ScentType;
+        use crate::world::ResourceType;
+
+        let mut sources = Vec::new();
+
+        // What lies on the ground. Berries on the bush are close to odourless,
+        // so an agent finds those by looking rather than by sniffing.
+        for resource in &self.world.resources {
+            if resource.amount == 0 {
+                continue;
+            }
+
+            let strength = resource.resource_type.raw_scent_strength();
+            if strength <= 0.0 {
+                continue;
+            }
+
+            let scent_type = if resource.resource_type == ResourceType::Water {
+                ScentType::Water
+            } else {
+                ScentType::Food
+            };
+
+            sources.push((
+                (resource.position.x, resource.position.y, 0),
+                scent_type,
+                strength,
+            ));
+        }
+
+        // Food that has turned announces itself, wherever it is being carried.
+        // This is decay rather than food: it says something is rotten here, and
+        // does not send an agent over to eat it.
+        for agent in &self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let rot = agent
+                .inventory
+                .get_all_items()
+                .iter()
+                .filter_map(|(_, item)| item.food_data.as_ref())
+                .filter(|food| food.is_rotting())
+                .map(|food| food.scent_strength())
+                .fold(0.0_f32, f32::max);
+
+            if rot > 0.0 {
+                sources.push((agent.state.position, ScentType::Decay, rot));
+            }
+        }
+
+        // A lit fire with food in it: the strongest smell there is, and the one
+        // a nose is really for.
+        //
+        // Nothing lights a fire or puts food in one yet, so this source is
+        // dormant in a live run - see ISSUES_FOUND.md.
+        for heat_source in self.world.heat_sources.all() {
+            if !heat_source.is_lit || heat_source.contents.is_empty() {
+                continue;
+            }
+
+            sources.push((heat_source.position, ScentType::Food, 1.0));
+        }
+
+        sources
     }
 
     /// Whether an agent can stand on this tile

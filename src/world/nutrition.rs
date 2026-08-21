@@ -181,6 +181,38 @@ impl FoodData {
         self.freshness <= 0.1
     }
 
+    /// Whether this food has turned far enough to smell of it
+    pub fn is_rotting(&self) -> bool {
+        self.freshness < 0.4
+    }
+
+    /// How strongly this food gives itself away by smell, as a fraction of an
+    /// agent's full smelling range.
+    ///
+    /// Cooking is the loudest thing a nose ever meets, which is why a camp can
+    /// be smelled long before it is seen. Rot is the next loudest and carries
+    /// most of the way. Anything raw and whole is close to silent.
+    pub fn scent_strength(&self) -> f32 {
+        if self.is_rotting() {
+            // The further gone it is, the further it carries
+            let rottenness = (0.4 - self.freshness.max(0.0)) / 0.4;
+            return (0.35 + rottenness * 0.45).clamp(0.0, 0.8);
+        }
+
+        match self.preparation {
+            // Food over a fire is unmistakable
+            PreparationState::Cooked | PreparationState::Smoked => 1.0,
+            // Prepared, but not hot
+            PreparationState::Dried
+            | PreparationState::Fermented
+            | PreparationState::Ground
+            | PreparationState::Salted
+            | PreparationState::Pickled => 0.3,
+            // Whole and raw: barely there
+            PreparationState::Raw => 0.1,
+        }
+    }
+
     /// Check if food is harmful (causes sickness if eaten)
     pub fn is_harmful(&self) -> bool {
         self.freshness <= 0.0 ||

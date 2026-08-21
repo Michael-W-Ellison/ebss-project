@@ -1516,13 +1516,8 @@ impl Population {
                 agent.skills.gain_experience(super::SkillType::Navigation, new_discoveries as u32 * 2);
             }
 
-            // Learn skills from discovered resources, and remember where the
-            // food and water are.
-            //
-            // Foraging reads spatial memory, not the exploration record, so
-            // without this an agent would catalogue a berry patch it had seen
-            // and still starve walking past it.
-            let recently_seen: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
+            // Learn skills from newly discovered resources.
+            let newly_seen: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
                 .exploration_knowledge
                 .known_resources
                 .iter()
@@ -1537,24 +1532,48 @@ impl Population {
                 .map(|(pos, resource_type)| (*pos, *resource_type))
                 .collect();
 
-            for (pos, resource_type) in recently_seen {
-                for (skill_type, xp) in Self::get_skill_for_resource_discovery(&resource_type) {
+            for (_, resource_type) in &newly_seen {
+                for (skill_type, xp) in Self::get_skill_for_resource_discovery(resource_type) {
                     agent.skills.gain_experience(skill_type, xp);
                 }
+            }
 
-                let remembered_as = if resource_type.is_edible() {
-                    Some(SpatialMemoryType::Food)
-                } else if resource_type == crate::world::ResourceType::Water {
-                    Some(SpatialMemoryType::Water)
-                } else {
-                    None
-                };
+            // Remember the food and water currently in view.
+            //
+            // Exploration reports a tile only the first time it is looked at,
+            // so an agent driven by that alone would stop noticing a berry
+            // patch the moment it had walked past it once. Sight is not a
+            // one-off: whatever is in range is seen again every tick, which is
+            // what keeps foraging memory current as patches are emptied and
+            // regrow. Foraging reads spatial memory rather than the
+            // exploration record, so without this an agent would have a patch
+            // catalogued and still starve walking past it.
+            let sight = vision_range as i32;
+            let in_view: Vec<(crate::world::Position, SpatialMemoryType)> = world
+                .resources
+                .iter()
+                .filter(|resource| resource.amount > 0)
+                .filter(|resource| {
+                    let dx = resource.position.x - agent_pos.x;
+                    let dy = resource.position.y - agent_pos.y;
+                    dx * dx + dy * dy <= sight * sight
+                })
+                .filter_map(|resource| {
+                    let memory_type = if resource.resource_type.is_edible() {
+                        SpatialMemoryType::Food
+                    } else if resource.resource_type == crate::world::ResourceType::Water {
+                        SpatialMemoryType::Water
+                    } else {
+                        return None;
+                    };
+                    Some((resource.position, memory_type))
+                })
+                .collect();
 
-                if let Some(memory_type) = remembered_as {
-                    agent
-                        .memory
-                        .remember_location(memory_type, (pos.x, pos.y, 0));
-                }
+            for (pos, memory_type) in in_view {
+                agent
+                    .memory
+                    .remember_location(memory_type, (pos.x, pos.y, 0));
             }
 
             // Learn skills from discovered buildings

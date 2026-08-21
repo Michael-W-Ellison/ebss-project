@@ -215,3 +215,61 @@ fn sight_finds_resources_not_only_ground() {
         "an agent should notice a stone deposit four tiles away"
     );
 }
+
+/// Sight is not a one-off. An agent keeps noticing the berry patch it is
+/// looking at, tick after tick.
+///
+/// Exploration reports a tile only the first time it is looked at, so an agent
+/// that relied on that alone stopped seeing a patch the moment it had walked
+/// past it once - and once the memory faded, nothing brought it back. Smell no
+/// longer covers for that: a berry on the bush is all but odourless.
+#[test]
+fn what_is_in_view_is_seen_again_every_tick() {
+    let mut world = World::new(WorldConfig::default());
+    world.resources.clear();
+    world.resources.push(ResourceNode::new(
+        ResourceType::Food,
+        Position::new(40, 30),
+        50,
+    ));
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+
+    let mut simulation = Simulation::new(world, population);
+    simulation.population.agents[0].state.position = (30, 30, 0);
+
+    let food_memories = |simulation: &Simulation| {
+        simulation.population.agents[0]
+            .memory
+            .spatial_memories
+            .iter()
+            .filter(|memory| matches!(memory.memory_type, SpatialMemoryType::Food))
+            .count()
+    };
+
+    simulation
+        .population
+        .process_exploration_with_world(&mut simulation.world);
+    assert!(
+        food_memories(&simulation) > 0,
+        "an agent should remember a patch it can see"
+    );
+
+    // Forget it, as time and a full head eventually would
+    simulation.population.agents[0].memory.spatial_memories.clear();
+    assert_eq!(food_memories(&simulation), 0);
+
+    // The patch has not moved and neither has the agent, so it is still there
+    // to be seen. The tile was explored long ago, so only live sight can find
+    // it now.
+    simulation.population.current_tick = 500;
+    simulation
+        .population
+        .process_exploration_with_world(&mut simulation.world);
+
+    assert!(
+        food_memories(&simulation) > 0,
+        "a patch still in view should be seen again, not written off as already explored"
+    );
+}

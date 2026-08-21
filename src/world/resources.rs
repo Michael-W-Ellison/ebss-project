@@ -62,6 +62,30 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
+    /// How strongly this gives itself away by smell where it lies untouched,
+    /// as a fraction of an agent's full smelling range.
+    ///
+    /// Human noses are poor. Berries on the bush and standing grain are close
+    /// to odourless until you are almost on top of them - they are found by
+    /// looking, not by sniffing. Flesh carries further. Nothing raw on the
+    /// ground competes with cooking or with rot, which are what a nose is
+    /// actually good for.
+    pub fn raw_scent_strength(&self) -> f32 {
+        match self {
+            // Barely detectable: you have to be standing among them
+            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => 0.08,
+
+            // Flesh gives itself away from further off
+            ResourceType::Meat | ResourceType::Fish => 0.24,
+
+            // Damp ground and vegetation, faintly
+            ResourceType::Water => 0.12,
+
+            // Wood, stone and ore have no smell worth the name
+            _ => 0.0,
+        }
+    }
+
     /// Whether an agent can eat this straight from the land.
     ///
     /// The single answer to "is this food", used by foraging, by what an agent
