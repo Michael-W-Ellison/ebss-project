@@ -1144,7 +1144,12 @@ impl Simulation {
         agent_position: (i32, i32, i32),
         critical_only: bool,
     ) -> Option<Action> {
-        let current_tick = self.current_tick;
+        let thirsty = agent
+            .drives
+            .get(DriveType::Thirst)
+            .map(|thirst| thirst.is_active())
+            .unwrap_or(false);
+        let dehydrated = agent.state.is_dehydrated();
 
         let hungry = agent
             .drives
@@ -1153,117 +1158,22 @@ impl Simulation {
             .unwrap_or(false);
         let starving = agent.state.is_starving() || agent.nutrition.is_starving();
 
-        if critical_only && !starving {
+        if critical_only && !(starving || dehydrated) {
             return None;
         }
 
+        // Water before food: thirst kills in about three days here where
+        // hunger takes seven, so a parched agent drinks first.
+        if thirsty || dehydrated {
+            if let Some(action) = self.water_action(agent, agent_position, dehydrated) {
+                return Some(action);
+            }
+        }
+
         if hungry || starving {
-            let carrying_food = agent.find_best_food_to_eat().is_some()
-                || agent
-                    .inventory
-                    .get_item("food")
-                    .map(|item| item.quantity > 0)
-                    .unwrap_or(false);
-
-            // Eat what we carry as soon as we are hungry; an agent that walks
-            // around starving with a full pack is the bug this guards against.
-            if carrying_food {
-                return Some(Action::Eat { food_type: "generic".to_string() });
+            if let Some(action) = self.food_action(agent, agent_position, starving) {
+                return Some(action);
             }
-
-            // Anything edible within foraging reach can simply be eaten
-            if self.nearest_edible_within(agent_position, Self::FORAGE_RADIUS).is_some() {
-                return Some(Action::Eat { food_type: "generic".to_string() });
-            }
-
-            // Otherwise head for the closest source the agent knows of: a
-            // scent it can smell right now, or failing that a patch it
-            // remembers. Scent carries by straight-line distance while
-            // foraging searches by walking distance, so food can be smelled
-            // from well outside reach - treating a smell as "food is here"
-            // leaves an agent trying to eat a meal it can smell but not touch.
-            let nearest_scent = agent
-                .senses
-                .smell
-                .get_scents_by_type(crate::agents::senses::ScentType::Food)
-                .into_iter()
-                .map(|scent| scent.source_position)
-                .min_by_key(|source| {
-                    (source.0 - agent_position.0).abs() + (source.1 - agent_position.1).abs()
-                });
-
-            if let Some(source) = nearest_scent {
-                return Some(Action::Move { target: source });
-            }
-
-            // Nothing edible on hand: head for the closest food we remember,
-            // otherwise forage where we stand. Eating happens on a later tick,
-            // once something is actually in the pack.
-            let nearest_remembered_food = agent
-                .memory
-                .recall_locations(crate::core::memory::SpatialMemoryType::Food)
-                .into_iter()
-                .map(|memory| memory.position)
-                .min_by_key(|pos| {
-                    (pos.0 - agent_position.0).abs() + (pos.1 - agent_position.1).abs()
-                });
-
-            if let Some(target) = nearest_remembered_food {
-                let distance = (target.0 - agent_position.0).abs()
-                    + (target.1 - agent_position.1).abs();
-
-                // Walk to food we know about before trying to pick anything up
-                if distance > 1 {
-                    return Some(Action::Move { target });
-                }
-
-                return Some(Action::Gather { resource_type: "food".to_string() });
-            }
-
-            // Starving with nowhere known to go: search rather than stand
-            // still and wait to die. Foraging in place only helps if food
-            // happens to be in range already, and that has already failed by
-            // this point. Agents that are merely hungry keep foraging locally
-            // rather than abandoning whatever they were doing.
-            if starving {
-                // Hold one heading for a stretch of ticks. Re-rolling the
-                // direction every tick produces a random walk that barely
-                // leaves the spot it started from, so an agent would jitter in
-                // place while food sat just outside its range.
-                const SEARCH_LEG_TICKS: u32 = 300;
-                const SEARCH_LEG_DISTANCE: i32 = 12;
-
-                let directions = [
-                    (1, 0),
-                    (-1, 0),
-                    (0, 1),
-                    (0, -1),
-                    (1, 1),
-                    (1, -1),
-                    (-1, 1),
-                    (-1, -1),
-                ];
-
-                // Vary the heading per agent and per leg, so agents starting
-                // from the same spot fan out instead of marching together
-                let leg = (current_tick / SEARCH_LEG_TICKS) as u64;
-                let seed = (agent.id.as_u128() as u64) ^ leg.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-                let (dx, dy) = directions[(seed % directions.len() as u64) as usize];
-
-                return Some(Action::Move {
-                    target: (
-                        agent_position.0 + dx * SEARCH_LEG_DISTANCE,
-                        agent_position.1 + dy * SEARCH_LEG_DISTANCE,
-                        agent_position.2,
-                    ),
-                });
-            }
-
-            // Hungry but not yet starving, with nothing in reach and nowhere
-            // known to try: let the tick go to whatever comes next - sheltering
-            // from the cold, a plan, a goal. Gathering thin air on the spot
-            // accomplishes nothing and blocks everything the agent could
-            // usefully be doing, including getting out of the weather.
         }
 
         // Collapse-level fatigue takes precedence over everything but hunger
@@ -1272,8 +1182,194 @@ impl Simulation {
         }
 
         None
+    }
 
+    /// How a thirsty agent gets a drink, if it can.
+    ///
+    /// `desperate` marks an agent far enough gone that finding water is worth
+    /// abandoning whatever else it was doing for.
+    fn water_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        desperate: bool,
+    ) -> Option<Action> {
+        use crate::agents::senses::ScentType;
+        use crate::core::memory::SpatialMemoryType;
+        use crate::world::ResourceType;
 
+        // A drink from the waterskin, or from a spring within reach. Both go
+        // through the same action: it prefers open water and falls back to
+        // whatever the agent is carrying.
+        let carrying_water = agent.inventory.available_water() > 0.0;
+        let water_in_reach = self
+            .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
+                resource.resource_type == ResourceType::Water
+            })
+            .is_some();
+
+        if carrying_water || water_in_reach {
+            return Some(Action::Gather { resource_type: "water".to_string() });
+        }
+
+        // Otherwise head for water the agent can smell or remembers
+        if let Some(target) = self.known_source_position(
+            agent,
+            agent_position,
+            ScentType::Water,
+            SpatialMemoryType::Water,
+        ) {
+            let distance =
+                (target.0 - agent_position.0).abs() + (target.1 - agent_position.1).abs();
+
+            if distance > 1 {
+                return Some(Action::Move { target });
+            }
+
+            return Some(Action::Gather { resource_type: "water".to_string() });
+        }
+
+        // Nowhere known to drink: go looking, if it has come to that
+        if desperate {
+            return Some(Self::search_leg(agent, agent_position, self.current_tick));
+        }
+
+        None
+    }
+
+    /// How a hungry agent gets a meal, if it can.
+    ///
+    /// `desperate` marks an agent starving badly enough that finding food is
+    /// worth abandoning whatever else it was doing for.
+    fn food_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        desperate: bool,
+    ) -> Option<Action> {
+        use crate::agents::senses::ScentType;
+        use crate::core::memory::SpatialMemoryType;
+
+        let carrying_food = agent.has_edible_food();
+
+        // Eat what we carry as soon as we are hungry; an agent that walks
+        // around starving with a full pack is the bug this guards against.
+        if carrying_food {
+            return Some(Action::Eat { food_type: "generic".to_string() });
+        }
+
+        // Anything edible within foraging reach can simply be eaten
+        if self
+            .nearest_edible_within(agent_position, Self::FORAGE_RADIUS)
+            .is_some()
+        {
+            return Some(Action::Eat { food_type: "generic".to_string() });
+        }
+
+        // Otherwise head for the closest source the agent knows of
+        if let Some(target) = self.known_source_position(
+            agent,
+            agent_position,
+            ScentType::Food,
+            SpatialMemoryType::Food,
+        ) {
+            let distance =
+                (target.0 - agent_position.0).abs() + (target.1 - agent_position.1).abs();
+
+            // Walk to food we know about before trying to pick anything up
+            if distance > 1 {
+                return Some(Action::Move { target });
+            }
+
+            return Some(Action::Gather { resource_type: "food".to_string() });
+        }
+
+        // Starving with nowhere known to go: search rather than stand still
+        // and wait to die. Agents that are merely hungry let the tick go to
+        // whatever comes next - sheltering from the cold, a plan, a goal -
+        // because gathering thin air on the spot accomplishes nothing and
+        // blocks everything they could usefully be doing.
+        if desperate {
+            return Some(Self::search_leg(agent, agent_position, self.current_tick));
+        }
+
+        None
+    }
+
+    /// A place the agent knows to look: what it can smell right now, falling
+    /// back to the nearest place it remembers.
+    ///
+    /// Scent wins because it is current, where a memory may be of a patch
+    /// already eaten bare. Scent also carries by straight-line distance while
+    /// walking is counted in steps, so what an agent smells can still be a
+    /// journey away - which is why this reports somewhere to go rather than
+    /// somewhere to reach for.
+    fn known_source_position(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        scent_type: crate::agents::senses::ScentType,
+        memory_type: crate::core::memory::SpatialMemoryType,
+    ) -> Option<(i32, i32, i32)> {
+        let walking_distance = |candidate: &(i32, i32, i32)| {
+            (candidate.0 - agent_position.0).abs() + (candidate.1 - agent_position.1).abs()
+        };
+
+        let smelled = agent
+            .senses
+            .smell
+            .get_scents_by_type(scent_type)
+            .into_iter()
+            .map(|scent| scent.source_position)
+            .min_by_key(walking_distance);
+
+        smelled.or_else(|| {
+            agent
+                .memory
+                .recall_locations(memory_type)
+                .into_iter()
+                .map(|memory| memory.position)
+                .min_by_key(walking_distance)
+        })
+    }
+
+    /// One leg of a search for something the agent cannot find nearby.
+    ///
+    /// The heading holds for a stretch of ticks: re-rolling it every tick
+    /// produces a random walk that barely leaves the spot it started from, so
+    /// an agent would jitter in place while what it needed sat just outside
+    /// its range. It varies per agent and per leg, so agents setting out from
+    /// the same place fan out instead of marching together.
+    fn search_leg(
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        current_tick: u32,
+    ) -> Action {
+        const SEARCH_LEG_TICKS: u32 = 300;
+        const SEARCH_LEG_DISTANCE: i32 = 12;
+
+        let directions = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ];
+
+        let leg = (current_tick / SEARCH_LEG_TICKS) as u64;
+        let seed = (agent.id.as_u128() as u64) ^ leg.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        let (dx, dy) = directions[(seed % directions.len() as u64) as usize];
+
+        Action::Move {
+            target: (
+                agent_position.0 + dx * SEARCH_LEG_DISTANCE,
+                agent_position.1 + dy * SEARCH_LEG_DISTANCE,
+                agent_position.2,
+            ),
+        }
     }
 
     fn generate_non_emotional_action(
@@ -1412,11 +1508,13 @@ impl Simulation {
         None
     }
 
-    /// Position of the closest edible resource within `radius` walking steps
-    fn nearest_edible_within(
+    /// Position of the closest resource within `radius` walking steps that the
+    /// agent has some use for
+    fn nearest_resource_within(
         &self,
         position: (i32, i32, i32),
         radius: u32,
+        wanted: impl Fn(&crate::world::ResourceNode) -> bool,
     ) -> Option<crate::world::Position> {
         use crate::world::Position;
 
@@ -1425,13 +1523,22 @@ impl Simulation {
         self.world
             .resources
             .iter()
-            .filter(|resource| {
-                resource.amount > 0 && Self::edible_item_for(resource.resource_type).is_some()
-            })
+            .filter(|resource| resource.amount > 0 && wanted(resource))
             .map(|resource| (resource.position, from.distance_to(&resource.position)))
             .filter(|(_, distance)| *distance <= radius)
             .min_by_key(|(_, distance)| *distance)
             .map(|(position, _)| position)
+    }
+
+    /// Position of the closest edible resource within `radius` walking steps
+    fn nearest_edible_within(
+        &self,
+        position: (i32, i32, i32),
+        radius: u32,
+    ) -> Option<crate::world::Position> {
+        self.nearest_resource_within(position, radius, |resource| {
+            Self::edible_item_for(resource.resource_type).is_some()
+        })
     }
 
     /// Resource types an agent can eat straight from the land, paired with the
@@ -1721,7 +1828,7 @@ impl Simulation {
                     agent
                         .inventory
                         .get_item("food")
-                        .filter(|item| item.quantity > 0)
+                        .filter(|item| item.quantity > 0 && item.food_data.is_none())
                         .map(|item| item.item_id.clone())
                 });
 
@@ -2020,10 +2127,34 @@ impl Simulation {
                         ActionResult::failure("Resource source was empty".to_string())
                     }
                 } else {
-                    // No resource nearby
+                    // No source in range. Water can still be drunk from a
+                    // waterskin, which is the whole point of carrying one -
+                    // an agent crossing dry ground should not go thirsty with
+                    // a full flask on its belt.
+                    if resource_type_enum == ResourceType::Water {
+                        let current_tick = self.current_tick;
+                        let agent = &mut self.population.agents[agent_index];
+
+                        if agent.inventory.available_water() > 0.0 {
+                            let drunk = agent.drink_water(1.0);
+
+                            if drunk {
+                                agent.state.drink(current_tick);
+
+                                debug!("Agent {} drank from its own container", agent.id);
+
+                                return ActionResult::success()
+                                    .with_drive_change(DriveType::Thirst, -0.2)
+                                    .with_energy_cost(1.0)
+                                    .with_message("Drank from a carried container".to_string());
+                            }
+                        }
+                    }
+
                     if resource_type_enum == ResourceType::Food {
                         self.forget_nearby_food_memories(agent_index);
                     }
+
                     ActionResult::failure(format!("No {} sources nearby", resource_type))
                 }
             },

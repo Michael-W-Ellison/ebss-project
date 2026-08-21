@@ -356,6 +356,15 @@ impl Inventory {
     }
 
     /// Fill containers from a water source
+    /// Total water currently carried in containers, in litres
+    pub fn available_water(&self) -> f32 {
+        self.items
+            .values()
+            .filter(|item| item.is_container())
+            .filter_map(|item| item.fill_level)
+            .sum()
+    }
+
     pub fn fill_containers(&mut self, available_water: f32) -> f32 {
         let mut remaining = available_water;
 
@@ -1167,8 +1176,15 @@ impl Agent {
         // Trim old percepts (keep only last 20 ticks worth)
         self.recent_percepts.retain(|(tick, _)| current_tick.saturating_sub(*tick) <= 20);
 
-        // Sync body health to agent state
-        self.state.health = self.body.overall_health() * 100.0;
+        // Body condition caps overall health rather than setting it.
+        //
+        // Starvation, dehydration and exposure damage the same field, and
+        // overwriting it from the body every tick threw all of that away: an
+        // agent could go six thousand ticks without water and still read as
+        // near perfect health, because the only harm that survived the tick
+        // was a broken bone.
+        let body_condition = self.body.overall_health() * 100.0;
+        self.state.health = self.state.health.min(body_condition);
 
         // Update energy (basic metabolism)
         self.state.energy = (self.state.energy - 0.1).max(0.0);
@@ -1201,6 +1217,20 @@ impl Agent {
 
         // Process food spoilage in inventory
         self.tick_food_spoilage(current_tick);
+
+        // Recover condition when nothing is wrong. `regenerate_health` had no
+        // callers at all, so agents only ever lost health over a lifetime.
+        let suffering = self.state.is_starving()
+            || self.state.is_dehydrated()
+            || !self.exposure_status.active_exposures.is_empty();
+
+        if !suffering {
+            let resting = self.fatigue.is_sleeping;
+            let body_condition = self.body.overall_health() * 100.0;
+
+            self.regenerate_health(resting);
+            self.state.health = self.state.health.min(body_condition);
+        }
 
         // Process fatigue (awake state)
         if !self.fatigue.is_sleeping {
@@ -3165,6 +3195,19 @@ impl Agent {
         EatResult::Success(nutrition)
     }
 
+    /// Whether the agent is carrying anything it can safely eat
+    pub fn has_edible_food(&self) -> bool {
+        if self.find_best_food_to_eat().is_some() {
+            return true;
+        }
+
+        // Untracked stacks have no freshness to judge, so they are always safe
+        self.inventory
+            .get_item("food")
+            .map(|item| item.quantity > 0 && item.food_data.is_none())
+            .unwrap_or(false)
+    }
+
     /// Find the best food item to eat based on nutritional needs and freshness
     pub fn find_best_food_to_eat(&self) -> Option<String> {
         let needed = self.nutrition.most_needed_nutrient();
@@ -3179,8 +3222,11 @@ impl Agent {
             }
 
             if let Some(ref food_data) = item.food_data {
-                // Skip spoiled food
-                if food_data.is_spoiled() {
+                // Skip anything that would make the agent sick. Raw food turns
+                // harmful before it counts as spoiled, so checking spoilage
+                // alone leaves agents eating rot: ten health a bite, one bite
+                // a tick, until the stack or the agent runs out.
+                if food_data.is_spoiled() || food_data.is_harmful() {
                     continue;
                 }
 
