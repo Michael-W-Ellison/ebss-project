@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `ea1f67d`
+**Last verified:** August 2026, against commit `1b98aa4`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -47,6 +47,11 @@ Verified reachable from `Simulation::tick()`.
 - Fatigue and sleep, with sleep quality from shelter, safety, health and hunger
 - Injury, healing, and death from starvation, dehydration, exposure, injury
   and old age
+- Fire and cooking: agents gather wood, build and light campfires, and cook at
+  them. Only meat, fish and grain are improved; anything else over a fire is
+  ruined, as is anything already cooked or preserved. Ruined food has nothing
+  left in it, is unsafe to eat and smells of decay. How often a cook burns a
+  batch falls from one in five to none with practice
 
 ### Lifecycle
 - Aging through infant, child, adolescent, adult and elderly stages
@@ -72,8 +77,9 @@ Verified reachable from `Simulation::tick()`.
   | Food over a lit fire | 1.00 | 25 tiles |
 
   Rot is emitted as `ScentType::Decay`, not food: it reports that something is
-  off, and does not send an agent over to eat it. Nothing lights a fire during
-  a run, so the cooking scent is dormant - see **Built, not connected**.
+  off, and does not send an agent over to eat it. Burnt food smells the same
+  way. The cooking scent used to be dormant because nothing ever lit a fire;
+  agents light them now, so it is something a nose can actually meet.
 - Agents share what they know of resource locations with neighbours, so a
   blind agent can be told where the food is
 
@@ -124,7 +130,6 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
 | Vision, as a percept channel (`senses::Vision`) | Sight now drives exploration and resource discovery, but nothing calls `update_visible_agents` or `update_visible_positions`, so `visible_agents` stays empty and agents still never see *each other* |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
-| Cooking | `Simulation` emits the strongest scent in the model from any lit heat source with food in it, but nothing calls `light_heat_source` or `add_to_heat_source` during a run, so no agent has ever smelled cooking |
 | `world::zoning`, `world::territory` | Read by building placement scoring (`spatial_planning.rs`), but nothing outside tests ever calls `add_zone` or `claim_territory`, so both managers are always empty and every bonus they contribute is zero |
 
 **Consequence for perception:** agents find the world by sight and smell, but
@@ -148,7 +153,9 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
 - **Clothing behaviour.** Clothing recipes, equipment slots and cold
   insulation all exist and work when equipment is present. Nothing drives an
   agent to make or wear anything, so insulation is always zero and agents
-  cycle between cold and shelter for their whole lives.
+  cycle between cold and shelter for their whole lives. This is the last gap
+  of the shape cooking used to have: the machinery is built and no agent has a
+  reason to reach for it.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
   cannot be reproduced and two tests are intermittently flaky.
 - **Long-run characterisation.** Nobody has studied population dynamics,
@@ -160,21 +167,24 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
 ## Measured behaviour
 
 From forty independent worlds, twelve starting agents each, eight thousand
-ticks (`Simulation::tick` driven directly, no GUI), measured both on this
-commit and on the flat-scent model that preceded it:
+ticks (`Simulation::tick` driven directly, no GUI), measured at each of the
+last three steps:
 
-| Measure | Before | After |
-| --- | --- | --- |
-| Populations dying out | 0 of 40 | 0 of 40 |
-| Population at the end | 985 from 480 | 944 from 480 |
-| Agents fed at the end | 934 of 985 (94.8%) | 906 of 944 (96.0%) |
-| Agents hydrated at the end | 970 of 985 (98.5%) | 937 of 944 (99.3%) |
-| Agents critically exposed | 0 | 0 |
-| Typical core temperature | 35-37 °C | 35-37 °C |
+| Measure | Flat scent, no fire | Human nose, no fire | With cooking |
+| --- | --- | --- | --- |
+| Populations dying out | 0 of 40 | 0 of 40 | 0 of 40 |
+| Population at the end | 985 from 480 | 944 from 480 | 1055 from 480 |
+| Agents fed at the end | 94.8% | 96.0% | 99.7% |
+| Agents hydrated at the end | 98.5% | 99.3% | 99.1% |
+| Agents critically exposed | 0 | 0 | 0 |
+| Typical core temperature | 35-37 °C | 35-37 °C | 35-37 °C |
+
+Cooking is what moved feeding: raw food gives up about a third of what is in
+it and cooked food nearly all, so the same forage feeds far more agents.
 
 Worth knowing before reading too much into a single run: the spread between
 worlds is wide. Twenty-world samples of the same build came out anywhere
-between 92% and 98% fed, which is why the comparison above is over forty.
+between 92% and 98% fed, which is why the comparisons above are over forty.
 
 Thermal model behaviour, by settled core temperature of an unclothed agent:
 
@@ -191,7 +201,7 @@ Thermal model behaviour, by settled core temperature of an unclothed agent:
 
 ## Test coverage
 
-1,070 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
+1,079 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
 pass, except three known flaky tests (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
 `test_production_building_placed_near_resources`) that assert on properties a

@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Last verified: August 2026 (against commit ea1f67d)
+Last verified: August 2026 (against commit 1b98aa4)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -56,8 +56,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,107 tests across the workspace:
-  1,070 library tests
+  1,116 tests across the workspace:
+  1,079 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -85,12 +85,19 @@ Verified as reached by Simulation::tick():
   Lifecycle       aging, life stages, reproduction, pregnancy, birth,
                   nursing, inheritance of traits and behaviour
   Behaviour       drives, behaviour trees with weight learning, goals,
-                  plans, foraging, drinking, sheltering, exploration
+                  plans, foraging, drinking, sheltering, exploration, cooking
+  Fire            agents gather wood, build and light campfires, and cook at
+                  them; only meat, fish and grain are improved by a fire, and
+                  anything else put over one is ruined - worthless, unsafe to
+                  eat and smelling of it. How often a cook burns a batch falls
+                  with practice, from one in five to none
   Perception      sight of terrain, resources and buildings within 25 tiles,
                   refreshed every tick and negated by the Blind trait; smell
                   scaled to what a thing actually gives off - a berry about
                   2 tiles, water 3, flesh 6, rot 9-20, cooking the full 25;
-                  sharing of known resource locations between agents
+                  sharing of known resource locations between agents. Food
+                  over a lit fire is the loudest smell there is, and now
+                  something an agent can actually meet
   Social          proximity relationships, social interactions, gossip,
                   observational learning, shared knowledge, technology
                   discovery and spread
@@ -118,11 +125,6 @@ missing features:
   Zoning and territory      Building placement reads zone and territory
                             bonuses, but nothing outside tests ever creates a
                             zone or claims territory, so both are always empty
-
-  Cooking                   Food over a fire is the strongest smell in the
-                            model and the one a nose is really for, but
-                            nothing lights a heat source or puts food on one
-                            during a run, so no agent has ever smelled it.
 
   Vision as a percept       Sight drives exploration and resource discovery,
                             but nothing populates vision.visible_agents, so
@@ -153,7 +155,9 @@ SUGGESTED NEXT STEPS
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
   3. Give agents a reason to make clothing, so cold is something they solve
-     rather than endure.
+     rather than endure. Cooking was the same shape of gap until recently and
+     is worth copying: the machinery existed, what was missing was an agent
+     with a reason to reach for it.
   4. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it

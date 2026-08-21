@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `ea1f67d`.
+**Last verified:** August 2026, against commit `1b98aa4`.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -77,17 +77,7 @@ behaviour works because `Population` computes proximity directly. Hearing is
 unfed entirely, so every sound-derived percept is a dead path. See
 SIMULATION_AUDIT.md.
 
-### 6. Nothing ever cooks
-
-`Simulation::emit_scents` gives food over a lit fire the strongest smell in
-the model, and `HeatSource` supports fuel, lighting and contents. Nothing in
-the simulation loop calls `light_heat_source` or `add_to_heat_source`, and
-nothing sets `PreparationState::Cooked` at runtime — only the food database's
-default for bread. So no agent has ever cooked, eaten anything cooked, or
-smelled cooking. This is the same shape of gap as clothing: the machinery is
-there and nothing drives it.
-
-### 7. Zoning and territory are never established
+### 6. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -95,27 +85,29 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 8. Agents carry food they will never eat
+### 7. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
-its freshness decays to zero and spoilage removes it. It now announces itself
-as a decay scent to anyone nearby, which is realistic and mildly useful, but
-nothing makes the carrier drop it: carried weight still includes rot.
+its freshness decays to zero and spoilage removes it. The same is true of food
+an agent burns: a novice cook ruins about one batch in five, and the ruins ride
+along in the pack. Both announce themselves as a decay scent to anyone nearby,
+which is realistic and mildly useful, but nothing makes the carrier drop them:
+carried weight still includes rot and cinders.
 
 ---
 
 ## Housekeeping
 
-### 9. Committed backup file
+### 8. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 10. Build warnings
+### 9. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 11. Placeholder package metadata
+### 10. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
@@ -163,6 +155,13 @@ Listed so nobody re-investigates them. Each has regression tests in
 - **Sensory traits never reached the senses.**
   `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
   perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Nothing ever cooked.** Heat sources, fuel, lighting and the whole
+  preparation model existed, and nothing in a run had ever lit a fire, so every
+  meal was eaten raw at about a third of its value and the strongest smell in
+  the model was unreachable. Agents now gather wood, light campfires and cook
+  at them, which is what moved the fraction of fed agents from 96.0% to 99.7%.
+  Cooking is restricted to food a fire improves — meat, fish, grain — and
+  anything else put over one is ruined, as is anything cooked twice.
 - **Smell found everything, and sight found nothing twice.** Every resource
   emitted the same full-strength scent, so an agent smelled a berry patch from
   twenty-five tiles and sight was decoration. Scent strength now depends on
