@@ -247,11 +247,8 @@ impl Population {
         let current_tick = self.current_tick;
         for agent in &mut self.agents {
             agent.tick_with_percepts(current_tick); // Process percepts with timestamp
-            // Apply pregnancy energy multiplier to age_tick
-            let energy_multiplier = agent.pregnancy.as_ref()
-                .map(|p| p.energy_multiplier(current_tick))
-                .unwrap_or(1.0);
-            agent.state.age_tick_with_modifier(current_tick, energy_multiplier);
+            // Aging, metabolism, food spoilage and fatigue (pregnancy modifier applied inside)
+            agent.process_survival_tick(current_tick);
         }
 
         // Update relationships between nearby agents

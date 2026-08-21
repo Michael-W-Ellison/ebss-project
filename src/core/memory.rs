@@ -458,6 +458,24 @@ impl Memory {
         }
     }
 
+    /// Forget a spatial memory that turned out to be wrong.
+    ///
+    /// Used when an agent travels to a remembered resource and finds nothing
+    /// there; without this the agent keeps returning to an exhausted site.
+    /// Returns true if a memory was removed.
+    pub fn forget_location(
+        &mut self,
+        memory_type: SpatialMemoryType,
+        position: (i32, i32, i32),
+    ) -> bool {
+        let before = self.spatial_memories.len();
+        self.spatial_memories.retain(|m| {
+            !(std::mem::discriminant(&m.memory_type) == std::mem::discriminant(&memory_type)
+                && m.position == position)
+        });
+        self.spatial_memories.len() < before
+    }
+
     /// Get spatial memories of a specific type
     pub fn recall_locations(&self, memory_type: SpatialMemoryType) -> Vec<&SpatialMemory> {
         self.spatial_memories

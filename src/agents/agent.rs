@@ -1179,6 +1179,15 @@ impl Agent {
         // First do the regular tick
         self.tick();
 
+        self.process_survival_tick(current_tick);
+    }
+
+    /// Run one tick of survival mechanics: aging, metabolism, food spoilage and fatigue.
+    ///
+    /// Split out of `tick_with_time` so that callers which drive agents through
+    /// `tick_with_percepts` instead (notably `Population::tick`) run the same
+    /// survival mechanics rather than aging alone.
+    pub fn process_survival_tick(&mut self, current_tick: u32) {
         // Calculate pregnancy energy multiplier (if pregnant)
         let energy_multiplier = self.pregnancy.as_ref()
             .map(|p| p.energy_multiplier(current_tick))
@@ -1257,10 +1266,17 @@ impl Agent {
             self.state.health = (self.state.health - penalty).max(0.0);
         }
 
-        // Sync nutritional energy with agent state energy
-        // This connects the old energy system with the new nutrition system
-        let energy_sync = self.nutrition.energy_reserves * 0.5; // Scale 0-100 to 0-50 contribution
-        self.state.energy = ((self.state.energy * 0.5) + energy_sync).min(100.0);
+        // Couple state energy to nutritional reserves.
+        //
+        // Reserves are the long-term store; `state.energy` is short-term felt
+        // energy that eating and sleeping move directly. Drifting gradually
+        // toward reserves keeps the two systems consistent without erasing the
+        // effect of a meal or a rest on the very next tick, which is what a
+        // straight average between the two used to do.
+        const ENERGY_SYNC_RATE: f32 = 0.02;
+        let reserve_delta = self.nutrition.energy_reserves - self.state.energy;
+        self.state.energy =
+            (self.state.energy + reserve_delta * ENERGY_SYNC_RATE).clamp(0.0, 100.0);
     }
 
     /// Update food freshness in inventory and remove spoiled items
@@ -3014,59 +3030,74 @@ impl Agent {
     /// Returns true if food was consumed
     /// Note: Use eat_food_item for nutrition-aware eating
     pub fn eat_food(&mut self, amount: u32) -> bool {
-        // Try to get food from inventory
-        if let Some(food_item) = self.inventory.get_item_mut("food") {
-            if food_item.quantity >= amount {
-                food_item.quantity -= amount;
+        // Read the food data before consuming, so the item can go through
+        // `remove_item` - that drops emptied stacks and keeps carried weight
+        // correct, where decrementing in place leaves a zero-quantity entry
+        // that still reads as "carrying food"
+        let carried = match self.inventory.get_item("food") {
+            Some(item) if item.quantity >= amount => Some(item.food_data.clone()),
+            _ => None,
+        };
 
-                // If food has nutrition data, use it
-                if let Some(ref food_data) = food_item.food_data {
-                    let nutrition = food_data.effective_nutrition();
-                    self.nutrition.consume(&nutrition.scale(amount as f32));
+        let Some(food_data) = carried else {
+            return false;
+        };
 
-                    // Also satisfy thirst from water content
-                    if nutrition.water_content > 0.3 {
-                        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-                            thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
-                        }
-                    }
-                } else {
-                    // Legacy: no food data, use old flat rate
-                    let energy_restored = (amount as f32) * 20.0;
-                    self.state.energy = (self.state.energy + energy_restored).min(100.0);
+        self.inventory.remove_item("food", amount);
+
+        // If food has nutrition data, use it
+        if let Some(food_data) = food_data {
+            let nutrition = food_data.effective_nutrition();
+            self.nutrition.consume(&nutrition.scale(amount as f32));
+
+            // Also satisfy thirst from water content
+            if nutrition.water_content > 0.3 {
+                if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                    thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
                 }
-
-                // Reset starvation (use current age as approximation of tick)
-                self.state.last_ate_tick = self.state.age;
-                self.state.ticks_without_food = 0;
-
-                // Satisfy hunger drive
-                let hunger_reduction = (amount as f32) * 0.2; // Each food reduces hunger by 0.2
-                if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
-                    hunger.decrease(hunger_reduction);
-                }
-
-                return true;
             }
+        } else {
+            // Legacy: no food data, use old flat rate
+            let energy_restored = (amount as f32) * 20.0;
+            self.state.energy = (self.state.energy + energy_restored).min(100.0);
         }
-        false
+
+        // Reset starvation (use current age as approximation of tick)
+        self.state.last_ate_tick = self.state.age;
+        self.state.ticks_without_food = 0;
+
+        // Satisfy hunger drive
+        let hunger_reduction = (amount as f32) * 0.2; // Each food reduces hunger by 0.2
+        if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+            hunger.decrease(hunger_reduction);
+        }
+
+        true
     }
 
     /// Eat a specific food item from inventory with full nutrition tracking
     /// Returns the result of eating including nutrition gained or problems
     pub fn eat_food_item(&mut self, item_id: &str, current_tick: u32) -> EatResult {
-        // Get food item from inventory
-        let food_item = match self.inventory.get_item_mut(item_id) {
-            Some(item) if item.quantity > 0 => item,
-            _ => return EatResult::NoFood,
+        // Read what we need up front so the item can be consumed through
+        // `remove_item`, which drops emptied stacks and keeps carried weight
+        // correct. Decrementing the quantity in place leaves a zero-quantity
+        // entry behind, and an agent holding one reads as "still carrying
+        // food" forever - so it keeps trying to eat nothing instead of going
+        // to look for a meal.
+        let (has_food, food_data) = match self.inventory.get_item(item_id) {
+            Some(item) if item.quantity > 0 => (true, item.food_data.clone()),
+            _ => (false, None),
         };
 
-        // Check if item has food data
-        let food_data = match &food_item.food_data {
-            Some(data) => data.clone(),
+        if !has_food {
+            return EatResult::NoFood;
+        }
+
+        let food_data = match food_data {
+            Some(data) => data,
             None => {
                 // Not a tracked food item - consume 1 with flat nutrition
-                food_item.quantity -= 1;
+                self.inventory.remove_item(item_id, 1);
                 let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
                 self.nutrition.consume(&flat_nutrition);
                 self.state.last_ate_tick = current_tick;
@@ -3080,7 +3111,7 @@ impl Agent {
 
         // Check if food is harmful (severely spoiled)
         if food_data.is_harmful() {
-            food_item.quantity -= 1;
+            self.inventory.remove_item(item_id, 1);
             let damage = 10.0;
             self.state.health = (self.state.health - damage).max(0.0);
             return EatResult::MadeSick(damage);
@@ -3092,7 +3123,7 @@ impl Agent {
         }
 
         // Consume the food
-        food_item.quantity -= 1;
+        self.inventory.remove_item(item_id, 1);
 
         // Get effective nutrition (preparation + freshness factors applied)
         let nutrition = food_data.effective_nutrition();
@@ -3127,6 +3158,12 @@ impl Agent {
         let mut best_item: Option<(String, f32)> = None;
 
         for (item_id, item) in &self.inventory.items {
+            // Skip emptied stacks - an exhausted entry lingering in the
+            // inventory would otherwise read as "still carrying food"
+            if item.quantity == 0 {
+                continue;
+            }
+
             if let Some(ref food_data) = item.food_data {
                 // Skip spoiled food
                 if food_data.is_spoiled() {

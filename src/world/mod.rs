@@ -530,7 +530,12 @@ impl World {
     }
 
     pub fn remove_depleted_resources(&mut self) {
-        self.resources.retain(|r| r.amount > 0);
+        // A renewable node stays on the map when emptied so it can regrow;
+        // deleting it would make berry patches and fish runs single-use and
+        // drain the world of food permanently. Mined-out mineral deposits are
+        // genuinely gone and are removed.
+        self.resources
+            .retain(|r| r.amount > 0 || r.is_renewable());
     }
 
     // ===== Heat Source Management =====

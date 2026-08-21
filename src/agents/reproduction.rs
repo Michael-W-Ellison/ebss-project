@@ -408,6 +408,19 @@ mod tests {
             if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
                 thirst.value = 0.2;
             }
+
+            // Traits and the personal reproduction modifier are rolled at
+            // random on creation, and an infertile or low-drive pair cannot
+            // mate whatever else the test sets up. Pin both so these tests
+            // assert on the behaviour they name instead of on the dice.
+            agent
+                .traits
+                .traits
+                .retain(|t| *t != crate::core::traits::Trait::Infertile);
+            agent.reproduction_drive_modifier = 1.0;
+            if let Some(reproduction) = agent.drives.get_mut(DriveType::Reproduction) {
+                reproduction.value = 0.5;
+            }
         }
 
         (male, female)

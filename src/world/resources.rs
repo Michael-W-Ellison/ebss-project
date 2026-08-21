@@ -345,6 +345,21 @@ impl ResourceNode {
         (self.amount as f32 / self.max_amount as f32) * 100.0
     }
 
+    /// Whether this resource regrows on its own once harvested
+    pub fn is_renewable(&self) -> bool {
+        matches!(
+            self.resource_type,
+            ResourceType::Wood
+                | ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Herbs
+                | ResourceType::Flax
+                | ResourceType::Cotton
+                | ResourceType::Honey
+                | ResourceType::Fish
+        )
+    }
+
     /// Regenerate resources based on climate and weather conditions
     /// Returns the amount regenerated
     pub fn regenerate(&mut self, temperature: f32, precipitation: f32, season_modifier: f32) -> u32 {
