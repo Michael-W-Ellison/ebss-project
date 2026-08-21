@@ -65,6 +65,17 @@ impl NutritionalContent {
     }
 }
 
+/// What a fire does to a particular kind of food
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CookingOutcome {
+    /// Raw flesh and hard grain: a fire is what makes these worth eating
+    Improves,
+    /// Food, but nothing a fire helps. Cooking it destroys it
+    Ruins,
+    /// Not food at all - there is nothing here to cook
+    NotFood,
+}
+
 /// Preparation state of food affecting utilization and spoilage
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum PreparationState {
@@ -85,6 +96,8 @@ pub enum PreparationState {
     Ground,
     /// Fermented (cheese, ale) - enhanced nutrients, slow spoilage
     Fermented,
+    /// Burnt, scorched or curdled past saving - worthless and unsafe to eat
+    Ruined,
 }
 
 impl PreparationState {
@@ -100,6 +113,7 @@ impl PreparationState {
             Self::Pickled => 0.70,   // Fermentation changes profile
             Self::Ground => 0.90,    // Improved digestibility
             Self::Fermented => 0.85, // Enhanced some nutrients, lost others
+            Self::Ruined => 0.0,     // Nothing left to absorb
         }
     }
 
@@ -114,6 +128,7 @@ impl PreparationState {
             Self::Pickled => 0.1,    // 10x longer
             Self::Ground => 1.2,     // Faster (more surface area)
             Self::Fermented => 0.2,  // 5x longer
+            Self::Ruined => 1.5,     // Already broken down; goes off fast
         }
     }
 
@@ -128,6 +143,7 @@ impl PreparationState {
             Self::Pickled => "Pickled",
             Self::Ground => "Ground",
             Self::Fermented => "Fermented",
+            Self::Ruined => "Ruined",
         }
     }
 }
@@ -210,11 +226,42 @@ impl FoodData {
             | PreparationState::Pickled => 0.3,
             // Whole and raw: barely there
             PreparationState::Raw => 0.1,
+            // Burnt carries, and is not a smell anyone follows
+            PreparationState::Ruined => 0.5,
         }
+    }
+
+    /// Whether this was cooked when it should not have been, or burnt
+    pub fn is_ruined(&self) -> bool {
+        self.preparation == PreparationState::Ruined
+    }
+
+    /// Put this over a fire.
+    ///
+    /// Only raw flesh and grain gain anything from it. Everything else is
+    /// spoiled by the heat, and so is anything that was already cooked or
+    /// preserved: a second turn over the flames burns it. Returns what
+    /// happened, so a caller can tell a meal from a mistake.
+    pub fn cook(&mut self, outcome: CookingOutcome) -> CookingOutcome {
+        let worth_cooking =
+            outcome == CookingOutcome::Improves && self.preparation == PreparationState::Raw;
+
+        if worth_cooking {
+            self.preparation = PreparationState::Cooked;
+            return CookingOutcome::Improves;
+        }
+
+        if outcome == CookingOutcome::NotFood {
+            return CookingOutcome::NotFood;
+        }
+
+        self.preparation = PreparationState::Ruined;
+        CookingOutcome::Ruins
     }
 
     /// Check if food is harmful (causes sickness if eaten)
     pub fn is_harmful(&self) -> bool {
+        self.is_ruined() ||
         self.freshness <= 0.0 ||
         (self.freshness < 0.3 && self.preparation == PreparationState::Raw)
     }

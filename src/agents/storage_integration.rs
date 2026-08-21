@@ -13,9 +13,20 @@ pub fn item_type_to_id(item_type: ItemType) -> String {
     format!("{:?}", item_type).to_lowercase()
 }
 
+/// Strip the preparation prefix from an item id.
+///
+/// Food that has been over a fire is carried under its own id - `cooked_fish`,
+/// `burnt_meat` - because one inventory stack can hold only one preparation
+/// state. Underneath it is still fish and still meat.
+pub fn base_item_id(id: &str) -> &str {
+    id.strip_prefix("cooked_")
+        .or_else(|| id.strip_prefix("burnt_"))
+        .unwrap_or(id)
+}
+
 /// Convert string ID to ItemType (best effort)
 pub fn id_to_item_type(id: &str) -> Option<ItemType> {
-    match id.to_lowercase().as_str() {
+    match base_item_id(&id.to_lowercase()) {
         // Basic Resources
         "wood" => Some(ItemType::Wood),
         "stone" => Some(ItemType::Stone),

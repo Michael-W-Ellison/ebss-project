@@ -282,6 +282,11 @@ impl Simulation {
 
     /// Execute one simulation tick
     pub fn tick(&mut self) {
+        // Food does not sit on a fire forever: it is taken off, or it burns
+        // away. Either way the smell of cooking is a passing thing, so old
+        // contents are cleared before scents are worked out.
+        self.clear_finished_cooking();
+
         // Let agents smell nearby food and water before they perceive and act,
         // so world resources reach the percept/memory pipeline this tick.
         self.emit_scents();
@@ -889,6 +894,8 @@ impl Simulation {
             Action::Tame { .. } => Some(ActionType::Social), // Taming requires social skills
             Action::CollectAnimalProduct { .. } => Some(ActionType::Crafting), // Animal husbandry
             Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
+            Action::Cook { .. } => Some(ActionType::Cooking),
+            Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)
             }
@@ -1129,7 +1136,8 @@ impl Simulation {
     /// PRIORITY 1: Check if agent needs shelter due to exposure
     /// PRIORITY 2: Check for high-salience percepts
     /// PRIORITY 3: Execute current plan step
-    /// PRIORITY 4: Check active goals
+    /// PRIORITY 3: Cook raw food
+    /// PRIORITY 4: Check high-salience percepts, then plans, then goals
     /// PRIORITY 5: Use drive-based action
     /// Action an agent needs to take to stay alive, if any.
     ///
@@ -1256,6 +1264,21 @@ impl Simulation {
         use crate::core::memory::SpatialMemoryType;
 
         let carrying_food = agent.has_edible_food();
+
+        // A fire right here turns a third of what is in raw meat into nearly
+        // all of it, so one tick spent cooking buys back several meals' worth.
+        // Not when starving: then the difference between a poor meal now and a
+        // good one next tick is the difference between eating and dying.
+        if !desperate
+            && Self::has_food_worth_cooking(agent)
+            && self
+                .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+                .is_some()
+        {
+            return Some(Action::Cook {
+                food_type: "generic".to_string(),
+            });
+        }
 
         // Eat what we carry as soon as we are hungry; an agent that walks
         // around starving with a full pack is the bug this guards against.
@@ -1397,7 +1420,23 @@ impl Simulation {
             return (Action::SeekShelter, false);
         }
 
-        // PRIORITY 3: Check for high-salience percepts (danger, resources, social opportunities)
+        // PRIORITY 3: Cook the raw food the agent is carrying.
+        //
+        // Anything reaching this point is fed, watered and warm - survival
+        // answered first - so this is an agent with raw meat and time on its
+        // hands, which is when cooking happens. It sits above goals and
+        // percepts because it does not otherwise happen at all: a plan or a
+        // steady stream of percepts wins every tie, and cooking placed below
+        // them was reached in four decisions in a thousand.
+        //
+        // It ends by itself. Cooking the food takes it off the list, so the
+        // agent goes back to whatever it was doing until it catches something
+        // else.
+        if let Some(action) = self.cooking_action(agent, agent_position) {
+            return (action, false);
+        }
+
+        // PRIORITY 4: Check for high-salience percepts (danger, resources, social opportunities)
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
             .iter()
             .cloned()
@@ -1411,14 +1450,14 @@ impl Simulation {
             return (percept_action, false);
         }
 
-        // PRIORITY 4: Execute current plan step (if agent has an active plan)
+        // PRIORITY 5: Execute current plan step (if agent has an active plan)
         if agent.should_execute_plan() {
             if let Some(plan_action) = agent.get_plan_action() {
                 return (plan_action, true);
             }
         }
 
-        // PRIORITY 5: Check active goals and generate goal-directed action
+        // PRIORITY 6: Check active goals and generate goal-directed action
         if let Some(goal) = agent.goals.highest_priority_goal() {
             // Get most urgent drive for fallback
             let fallback_drive = agent.drives.most_urgent()
@@ -1430,7 +1469,7 @@ impl Simulation {
             }
         }
 
-        // PRIORITY 6: Use drive-based action as fallback
+        // PRIORITY 7: Use drive-based action as fallback
         let drive_type = agent.select_drive_with_happiness()
             .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
             .unwrap_or(DriveType::Curiosity);
@@ -1442,6 +1481,184 @@ impl Simulation {
     /// How far an agent will walk to reach a resource while foraging, in
     /// walking (Manhattan) distance
     const FORAGE_RADIUS: u32 = 25;
+
+    /// How close an agent has to be to a fire to light it, feed it or cook on
+    /// it: near enough to reach into the flames
+    const FIRE_REACH: i32 = 1;
+
+    /// Wood a campfire is built from, matching `HeatSourceType::Campfire`
+    const FIRE_BUILD_WOOD: u32 = 5;
+
+    /// Wood put on to burn, worth about fifty ticks at a campfire's rate
+    const FIRE_FUEL_WOOD: u32 = 5;
+
+    /// How long food goes on smelling of cooking after it is taken off the
+    /// fire, in ticks
+    const COOKING_SMELL_TICKS: u32 = 60;
+
+    /// How much food fits over a campfire at once
+    const COOK_BATCH: u32 = 5;
+
+    /// How often a cook leaves food on the fire too long, by how practised
+    /// they are.
+    ///
+    /// Deliberately gentler than the generic `SkillCategory::failure_chance`,
+    /// which is calibrated for botching an axe: burning a meal is a smaller
+    /// and commoner mistake, and a fifty-fifty campfire would make cooking not
+    /// worth attempting.
+    fn burn_chance(cooking_level: i32) -> f32 {
+        match cooking_level {
+            level if level <= -6 => 0.20, // has never done it before
+            -5..=-1 => 0.10,
+            0..=5 => 0.04,
+            _ => 0.0, // years of it
+        }
+    }
+
+    /// What to call food that has come off a fire.
+    ///
+    /// `id_to_item_type` reads through these prefixes, so cooked fish is still
+    /// fish to everything that asks what it is.
+    fn prepared_item_id(item_id: &str, cooked_well: bool) -> String {
+        let base = crate::agents::storage_integration::base_item_id(item_id);
+
+        if cooked_well {
+            format!("cooked_{}", base)
+        } else {
+            format!("burnt_{}", base)
+        }
+    }
+
+    /// The nearest fire within reach, and where it is.
+    ///
+    /// With `lit_only` this reports only a fire that is actually burning; with
+    /// it false, a cold hearth counts too, which is what relighting looks for.
+    fn nearest_fire_from(
+        &self,
+        position: (i32, i32, i32),
+        reach: i32,
+        lit_only: bool,
+    ) -> Option<(uuid::Uuid, (i32, i32, i32))> {
+        self.world
+            .heat_sources
+            .all()
+            .into_iter()
+            .filter(|fire| !lit_only || fire.is_lit)
+            .filter(|fire| {
+                (fire.position.0 - position.0).abs() <= reach
+                    && (fire.position.1 - position.1).abs() <= reach
+            })
+            .min_by_key(|fire| {
+                (fire.position.0 - position.0).abs() + (fire.position.1 - position.1).abs()
+            })
+            .map(|fire| (fire.id, fire.position))
+    }
+
+    /// What the agent would put on a fire, if anything.
+    ///
+    /// A named food is taken at its word - cook a berry if you insist, and
+    /// lose it. Asked for anything, an agent picks something a fire actually
+    /// improves, because nobody sets out to burn their dinner.
+    fn cookable_item(agent: &crate::agents::Agent, food_type: &str) -> Option<String> {
+        use crate::world::nutrition::CookingOutcome;
+
+        let named = !food_type.is_empty() && food_type != "generic";
+        if named {
+            return agent
+                .inventory
+                .get_item(food_type)
+                .filter(|item| item.quantity > 0)
+                .map(|item| item.item_id.clone());
+        }
+
+        agent
+            .inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0)
+            .filter(|item| {
+                item.food_data
+                    .as_ref()
+                    .map(|food| food.preparation == crate::world::nutrition::PreparationState::Raw)
+                    .unwrap_or(true)
+            })
+            .filter(|item| {
+                crate::agents::storage_integration::id_to_item_type(&item.item_id)
+                    .map(|item_type| item_type.cooking_outcome() == CookingOutcome::Improves)
+                    .unwrap_or(false)
+            })
+            .map(|item| item.item_id.clone())
+            .min()
+    }
+
+    /// Whether the agent is carrying something a fire would improve
+    fn has_food_worth_cooking(agent: &crate::agents::Agent) -> bool {
+        Self::cookable_item(agent, "generic").is_some()
+    }
+
+    /// How far an agent will walk to reach a fire that is already burning
+    const FIRE_WALK_RADIUS: i32 = 20;
+
+    /// Getting raw food onto a fire, in whatever order the situation needs:
+    /// cook here, walk to the fire, light one, or go and cut the wood for it.
+    ///
+    /// Cooking is worth the trouble - raw meat gives up about a third of what
+    /// is in it, cooked meat nearly all of it - but only for food a fire
+    /// improves, so an agent carrying nothing but berries never lights one.
+    fn cooking_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        if !Self::has_food_worth_cooking(agent) {
+            return None;
+        }
+
+        // Standing at a fire that is burning: put the food on it
+        if self
+            .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+            .is_some()
+        {
+            return Some(Action::Cook {
+                food_type: "generic".to_string(),
+            });
+        }
+
+        // A fire burning within walking distance is worth the walk
+        if let Some((_, position)) =
+            self.nearest_fire_from(agent_position, Self::FIRE_WALK_RADIUS, true)
+        {
+            return Some(Action::Move { target: position });
+        }
+
+        // A cold hearth in reach costs only the fuel to bring back to life
+        let relightable = self
+            .nearest_fire_from(agent_position, Self::FIRE_REACH, false)
+            .is_some();
+        let wood_needed = if relightable {
+            Self::FIRE_FUEL_WOOD
+        } else {
+            Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
+        };
+
+        if agent.inventory.has_item("wood", wood_needed) {
+            return Some(Action::LightFire);
+        }
+
+        // No wood, but trees within reach: fetch some
+        if self
+            .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
+                resource.resource_type == crate::world::ResourceType::Wood
+            })
+            .is_some()
+        {
+            return Some(Action::Gather {
+                resource_type: "wood".to_string(),
+            });
+        }
+
+        None
+    }
 
     /// Whether standing on this tile counts as being under cover
     fn is_shelter_tile(&self, position: &crate::world::Position) -> bool {
@@ -1588,6 +1805,30 @@ impl Simulation {
     /// - what lies on the ground, faintly, and mostly if it is flesh
     /// - food that has turned, wherever it is being carried
     /// - a lit fire with something in it, which carries furthest of all
+    /// Take food off the fire once it has had its time there.
+    ///
+    /// The heat sources were built for smelting, where contents sit until a
+    /// recipe consumes them. Food has no such recipe, so without this a fire
+    /// that once had a meal on it would smell of cooking for the rest of the
+    /// run.
+    fn clear_finished_cooking(&mut self) {
+        let cooking_time = Self::COOKING_SMELL_TICKS;
+
+        for heat_source in self.world.heat_sources.all_mut() {
+            heat_source.contents.retain(|content| {
+                let is_food = crate::agents::storage_integration::id_to_item_type(
+                    &content.material_id,
+                )
+                .map(|item_type| {
+                    item_type.cooking_outcome() != crate::world::nutrition::CookingOutcome::NotFood
+                })
+                .unwrap_or(false);
+
+                !is_food || content.heating_time < cooking_time
+            });
+        }
+    }
+
     fn emit_scents(&mut self) {
         use crate::agents::senses::{Scent, ScentType};
 
@@ -1671,7 +1912,7 @@ impl Simulation {
                 .get_all_items()
                 .iter()
                 .filter_map(|(_, item)| item.food_data.as_ref())
-                .filter(|food| food.is_rotting())
+                .filter(|food| food.is_rotting() || food.is_ruined())
                 .map(|food| food.scent_strength())
                 .fold(0.0_f32, f32::max);
 
@@ -1887,6 +2128,7 @@ impl Simulation {
 
     fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
         use rand::Rng;
+        use crate::world::nutrition::CookingOutcome;
         use crate::world::Position;
 
         let mut rng = rand::thread_rng();
@@ -4164,6 +4406,214 @@ impl Simulation {
                 ActionResult::success()
                     .with_energy_cost(1.0)
                     .with_message("Dismounted from transport".to_string())
+            },
+
+            Action::LightFire => {
+                // A hearth is worth more than the wood in it, so an unlit fire
+                // already standing here is relit rather than rebuilt.
+                let agent_pos = self.population.agents[agent_index].state.position;
+
+                let existing = self
+                    .nearest_fire_from(agent_pos, Self::FIRE_REACH, false)
+                    .map(|(id, _)| id);
+
+                let wood_needed = if existing.is_some() {
+                    Self::FIRE_FUEL_WOOD
+                } else {
+                    Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
+                };
+
+                {
+                    let agent = &self.population.agents[agent_index];
+                    if !agent.inventory.has_item("wood", wood_needed) {
+                        return ActionResult::failure(format!(
+                            "Not enough wood for a fire: needs {}",
+                            wood_needed
+                        ));
+                    }
+                }
+
+                let builder = self.population.agents[agent_index].id;
+                let fire_id = match existing {
+                    Some(id) => id,
+                    None => match self.world.build_heat_source(
+                        crate::environment::HeatSourceType::Campfire,
+                        agent_pos,
+                        Some(builder),
+                    ) {
+                        Ok(id) => id,
+                        Err(reason) => {
+                            return ActionResult::failure(format!(
+                                "Could not build a fire here: {}",
+                                reason
+                            ))
+                        }
+                    },
+                };
+
+                self.population.agents[agent_index]
+                    .inventory
+                    .remove_item("wood", wood_needed);
+
+                let _ = self.world.add_fuel_to_heat_source(
+                    &fire_id,
+                    "wood".to_string(),
+                    Self::FIRE_FUEL_WOOD as f32,
+                );
+
+                if let Err(reason) = self.world.light_heat_source(&fire_id) {
+                    return ActionResult::failure(format!("Could not light the fire: {}", reason));
+                }
+
+                let agent = &mut self.population.agents[agent_index];
+                agent
+                    .skills
+                    .gain_experience(crate::agents::SkillType::Cooking, 5);
+
+                debug!("Agent {} lit a fire at {:?}", agent.id, agent_pos);
+
+                ActionResult::success()
+                    .with_energy_cost(4.0)
+                    .with_message("Lit a fire".to_string())
+            },
+
+            Action::Cook { food_type } => {
+                // Cooking needs a fire, and the agent has to be standing at it
+                let agent_pos = self.population.agents[agent_index].state.position;
+                let fire = self.nearest_fire_from(agent_pos, Self::FIRE_REACH, true);
+
+                let (fire_id, _) = match fire {
+                    Some(fire) => fire,
+                    None => return ActionResult::failure("No lit fire within reach".to_string()),
+                };
+
+                // Which of the things it is carrying goes on the fire
+                let chosen = {
+                    let agent = &self.population.agents[agent_index];
+                    match Self::cookable_item(agent, food_type) {
+                        Some(item_id) => item_id,
+                        None => {
+                            return ActionResult::failure(
+                                "Nothing worth putting on the fire".to_string(),
+                            )
+                        }
+                    }
+                };
+
+                let item_type = crate::agents::storage_integration::id_to_item_type(&chosen);
+                let outcome = item_type
+                    .map(|item_type| item_type.cooking_outcome())
+                    .unwrap_or(CookingOutcome::NotFood);
+
+                if outcome == CookingOutcome::NotFood {
+                    return ActionResult::failure(format!("{} is not food", chosen));
+                }
+
+                let current_tick = self.current_tick;
+                let fresh_food_data = item_type
+                    .and_then(|item_type| self.food_database.create_food_data(&item_type, current_tick));
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // Watching a fire is a skill. Someone who has never done it
+                // burns one meal in five; someone who has done it for years
+                // burns none, so the same food is ruined or not depending on
+                // who is standing over it.
+                let practice = agent
+                    .skills
+                    .get_skill_if_exists(crate::agents::SkillType::Cooking)
+                    .map(|skill| skill.level)
+                    .unwrap_or(-10);
+                let attentive = rng.gen::<f32>() >= Self::burn_chance(practice);
+
+                let outcome = if attentive {
+                    outcome
+                } else {
+                    CookingOutcome::Ruins
+                };
+
+                // Only what fits over the flames goes on. Cooking a whole pack
+                // at once would mean one lapse of attention costing everything
+                // an agent had gathered, and would leave it with no raw food
+                // to fall back on.
+                let carried = agent
+                    .inventory
+                    .get_item(&chosen)
+                    .map(|item| item.quantity)
+                    .unwrap_or(0);
+                let quantity = carried.min(Self::COOK_BATCH);
+
+                if quantity == 0 {
+                    return ActionResult::failure(format!("No {} to cook", chosen));
+                }
+
+                let mut batch = match agent.inventory.remove_item(&chosen, quantity) {
+                    Some(batch) => batch,
+                    None => return ActionResult::failure(format!("No {} to cook", chosen)),
+                };
+
+                // Food gathered before the nutrition system knew about it can
+                // reach the fire without any food data at all
+                if batch.food_data.is_none() {
+                    batch.food_data = fresh_food_data;
+                }
+
+                match batch.food_data.as_mut() {
+                    Some(food) => {
+                        food.cook(outcome);
+                    }
+                    None => {
+                        agent.inventory.add_item(batch);
+                        return ActionResult::failure(format!("{} is not food", chosen));
+                    }
+                }
+
+                // What comes off the fire is a different thing from what went
+                // on, and an agent carries the two side by side: a stack holds
+                // one preparation state, so cooked fish cannot share an entry
+                // with the raw fish still in the pack.
+                batch.item_id = Self::prepared_item_id(&chosen, outcome == CookingOutcome::Improves);
+
+                if !agent.inventory.add_item(batch) {
+                    return ActionResult::failure(format!(
+                        "Nowhere to put {} {} coming off the fire",
+                        quantity, chosen
+                    ));
+                }
+
+                agent
+                    .skills
+                    .gain_experience(crate::agents::SkillType::Cooking, 25);
+
+                // What is on the fire is what the neighbours smell
+                let _ = self
+                    .world
+                    .add_to_heat_source(&fire_id, chosen.clone(), quantity);
+
+                if outcome == CookingOutcome::Improves {
+                    debug!("Agent {} cooked {} {}", self.population.agents[agent_index].id, quantity, chosen);
+
+                    ActionResult::success()
+                        .with_energy_cost(2.0)
+                        .with_message(format!("Cooked {} {}", quantity, chosen))
+                } else if attentive {
+                    debug!(
+                        "Agent {} ruined {} {}: a fire is no good to it",
+                        self.population.agents[agent_index].id, quantity, chosen
+                    );
+
+                    ActionResult::failure(format!(
+                        "Ruined {} {}: a fire is no good to it",
+                        quantity, chosen
+                    ))
+                } else {
+                    debug!(
+                        "Agent {} burnt {} {}",
+                        self.population.agents[agent_index].id, quantity, chosen
+                    );
+
+                    ActionResult::failure(format!("Burnt {} {}", quantity, chosen))
+                }
             },
 
             Action::Wait => {

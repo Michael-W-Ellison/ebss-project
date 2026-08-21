@@ -202,6 +202,10 @@ pub enum Action {
     Dismount,
     /// Seek shelter from dangerous weather
     SeekShelter,
+    /// Build, fuel and light a fire where the agent is standing
+    LightFire,
+    /// Put carried food on a fire the agent is standing at
+    Cook { food_type: String },
     /// Wait/idle
     Wait,
 }
@@ -229,6 +233,8 @@ impl Action {
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
+            Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
+            Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::Move { .. } => None,
             Action::Wait => None,
         }
