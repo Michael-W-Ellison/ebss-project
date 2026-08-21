@@ -2130,7 +2130,19 @@ impl Agent {
             super::fatigue::FatigueSeverity::Severe => 0.2,
         };
 
-        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5) * self.reproduction_drive_modifier * dev_modifier * fatigue_factor
+        // Clamped to keep the documented 0.0 to 1.0 contract. The personal
+        // modifier reaches 1.8 and the developmental one 1.1, so an agent in
+        // its prime can multiply out to nearly 2.0 - and callers treat this as
+        // a probability. Multiplying two such values gave conception odds near
+        // 4.0, which panics the sampler.
+        let fertility = base_fertility
+            * health_factor
+            * (0.5 + reproduction_drive * 0.5)
+            * self.reproduction_drive_modifier
+            * dev_modifier
+            * fatigue_factor;
+
+        fertility.clamp(0.0, 1.0)
     }
 
     /// Get effective reproduction drive (base drive * personal modifier)

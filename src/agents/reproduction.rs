@@ -119,8 +119,11 @@ pub fn attempt_impregnation(
         return None;
     }
 
-    // Calculate conception probability based on fertility
-    let conception_chance = male.fertility() * female.fertility();
+    // Calculate conception probability based on fertility.
+    //
+    // Clamped because this is handed straight to the sampler, which panics on
+    // anything outside 0.0 to 1.0 rather than saturating.
+    let conception_chance = (male.fertility() * female.fertility()).clamp(0.0, 1.0);
 
     if rng.gen_bool(conception_chance as f64) {
         Some(PregnancyState::new(current_tick, male.id))
@@ -424,6 +427,70 @@ mod tests {
         }
 
         (male, female)
+    }
+
+    /// Fertility is handed to the sampler as a probability, so it has to keep
+    /// to its documented range.
+    ///
+    /// The personal reproduction modifier goes as high as 1.8 and the
+    /// developmental one to 1.1, so an unclamped agent in its prime multiplied
+    /// out to nearly 2.0.
+    #[test]
+    fn test_fertility_stays_within_probability_range() {
+        let mut agent = Agent::new(AgentConfig::default());
+
+        agent.state.age = 3000;
+        agent.state.life_stage = crate::agents::LifeStage::Adult;
+        agent.state.health = 100.0;
+        agent
+            .traits
+            .traits
+            .retain(|t| *t != crate::core::traits::Trait::Infertile);
+
+        // Every multiplier at its most generous
+        agent.reproduction_drive_modifier = 1.8;
+        agent.developmental_nutrition.finalized = true;
+        agent.developmental_nutrition.stat_modifiers.fertility = 1.1;
+        if let Some(drive) = agent.drives.get_mut(DriveType::Reproduction) {
+            drive.value = 1.0;
+        }
+
+        let fertility = agent.fertility();
+
+        assert!(
+            (0.0..=1.0).contains(&fertility),
+            "fertility should stay a probability, got {fertility}"
+        );
+    }
+
+    /// Two unusually fertile agents must not crash the conception roll.
+    ///
+    /// Their fertilities multiplied to roughly 4.0, and the sampler panics on
+    /// anything outside 0.0 to 1.0 rather than saturating. Reproduction only
+    /// started running once agents could keep themselves fed and watered, so
+    /// this surfaced as a rare crash a few thousand ticks into a run.
+    #[test]
+    fn test_impregnation_survives_maximum_fertility() {
+        let (mut male, mut female) = create_mating_pair();
+
+        for agent in [&mut male, &mut female] {
+            agent.state.health = 100.0;
+            agent.reproduction_drive_modifier = 1.8;
+            agent.developmental_nutrition.finalized = true;
+            agent.developmental_nutrition.stat_modifiers.fertility = 1.1;
+            if let Some(drive) = agent.drives.get_mut(DriveType::Reproduction) {
+                drive.value = 1.0;
+            }
+        }
+
+        assert!(
+            male.fertility() * female.fertility() <= 1.0,
+            "the conception roll needs a probability, got {}",
+            male.fertility() * female.fertility()
+        );
+
+        // Would panic outright before the clamp
+        let _ = attempt_impregnation(&male, &female, 100);
     }
 
     #[test]
