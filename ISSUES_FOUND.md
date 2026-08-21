@@ -1,207 +1,162 @@
-# Simulation Issues Analysis
+# Known Issues
 
-## Critical Issues Found
+**Last verified:** August 2026, against commit `b8e557e`.
 
-### 1. ⚠️ **CRITICAL: Death Mechanics Not Integrated in Simulation Loop**
-
-**Status**: CRITICAL - Prevents all death mechanics from functioning
-**Location**: `src/analytics/mod.rs:87-149` (Simulation::tick())
-
-**Problem**:
-The `Simulation::tick()` method directly calls `agent.tick()` on each agent, but this does NOT trigger the aging and starvation death mechanics. The death mechanics are only triggered when `Population::tick()` is called, which calls `agent.tick_with_time(current_tick)` → `state.age_tick(current_tick)`.
-
-**Current Code Flow**:
-```
-Simulation::tick()
-  └─> agent.tick()  ❌ Does NOT include aging/starvation
-```
-
-**Required Code Flow**:
-```
-Simulation::tick()
-  └─> Population::tick()
-      ├─> agent.tick_with_time(current_tick)
-      │   ├─> agent.tick()
-      │   └─> agent.state.age_tick(current_tick)  ✓ Aging & starvation
-      ├─> process_deaths()  ✓ Remove dead agents
-      ├─> process_reproduction()
-      └─> process_abandonments()
-```
-
-**Impact**:
-- ❌ Agents never age
-- ❌ Agents never die from starvation
-- ❌ Agents never die from old age
-- ❌ Life stages never progress (always stay at default)
-- ❌ Death processing never runs
-- ❌ Reproduction never happens
-- ❌ Population statistics never update
-
-**Evidence**:
-- `src/agents/agent.rs:616-622`: `tick_with_time()` calls `age_tick()`
-- `src/agents/agent.rs:468-518`: `age_tick()` contains all aging and starvation logic
-- `src/agents/population.rs:96-121`: `Population::tick()` orchestrates full lifecycle
-- `src/analytics/mod.rs:87-149`: `Simulation::tick()` bypasses Population::tick()
-
-**Solution Required**:
-Modify `Simulation::tick()` to call `self.population.tick()` in addition to (or instead of) manually iterating agents.
+Each entry below was reproduced before being written down, and each carries
+the evidence. Entries are ordered by how much they block someone picking the
+project up.
 
 ---
 
-## Medium Issues
+## Blocking
 
-### 2. ⚠️ **Duplicate Agent Processing in Simulation**
+### 1. The Bevy front end does not compile
 
-**Status**: MEDIUM - Inefficiency and potential conflicts
-**Location**: `src/analytics/mod.rs:92-143`
+**Where:** `src/bevy_gui/ui/mod.rs:1001-1013`
+**Reproduce:** `cargo check --features bevy_gui` — 9 errors
 
-**Problem**:
-If `Population::tick()` is added to `Simulation::tick()`, agents would be processed twice:
-1. Once in `Population::tick()` via `agent.tick_with_time()`
-2. Again in `Simulation::tick()` via manual iteration
+The panel reads fields that no longer exist on `HistoryPoint`: `infants`,
+`children`, `adolescents`, `adults`, `elderly`, `avg_health`, `avg_energy`,
+`avg_happiness`, `buildings_construction`. The struct was refactored and this
+call site was not updated with it.
 
-**Impact**:
-- Drives would accumulate twice as fast
-- Behavior trees would execute twice per tick
-- Actions would be generated and executed redundantly
+Mechanical to fix: either restore the fields on `HistoryPoint` or read the
+values from wherever they moved. The egui front end (`--features gui`) is
+unaffected and works.
 
-**Solution Required**:
-Restructure `Simulation::tick()` to either:
-- **Option A**: Call `Population::tick()` and remove manual agent iteration
-- **Option B**: Call `Population::tick()` but skip the behavior tree execution loop if it's already handled
+### 2. The bundled plugin crate does not compile
 
----
+**Where:** `plugins/minecraft_survival/src/lib.rs`
+**Reproduce:** `cargo check --workspace` — 17 errors
 
-### 3. ⚠️ **Missing Population Tick Counter Synchronization**
+The crate is written against an older API in which `environment::Action` was a
+struct with `new()`, `.effects`, `.id` and `.action_type`. `Action` is now an
+enum. This breaks `cargo check --workspace` and `cargo test --workspace` for
+everyone, whether or not they care about the plugin.
 
-**Status**: MEDIUM - Timing desynchronization
-**Location**: `src/analytics/mod.rs:88` and `src/agents/population.rs:96`
-
-**Problem**:
-Both `Simulation` and `Population` maintain separate tick counters:
-- `Simulation.current_tick` (u32)
-- `Population.current_tick` (u32)
-
-These could drift out of sync, causing issues with:
-- Age calculations
-- Starvation timing
-- Reproduction cooldowns
-- Any time-dependent logic
-
-**Solution Required**:
-- Ensure Population uses the same tick counter as Simulation
-- Pass tick number to Population::tick() rather than letting it maintain its own
+The in-tree `src/environment/minecraft_survival.rs` is the current, working
+version of the same environment. The plugin crate is a stale copy of it, so
+the cheapest fix may be to delete the crate or rewrite it against the enum.
 
 ---
 
-## Minor Issues
+## Correctness
 
-### 4. ⚠️ **Population Size Calculation Inconsistency**
+### 3. Two tests fail intermittently
 
-**Status**: MINOR - Potential confusion
-**Location**: `src/agents/population.rs:90-92`
+    world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
+    world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
 
-**Problem**:
-```rust
-pub fn size(&self) -> usize {
-    self.agents.iter().filter(|a| a.state.is_alive).count()
-}
-```
+Measured failure rates of roughly 1-in-10 to 1-in-20 per run, present long
+before recent work (measured on unmodified code at 2/20 and 3/15 for related
+cases). Both build a world through `World::new`, which draws from
+`thread_rng`, and then assert on a property a random world does not always
+have — for example that clay deposits happen to be clustered.
 
-The `size()` method filters for alive agents, but `self.agents.len()` includes all agents (alive and dead).
+The fix is to give world generation a seed, which the project wants anyway for
+reproducible runs. Until then, a red build is not necessarily a real failure,
+which is corrosive: check whether the failing test is one of these two before
+assuming a regression.
 
-**Impact**:
-- Different parts of code may report different population sizes
-- Dead agents remain in the vector until `process_deaths()` is called
+### 4. No error recovery around a tick
 
-**Note**: This is actually correct behavior (dead agents should be removed by `process_deaths()`), but could cause confusion if death processing isn't running.
-
----
-
-### 5. ⚠️ **Default Life Stage State**
-
-**Status**: MINOR - Initialization issue
-**Location**: `src/agents/agent.rs:434-465` (AgentState::new())
-
-**Problem**:
-New agents start with `age: 0` but the `life_stage` might not be properly initialized to `Infant`.
-
-**Impact**:
-- New agents might have undefined life stage
-- Statistics might not properly categorize newborns
-
-**Verification Needed**:
-Check if `LifeStage::from_age(0)` correctly returns `LifeStage::Infant`.
+One panicking agent ends the whole run and loses everything since the last
+autosave. There is no isolation of per-agent failure and no attempt to
+continue after an error. This mattered concretely: a probability bug in
+conception crashed roughly one run in twenty-five until it was fixed, and each
+crash took the entire simulation with it.
 
 ---
 
-## Working Components
+## Design gaps that show up as odd behaviour
 
-### ✅ **Correctly Implemented**
+### 5. Agents never make or wear clothing
 
-1. **World Initialization**
-   - `World::new(WorldConfig::default())` ✓ Works
-   - Default configuration available ✓ Works
+Cold insulation comes only from equipment, and nothing drives an agent to
+craft or equip anything. Insulation is therefore always zero, and agents spend
+their lives cycling between being cold and sheltering. Clothing recipes
+(`src/environment/clothing_recipes.rs`) and the equipment system both exist
+and work when items are placed on an agent by hand.
 
-2. **Population Initialization**
-   - `Population::with_config(PopulationConfig::default())` ✓ Works
-   - `population.spawn_agent()` ✓ Works
-   - Agent creation and field initialization ✓ Works
+This is the largest behavioural gap: cold is currently a condition agents
+endure rather than a problem they solve, which is exactly the kind of
+emergence the project exists to produce.
 
-3. **Death Mechanics Code** (not integrated, but code is correct)
-   - `age_tick()` implementation ✓ Correct
-   - `process_deaths()` implementation ✓ Correct
-   - Starvation progression ✓ Correct
-   - Old age checking ✓ Correct
+### 6. Fear is a hunger signal, not a danger signal
 
-4. **Agent Subsystems**
-   - `agent.tick()` subsystem updates ✓ Works
-   - Body damage processing ✓ Works
-   - Emotion processing ✓ Works
-   - Drive accumulation ✓ Works
+`calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
+rest. Since hunger saturates between meals, fear sits at around 0.8 much of
+the time. `should_flee` triggers above 0.6, so agents read as fleeing in
+ordinary circumstances rather than in response to a threat.
 
-5. **Type Exports**
-   - Prelude exports all necessary types ✓ Works
-   - Import paths are correct ✓ Works
+Survival actions now outrank fleeing, so this no longer strands agents, but
+the emotional model is still reporting something misleading, and anything
+built on `should_flee` inherits that.
 
----
+### 7. Perception is smell-only
 
-## Recommended Action Plan
+Agents smell food and water. Nothing feeds vision or hearing from the world,
+so `Percept::AgentDetected` and every sound-derived percept are dead paths in
+a live run. Social behaviour works because `Population` computes proximity
+directly rather than perceiving it. See SIMULATION_AUDIT.md.
 
-### Priority 1: Fix Critical Issue #1
-1. Modify `Simulation::tick()` to integrate `Population::tick()`
-2. Remove or refactor duplicate agent processing
-3. Ensure tick counters are synchronized
+### 8. Zoning and territory are never established
 
-### Priority 2: Test Integration
-1. Run test_simulation executable
-2. Verify agents age over time
-3. Verify deaths occur from old age and starvation
-4. Verify life stages progress correctly
-5. Verify population statistics update
+Building placement scoring reads zone and territory bonuses from
+`World::zone_manager` and `World::territory_manager`, but nothing outside the
+tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
+always empty in a live run and every bonus they contribute is zero, so
+settlements have no planned structure and agents claim no ground.
 
-### Priority 3: Address Medium Issues
-1. Resolve duplicate processing
-2. Synchronize tick counters
-3. Document expected behavior
+### 9. Agents carry food they will never eat
 
-### Priority 4: Cleanup
-1. Remove redundant code
-2. Add integration tests
-3. Update documentation
+Food that has turned is correctly refused, but stays in the inventory until
+its freshness decays to zero and spoilage removes it. Harmless, but it means
+carried weight includes rot.
 
 ---
 
-## Testing Checklist
+## Housekeeping
 
-After fixing Issue #1, verify:
+### 10. Committed backup file
 
-- [ ] Agents age each tick (check `agent.state.age` increases)
-- [ ] Life stages progress (Infant → Child → Adolescent → Adult → Elderly)
-- [ ] Agents die when `age >= max_age`
-- [ ] Agents die from starvation if not eating
-- [ ] `process_deaths()` removes dead agents
-- [ ] Population statistics update correctly
-- [ ] Reproduction occurs (when implemented)
-- [ ] Death watch warnings appear in test executable
-- [ ] Final statistics show deaths occurred
+`src/analytics/mod.rs.backup` is checked into the repository.
+
+### 11. Build warnings
+
+15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
+handles most.
+
+### 12. Placeholder package metadata
+
+`Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
+and `repository = "https://github.com/yourusername/ebss-project"`.
+
+---
+
+## Recently fixed
+
+Listed so nobody re-investigates them. Each has regression tests in
+`src/analytics/tests/`.
+
+- **Death mechanics not integrated.** `Simulation::tick` bypassed
+  `Population::tick`, so aging, starvation and death never ran. This was the
+  critical issue in the previous version of this document. Fixed.
+- **Survival subsystems never invoked.** `Population::tick` reached past
+  `tick_with_time`, so nutrition metabolism, food spoilage and awake fatigue
+  had no effect on a live run despite full unit-test coverage.
+- **Agents starved holding food.** Eating ignored inventory, goals outranked
+  hunger indefinitely, and action selection was gated on having a matching
+  behaviour tree.
+- **Agents were permanently hypothermic.** Thermoregulation was weaker than
+  environmental heat transfer, so core temperature settled near ambient;
+  shelter did not affect body temperature; exposure damage never decreased.
+- **Agents never drank.** Thirst was reachable only through the drive fallback
+  that hunger monopolised. Agents went thousands of ticks without water beside
+  a river.
+- **Survival damage was erased.** Health was overwritten from body condition
+  every tick, discarding starvation, dehydration and exposure damage.
+- **Conception crashed the simulation.** Fertility could exceed 1.0 and was
+  used as a probability; 44.7% of adult pairs produced odds above 1.0, which
+  panics the sampler. Only reachable once agents could feed and water
+  themselves well enough to reproduce.

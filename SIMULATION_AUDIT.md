@@ -1,336 +1,181 @@
 # EBSS Simulation Feature Audit
 
-**Date:** 2025-11-17
-**Status:** Comprehensive audit of simulation functionality
+**Last verified:** August 2026, against commit `b8e557e`
+**Method:** every claim below was checked by reading the call chain from
+`Simulation::tick()` outward, or by running the simulation and measuring the
+result. Claims that could not be verified either way are marked as such.
 
 ---
 
-## ✅ Implemented Features
+## Why this audit is organised around "is it wired in"
 
-### 1. **Save/Load System**
-- ✅ JSON-based persistence
-- ✅ Full state serialization (agents, world, population)
-- ✅ Graceful error handling
-- ✅ **11 comprehensive tests** covering save/load/resume cycles
+The recurring shape of defects in this codebase has not been missing features.
+It has been complete, well-tested subsystems that nothing in the live
+simulation loop calls. Nutrition metabolism, food spoilage and awake fatigue
+each had thorough unit tests and zero effect on a running simulation, because
+`Population::tick` reached past the function that invoked them. Health
+regeneration had no callers at all. The food database was never instantiated.
 
-**Location:** `src/analytics/mod.rs`
-**Test Coverage:** `src/analytics/tests/save_load_tests.rs`
+So this audit separates three states, and the middle one is where the risk
+lives:
 
----
+| State | Meaning |
+| --- | --- |
+| **Running** | Reached from `Simulation::tick()` and observable in a run |
+| **Built, not connected** | Implemented and tested, but no live caller |
+| **Absent** | Not implemented |
 
-### 2. **Simulation Control**
-- ✅ Pause/Resume
-- ✅ Speed control (0.1-1000 ticks/second)
-- ✅ Step-by-step execution
-- ✅ State inspection (Running/Paused/Stepping)
-
-**Location:** `src/analytics/simulation_controller.rs`
-**Test Coverage:** 5 tests in module
-
----
-
-### 3. **Performance Monitoring**
-- ✅ Operation timing
-- ✅ Tick performance tracking
-- ✅ TPS (ticks per second) measurement
-- ✅ Memory usage estimates
-- ✅ Performance summaries
-- ✅ Profiling macro (`profile_operation!`)
-
-**Location:** `src/analytics/performance.rs`
-**Test Coverage:** 8 comprehensive tests
+A subsystem being "implemented" and "tested" says nothing about whether it
+does anything. Check the call chain.
 
 ---
 
-### 4. **Analytics & Metrics**
-- ✅ Population tracking (births, deaths, abandonments)
-- ✅ Drive snapshots
-- ✅ Emotion tracking
-- ✅ Relationship metrics
-- ✅ Emergence detection
-- ✅ Behavior pattern analysis
+## Running
 
-**Location:** `src/analytics/metrics.rs`, `src/analytics/emergence.rs`
+Verified reachable from `Simulation::tick()`.
 
----
+### Survival
+- Hunger, thirst and energy, with agents foraging, drinking and eating from
+  inventory or the land
+- Nutrition: energy reserves, protein and micronutrients, with deficiency
+  penalties; food carries nutrition and spoils, and agents refuse food that
+  would make them sick
+- Body temperature with insulation, wind chill and heat index; exposure
+  (hypothermia, hyperthermia, frostbite, sunburn, windburn, dehydration) that
+  accumulates, is capped, and recovers
+- Shelter: buildings and woodland moderate temperature and let exposure heal
+- Fatigue and sleep, with sleep quality from shelter, safety, health and hunger
+- Injury, healing, and death from starvation, dehydration, exposure, injury
+  and old age
 
-### 5. **Data Export**
-- ✅ JSON export (pretty and compact)
-- ✅ CSV export for metrics
-- ✅ Population trends
-- ✅ Happiness trends
-- ✅ Trait distributions over time
-- ✅ Dashboard data generation
+### Lifecycle
+- Aging through infant, child, adolescent, adult and elderly stages
+- Mate selection, pregnancy with prenatal nutrition, birth, nursing, and
+  developmental nutrition that modifies adult stats
+- Inheritance of traits and behaviour trees from both parents
 
-**Location:** `src/analytics/export.rs`
-**Test Coverage:** 4 tests
+### Behaviour
+- 14 drives with per-agent weights and thresholds
+- Behaviour trees with weight-based learning and pruning
+- Goals and multi-step plans, abandoned when no longer relevant
+- Action selection ordered: starvation, emotional response, shelter,
+  perception, plan, goal, drive
+- Obstacle-aware movement (greedy step, then a bounded breadth-first route
+  search), committed search legs when looking for something out of range
 
----
+### Social
+- Proximity-based relationships and bonds, decay at distance
+- Social interactions, gossip and information spread
+- Observational learning between agents
+- Shared knowledge, technology discovery and spread
 
-### 6. **Configuration System**
-- ✅ WorldConfig (size, resources)
-- ✅ AgentConfig (traits, skills, initial state)
-- ✅ PopulationConfig (abandonment thresholds)
-- ✅ MemoryConfig (capacity limits)
-- ✅ PluginConfig (world generation seeds)
+### World
+- Terrain, climate, weather, seasons, day/night
+- Resources with regeneration; renewable nodes persist when emptied so they
+  regrow, non-renewable deposits are removed
+- Buildings, construction and maintenance
+- Crafting, smelting, technology progression
+- Fauna (movement, hunger, breeding, predation) and flora (growth, regrowth)
+- Combat between agents and hunting of animals
 
-**Location:** Multiple modules
-
----
-
-### 7. **Testing Infrastructure**
-- ✅ **644 passing unit tests**
-- ✅ Drive satisfaction tests (20 tests)
-- ✅ Lifecycle & survival tests (25 tests)
-- ✅ Save/load tests (11 tests)
-- ✅ TDD methodology applied
-- ✅ Floating-point precision handling
-- ✅ Integration tests
-
----
-
-### 8. **Logging**
-- ✅ Uses `log` crate
-- ✅ Debug, info, warn levels
-- ✅ Structured logging throughout simulation
-
----
-
-### 9. **Inspection Tools**
-- ✅ Inspector for agents/world
-- ✅ Drive inspection
-- ✅ Memory summaries
-- ✅ Inventory summaries
-- ✅ Sensory summaries
-- ✅ Skill summaries
-- ✅ Emotion summaries
-- ✅ Relationship summaries
-
-**Location:** `src/analytics/inspector.rs`
+### Persistence and display
+- Save and load via MessagePack; autosave with checkpoint rotation
+- ASCII renderer
+- egui GUI (`cargo run --features gui --bin ebss_gui`)
 
 ---
 
-### 10. **Visualization**
-- ✅ ASCII renderer
-- ✅ Real-time population display
+## Built, not connected
 
-**Location:** `src/visualization/mod.rs`
+Each of these is implemented and has tests. None is driven by
+`Simulation::tick()`.
 
----
+| Component | State |
+| --- | --- |
+| `analytics::web_api` (`ApiServer`) | **Zero call sites in the entire repo.** An HTTP API with no server started and no front end |
+| `analytics::events` (`EventBus`) | Constructed only inside its own tests |
+| `analytics::replay` (`SessionRecorder`) | Constructed only inside its own tests |
+| `analytics::storage` (`StorageManager`) | Constructed only inside its own tests |
+| `analytics::metrics` (`SimulationMetrics`) | Works when driven; `examples/ascii_simulation.rs` and `examples/phase4_analytics.rs` show how |
+| `analytics::emergence` (`EmergenceDetector`) | Same — driven by those two examples only |
+| `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
+| Vision (`senses::Vision`) | Nothing calls `update_visible_agents` or `update_visible_positions`, so agents never see anything |
+| Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
+| `world::zoning`, `world::territory` | Read by building placement scoring (`spatial_planning.rs`), but nothing outside tests ever calls `add_zone` or `claim_territory`, so both managers are always empty and every bonus they contribute is zero |
 
-## ⚠️ Missing/Incomplete Features
-
-### 1. **Auto-save/Checkpointing** ❌
-**Priority:** HIGH
-**Impact:** Data loss on crashes
-
-**What's Needed:**
-- Auto-save at configurable intervals
-- Checkpoint rotation (keep last N saves)
-- Crash recovery mechanism
-- Incremental saves for large simulations
-
-**Suggested Implementation:**
-```rust
-pub struct AutoSaveConfig {
-    pub enabled: bool,
-    pub interval_ticks: u32,
-    pub max_checkpoints: usize,
-    pub save_directory: PathBuf,
-}
-```
+**Consequence for perception:** the only sensory channel the simulation feeds
+is smell, and only for food and water. Agents locate resources by scent and
+by remembering where they have been. They do not see each other; social
+proximity is computed directly by `Population`, not perceived. Any reasoning
+that depends on `Percept::AgentDetected` or on sound is a dead path in a live
+run.
 
 ---
 
-### 2. **Deterministic Replay** ❌
-**Priority:** MEDIUM
-**Impact:** Cannot reproduce bugs or replay scenarios
+## Absent
 
-**What's Needed:**
-- Random seed control at simulation level
-- Event log for replay
-- Deterministic execution guarantee
-- Replay from saved event stream
-
-**Current State:** Seeds exist only in PluginConfig (world generation)
-
-**Suggested Implementation:**
-```rust
-pub struct SimulationConfig {
-    pub seed: u64,
-    pub deterministic: bool,
-    pub record_events: bool,
-}
-```
+- **Clothing behaviour.** Clothing recipes, equipment slots and cold
+  insulation all exist and work when equipment is present. Nothing drives an
+  agent to make or wear anything, so insulation is always zero and agents
+  cycle between cold and shelter for their whole lives.
+- **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
+  cannot be reproduced and two tests are intermittently flaky.
+- **Long-run characterisation.** Nobody has studied population dynamics,
+  technology spread or settlement patterns past a few tens of thousands of
+  ticks.
 
 ---
 
-### 3. **Configuration Validation** ❌
-**Priority:** MEDIUM
-**Impact:** Invalid configurations cause runtime errors
+## Measured behaviour
 
-**What's Needed:**
-- Validate configs before simulation start
-- Check for impossible values
-- Provide helpful error messages
-- Constraint checking (min/max values)
+From ten independent worlds, twelve starting agents each, eight thousand ticks
+(`Simulation::tick` driven directly, no GUI):
 
-**Suggested Implementation:**
-```rust
-impl WorldConfig {
-    pub fn validate(&self) -> Result<(), String> {
-        if self.size.0 == 0 || self.size.1 == 0 {
-            return Err("World size must be greater than 0".to_string());
-        }
-        Ok(())
-    }
-}
-```
+| Measure | Result |
+| --- | --- |
+| Populations dying out | 0 of 10 |
+| Population trajectory | 12 → 18-37, by live births |
+| Agents fed at the end | 296 of 299 |
+| Agents hydrated at the end | 291 of 299 |
+| Agents critically exposed | 0 |
+| Typical core temperature | 35-37 °C |
+| Typical time since last drink | ~30 ticks |
 
----
+Thermal model behaviour, by settled core temperature of an unclothed agent:
 
-### 4. **SimulationConfig Implementation** ❌
-**Priority:** HIGH
-**Impact:** No central configuration for simulation parameters
-
-**Current State:** Empty stub: `pub struct SimulationConfig;`
-
-**What's Needed:**
-```rust
-pub struct SimulationConfig {
-    pub seed: Option<u64>,
-    pub max_ticks: Option<u32>,
-    pub autosave_interval: Option<u32>,
-    pub log_level: LogLevel,
-    pub performance_monitoring: bool,
-    pub emergence_detection: bool,
-}
-```
+| Ambient | Core | Verdict |
+| --- | --- | --- |
+| 20 °C | 37.0 | comfortable |
+| 10 °C | 37.0 | comfortable |
+| 0 °C | 35.1 | marginal |
+| −20 °C | 29.6 | hypothermic |
+| −20 °C with 0.8 insulation | 37.0 | comfortable |
+| 60 °C | 42.0 | hyperthermic |
 
 ---
 
-### 5. **Error Recovery** ❌
-**Priority:** LOW
-**Impact:** Crashes lose all progress
+## Test coverage
 
-**What's Needed:**
-- Try-catch around tick execution
-- Graceful degradation
-- Error reporting without crashing
-- Agent isolation (one agent error doesn't crash sim)
+1,055 library tests, 15 integration tests, 1 doc test. All pass, except two
+known flaky tests (`test_resource_clustering`,
+`test_minimize_travel_time_from_agent_position`) that assert on properties a
+randomly generated world does not always have.
 
----
-
-### 6. **Event System** ❌
-**Priority:** MEDIUM
-**Impact:** No event history, hard to debug
-
-**What's Needed:**
-- Centralized event log
-- Event replay capability
-- Event filtering/querying
-- Event-driven architecture for observers
+Coverage is dense at the unit level and thin at the "does this run in a real
+simulation" level, which is precisely how the wiring defects survived. The
+regression tests added for survival, shelter and thirst
+(`src/analytics/tests/`) deliberately drive a whole `Simulation` for thousands
+of ticks and assert on the outcome, rather than calling a subsystem directly.
+More tests of that shape would be the single best defence against this class
+of bug.
 
 ---
 
-### 7. **Hot Reload** ❌
-**Priority:** LOW
-**Impact:** Must restart simulation to change config
+## Superseded
 
-**What's Needed:**
-- Reload configuration without restart
-- Plugin hot-swap
-- Behavior tree updates while running
-
----
-
-### 8. **Benchmarking Suite** ❌
-**Priority:** LOW
-**Impact:** Cannot measure performance improvements
-
-**What's Needed:**
-- Criterion benchmarks
-- Scalability tests
-- Performance regression detection
-
----
-
-### 9. **Command-Line Interface** ⚠️
-**Priority:** LOW
-**Status:** Partial (test_simulation binary exists but limited)
-
-**What's Needed:**
-- Better CLI with subcommands
-- `ebss run`, `ebss load`, `ebss export`
-- Progress bars
-- Interactive mode
-
----
-
-### 10. **Scripting/Modding API** ❌
-**Priority:** LOW
-**Impact:** Hard to extend without Rust knowledge
-
-**What's Needed:**
-- Lua or Rhai scripting integration
-- Plugin system for custom behaviors
-- Event hooks for modders
-
----
-
-## 📊 Test Coverage Summary
-
-| Module | Tests | Status |
-|--------|-------|--------|
-| **Drive Satisfaction** | 20 | ✅ All Pass |
-| **Lifecycle & Survival** | 25 | ✅ All Pass |
-| **Save/Load** | 11 | ✅ All Pass |
-| **Action Execution** | 4 | ✅ All Pass |
-| **Performance Monitor** | 8 | ✅ All Pass |
-| **Data Export** | 4 | ✅ All Pass |
-| **Simulation Controller** | 5 | ✅ All Pass |
-| **Pre-existing Tests** | 567 | ✅ All Pass |
-| **TOTAL** | **644** | ✅ **100% Pass Rate** |
-
----
-
-## 🎯 Recommended Priorities
-
-### Phase 1 (Critical - Implement Now)
-1. ✅ **Save/Load** - COMPLETED
-2. **Auto-save/Checkpointing** - Prevents data loss
-3. **SimulationConfig** - Central configuration
-4. **Configuration Validation** - Prevent runtime errors
-
-### Phase 2 (Important - Near Future)
-5. **Deterministic Replay** - Bug reproduction
-6. **Event System** - Debugging and analysis
-7. **Better CLI** - User experience
-
-### Phase 3 (Nice to Have - Future)
-8. **Hot Reload** - Development convenience
-9. **Benchmarking** - Performance tracking
-10. **Scripting API** - Extensibility
-
----
-
-## 📝 Notes
-
-- **Excellent test coverage:** 644 tests with 100% pass rate
-- **TDD methodology successfully applied** for save/load
-- **Performance monitoring is comprehensive** and production-ready
-- **Analytics system is mature** with emergence detection
-- **Main gaps:** Auto-save, deterministic replay, config validation
-
----
-
-## ✨ Highlights
-
-The simulation has:
-- ✅ **Robust persistence** (save/load with full state)
-- ✅ **Comprehensive testing** (644 tests)
-- ✅ **Performance profiling** (detailed operation timing)
-- ✅ **Rich analytics** (emergence patterns, metrics export)
-- ✅ **Flexible control** (pause, speed, step)
-
-**Overall Assessment:** **Production-ready core** with excellent test coverage. Main missing features are quality-of-life improvements (auto-save, better configs) rather than critical functionality gaps.
+An earlier version of this document listed auto-save, deterministic replay,
+configuration validation, `SimulationConfig` and error recovery as missing.
+Auto-save, replay, config validation and `SimulationConfig` have since been
+implemented — the first three are running, replay is built but unconnected.
+Error recovery (isolating a panicking agent so one failure does not end the
+run) is still absent.

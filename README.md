@@ -6,7 +6,7 @@ A general-purpose AI platform for simulating societies of autonomous agents that
 
 EBSS provides a modular framework where agents develop complex behaviors through:
 - **Weighted Behavior Trees**: Learned decision-making patterns that evolve with experience
-- **Drive-Based Motivation**: 13 core drives (hunger, safety, curiosity, social, etc.) creating dynamic priorities
+- **Drive-Based Motivation**: 14 core drives (hunger, thirst, safety, curiosity, social, etc.) creating dynamic priorities
 - **Genetic Inheritance**: Offspring inherit successful behavioral patterns from parents
 - **Memory Systems**: Agents remember locations, storage contents, and other agents
 - **Observational Learning**: Young agents learn by following experienced agents
@@ -16,21 +16,36 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 
 ## Project Status
 
-**Current Phase**: Foundation Development (Phase 1)
+**Current state**: all four planned phases are implemented. A default
+simulation runs a society that feeds itself, waters itself, shelters from the
+weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
+across 181 source files, with 1,055 library tests.
 
-This project is in early development. See the [Software Design Document](docs/Software_Design_Document.docx) for complete specifications.
+The work left is connecting and hardening rather than building: the Bevy front
+end and the bundled plugin crate no longer compile against the current API, and
+several analytics components are libraries with no caller. See
+[PROJECT_STATUS.txt](PROJECT_STATUS.txt) for measured detail and
+[ISSUES_FOUND.md](ISSUES_FOUND.md) for the current defect list. The
+[Software Design Document](EBSS_Software_Design_Document.docx) holds the
+original specifications.
 
 ## Key Features
 
 - ✅ Behavior Tree Learning: Agents build and evolve decision trees through experience
-- ✅ Drive Architecture: 13 core drives create emergent behavior patterns
-- 🚧 Genetic Inheritance: Offspring learn from successful parent strategies
-- 🚧 Environment Abstraction: Plugin system for different world types
-- 📋 Memory Systems: Knowledge persistence with decay
-- 📋 Social Learning: Observation and imitation mechanics
-- 📋 Analytics: Emergence detection and behavior analysis
+- ✅ Drive Architecture: 14 core drives create emergent behavior patterns
+- ✅ Survival: hunger, thirst, nutrition, body temperature, exposure and shelter
+- ✅ Genetic Inheritance: offspring inherit traits and behavior from parents
+- ✅ Memory Systems: spatial and episodic memory with decay
+- ✅ Social Learning: observation, imitation, gossip and shared knowledge
+- ✅ Environment Abstraction: plugin interface, crafting, technology progression
+- 🚧 Analytics: emergence detection, metrics and replay exist but the
+  simulation loop does not drive them — examples do
+- 🚧 Perception: agents smell food and water; vision and hearing are built but
+  nothing feeds them from the world
+- 📋 Clothing behavior: recipes and equipment exist, but no agent is driven to
+  make or wear anything, so insulation is always zero
 
-Legend: ✅ Implemented | 🚧 In Progress | 📋 Planned
+Legend: ✅ Implemented and running | 🚧 Built but not fully connected | 📋 Not yet driven
 
 ## Project Structure
 
@@ -102,34 +117,51 @@ fn main() {
 
 ## Development Roadmap
 
-### Phase 1: Core Foundation (Months 1-4) ⏳
+All four originally planned phases are implemented. Boxes below reflect what
+the code actually does, verified by running it — not what was planned.
+
+### Phase 1: Core Foundation ✅
 - [x] Project structure and build system
-- [ ] Basic behavior tree implementation
-- [ ] Core drive system (5 drives)
-- [ ] Simple grid-based world
-- [ ] Agent actions and learning
-- [ ] ASCII visualization
+- [x] Behavior tree implementation with weight-based learning and pruning
+- [x] Core drive system (all 14 drives)
+- [x] Grid-based world with terrain, resources and regeneration
+- [x] Agent actions and learning
+- [x] ASCII visualization
 
-### Phase 2: Environment Abstraction (Months 5-8)
-- [ ] Plugin architecture
-- [ ] Material property system
-- [ ] Template-based crafting
-- [ ] Minecraft-style environment
-- [ ] Tool effectiveness calculations
+### Phase 2: Environment Abstraction ✅
+- [x] Plugin architecture (`src/environment/plugin.rs`, registry)
+- [x] Material property system
+- [x] Template-based crafting, smelting and clothing recipes
+- [x] Minecraft-style environment (`src/environment/minecraft_survival.rs`)
+- [x] Tool effectiveness calculations
+- [ ] The bundled `plugins/minecraft_survival` crate is a stale copy and no
+      longer compiles; the in-tree module above is the current one
 
-### Phase 3: Social Systems (Months 9-12)
-- [ ] Reproduction mechanics
-- [ ] Genetic inheritance
-- [ ] Observational learning
-- [ ] Social memory
-- [ ] All 13 drives implemented
+### Phase 3: Social Systems ✅
+- [x] Reproduction, pregnancy, birth and nursing
+- [x] Genetic and behavioral inheritance
+- [x] Observational learning
+- [x] Social memory, relationships, gossip and shared knowledge
+- [x] All 14 drives implemented and acted on
 
-### Phase 4: Analytics and Polish (Months 13-18)
-- [ ] Data logging and analysis
-- [ ] Web-based visualization
-- [ ] Emergence detection
-- [ ] Performance optimization
-- [ ] Additional environment plugins
+### Phase 4: Analytics and Polish 🚧
+- [x] Data logging and analysis (metrics, export to JSON/CSV)
+- [x] Emergence detection
+- [x] Save/load and autosave with checkpoint rotation
+- [x] Interactive GUI (egui) alongside the ASCII renderer
+- [ ] Analytics are not driven by the simulation loop — they run only when a
+      caller feeds them, as `examples/ascii_simulation.rs` does
+- [ ] Web-based visualization: an HTTP API exists in `analytics/web_api.rs`
+      but has no call sites and no front end
+- [ ] Bevy front end does not compile (see ISSUES_FOUND.md)
+- [ ] Performance has not been profiled at scale
+
+### Beyond the original plan
+- [ ] Give world generation a seed, so runs are reproducible and two flaky
+      tests become deterministic
+- [ ] Feed vision and hearing from the world, so perception is not smell-only
+- [ ] Drive agents to make and wear clothing, so cold is solvable
+- [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts
 
@@ -137,20 +169,22 @@ fn main() {
 Agents maintain forests of behavior trees where successful patterns are reinforced over time. Each tree branch has a weight that increases with positive outcomes.
 
 ### Drive System
-13 core drives motivate agent behavior:
+14 core drives motivate agent behavior, in the order they appear in
+`DriveType`:
 1. Hunger - Seek and consume food
-2. Rest - Find shelter and sleep
-3. Shelter - Build or locate protective structures
-4. Safety - Avoid threats, create defenses
-5. Preparedness - Stockpile resources and tools
-6. Industry - Mine, smelt, and process materials
-7. Sustenance - Farm and produce food
-8. Curiosity - Explore and learn
-9. Social - Interact with other agents
-10. Reproduction - Create offspring
-11. Luxury - Seek rare or decorative items
-12. Utility - Maintain tools and equipment
-13. Construction - Build structures and infrastructure
+2. Thirst - Find and drink water
+3. Rest - Sleep and recover from fatigue
+4. Shelter - Build or locate protective structures
+5. Safety - Avoid threats, create defenses
+6. Preparedness - Stockpile resources and tools
+7. Industry - Mine, smelt, and process materials
+8. Sustenance - Farm and produce food
+9. Curiosity - Explore and learn
+10. Social - Interact with other agents
+11. Reproduction - Create offspring
+12. Luxury - Seek rare or decorative items
+13. Utility - Maintain tools and equipment
+14. Construction - Build structures and infrastructure
 
 ### Memory
 Agents remember:
@@ -184,10 +218,16 @@ cargo tarpaulin --out Html
 
 ## Documentation
 
-- [Software Design Document](docs/Software_Design_Document.docx) - Complete system architecture and specifications
-- [API Documentation](docs/api/README.md) - Detailed API reference
-- [Environment Plugin Guide](docs/environment_plugins.md) - Creating custom environments
-- [Examples](examples/README.md) - Tutorials and example simulations
+- [Software Design Document](EBSS_Software_Design_Document.docx) - Original architecture and specifications
+- [PROJECT_STATUS.txt](PROJECT_STATUS.txt) - Measured state of the project: what builds, what runs, what does not
+- [SIMULATION_AUDIT.md](SIMULATION_AUDIT.md) - Which subsystems the simulation loop actually drives
+- [ISSUES_FOUND.md](ISSUES_FOUND.md) - Current known defects, with reproduction steps
+- [TESTING.md](TESTING.md) - How to run and write tests
+- [SETUP.md](SETUP.md) - Development environment setup
+- [docs/VISUALIZATION.md](docs/VISUALIZATION.md) - Rendering and display
+- API reference: `cargo doc --open` (there is no checked-in API document)
+- Examples: 21 runnable programs in [examples/](examples/), starting with
+  `basic_survival.rs`
 
 ## Research Applications
 
