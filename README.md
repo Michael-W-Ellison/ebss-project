@@ -69,6 +69,9 @@ original specifications.
   eight-thousand-tick run covers seven years and all four seasons, and a life
   spans eight or nine of them. Every run before this ended on Year 0, Day 4,
   having never left the winter it began in
+- 🚧 The season decides regrowth, daylight and the weather, but not the
+  temperature a tile reports: that is frozen the first time anything asks, so
+  winter is no colder than summer
 - ✅ Drives that look past this afternoon run five times faster in an agent
   whose immediate needs are met, and a quarter as fast in one whose are not
 - 🚧 Agents cannot yet hear anything: that percept channel is built but unfed

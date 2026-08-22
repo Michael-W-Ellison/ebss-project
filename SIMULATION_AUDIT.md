@@ -69,11 +69,14 @@ Verified reachable from `Simulation::tick()`.
   an eight-thousand-tick run covers seven years and twenty-eight seasons; every
   run before this one ended on Year 0, Day 4, Winter, having never left the
   season it started in
-- Seasons that tell on the world: the growth modifier on regrowth (spring ×1.5
-  through winter ×0.3), the temperature swing (×1.2 down to ×0.6), snow in cold
-  biomes, and day length. Plants feel the shortening day directly - nine hours
-  of winter sun against summer's fifteen - so a winter is a winter for them
-  whatever the weather does
+- Two things the season now decides: the growth modifier on regrowth (spring
+  ×1.5 through winter ×0.3), read every regeneration pass, and the length of
+  the day, which plants feel directly - nine hours of winter sun against
+  summer's fifteen. A winter is a winter for a plant whatever the weather is
+  doing that hour
+- The season also picks the weather (`WeatherGenerator` turns winter into snow,
+  sleet and blizzards), but see **Built but not connected** for the temperature
+  a tile actually reports: the season reaches it once and then sticks
 
 ### Lifecycle
 - Aging through infant, child, adolescent, adult and elderly stages, over eight
@@ -191,6 +194,7 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::emergence` (`EmergenceDetector`) | Same — driven by those two examples only |
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
+| Seasonal temperature | Computed three ways; the one agents read is frozen. `ClimateManager::get_biome` builds a `Biome` per tile on first touch, stamps the season and hour into it, and caches it for ever - `clear_biome_cache()` is called only from a test - so `get_temperature` returns that first-touch value plus the current weather modifier. Meanwhile `ClimateManager::tick` recomputes `base_climate.temperature` from the season and hour every tick and nothing reads it, and `SeasonalCalendar::apply_modifiers` has no caller outside its own test. Measured: winter and summer report the same temperature to a tenth of a degree |
 | `world::zoning`, `world::territory` | Read by building placement scoring (`spatial_planning.rs`), but nothing outside tests ever calls `add_zone` or `claim_territory`, so both managers are always empty and every bonus they contribute is zero |
 
 **Consequence for perception:** agents find the world by sight and smell.
@@ -402,6 +406,22 @@ worlds ended under 130 units of it - and falls back. The ones that never
 overshoot sit small and comfortable, 15 or 50 people against 5,000 units of
 crop still standing. Nobody starves in a straight line; they starve after
 having been too many.
+
+**Winter is not a stressor, because the temperature a tile reports never
+changes.** Measured over 15,600 ticks spanning every season, sampling the
+temperature `ClimateManager::get_temperature` returns for a plains tile:
+
+| Season | Mean | Lowest | Highest |
+| --- | --- | --- | --- |
+| Spring | 20.75 °C | 19.3 | 21.3 |
+| Summer | 20.68 °C | 19.3 | 21.3 |
+| Fall | 20.75 °C | 19.3 | 21.3 |
+| Winter | 20.79 °C | 19.3 | 21.3 |
+
+Winter is the warmest season by four hundredths of a degree, and the only thing
+moving the number at all is the weather type. Mortality is flat to match:
+deaths per ten thousand agent-ticks over six worlds run to twenty-four thousand
+come out at 1.62 in spring, 1.58 in summer, 1.47 in autumn and 1.71 in winter.
 
 **Why a settlement that overshoots does not settle back.** Six worlds traced to
 thirty thousand ticks, sampling the ground the settlement actually farms rather

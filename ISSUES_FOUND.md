@@ -141,7 +141,44 @@ to `body.overall_health()` but clawed back at 0.02 a tick. A population
 carrying a permanent thirty-point health deficit has no reserve for a bad
 winter, which is what a mass die-off looks like when it comes.
 
-### 4. The ecology settles in most worlds, not all
+### 4. Winter is not cold: the tile temperature is frozen at first touch
+
+`ClimateManager::get_biome` builds a `Biome` for a position the first time
+anybody asks about it, stamps the current season and hour into it, and caches
+it for the rest of the run. `clear_biome_cache()` exists and is called only
+from a test. So `get_temperature` — the temperature agents actually feel, via
+exposure and body temperature — is that first-touch value plus whatever the
+weather is doing now, and the season never reaches it again.
+
+Measured over 15,600 ticks spanning every season, for a plains tile:
+
+| Season | Mean | Lowest | Highest |
+| --- | --- | --- | --- |
+| Spring | 20.75 °C | 19.3 | 21.3 |
+| Summer | 20.68 °C | 19.3 | 21.3 |
+| Fall | 20.75 °C | 19.3 | 21.3 |
+| Winter | 20.79 °C | 19.3 | 21.3 |
+
+Winter is the warmest season by four hundredths of a degree. Mortality agrees:
+deaths per ten thousand agent-ticks over six worlds to twenty-four thousand
+come out at 1.62, 1.58, 1.47 and 1.71 for spring, summer, autumn and winter.
+
+Two correct seasonal-temperature paths are computed and thrown away.
+`ClimateManager::tick` sets `base_climate.temperature = base_temp * season_mod
+* time_mod` every tick and nothing reads it. `SeasonalCalendar::apply_modifiers`
+does the same job and has no caller outside its own test. The live path is the
+frozen one.
+
+The seasons do reach the world by two other routes, both working: the growth
+modifier on regrowth, and the `WeatherGenerator`, which turns winter into snow,
+sleet and blizzards. What does not reach it is the baseline swing — and with it
+the reason a settlement would need to store food, put on a coat or get indoors
+at one time of year rather than another.
+
+Fixing it is not just a cache invalidation: making winter genuinely cold is a
+real change to the balance and would need measuring before and after.
+
+### 5. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
 herds stay bounded in thirty-three. In the seven that run away the predators
@@ -149,7 +186,7 @@ died out first, and although animals do wander back in from off the map, the
 trickle is slow enough — by design — that a world can spend thousands of ticks
 with its herds climbing unopposed before a replacement pack arrives.
 
-### 5. Clothing and hunting cost about what they return
+### 6. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -168,7 +205,7 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 6. Fear is a hunger signal, not a danger signal
+### 7. Fear is a hunger signal, not a danger signal
 
 `calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
 rest. Since hunger saturates between meals, fear sits at around 0.8 much of
@@ -179,14 +216,14 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 7. Agents still cannot hear anything
+### 8. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 8. Zoning and territory are never established
+### 9. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -194,7 +231,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 9. Agents carry food they will never eat
+### 10. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -208,16 +245,16 @@ carried weight still includes rot and cinders.
 
 ## Housekeeping
 
-### 10. Committed backup file
+### 11. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 11. Build warnings
+### 12. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 12. Placeholder package metadata
+### 13. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
