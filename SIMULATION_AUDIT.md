@@ -432,6 +432,12 @@ the cold there is comes through the weather instead: winter snows nearly a
 tenth of the time and no other season snows at all, which pulls a winter about
 half a degree below the rest. See **Built but not connected** for why.
 
+Mortality agrees. Deaths per ten thousand agent-ticks over six worlds run to
+twenty-four thousand: spring 1.57, summer 1.42, autumn 1.42, winter 1.57.
+Winter kills a tenth more than a summer, and so does spring to the second
+decimal — inside the noise on about 290 deaths a season. Nothing in these
+worlds has to survive a winter.
+
 **Why a settlement that overshoots does not settle back.** Six worlds traced to
 thirty thousand ticks, sampling the ground the settlement actually farms rather
 than the map as a whole.

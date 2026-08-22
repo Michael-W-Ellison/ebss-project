@@ -180,6 +180,21 @@ never arrives is the baseline swing, and with it most of the reason a
 settlement would store food, put on a coat or get indoors at one time of year
 rather than another.
 
+Mortality says the same thing. Deaths per ten thousand agent-ticks, six worlds
+run to twenty-four thousand ticks each, with snow correctly confined to winter:
+
+| Season | Deaths per 10k agent-ticks |
+| --- | --- |
+| Spring | 1.57 |
+| Summer | 1.42 |
+| Fall | 1.42 |
+| Winter | 1.57 |
+
+Winter kills about a tenth more than a summer — and so does spring, to the
+second decimal. On roughly 290 deaths a season that is inside the noise. There
+is no winter in these worlds, only a slightly snowier stretch of the same
+weather.
+
 Fixing it is not just a cache invalidation: making winter genuinely cold is a
 real change to the balance and would need measuring before and after.
 
