@@ -1782,7 +1782,13 @@ impl PlantManager {
     ///
     /// Runs one pass per `ticks` ticks rather than every tick: plants take
     /// thousands of ticks to grow and the world has hundreds of them.
-    pub fn tick_in_world(&mut self, grid: &mut crate::world::Grid, precipitation: f32, ticks: f32) {
+    pub fn tick_in_world(
+        &mut self,
+        grid: &mut crate::world::Grid,
+        precipitation: f32,
+        ticks: f32,
+        season: crate::environment::Season,
+    ) {
         use crate::world::soil::Soil;
         use crate::world::Position;
 
@@ -1863,7 +1869,11 @@ impl PlantManager {
             } else {
                 0.0
             };
-            let light = (1.0 - (over_it - own).max(0.0)).clamp(0.05, 1.0);
+            // A short day is less light, whatever is or is not standing over
+            // the plant. This is what makes a winter a winter for a plant:
+            // nine hours of sun against summer's fifteen.
+            let daylight = season.day_length() / 15.0;
+            let light = ((1.0 - (over_it - own).max(0.0)) * daylight).clamp(0.05, 1.0);
 
             // Nutrient: what is in the ground, and how readily this plant can
             // get at it. Broken ground is worked, weeded and watered, so a crop

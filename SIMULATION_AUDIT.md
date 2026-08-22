@@ -63,8 +63,21 @@ Verified reachable from `Simulation::tick()`.
   that made it could manage. Wood goes into clothes only once a fire's worth
   is set aside, and the coat a new one replaces is left behind
 
+### The turning year
+- A calendar a life fits inside. A tick is two hours, a day twelve ticks, a
+  season twenty-four days and a year 1,152 ticks. A world opens in spring and
+  an eight-thousand-tick run covers seven years and twenty-eight seasons; every
+  run before this one ended on Year 0, Day 4, Winter, having never left the
+  season it started in
+- Seasons that tell on the world: the growth modifier on regrowth (spring ×1.5
+  through winter ×0.3), the temperature swing (×1.2 down to ×0.6), snow in cold
+  biomes, and day length. Plants feel the shortening day directly - nine hours
+  of winter sun against summer's fifteen - so a winter is a winter for them
+  whatever the weather does
+
 ### Lifecycle
-- Aging through infant, child, adolescent, adult and elderly stages
+- Aging through infant, child, adolescent, adult and elderly stages, over eight
+  or nine calendar years and thirty-odd seasons
 - Mate selection, pregnancy with prenatal nutrition, birth, nursing, and
   developmental nutrition that modifies adult stats
 - Inheritance of traits and behaviour trees from both parents
@@ -205,10 +218,6 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
   can afford.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
   cannot be reproduced and five tests are intermittently flaky.
-- **A calendar the lifecycle agrees with.** A year is 876,000 ticks — 100 ticks
-  an hour — and an agent lives about 10,000, so a whole life happens inside four
-  calendar days and the seasons never turn in a normal run. Season modifiers on
-  plant growth are therefore all but constant.
 - **Long-run characterisation.** Nobody has studied population dynamics,
   technology spread or settlement patterns past a few tens of thousands of
   ticks.
@@ -355,15 +364,40 @@ One world shows the whole arc: a boom to 165 people, soil worked from 0.48 down
 to 0.19, the standing crop collapsing from 4,176 units to 80, and the
 population falling back to 91.
 
+**The turning year.** Twenty worlds of twelve, eight thousand ticks, measured
+on the commit before this one and on this one:
+
+| Measure | Winter-locked | Seasons turning |
+| --- | --- | --- |
+| Where a run ends | Year 0, Day 4, Winter | Year 6, Day 91, Winter |
+| Seasons a run sees | 1 of 4 | 4 of 4 |
+| A life, in calendar years | 0.011 | 7.8-9.5 |
+| Worlds still inhabited | 19 of 20 | 20 of 20 |
+| People at the end | 36.8 | 38.0 |
+| Standing crop at the end | 4,925 | 5,220 |
+| Mean temperature over the run | 14.1 °C | 17.3 °C |
+
+Nothing had to be rebalanced for it, which was not obvious beforehand: the
+season modifier on regrowth had been pinned at winter's ×0.3 and now averages
+×0.95 over a year, so wild food comes back around three times as fast on
+average. It does not run away, because a patch is capped by what the ground
+under it will carry rather than by how fast it grows back, and the cap did not
+move. What changed is the shape of the year rather than the total: a summer
+hedgerow now outgrows a winter one, and a settlement has to get from one to
+the next.
+
 ## Test coverage
 
-1,128 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,137 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
-pass, except three known flaky tests (`test_resource_clustering`,
+pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
-`test_production_building_placed_near_resources`) that assert on properties a
-randomly generated world does not always have. The third was measured at
-4 failures in 120 runs on the commit before this one, so it is not new.
+`test_production_building_placed_near_resources`, and now
+`water_is_not_used_up`) that assert on properties a randomly generated world
+does not always have. The third was measured at 4 failures in 120 runs on an
+earlier commit, so it is not new; the fourth has a wider margin after the
+calendar change than before it (98.4% of a world's water still there at six
+thousand ticks, against 95.6% before, on a floor of 95%).
 
 Coverage is dense at the unit level and thin at the "does this run in a real
 simulation" level, which is precisely how the wiring defects survived. The

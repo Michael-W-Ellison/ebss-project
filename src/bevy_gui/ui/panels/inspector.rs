@@ -14,6 +14,12 @@ use crate::gui::state::{
     DriveData, SkillData, InventoryItemData, GoalData,
 };
 use crate::agents::Gender;
+use crate::environment::TICKS_PER_YEAR;
+
+/// How many ticks make a year, in the shape the age fields want.
+fn ebss_years() -> u32 {
+    TICKS_PER_YEAR.max(1)
+}
 
 pub fn render_inspector_panel(
     mut egui_ctx: EguiContexts,
@@ -230,7 +236,7 @@ fn render_agent_header(ui: &mut egui::Ui, agent: &SelectedAgentData, notificatio
         // Quick stats on right
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             // Age display
-            let age_years = agent.age / 365;
+            let age_years = agent.age / ebss_years();
             ui.label(egui::RichText::new(format!("{}y", age_years)).small());
         });
     });
@@ -313,8 +319,8 @@ fn render_agent_overview(ui: &mut egui::Ui, agent: &SelectedAgentData) {
         // Age progress
         ui.horizontal(|ui| {
             ui.label("Age:");
-            let age_years = agent.age / 365;
-            let max_years = agent.max_age / 365;
+            let age_years = agent.age / ebss_years();
+            let max_years = agent.max_age / ebss_years();
             let age_pct = agent.age as f32 / agent.max_age.max(1) as f32;
             let age_color = if age_pct > 0.8 {
                 egui::Color32::from_rgb(200, 150, 100)

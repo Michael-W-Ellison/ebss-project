@@ -1214,8 +1214,9 @@ impl World {
         // plants take thousands to grow and a world holds hundreds of them.
         if self.tick % 10 == 0 {
             let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+            let season = self.climate.current_season();
             self.plants
-                .tick_in_world(&mut self.grid, precipitation, 10.0);
+                .tick_in_world(&mut self.grid, precipitation, 10.0, season);
         }
 
         // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)

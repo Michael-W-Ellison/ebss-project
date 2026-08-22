@@ -459,6 +459,11 @@ impl Default for Inventory {
 }
 
 /// Life stages of an agent
+///
+/// A year is [`crate::environment::TICKS_PER_YEAR`] ticks, so the boundaries
+/// below are roughly: infancy to five months, childhood to a year and a
+/// quarter, adolescence to two years, adulthood to seven, old age after that.
+/// An agent lives eight or nine years and sees thirty-odd seasons turn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifeStage {
     /// 0-500 ticks, cannot reproduce, learns from parents
@@ -3539,6 +3544,16 @@ impl Agent {
                 self.state.is_alive = false;
             }
         }
+    }
+
+    /// How old this agent is in calendar years.
+    pub fn age_in_years(&self) -> f32 {
+        self.state.age as f32 / crate::environment::TICKS_PER_YEAR as f32
+    }
+
+    /// How long this agent will live, in calendar years, if nothing kills it.
+    pub fn lifespan_in_years(&self) -> f32 {
+        self.state.max_age as f32 / crate::environment::TICKS_PER_YEAR as f32
     }
 
     /// Update life stage based on age

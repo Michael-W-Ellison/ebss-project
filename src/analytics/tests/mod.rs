@@ -14,3 +14,4 @@ pub mod predator_prey_tests;
 pub mod longevity_tests;
 pub mod husbandry_tests;
 pub mod land_tests;
+pub mod calendar_tests;

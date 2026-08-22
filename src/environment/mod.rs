@@ -52,7 +52,9 @@ pub use fauna::{
 pub use biome::{BiomeType, Biome};
 pub use weather::{Weather, WeatherType, WeatherGenerator, PrecipitationType};
 pub use exposure::{ExposureType, ExposureStatus, ExposureProtection};
-pub use seasons::{Season, SeasonalCalendar};
+pub use seasons::{
+    Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, TICKS_PER_DAY, TICKS_PER_YEAR,
+};
 
 /// Result type for environment operations
 pub type EnvironmentResult<T> = Result<T, EnvironmentError>;

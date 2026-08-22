@@ -14,26 +14,31 @@ and running the project.
 
 ## Correctness
 
-### 1. Five tests fail intermittently
+### 1. Six tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
     analytics::tests::agent_building_integration_tests::test_production_building_placed_near_resources
     analytics::tests::agent_building_integration_tests::test_production_chain_buildings_cluster
     analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
+    analytics::tests::longevity_tests::water_is_not_used_up
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
-4-in-120 for the third and 1-in-30 to 1-in-40 for the last two, all present long
+4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
 before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
-1/30). All five build a world through `World::new`, which draws from
-`thread_rng`, and
+1/30). The last was seen to fail once and then pass six times running; it
+asserts that a world holds 95% of its water after six thousand ticks, and
+across twelve worlds the worst case sits at 98.4% — on the commit before the
+calendar was fixed it sat at 95.6%, so the margin got wider rather than
+narrower, and the tail is simply thin. All six build a world through
+`World::new`, which draws from `thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
 the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
-which is corrosive: check whether the failing test is one of these two before
+which is corrosive: check whether the failing test is one of these six before
 assuming a regression.
 
 ### 2. No error recovery around a tick
@@ -48,18 +53,7 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. The calendar and the lifecycle disagree by two orders of magnitude
-
-A year is 876,000 ticks: the world's calendar runs at 100 ticks an hour. An
-agent lives about 10,000 ticks. So an entire life — infant to elderly — happens
-inside four calendar days, and no run anybody has made has ever seen a season
-turn.
-
-This matters now that plants grow: the season modifier on growth (spring ×1.5
-through winter ×0.3) is in practice a constant, and nothing in the model ever
-has to survive a winter.
-
-### 4. Nobody has looked at a farming settlement over a very long run
+### 3. Nobody has looked at a farming settlement over a very long run
 
 Fields changed the shape of this. A settlement that plants its food reaches
 between twenty and a hundred and fifty people where a foraging one capped
@@ -72,7 +66,7 @@ established the earlier collapse were foraging settlements; a farming one at a
 hundred and fifty people is a different animal, and slower to simulate, and
 uncharacterised.
 
-### 5. The ecology settles in most worlds, not all
+### 4. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
 herds stay bounded in thirty-three. In the seven that run away the predators
@@ -80,7 +74,7 @@ died out first, and although animals do wander back in from off the map, the
 trickle is slow enough — by design — that a world can spend thousands of ticks
 with its herds climbing unopposed before a replacement pack arrives.
 
-### 6. Clothing and hunting cost about what they return
+### 5. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -99,7 +93,7 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 7. Fear is a hunger signal, not a danger signal
+### 6. Fear is a hunger signal, not a danger signal
 
 `calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
 rest. Since hunger saturates between meals, fear sits at around 0.8 much of
@@ -110,14 +104,14 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 8. Agents still cannot hear anything
+### 7. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 9. Zoning and territory are never established
+### 8. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -125,7 +119,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 10. Agents carry food they will never eat
+### 9. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -139,16 +133,16 @@ carried weight still includes rot and cinders.
 
 ## Housekeeping
 
-### 11. Committed backup file
+### 10. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 12. Build warnings
+### 11. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 13. Placeholder package metadata
+### 12. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
