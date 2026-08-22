@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `5c74481`
+**Last verified:** August 2026, against commit `8a7990f`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -118,6 +118,10 @@ Verified reachable from `Simulation::tick()`.
   every hungry predator hunts on its own account, a herd is limited by the
   ground it grazes as well as by what eats it, a starving predator widens what
   it will take, and one beside a settlement turns on the people
+- Recolonisation: a species wiped out of a world, or hunted down to a quarter
+  of the most that world ever held of it, is slowly replaced by animals
+  wandering in from off the map - one small group every eight thousand ticks
+  or so, and only species that have lived there
 - Flora (growth, regrowth)
 - Combat between agents and hunting of animals
 
@@ -256,25 +260,41 @@ added it:
 
 | Measure | Before | After |
 | --- | --- | --- |
-| Worlds with predators still alive at the end | 7 of 40 | 30 of 40 |
-| Worlds with herds bounded (under 150) | — | 32 of 40 |
-| Herbivores, as a multiple of the founding stock | 11x | 4.8x |
+| Worlds with predators still alive at the end | 7 of 40 | 36 of 40 |
+| Worlds with herds bounded (under 150) | — | 33 of 40 |
+| Herbivores, as a multiple of the founding stock | 11x | 4.1x |
 | Agents mauled by animals | 0 | 31 |
-| Agent population | 903 | 817 |
+| Agent population | 903 | 938 |
 
 Before this, predation sat behind one roll for the whole world per tick, a
 predator only hunted when half starved, predators were stocked without regard
 to what they could eat, and nothing but the hard population cap of a thousand
 limited a herd. Nothing in the model let an animal touch an agent at all.
 
-It is not stable everywhere. In the eight worlds where herds are not bounded,
-the predators died out first; in some others the herd goes instead and takes
-the predators with it. A world holding both at once is the common case now
-rather than the rare one, which it was not before.
+It is not stable everywhere. In the seven worlds where herds are not bounded,
+the predators died out first. A world holding both at once is the common case
+now rather than the rare one, which it was not before. Species that do go now
+come back: 208 of the 301 species a world starts with are still there after
+eight thousand ticks, and the rest are candidates for the slow trickle of
+arrivals from off the map.
+
+**Over a long run.** Every settlement tested used to be empty by thirty
+thousand ticks. Two things were killing them, neither visible in the eight
+thousand ticks everything above is measured over: children froze — they have
+no clothing of their own and nobody makes any for them, so they ran two or
+three degrees colder than the adults beside them, and nearly half of everyone
+born died before growing up — and water was consumed without ever coming back,
+so a world lost more than half of it in fifteen thousand ticks. With the young
+kept warm by their carers and the rivers refilling, nine settlements of twelve
+were still inhabited at thirty thousand ticks and thirteen of sixteen at
+twenty thousand. The rest starve out: food regenerates about four times slower
+than a grown population eats it, so a settlement that overshoots the land does
+not settle back.
 
 ## Test coverage
 
-1,101 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
+1,109 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
 pass, except three known flaky tests (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
 `test_production_building_placed_near_resources`) that assert on properties a

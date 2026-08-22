@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `5c74481`.
+**Last verified:** August 2026, against commit `8a7990f`.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -14,18 +14,20 @@ and running the project.
 
 ## Correctness
 
-### 1. Three tests fail intermittently
+### 1. Four tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
     analytics::tests::agent_building_integration_tests::test_production_building_placed_near_resources
+    analytics::tests::agent_building_integration_tests::test_production_chain_buildings_cluster
 
-Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two
-and 4-in-120 for the third, all present long before recent work (measured on
-unmodified code at 2/20, 3/15 and 4/120). All three build a world through
-`World::new`, which draws from `thread_rng`, and then assert on a property a
-random world does not always have — for example that clay deposits happen to
-be clustered, or that a forge finds somewhere near the iron to stand.
+Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
+4-in-120 for the third and 1-in-40 for the fourth, all present long before
+recent work (measured on unmodified code at 2/20, 3/15, 4/120 and 1/40). All
+four build a world through `World::new`, which draws from `thread_rng`, and
+then assert on a property a random world does not always have — for example
+that clay deposits happen to be clustered, or that a forge finds somewhere near
+the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
@@ -44,24 +46,29 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. Settlements die out over a long run
+### 3. A quarter of settlements still starve out over a long run
 
-Every population tested was gone by thirty thousand ticks — three worlds of
-three, on this commit and on the one before any of the ecology work, so the
-animals are not the cause. Nobody has looked at what is killing them.
+Nine settlements of twelve are still inhabited at thirty thousand ticks, and
+thirteen of sixteen at twenty thousand. The rest starve.
 
-Up to eight thousand ticks, which is what everything else here is measured
-over, settlements grow. What happens between there and thirty thousand is
-uncharacterised.
+The cause is known and not fixed: food regenerates about four times slower
+than a grown population eats it. A world's edible resources go from around a
+thousand units to five within seven thousand ticks of the population reaching
+forty, and the population then crashes rather than settling back to what the
+land carries. A fifty-by-fifty map appears to carry somewhere around a dozen
+people indefinitely, and rather more than that briefly.
+
+Two other causes were found and fixed — see **Recently fixed** — and both had
+been invisible because everything else here is measured over eight thousand
+ticks.
 
 ### 4. The ecology settles in most worlds, not all
 
-Over forty worlds, predators are still alive at the end in thirty and herds
-stay bounded in thirty-two. In the eight that run away the predators died out
-first; in some others the herd goes and takes the predators with it. Nothing
-recolonises: once a species is gone from a world it is gone for good, so a
-world that loses its predators early spends the rest of the run with herds
-climbing to the population cap.
+Over forty worlds, predators are still alive at the end in thirty-six and
+herds stay bounded in thirty-three. In the seven that run away the predators
+died out first, and although animals do wander back in from off the map, the
+trickle is slow enough — by design — that a world can spend thousands of ticks
+with its herds climbing unopposed before a replacement pack arrives.
 
 ### 5. Clothing and hunting cost about what they return
 
@@ -181,6 +188,17 @@ Listed so nobody re-investigates them. Each has regression tests in
 - **Sensory traits never reached the senses.**
   `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
   perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Children froze to death.** A child has no clothing of its own — it cannot
+  gather flax, has no skill to sew and nobody makes anything for it — so it ran
+  two or three degrees colder than the adults beside it. One traced child had a
+  perfect body, no injuries, full energy and a core temperature of 32.9. Nearly
+  half of everyone ever born died before growing up, which no birth rate can
+  carry. The young are now kept warm by whoever is looking after them.
+- **Water was consumed and never came back.** It had no regeneration rate and
+  did not count as renewable, so every drink took a unit out of the world for
+  good and a lake drunk dry was deleted outright. A world lost more than half
+  its water in fifteen thousand ticks. Together with the above, this is what
+  emptied every settlement by thirty thousand ticks.
 - **Herbivores had nothing holding them down.** The world was ticked twice per
   simulation tick; predation sat behind one roll for the whole world per tick;
   a predator only hunted when half starved; predators were stocked without

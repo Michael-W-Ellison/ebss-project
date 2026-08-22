@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Last verified: August 2026 (against commit 5c74481)
+Last verified: August 2026 (against commit 8a7990f)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -55,23 +55,31 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,138 tests across the workspace:
-  1,101 library tests
+  1,146 tests across the workspace:
+  1,109 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
 
-  All pass, with three known flaky tests that fail intermittently:
+  All pass, with four known flaky tests that fail intermittently:
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_...
     analytics::tests::agent_building_integration_tests::
       test_production_building_placed_near_resources
+    analytics::tests::agent_building_integration_tests::
+      test_production_chain_buildings_cluster
 
-  All three seed World::new from thread_rng and assert on properties that a
+  All four seed World::new from thread_rng and assert on properties that a
   randomly generated world does not always satisfy. Measured failure rates of
-  roughly 1-in-10 to 1-in-20 per run for the first two and 4-in-120 for the
-  third, all present before any recent work. Fixing them means giving world
+  roughly 1-in-10 to 1-in-20 per run for the first two, 4-in-120 for the third
+  and 1-in-40 for the fourth, all present before any recent work and all
+  measured against the commit before it. Fixing them means giving world
   generation a seed.
+
+  One test is marked ignored and left out of the count above:
+  analytics::tests::longevity_tests::a_settlement_lasts_thirty_thousand_ticks
+  runs thirty thousand ticks and a quarter of worlds die of their own accord.
+  Run it by hand: cargo test --release -- --ignored a_settlement_lasts
 
 
 WHAT RUNS IN A LIVE SIMULATION
@@ -102,7 +110,9 @@ Verified as reached by Simulation::tick():
   Ecology         herds are held down by the predators that live off them, and
                   by the ground they graze; predators that cannot find prey
                   starve, widen what they will take, and turn on the people
-                  living beside them
+                  living beside them; a species wiped out here or
+                  hunted down to a quarter of its peak is slowly replaced by
+                  animals wandering in from off the map
   Perception      sight of terrain, resources and buildings within 25 tiles,
                   refreshed every tick and negated by the Blind trait; smell
                   scaled to what a thing actually gives off - a berry about
@@ -159,9 +169,12 @@ KNOWN GAPS IN BEHAVIOUR
     There are only a handful of animals in a world, so most agents never get
     a skin.
   - Fauna is stable in most worlds but not all. Over forty worlds, predators
-    are still alive at the end in thirty and herds stay bounded in thirty-two;
-    the rest either lose their predators and run to the population cap, or
-    lose the herd and then the predators with it.
+    are still alive at the end in thirty-six and herds stay bounded in
+    thirty-three; the rest lose their predators and run to the population cap.
+  - A settlement is not certain to last. Nine of twelve were still inhabited
+    at thirty thousand ticks and thirteen of sixteen at twenty thousand; the
+    rest starve out. A fifty-by-fifty map carries perhaps forty people, and a
+    settlement that overshoots that crashes hard.
   - Agent fear is computed from unmet hunger, thirst and rest, so it sits
     high whenever an agent is between meals. Fleeing is gated on fear, which
     makes flight a common state rather than a response to danger.
@@ -176,9 +189,10 @@ SUGGESTED NEXT STEPS
   2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  3. Find out why a settlement dies out over a long run. Every population
-     tested was gone by thirty thousand ticks, on this commit and on the one
-     before any of the ecology work, so it is not the animals.
+  3. Look at the quarter of settlements that still starve out over a long run.
+     Food regenerates about four times slower than a grown population eats it,
+     so a settlement that overshoots the land does not settle back - it
+     collapses.
   4. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it
