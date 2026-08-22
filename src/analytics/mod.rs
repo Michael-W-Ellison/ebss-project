@@ -6133,6 +6133,24 @@ impl Simulation {
             })
             .collect();
 
+        // Where the grown-ups are, so a baby can be counted as being held by
+        // one of them
+        let carers: Vec<(i32, i32, i32)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .filter(|agent| {
+                matches!(
+                    agent.state.life_stage,
+                    crate::agents::LifeStage::Adolescent
+                        | crate::agents::LifeStage::Adult
+                        | crate::agents::LifeStage::Elderly
+                )
+            })
+            .map(|agent| agent.state.position)
+            .collect();
+
         for agent in &mut self.population.agents {
             if !agent.state.is_alive {
                 continue;
@@ -6154,9 +6172,32 @@ impl Simulation {
 
             // Check if agent has shelter
             // Agent has shelter if they're in a completed building
-            let has_shelter = self.world.buildings.iter().any(|b| {
+            let mut has_shelter = self.world.buildings.iter().any(|b| {
                 b.position == agent_pos && b.is_completed()
             }) || matches!(terrain_type, crate::world::TerrainType::Forest); // Forest provides partial shelter
+
+            // The young are kept warm by whoever is looking after them.
+            //
+            // A child has no clothing of its own - it cannot gather flax, has
+            // no skill to sew and nobody makes anything for it - so left to
+            // the weather it runs two or three degrees colder than the adults
+            // around it and dies of that. Nearly half of everyone ever born
+            // died before growing up, which no birth rate can carry: it is
+            // what emptied every settlement inside thirty thousand ticks.
+            let too_young_to_manage = matches!(
+                agent.state.life_stage,
+                crate::agents::LifeStage::Infant | crate::agents::LifeStage::Child
+            );
+
+            if !has_shelter && too_young_to_manage {
+                let position = agent.state.position;
+                has_shelter = carers.iter().any(|carer| {
+                    let dx = (carer.0 - position.0) as f32;
+                    let dy = (carer.1 - position.1) as f32;
+                    (dx * dx + dy * dy).sqrt()
+                        <= crate::agents::childcare::MAX_CAREGIVER_DISTANCE
+                });
+            }
 
             // Update agent's body temperature based on climate, taking cover
             // into account so that reaching shelter actually warms the agent

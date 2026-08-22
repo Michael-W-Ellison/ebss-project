@@ -392,6 +392,8 @@ impl ResourceNode {
                 | ResourceType::Cotton
                 | ResourceType::Honey
                 | ResourceType::Fish
+                // A river is not used up by the people drinking from it
+                | ResourceType::Water
         )
     }
 
@@ -415,6 +417,16 @@ impl ResourceNode {
 
             // Slow renewable
             ResourceType::Fish => 0.02,       // Fish populations regenerate
+
+            // Rivers and lakes refill from rain and from what feeds them.
+            //
+            // Water used to regenerate at nothing at all and was not counted
+            // as renewable, so every drink took a unit out of the world for
+            // good and a lake that ran dry was deleted. Over fifteen thousand
+            // ticks a world lost more than half its water that way, and the
+            // settlements drinking from it died of thirst and then of hunger,
+            // walking further and further for both.
+            ResourceType::Water => 0.5,
 
             // Non-renewable (mineral resources don't regenerate)
             ResourceType::Stone |

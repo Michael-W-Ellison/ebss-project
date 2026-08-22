@@ -1909,6 +1909,20 @@ pub struct AnimalManager {
     spawn_rate: f32, // Chance per tick to spawn
     max_population: usize,
 
+    /// The most of each species this world has ever held, which is what a
+    /// depleted population is judged against
+    #[serde(default)]
+    peak_population: HashMap<String, u32>,
+
+    /// Size of the map, so animals wandering in from outside know where the
+    /// edge is
+    #[serde(default)]
+    world_bounds: Option<(i32, i32)>,
+
+    /// Ticks since the last time anything was allowed to wander in
+    #[serde(default)]
+    ticks_since_migration: u32,
+
     /// Reference to fauna registry (not serialized)
     #[serde(skip)]
     registry: Option<FaunaRegistry>,
@@ -1921,6 +1935,9 @@ impl AnimalManager {
             groups: HashMap::new(),
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
+            peak_population: HashMap::new(),
+            world_bounds: None,
+            ticks_since_migration: 0,
             registry: Some(FaunaRegistry::new()),
         }
     }
@@ -2202,6 +2219,10 @@ impl AnimalManager {
 
         // Fourth pass: Predator hunting
         self.process_predation();
+
+        // Animals from beyond the edge of the map, for species that have been
+        // wiped out or hunted down to nothing here
+        self.process_immigration();
 
         // Fifth pass: Herbivore feeding (grazing reduces hunger)
         self.process_grazing();
@@ -2531,6 +2552,97 @@ impl AnimalManager {
         }
     }
 
+    /// Animals wander in from beyond the edge of the map.
+    ///
+    /// A species that has been wiped out here, or hunted down to a quarter of
+    /// the most this world ever held of it, is not gone from the world
+    /// entirely - only from this corner of it - and a few will find their way
+    /// back. Only species that have lived here migrate in: the map does not
+    /// invent lions for a valley that never had any.
+    ///
+    /// Deliberately rare. One small group per depleted species every eight
+    /// thousand ticks or so, which is a lifetime for most of them. It is meant
+    /// to keep a world from emptying out for good, not to be a larder that
+    /// refills itself faster than it can be emptied - a settlement that clears
+    /// the herds waits a long time for more.
+    fn process_immigration(&mut self) {
+        use rand::Rng;
+
+        /// How often anything is allowed to arrive at all
+        const MIGRATION_INTERVAL: u32 = 2000;
+
+        /// And how often, at those moments, anything actually does
+        const MIGRATION_CHANCE: f64 = 0.25;
+
+        /// Below this share of the most this world ever held, a species counts
+        /// as needing help
+        const DEPLETED_SHARE: f32 = 0.25;
+
+        /// How many arrive at once
+        const ARRIVALS: (u32, u32) = (1, 3);
+
+        self.ticks_since_migration += 1;
+        if self.ticks_since_migration < MIGRATION_INTERVAL {
+            return;
+        }
+        self.ticks_since_migration = 0;
+
+        let bounds = match self.world_bounds {
+            Some(bounds) => bounds,
+            None => return,
+        };
+
+        // What is here now, and the most there has ever been
+        let mut present: HashMap<String, u32> = HashMap::new();
+        for animal in &self.animals {
+            if animal.is_alive() {
+                *present.entry(animal.species_id.clone()).or_insert(0) += 1;
+            }
+        }
+
+        for (species_id, count) in &present {
+            let peak = self.peak_population.entry(species_id.clone()).or_insert(0);
+            *peak = (*peak).max(*count);
+        }
+
+        let depleted: Vec<String> = self
+            .peak_population
+            .iter()
+            .filter(|(species_id, peak)| {
+                let here = present.get(*species_id).copied().unwrap_or(0) as f32;
+                here < (**peak as f32) * DEPLETED_SHARE
+            })
+            .map(|(species_id, _)| species_id.clone())
+            .collect();
+
+        if depleted.is_empty() {
+            return;
+        }
+
+        let mut rng = rand::thread_rng();
+
+        for species_id in depleted {
+            if self.animals.len() >= self.max_population {
+                break;
+            }
+
+            if !rng.gen_bool(MIGRATION_CHANCE) {
+                continue;
+            }
+
+            // In from one of the four edges
+            let arrival = match rng.gen_range(0..4) {
+                0 => (rng.gen_range(0..bounds.0), 0),
+                1 => (rng.gen_range(0..bounds.0), bounds.1 - 1),
+                2 => (0, rng.gen_range(0..bounds.1)),
+                _ => (bounds.0 - 1, rng.gen_range(0..bounds.1)),
+            };
+
+            let arriving = rng.gen_range(ARRIVALS.0..=ARRIVALS.1);
+            self.spawn_group(species_id, arrival, arriving);
+        }
+    }
+
     /// Process grazing - herbivores reduce hunger when grazing.
     ///
     /// What a mouthful is worth depends on how many other mouths are on the
@@ -2742,6 +2854,8 @@ impl AnimalManager {
             Some(r) => r.clone(),
             None => return,
         };
+
+        self.world_bounds = Some((grid.width as i32, grid.height as i32));
 
         let total_tiles = grid.width * grid.height;
         let total_herds = (total_tiles * config.herds_per_10000_tiles) / 10000;

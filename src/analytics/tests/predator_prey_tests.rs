@@ -333,3 +333,93 @@ fn the_world_advances_once_per_tick() {
         "the world should advance one tick per simulation tick"
     );
 }
+
+/// A species wiped out of a world is not gone from the world for good.
+///
+/// Nothing recolonised: once the last of a species was killed, that world
+/// spent the rest of its run without it, and a settlement that cleared the
+/// herds had removed the warm half of its clothing permanently.
+#[test]
+fn a_wiped_out_species_finds_its_way_back() {
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+
+    for i in 0..12 {
+        let _ = world.spawn_animal("sheep".to_string(), (20 + i % 4, 20 + i / 4));
+    }
+
+    let mut simulation = Simulation::new(world, Population::new());
+
+    // Let the world learn how many sheep it holds, then take them all
+    for _ in 0..2100 {
+        simulation.tick();
+    }
+    simulation.world.animals.get_all_mut().clear();
+
+    assert_eq!(
+        simulation.world.animals.get_all().len(),
+        0,
+        "the world should be empty of sheep to begin with"
+    );
+
+    let mut returned_at = None;
+    for tick in 0..30000 {
+        simulation.tick();
+        if !simulation.world.animals.get_all().is_empty() {
+            returned_at = Some(tick);
+            break;
+        }
+    }
+
+    let returned_at = returned_at.expect("sheep should find their way back eventually");
+
+    assert!(
+        returned_at > 1000,
+        "they should not walk straight back in: returned after {returned_at} ticks"
+    );
+
+    assert!(
+        simulation
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .all(|animal| animal.species_id == "sheep"),
+        "a world of sheep should get sheep back, not something it never had"
+    );
+}
+
+/// What wanders in is a trickle, not a larder.
+///
+/// The point of it is that a world does not empty out for good, not that a
+/// settlement which clears the herds gets them back faster than it can eat
+/// them.
+#[test]
+fn what_migrates_in_is_a_trickle() {
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+
+    for i in 0..12 {
+        let _ = world.spawn_animal("sheep".to_string(), (20 + i % 4, 20 + i / 4));
+    }
+
+    let mut simulation = Simulation::new(world, Population::new());
+    for _ in 0..2100 {
+        simulation.tick();
+    }
+
+    // Clear them out every tick, so nothing that arrives can breed: what is
+    // left at the end is what walked in
+    let mut arrivals = 0;
+    for _ in 0..20000 {
+        simulation.tick();
+        arrivals += simulation.world.animals.get_all().len();
+        simulation.world.animals.get_all_mut().clear();
+    }
+
+    assert!(arrivals > 0, "something should have wandered in over twenty thousand ticks");
+    assert!(
+        arrivals < 60,
+        "arrivals should be a trickle, not a supply: {arrivals} in twenty thousand ticks"
+    );
+}
