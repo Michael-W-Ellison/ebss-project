@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Last verified: August 2026 (against commit 8a7990f)
+Last verified: August 2026 (against commit 71a4351)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -55,8 +55,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,146 tests across the workspace:
-  1,109 library tests
+  1,158 tests across the workspace:
+  1,121 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -91,8 +91,19 @@ Verified as reached by Simulation::tick():
                   exposure and shelter, injury and healing, death
   Lifecycle       aging, life stages, reproduction, pregnancy, birth,
                   nursing, inheritance of traits and behaviour
-  Behaviour       drives, behaviour trees with weight learning, goals,
-                  plans, foraging, drinking, sheltering, exploration, cooking
+  Behaviour       15 drives, behaviour trees with weight learning, goals,
+                  plans, foraging, drinking, sheltering, exploration, cooking,
+                  farming. Drives that look past this afternoon run five times
+                  faster in an agent that is fed, watered, rested and warm and
+                  a quarter as fast in one that is not
+  Farming         agents break open grass into fields and sow them; crops on
+                  broken ground grow eight times faster than the same thing
+                  wild, which is what feeds a settlement past the dozen the
+                  hedgerows carry
+  Family          parents keep their children close, going to one that has
+                  strayed and running to one that something is stalking;
+                  children pick up skill experience watching the adults around
+                  them, and three times as much watching their own parents
   Fire            agents gather wood, build and light campfires, and cook at
                   them; only meat, fish and grain are improved by a fire, and
                   anything else put over one is ruined - worthless, unsafe to
@@ -113,7 +124,9 @@ Verified as reached by Simulation::tick():
                   living beside them; a species wiped out here or
                   hunted down to a quarter of its peak is slowly replaced by
                   animals wandering in from off the map
-  Perception      sight of terrain, resources and buildings within 25 tiles,
+  Perception      agents see one another, which observational learning is
+                  gated on and had never had; sight of terrain, resources and
+                  buildings within 25 tiles,
                   refreshed every tick and negated by the Blind trait; smell
                   scaled to what a thing actually gives off - a berry about
                   2 tiles, water 3, flesh 6, rot 9-20, cooking the full 25;
@@ -148,11 +161,6 @@ missing features:
                             bonuses, but nothing outside tests ever creates a
                             zone or claims territory, so both are always empty
 
-  Vision as a percept       Sight drives exploration and resource discovery,
-                            but nothing populates vision.visible_agents, so
-                            agents never see each other and
-                            Percept::AgentDetected is never produced.
-
   Hearing                   Nothing feeds sounds from the world, so every
                             sound-derived percept is a dead path.
 
@@ -171,10 +179,11 @@ KNOWN GAPS IN BEHAVIOUR
   - Fauna is stable in most worlds but not all. Over forty worlds, predators
     are still alive at the end in thirty-six and herds stay bounded in
     thirty-three; the rest lose their predators and run to the population cap.
-  - A settlement is not certain to last. Nine of twelve were still inhabited
-    at thirty thousand ticks and thirteen of sixteen at twenty thousand; the
-    rest starve out. A fifty-by-fifty map carries perhaps forty people, and a
-    settlement that overshoots that crashes hard.
+  - A settlement is not certain to last. Four of five were still there at
+    twenty thousand ticks with farming; the one that went, went early. A
+    farming settlement runs to between twenty and a hundred and fifty people
+    where a foraging one capped around a dozen, and the large ones overshoot
+    and correct rather than dying.
   - Agent fear is computed from unmet hunger, thirst and rest, so it sits
     high whenever an agent is between meals. Fleeing is gated on fear, which
     makes flight a common state rather than a response to danger.
@@ -189,10 +198,9 @@ SUGGESTED NEXT STEPS
   2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  3. Look at the quarter of settlements that still starve out over a long run.
-     Food regenerates about four times slower than a grown population eats it,
-     so a settlement that overshoots the land does not settle back - it
-     collapses.
+  3. Characterise a farming settlement over a very long run. They now reach a
+     hundred and fifty people and overshoot; nobody has looked at what happens
+     past twenty thousand ticks with fields in the ground.
   4. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it

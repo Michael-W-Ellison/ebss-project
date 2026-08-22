@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `8a7990f`
+**Last verified:** August 2026, against commit `71a4351`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -69,6 +69,20 @@ Verified reachable from `Simulation::tick()`.
   developmental nutrition that modifies adult stats
 - Inheritance of traits and behaviour trees from both parents
 
+### Working the land
+- Agents break open grass into fields and sow them. Crops on broken ground grow
+  eight times faster than the same thing growing wild, and wild food is now
+  slower still, so a settlement's food comes increasingly from what it plants
+- Water is fed by where it lies: a river carries it in from upstream, a spring
+  in the hills gives whatever the weather does, a pool on open ground lives on
+  the rain, and frozen ground gives up a quarter of what it otherwise would
+
+### Family
+- Parents keep their children close, going to one that has strayed and running
+  to one that something is stalking - above their own coat and their own roof
+- Children pick up skill experience every time they watch an adult work, and
+  three times as much watching their own parents
+
 ### Perception
 - Sight, which is how food is actually found: agents discover terrain,
   resources and buildings within 25 tiles, refreshed every tick rather than
@@ -94,7 +108,10 @@ Verified reachable from `Simulation::tick()`.
   blind agent can be told where the food is
 
 ### Behaviour
-- 14 drives with per-agent weights and thresholds
+- 15 drives with per-agent weights and thresholds. The six that look past this
+  afternoon — a store of food, a field, tools, a building, comforts — run five
+  times faster in an agent that is fed, watered, rested and warm, and a quarter
+  as fast in one that is not
 - Behaviour trees with weight-based learning and pruning
 - Goals and multi-step plans, abandoned when no longer relevant
 - Action selection ordered: starvation, emotional response, shelter,
@@ -146,16 +163,14 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::metrics` (`SimulationMetrics`) | Works when driven; `examples/ascii_simulation.rs` and `examples/phase4_analytics.rs` show how |
 | `analytics::emergence` (`EmergenceDetector`) | Same — driven by those two examples only |
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
-| Vision, as a percept channel (`senses::Vision`) | Sight now drives exploration and resource discovery, but nothing calls `update_visible_agents` or `update_visible_positions`, so `visible_agents` stays empty and agents still never see *each other* |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
 | `world::zoning`, `world::territory` | Read by building placement scoring (`spatial_planning.rs`), but nothing outside tests ever calls `add_zone` or `claim_territory`, so both managers are always empty and every bonus they contribute is zero |
 
-**Consequence for perception:** agents find the world by sight and smell, but
-the percept pipeline itself is still fed only by smell. `Percept::
-ResourceDetected` comes from scents; `Percept::AgentDetected` comes from
-`visible_agents`, which nothing populates, so agents do not see each other and
-social proximity is computed directly by `Population` rather than perceived.
-Anything depending on sound is likewise a dead path.
+**Consequence for perception:** agents find the world by sight and smell.
+`Percept::ResourceDetected` comes from scents; `visible_agents` is populated
+each tick now, which is what observational learning is gated on — until it was,
+the whole learning system ran over an empty list and no agent had ever recorded
+seeing another do anything. Anything depending on sound is still a dead path.
 
 Sight reaches 25 tiles and every smell food gives off where it lies reaches
 between 2 and 6, so looking is what finds dinner and smelling is what warns
@@ -291,9 +306,23 @@ twenty thousand. The rest starve out: food regenerates about four times slower
 than a grown population eats it, so a settlement that overshoots the land does
 not settle back.
 
+Farming, measured over twenty thousand ticks in five worlds:
+
+| Measure | Result |
+| --- | --- |
+| Settlements still there at 20,000 ticks | 4 of 5 |
+| Population at the end | 20, 36, 131, 147 (one world empty) |
+| Fields broken | 23 to 101 per world |
+| Edible resource in the world | 3,700 to 8,800 units |
+
+Before fields, a settlement's food came only from what grew wild, which regrows
+about four times slower than a grown population eats it: settlements capped
+around a dozen people and a quarter starved out. The largest now overshoot and
+correct rather than dying.
+
 ## Test coverage
 
-1,109 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,121 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
 pass, except three known flaky tests (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,

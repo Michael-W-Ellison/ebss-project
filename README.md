@@ -51,8 +51,15 @@ original specifications.
   it away. Smell is scaled to what a thing actually gives off: a berry on the
   bush carries about two tiles, water three, flesh six, food that has turned
   nine to twenty, and cooking the whole range
-- 🚧 Agents cannot yet see each other or hear anything: those percept channels
-  are built but unfed
+- ✅ Farming: agents break open grass into fields and sow them; crops grow eight
+  times faster on broken ground than anything wild, which is what feeds a
+  settlement past the dozen the hedgerows carry
+- ✅ Family: parents keep their children close and go to one that has strayed or
+  that something is stalking; children learn skills by watching the adults
+  around them, and most from their own parents
+- ✅ Drives that look past this afternoon run five times faster in an agent
+  whose immediate needs are met, and a quarter as fast in one whose are not
+- 🚧 Agents cannot yet hear anything: that percept channel is built but unfed
 - ✅ Clothing: agents gather flax, cotton and bark, make garments and wear
   them. A garment is worth what its material is worth and what the hand that
   made it could manage; wood goes into clothes only once a fire's worth is set
@@ -182,9 +189,8 @@ the code actually does, verified by running it — not what was planned.
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
-- [ ] Feed a grown settlement: food regrows about four times slower than forty
-      people eat it, so a quarter of settlements still starve out past twenty
-      thousand ticks
+- [ ] Characterise a farming settlement past twenty thousand ticks — they now
+      reach a hundred and fifty people and overshoot
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts

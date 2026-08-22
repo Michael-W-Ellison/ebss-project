@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `8a7990f`.
+**Last verified:** August 2026, against commit `71a4351`.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -14,17 +14,19 @@ and running the project.
 
 ## Correctness
 
-### 1. Four tests fail intermittently
+### 1. Five tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
     analytics::tests::agent_building_integration_tests::test_production_building_placed_near_resources
     analytics::tests::agent_building_integration_tests::test_production_chain_buildings_cluster
+    analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
-4-in-120 for the third and 1-in-40 for the fourth, all present long before
-recent work (measured on unmodified code at 2/20, 3/15, 4/120 and 1/40). All
-four build a world through `World::new`, which draws from `thread_rng`, and
+4-in-120 for the third and 1-in-30 to 1-in-40 for the last two, all present long
+before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
+1/30). All five build a world through `World::new`, which draws from
+`thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
 the iron to stand.
@@ -46,21 +48,18 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. A quarter of settlements still starve out over a long run
+### 3. Nobody has looked at a farming settlement over a very long run
 
-Nine settlements of twelve are still inhabited at thirty thousand ticks, and
-thirteen of sixteen at twenty thousand. The rest starve.
+Fields changed the shape of this. A settlement that plants its food reaches
+between twenty and a hundred and fifty people where a foraging one capped
+around a dozen, and four of five were still there at twenty thousand ticks. The
+large ones overshoot and correct — one ran to 212 people and settled back to
+131 — rather than dying out.
 
-The cause is known and not fixed: food regenerates about four times slower
-than a grown population eats it. A world's edible resources go from around a
-thousand units to five within seven thousand ticks of the population reaching
-forty, and the population then crashes rather than settling back to what the
-land carries. A fifty-by-fifty map appears to carry somewhere around a dozen
-people indefinitely, and rather more than that briefly.
-
-Two other causes were found and fixed — see **Recently fixed** — and both had
-been invisible because everything else here is measured over eight thousand
-ticks.
+What nobody has done is watch one past twenty thousand ticks. The runs that
+established the earlier collapse were foraging settlements; a farming one at a
+hundred and fifty people is a different animal, and slower to simulate, and
+uncharacterised.
 
 ### 4. The ecology settles in most worlds, not all
 
@@ -100,15 +99,12 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 7. Agents still cannot see each other, or hear anything
+### 7. Agents still cannot hear anything
 
-Sight now discovers terrain, resources and buildings, but only through the
-exploration path. The percept pipeline's own vision channel reads
-`vision.visible_agents`, which nothing populates, so `Percept::AgentDetected`
-is still never produced and agents do not perceive one another — social
-behaviour works because `Population` computes proximity directly. Hearing is
-unfed entirely, so every sound-derived percept is a dead path. See
-SIMULATION_AUDIT.md.
+Sight discovers terrain, resources and buildings, and agents now see one
+another — `vision.visible_agents` is populated each tick, which is what
+observational learning is gated on. Hearing is unfed entirely, so every
+sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
 ### 8. Zoning and territory are never established
 
@@ -188,6 +184,14 @@ Listed so nobody re-investigates them. Each has regression tests in
 - **Sensory traits never reached the senses.**
   `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
   perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Nobody could see anybody.** Nothing populated `vision.visible_agents`, and
+  observation is gated on it, so the whole observational learning system —
+  broadcast, record, adopt, teach — ran every twenty ticks over an empty list.
+  No agent had ever recorded seeing another do anything, in any run, ever.
+- **Wild food could not feed a settlement.** It regrows about four times slower
+  than a grown population eats it, and nothing else produced food at all.
+  Agents break ground into fields now; crops on them grow eight times faster
+  than the same thing wild.
 - **Children froze to death.** A child has no clothing of its own — it cannot
   gather flax, has no skill to sew and nobody makes anything for it — so it ran
   two or three degrees colder than the adults beside it. One traced child had a
