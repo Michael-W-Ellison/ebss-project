@@ -63,6 +63,34 @@ Verified reachable from `Simulation::tick()`.
   that made it could manage. Wood goes into clothes only once a fire's worth
   is set aside, and the coat a new one replaces is left behind
 
+### Pressure
+- A need presses harder the longer it is denied. Every drive counts how long it
+  has been asking without being answered, and that count multiplies both how
+  fast it builds and how loudly it argues in action selection, up to fourfold.
+  A person who missed a meal is a little distracted; one who has not eaten in
+  three days is not thinking about anything else. Being fed halves the count
+  rather than clearing it
+- Every drive also counts how long it has *not* had to ask, which is the only
+  forward-looking thing an agent has and is what breeding waits on
+- Breeding waits on a surplus rather than on a full stomach: immediate needs
+  met, no recent stretch of going short, and either food in hand for two or a
+  long stretch in which feeding itself was simply not a problem
+- Children have less to live on than adults. Every starvation threshold is
+  measured against what the body has stored - a quarter of an adult's for an
+  infant, under half for a child, three fifths for the elderly - so a hungry
+  year takes a generation rather than an even slice
+- A settlement can leave. Ten days of hunger going unanswered and an agent
+  stops working the fields it has and walks, to the furthest food it remembers
+  or failing that on a bearing of its own. Nobody decides it on the
+  settlement's behalf; it falls out of the drive
+- Agents learn what works. Every action's outcome is recorded against the kind
+  of undertaking it was and shifts a running belief about whether that kind of
+  thing pays for this agent. Failures count for more than successes, nothing is
+  written off before five attempts, and something that has gone badly nearly
+  every time is dropped - a hunter who never catches anything stops hunting.
+  The same outcomes drive the behaviour-tree weights, which were built to be
+  this record and had never had a caller
+
 ### The turning year
 - A calendar a life fits inside. A tick is two hours, a day twelve ticks, a
   season twenty-four days and a year 1,152 ticks. A world opens in spring and
@@ -438,7 +466,38 @@ Winter kills a tenth more than a summer, and so does spring to the second
 decimal — inside the noise on about 290 deaths a season. Nothing in these
 worlds has to survive a winter.
 
-**Why a settlement that overshoots does not settle back.** Six worlds traced to
+**What the pressure changed.** Six worlds of twelve, thirty thousand ticks,
+against the same measurement before the drives were given any of it:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Worlds still inhabited | 11 of 12 | 6 of 6 |
+| People at the end | 77.7 | 76.0 |
+| Highest the population reached | 141.3 | 93.2 |
+| Still at or near that peak at the end | — | 5 of 6 |
+| Fertility of the farmed ground at the end | 0.025 (traced world) | 0.179 |
+
+The population figure barely moves; the shape behind it is different. Before,
+a settlement ran up past two hundred and was down to a third of that and still
+falling — end over peak, 0.55. Now the peak is a third lower and five of six
+worlds are within a tenth of it when the run ends: 0.82. They are holding
+rather than having crashed from a high.
+
+Four of the six settle outright — populations of 57 to 102 on ground still at
+0.21 to 0.26 fertility, carrying two to two and a half thousand units of crop,
+births and deaths level. The other two work their ground out anyway (0.081 and
+0.028) and go into famine, and in both the pressure shows: 27 of 91 people in
+one and 23 of 42 in the other have had hunger denied past the point where they
+stop working the fields and walk.
+
+Worth being plain about what has not been fixed. The ground is still mined,
+just more slowly, because there are fewer people on it: nothing yet puts
+nutrient back at the rate it is taken. And leaving is a real option only in
+proportion to how much unfarmed country is left — on a fifty-by-fifty map with
+ninety-odd fields already broken, an agent that walks out does not have far to
+walk.
+
+**Why a settlement that overshoots did not settle back.** Six worlds traced to
 thirty thousand ticks, sampling the ground the settlement actually farms rather
 than the map as a whole.
 
@@ -489,7 +548,7 @@ anybody.
 
 ## Test coverage
 
-1,139 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,156 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
 pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,

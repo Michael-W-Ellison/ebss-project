@@ -110,6 +110,18 @@ Verified as reached by Simulation::tick():
                   farming. Drives that look past this afternoon run five times
                   faster in an agent that is fed, watered, rested and warm and
                   a quarter as fast in one that is not
+  Pressure        a denied drive presses harder the longer it waits, up to
+                  fourfold, on both how fast it builds and how loudly it argues
+                  - so a settlement that cannot feed somebody loses them to it.
+                  Breeding waits on a surplus or a long settled stretch;
+                  children have a quarter to a half of an adult's reserves
+                  against a famine; ten days of unanswered hunger sends an
+                  agent out of the country it is in
+  Learning        every action's outcome is recorded against the kind of
+                  undertaking it was and shifts what the agent will try next.
+                  Failures count for more than successes, nothing is dropped
+                  before five attempts, and a hunter who never catches
+                  anything stops hunting
   Land            every tile carries soil: nutrients, and two pools of dead
                   matter waiting to become more of it. What rots and how fast
                   depends on how dense it was alive and how wet the ground is

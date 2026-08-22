@@ -141,6 +141,26 @@ to `body.overall_health()` but clawed back at 0.02 a tick. A population
 carrying a permanent thirty-point health deficit has no reserve for a bad
 winter, which is what a mass die-off looks like when it comes.
 
+**Since measured.** Six things were put in against this: worked-out ground now
+carries a proportionally smaller crop rather than flooring at four tenths; a
+denied drive presses harder the longer it waits, up to fourfold; breeding waits
+on a surplus or a long settled stretch rather than on a full stomach; children
+have a quarter to a half of an adult's reserves against a famine; ten days of
+unanswered hunger sends an agent out of the country it is in; and agents record
+how their attempts turn out and drop what does not pay.
+
+Six worlds to thirty thousand ticks afterwards: peaks fell from a mean of 141
+to 93, five of six worlds ended within a tenth of their own peak rather than a
+third below it, and the farmed ground ended at 0.179 fertility rather than
+0.025. Four settled outright. Two still worked their ground out, and in both
+the migration pressure was firing on a quarter to a half of the population by
+the end.
+
+What remains: the ground is still mined, only more slowly, because there are
+fewer people on it - nothing puts nutrient back at the rate it is taken. And
+on a fifty-by-fifty map with ninety fields already broken, an agent that walks
+out has nowhere much to walk to.
+
 ### 4. Winter is not cold: the tile temperature is frozen at first touch
 
 `ClimateManager::get_biome` builds a `Biome` for a position the first time
