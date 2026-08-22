@@ -895,6 +895,7 @@ impl Simulation {
             Action::CollectAnimalProduct { .. } => Some(ActionType::Crafting), // Animal husbandry
             Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
             Action::Cook { .. } => Some(ActionType::Cooking),
+            Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)
@@ -1132,13 +1133,6 @@ impl Simulation {
         }
     }
 
-    /// Generate an action based on non-emotional priorities:
-    /// PRIORITY 1: Check if agent needs shelter due to exposure
-    /// PRIORITY 2: Check for high-salience percepts
-    /// PRIORITY 3: Execute current plan step
-    /// PRIORITY 3: Cook raw food
-    /// PRIORITY 4: Check high-salience percepts, then plans, then goals
-    /// PRIORITY 5: Use drive-based action
     /// Action an agent needs to take to stay alive, if any.
     ///
     /// Nothing else in the decision pipeline satisfies hunger or exhaustion:
@@ -1400,6 +1394,17 @@ impl Simulation {
         }
     }
 
+    /// What an agent does when nothing has frightened it, in order:
+    ///
+    /// 1. stay alive - eat, drink, sleep
+    /// 2. put on or make clothing, if it can be done where it stands
+    /// 3. get out of the weather
+    /// 4. cook what it is carrying
+    /// 5. go and get the material to clothe itself
+    /// 6. act on something it can see or smell
+    /// 7. carry on with a plan
+    /// 8. work towards a goal
+    /// 9. whatever its most pressing drive suggests
     fn generate_non_emotional_action(
         &self,
         agent: &crate::agents::Agent,
@@ -1410,7 +1415,19 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 2: Check if agent needs shelter due to exposure
+        // PRIORITY 2: Put on or make clothing, if that can be done on the spot.
+        //
+        // This comes before sheltering because a coat is the durable answer to
+        // cold and a roof is the temporary one: an agent that walks to shelter
+        // every time it feels the wind never gets around to dressing itself,
+        // which is why insulation used to sit at zero for whole lifetimes.
+        // Only what can be done where it stands outranks shelter; going off to
+        // cut flax waits until PRIORITY 3.
+        if let Some(action) = self.clothing_action(agent, agent_position, true) {
+            return (action, false);
+        }
+
+        // PRIORITY 3: Check if agent needs shelter due to exposure
         //
         // Triggered on what the agent is suffering right now, not on the
         // running total of damage taken: that total only ever rises, so once
@@ -1420,7 +1437,7 @@ impl Simulation {
             return (Action::SeekShelter, false);
         }
 
-        // PRIORITY 3: Cook the raw food the agent is carrying.
+        // PRIORITY 4: Cook the raw food the agent is carrying.
         //
         // Anything reaching this point is fed, watered and warm - survival
         // answered first - so this is an agent with raw meat and time on its
@@ -1436,7 +1453,16 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 4: Check for high-salience percepts (danger, resources, social opportunities)
+        // PRIORITY 5: Go and get what the agent needs to clothe itself.
+        //
+        // Below cooking, because a meal is worth more than a coat: cooking
+        // nearly trebles what a piece of food is worth, and an agent that went
+        // for flax first ate worse for it.
+        if let Some(action) = self.clothing_action(agent, agent_position, false) {
+            return (action, false);
+        }
+
+        // PRIORITY 6: Check for high-salience percepts (danger, resources, social opportunities)
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
             .iter()
             .cloned()
@@ -1450,14 +1476,14 @@ impl Simulation {
             return (percept_action, false);
         }
 
-        // PRIORITY 5: Execute current plan step (if agent has an active plan)
+        // PRIORITY 7: Execute current plan step (if agent has an active plan)
         if agent.should_execute_plan() {
             if let Some(plan_action) = agent.get_plan_action() {
                 return (plan_action, true);
             }
         }
 
-        // PRIORITY 6: Check active goals and generate goal-directed action
+        // PRIORITY 8: Check active goals and generate goal-directed action
         if let Some(goal) = agent.goals.highest_priority_goal() {
             // Get most urgent drive for fallback
             let fallback_drive = agent.drives.most_urgent()
@@ -1469,7 +1495,7 @@ impl Simulation {
             }
         }
 
-        // PRIORITY 7: Use drive-based action as fallback
+        // PRIORITY 9: Use drive-based action as fallback
         let drive_type = agent.select_drive_with_happiness()
             .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
             .unwrap_or(DriveType::Curiosity);
@@ -1598,6 +1624,278 @@ impl Simulation {
 
     /// How far an agent will walk to reach a fire that is already burning
     const FIRE_WALK_RADIUS: i32 = 20;
+
+    /// How much warmer a garment has to be before it is worth changing into.
+    ///
+    /// Without a margin an agent swaps between two near-identical coats every
+    /// tick forever: whatever it is wearing wears down a little each tick, so
+    /// the one folded in its pack is always fractionally better.
+    const WARMTH_WORTH_CHANGING_FOR: f32 = 0.05;
+
+    /// How much better a new garment has to be before it is worth the material
+    /// and the work of making one.
+    ///
+    /// Whatever is on an agent's back wears a little thinner every tick, so
+    /// against a bare comparison there is always a fresh coat worth making:
+    /// agents replaced their clothes every few hundred ticks and ended up
+    /// carrying dozens of cast-offs. A quarter better means a real
+    /// improvement - a better material, or a hand that has learned something -
+    /// rather than ordinary wear.
+    const WORTH_MAKING_ANEW: f32 = 1.25;
+
+    /// Whether a garment of this warmth is worth making, given what is already
+    /// on that slot
+    fn worth_making(warmth: f32, worn: f32) -> bool {
+        warmth > worn * Self::WORTH_MAKING_ANEW + Self::WARMTH_WORTH_CHANGING_FOR
+    }
+
+    /// How far below its ideal an agent has to be to want another layer.
+    ///
+    /// Well short of `is_too_cold`, which is two degrees down and already
+    /// dangerous: nobody waits until they are hypothermic to think about a
+    /// coat, and an agent that did would spend the whole time it was cold
+    /// walking to shelter instead of making one.
+    const CHILLY_MARGIN: f32 = 0.5;
+
+    /// How far an agent will travel for the material to clothe itself.
+    ///
+    /// Further than it will go for food, because flax and cotton grow in a
+    /// handful of patches on a map where there is something to eat almost
+    /// everywhere - but not so far that the trip costs more than the coat is
+    /// worth.
+    const CLOTHING_MATERIAL_RADIUS: u32 = 40;
+
+    /// Insulation past which an agent counts itself dressed and gets on with
+    /// its life.
+    ///
+    /// Without a stopping point this is a bottomless job. An unclothed agent
+    /// sits about a degree under its ideal most of the time, so it is nearly
+    /// always a little cold, and there is nearly always another patch of flax
+    /// somewhere worth walking to: agents chased marginal warmth across the
+    /// map instead of eating, and populations fell by a quarter.
+    const ENOUGH_INSULATION: f32 = 0.35;
+
+    /// Whether the agent can spare the material for this garment.
+    ///
+    /// Wood is the one material that is wanted for something else: a fire
+    /// takes ten and cooking is worth more than a pair of bark boots is, so
+    /// wood only goes into clothing once there is a fire's worth left over.
+    /// Without this agents made boots out of the firewood, stopped cooking,
+    /// and went back to eating raw - four points of the fed population, for an
+    /// insulation of about one part in a hundred.
+    fn can_spare_material(
+        agent: &crate::agents::Agent,
+        recipe: &crate::agents::equipment::GarmentRecipe,
+    ) -> bool {
+        let reserve = if recipe.material_item == "wood" {
+            Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
+        } else {
+            0
+        };
+
+        agent
+            .inventory
+            .has_item(recipe.material_item, recipe.material_amount + reserve)
+    }
+
+    /// Whether the agent is cold enough, and bare enough, to want another layer
+    fn wants_more_clothing(agent: &crate::agents::Agent) -> bool {
+        agent.body_temperature.current < agent.body_temperature.ideal - Self::CHILLY_MARGIN
+            && agent.body.total_cold_insulation() < Self::ENOUGH_INSULATION
+    }
+
+    /// What an agent of this much practice turns a given material into.
+    ///
+    /// The generic skill quality curve puts every untrained agent at Pathetic,
+    /// and skills start ten levels below untrained, so a first cloak was worth
+    /// half of nothing and no agent ever cooked or sewed often enough to climb
+    /// out. A first attempt here is crude but wearable, and practice tells.
+    fn expected_garment_quality(agent: &crate::agents::Agent) -> crate::agents::skills::Quality {
+        use crate::agents::skills::Quality;
+
+        let practice = agent
+            .skills
+            .get_skill_if_exists(crate::agents::SkillType::Leatherworking)
+            .map(|skill| skill.level)
+            .unwrap_or(-10);
+
+        match practice {
+            level if level < 0 => Quality::Crude,
+            0..=3 => Quality::Basic,
+            4..=6 => Quality::Moderate,
+            7..=8 => Quality::Advanced,
+            _ => Quality::Expert,
+        }
+    }
+
+    /// How warm a garment of this recipe and quality is
+    fn garment_warmth(
+        recipe: &crate::agents::equipment::GarmentRecipe,
+        quality: crate::agents::skills::Quality,
+    ) -> f32 {
+        recipe.warmth() * quality.modifier()
+    }
+
+    /// How warm the agent is already, in that slot
+    fn warmth_worn(agent: &crate::agents::Agent, slot: crate::agents::equipment::EquipmentSlot) -> f32 {
+        agent
+            .body
+            .equipment
+            .get(&slot)
+            .map(|worn| worn.cold_insulation())
+            .unwrap_or(0.0)
+    }
+
+    /// A garment in the pack worth changing into
+    fn garment_to_put_on(agent: &crate::agents::Agent) -> Option<String> {
+        use crate::agents::equipment::garment_recipe;
+
+        agent
+            .inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0)
+            .filter_map(|item| {
+                let recipe = garment_recipe(&item.item_id)?;
+                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Crude);
+                let wear = match (item.current_durability, item.max_durability) {
+                    (Some(current), Some(max)) if max > 0.0 => (current / max).clamp(0.0, 1.0),
+                    _ => 1.0,
+                };
+                let warmth = Self::garment_warmth(recipe, quality) * wear;
+
+                if warmth > Self::warmth_worn(agent, recipe.slot) + Self::WARMTH_WORTH_CHANGING_FOR
+                {
+                    Some((recipe.id.to_string(), warmth))
+                } else {
+                    None
+                }
+            })
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(id, _)| id)
+    }
+
+    /// The warmest garment the agent could make right now that would be an
+    /// improvement on what it is wearing
+    fn garment_to_make(agent: &crate::agents::Agent) -> Option<String> {
+        let quality = Self::expected_garment_quality(agent);
+
+        crate::agents::equipment::GARMENT_RECIPES
+            .iter()
+            .filter(|recipe| Self::can_spare_material(agent, recipe))
+            .filter(|recipe| {
+                Self::worth_making(
+                    Self::garment_warmth(recipe, quality),
+                    Self::warmth_worn(agent, recipe.slot),
+                )
+            })
+            .max_by(|a, b| {
+                Self::garment_warmth(a, quality)
+                    .partial_cmp(&Self::garment_warmth(b, quality))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|recipe| recipe.id.to_string())
+    }
+
+    /// The material for the warmest garment an agent could go and get, and the
+    /// patch it grows in
+    fn material_to_gather(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(String, crate::world::Position)> {
+        use crate::world::ResourceType;
+
+        let quality = Self::expected_garment_quality(agent);
+
+        crate::agents::equipment::GARMENT_RECIPES
+            .iter()
+            .filter(|recipe| {
+                Self::worth_making(
+                    Self::garment_warmth(recipe, quality),
+                    Self::warmth_worn(agent, recipe.slot),
+                )
+            })
+            .filter_map(|recipe| {
+                let resource = match recipe.material_item {
+                    "flax" => ResourceType::Flax,
+                    "cotton" => ResourceType::Cotton,
+                    "hides" => ResourceType::Hides,
+                    "wool" => ResourceType::Wool,
+                    "wood" => ResourceType::Wood,
+                    _ => return None,
+                };
+
+                let patch = self.nearest_resource_within(
+                    agent_position,
+                    Self::CLOTHING_MATERIAL_RADIUS,
+                    |node| node.resource_type == resource,
+                )?;
+
+                // Warmth is worth having, but not at any distance. A cloak's
+                // worth of flax forty tiles off is a worse bargain than bark
+                // from the trees an agent is standing in, and agents that
+                // always went for the warmest thing walked instead of ate.
+                let from = crate::world::Position::new(agent_position.0, agent_position.1);
+                let travel = from.distance_to(&patch) as f32;
+                let worth = Self::garment_warmth(recipe, quality) / (1.0 + travel / 10.0);
+
+                Some((recipe.material_item.to_string(), patch, worth))
+            })
+            .max_by(|(_, _, a), (_, _, b)| {
+                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(material, patch, _)| (material, patch))
+    }
+
+    /// Getting dressed, in whatever order the situation needs: put on what is
+    /// already made, make what there is material for, or go and gather it.
+    ///
+    /// Only a cold agent bothers. Insulation was always zero before this,
+    /// because nothing ever drove an agent to make or wear anything, so cold
+    /// was a thing agents endured for their whole lives rather than solved.
+    ///
+    /// With `immediate_only` this reports only what can be done on the spot,
+    /// which is what outranks walking to shelter: pulling on a coat you are
+    /// already carrying beats crossing a field to get out of the wind, and
+    /// going off to cut flax does not.
+    fn clothing_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        immediate_only: bool,
+    ) -> Option<Action> {
+        if !Self::wants_more_clothing(agent) {
+            return None;
+        }
+
+        if let Some(garment) = Self::garment_to_put_on(agent) {
+            return Some(Action::WearClothing { garment });
+        }
+
+        if let Some(garment) = Self::garment_to_make(agent) {
+            return Some(Action::MakeClothing { garment });
+        }
+
+        if immediate_only {
+            return None;
+        }
+
+        // Gathering reaches only as far as foraging does, so a patch further
+        // off than that is somewhere to walk to first
+        let (material, patch) = self.material_to_gather(agent, agent_position)?;
+
+        let from = crate::world::Position::new(agent_position.0, agent_position.1);
+        if from.distance_to(&patch) > Self::FORAGE_RADIUS {
+            return Some(Action::Move {
+                target: (patch.x, patch.y, agent_position.2),
+            });
+        }
+
+        Some(Action::Gather {
+            resource_type: material,
+        })
+    }
 
     /// Getting raw food onto a fire, in whatever order the situation needs:
     /// cook here, walk to the fire, light one, or go and cut the wood for it.
@@ -2299,6 +2597,14 @@ impl Simulation {
                     "iron" => Some(ResourceType::Iron),
                     "food" => Some(ResourceType::Food),
                     "water" => Some(ResourceType::Water),
+                    // Clothing materials. Flax and cotton grow in patches an
+                    // agent can walk to; hides and wool come off animals, so
+                    // they are here for when an agent has somewhere to get
+                    // them rather than because the ground offers any.
+                    "flax" => Some(ResourceType::Flax),
+                    "cotton" => Some(ResourceType::Cotton),
+                    "hides" => Some(ResourceType::Hides),
+                    "wool" => Some(ResourceType::Wool),
                     "generic" => Some(ResourceType::Wood), // Default to wood for generic
                     _ => None,
                 };
@@ -2347,6 +2653,9 @@ impl Simulation {
                     // Determine harvest amount based on resource type and skill
                     let harvest_amount = match resource_type_enum {
                         ResourceType::Wood => rng.gen_range(1..=3),
+                        // An armful at a time, like wood: a garment's worth of
+                        // flax one stem per trip is a week's work
+                        ResourceType::Flax | ResourceType::Cotton => rng.gen_range(1..=3),
                         ResourceType::Stone => rng.gen_range(1..=2),
                         ResourceType::Iron => 1,
                         ResourceType::Food => 1,
@@ -2393,6 +2702,11 @@ impl Simulation {
                             ResourceType::Grain => "grain",
                             ResourceType::Fish => "fish",
                             ResourceType::Meat => "meat",
+                            ResourceType::Flax => "flax",
+                            ResourceType::Cotton => "cotton",
+                            ResourceType::Hides => "hides",
+                            ResourceType::Wool => "wool",
+                            ResourceType::Herbs => "herbs",
                             _ => "generic",
                         };
 
@@ -4614,6 +4928,155 @@ impl Simulation {
 
                     ActionResult::failure(format!("Burnt {} {}", quantity, chosen))
                 }
+            },
+
+            Action::MakeClothing { garment } => {
+                use crate::agents::equipment::garment_recipe;
+                use crate::agents::skills::SkillType;
+
+                let recipe = match garment_recipe(garment) {
+                    Some(recipe) => recipe,
+                    None => {
+                        return ActionResult::failure(format!("No such garment: {}", garment))
+                    }
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+
+                if !agent
+                    .inventory
+                    .has_item(recipe.material_item, recipe.material_amount)
+                {
+                    return ActionResult::failure(format!(
+                        "Not enough {} for a {}: needs {}",
+                        recipe.material_item, recipe.name, recipe.material_amount
+                    ));
+                }
+
+                // Making a garment is a skill like any other: the same flax in
+                // different hands comes out as something that keeps the cold
+                // off or as something that falls apart in a week. Quality
+                // carries into both warmth and durability.
+                let quality = Self::expected_garment_quality(agent);
+
+                let made = match crate::agents::equipment::ClothingTemplate::from_id(
+                    recipe.id, quality,
+                ) {
+                    Some(made) => made,
+                    None => {
+                        return ActionResult::failure(format!("Cannot make a {}", recipe.name))
+                    }
+                };
+
+                agent
+                    .inventory
+                    .remove_item(recipe.material_item, recipe.material_amount);
+
+                agent.skills.gain_experience(SkillType::Leatherworking, 25);
+
+                // Making a coat and putting it on is one act.
+                //
+                // Leaving it in the pack to be worn later does not work: an
+                // inventory stack carries one quality for the whole stack, so
+                // a better second coat merged into the first and was recorded
+                // as no better than it. Agents made coat after coat, each an
+                // improvement, and wore none of them - over eight thousand
+                // ticks one settlement made two hundred and eighty garments
+                // and put on a hundred and sixty.
+                let worn_now = Self::warmth_worn(agent, recipe.slot);
+                let put_on = made.cold_insulation() > worn_now;
+
+                if put_on {
+                    // The coat this replaces is worn out or simply worse, and
+                    // an agent that kept every one of them ended up carrying
+                    // twenty cast-offs at two kilos each - a third of what it
+                    // could carry, in old clothes, instead of food.
+                    agent.body.unequip(recipe.slot);
+                    agent.body.equip(made);
+                } else {
+                    let mut folded = crate::agents::InventoryItem::new_with_weight(
+                        recipe.id.to_string(),
+                        1,
+                        2.0,
+                    );
+                    folded.quality = Some(quality);
+                    folded.current_durability = Some(made.durability);
+                    folded.max_durability = Some(made.max_durability);
+
+                    if !agent.inventory.add_item(folded) {
+                        return ActionResult::failure(format!(
+                            "Nowhere to put the {} just made",
+                            recipe.name
+                        ));
+                    }
+                }
+
+                debug!(
+                    "Agent {} made a {:?} {} (insulation now {:.2})",
+                    agent.id,
+                    quality,
+                    recipe.name,
+                    agent.body.total_cold_insulation()
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Shelter, -0.15)
+                    .with_energy_cost(8.0)
+                    .with_message(format!("Made and put on a {:?} {}", quality, recipe.name))
+            },
+
+            Action::WearClothing { garment } => {
+                use crate::agents::equipment::{garment_recipe, ClothingTemplate};
+
+                let recipe = match garment_recipe(garment) {
+                    Some(recipe) => recipe,
+                    None => {
+                        return ActionResult::failure(format!("No such garment: {}", garment))
+                    }
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+
+                let carried = match agent.inventory.remove_item(recipe.id, 1) {
+                    Some(carried) => carried,
+                    None => {
+                        return ActionResult::failure(format!("No {} to put on", recipe.name))
+                    }
+                };
+
+                let quality = carried
+                    .quality
+                    .unwrap_or(crate::agents::skills::Quality::Basic);
+
+                let mut clothing = match ClothingTemplate::from_id(recipe.id, quality) {
+                    Some(clothing) => clothing,
+                    None => {
+                        agent.inventory.add_item(carried);
+                        return ActionResult::failure(format!("Cannot wear {}", recipe.name));
+                    }
+                };
+
+                // A garment picked back up is as worn as it was when it came off
+                if let Some(durability) = carried.current_durability {
+                    clothing.durability = durability.min(clothing.max_durability);
+                }
+
+                // Whatever was in that slot is worse than what is going on
+                // over it, and is left behind rather than carried around
+                agent.body.unequip(recipe.slot);
+                agent.body.equip(clothing);
+
+                debug!(
+                    "Agent {} put on a {} (insulation now {:.2})",
+                    agent.id,
+                    recipe.name,
+                    agent.body.total_cold_insulation()
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Shelter, -0.2)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Put on a {}", recipe.name))
             },
 
             Action::Wait => {

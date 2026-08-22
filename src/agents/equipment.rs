@@ -1223,9 +1223,221 @@ impl Default for EquipmentManager {
 }
 
 /// Predefined clothing templates
+/// A garment an agent can actually make, and what it takes to make one.
+///
+/// This is the single table behind both making and wearing: an agent checks it
+/// for something it has the material for, and reads it again to rebuild the
+/// garment when it puts it on.
+///
+/// Material decides most of what a garment is worth. Fur and wool are what you
+/// want against the cold and are only had from animals; flax and cotton grow
+/// on the ground and make something that will do; bark is what you fall back
+/// on. `environment::clothing_recipes` describes a richer set that wants a
+/// workbench, tanned leather and spun thread - none of which exists in a
+/// running simulation - so these are deliberately made from what an agent can
+/// pick up.
+#[derive(Debug, Clone, Copy)]
+pub struct GarmentRecipe {
+    /// Item id the finished garment is carried and worn under
+    pub id: &'static str,
+    pub name: &'static str,
+    pub slot: EquipmentSlot,
+    /// Inventory item it is made from, and how much of it
+    pub material_item: &'static str,
+    pub material_amount: u32,
+    pub material: ClothingMaterial,
+    pub base_cold_insulation: f32,
+    pub base_heat_resistance: f32,
+    pub base_armor: f32,
+}
+
+impl GarmentRecipe {
+    /// Roughly how much warmth this garment is worth at ordinary quality,
+    /// which is what an agent compares when deciding what to make
+    pub fn warmth(&self) -> f32 {
+        self.base_cold_insulation * self.material.cold_insulation()
+    }
+}
+
+/// Every garment an agent knows how to make
+pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
+    // From animals: the warm things, and the ones an agent has to hunt for
+    GarmentRecipe {
+        id: "fur_coat",
+        name: "Fur Coat",
+        slot: EquipmentSlot::Torso,
+        material_item: "hides",
+        material_amount: 6,
+        material: ClothingMaterial::Fur,
+        base_cold_insulation: 0.8,
+        base_heat_resistance: 0.1,
+        base_armor: 0.2,
+    },
+    GarmentRecipe {
+        id: "fur_hat",
+        name: "Fur Hat",
+        slot: EquipmentSlot::Head,
+        material_item: "hides",
+        material_amount: 3,
+        material: ClothingMaterial::Fur,
+        base_cold_insulation: 0.5,
+        base_heat_resistance: 0.1,
+        base_armor: 0.1,
+    },
+    GarmentRecipe {
+        id: "hide_armor",
+        name: "Hide Armor",
+        slot: EquipmentSlot::Torso,
+        material_item: "hides",
+        material_amount: 8,
+        material: ClothingMaterial::Hide,
+        base_cold_insulation: 0.5,
+        base_heat_resistance: 0.2,
+        base_armor: 0.6,
+    },
+    GarmentRecipe {
+        id: "wool_cloak",
+        name: "Wool Cloak",
+        slot: EquipmentSlot::Back,
+        material_item: "wool",
+        material_amount: 5,
+        material: ClothingMaterial::Wool,
+        base_cold_insulation: 0.6,
+        base_heat_resistance: 0.2,
+        base_armor: 0.1,
+    },
+    GarmentRecipe {
+        id: "leather_tunic",
+        name: "Leather Tunic",
+        slot: EquipmentSlot::Torso,
+        material_item: "leather",
+        material_amount: 8,
+        material: ClothingMaterial::Leather,
+        base_cold_insulation: 0.4,
+        base_heat_resistance: 0.3,
+        base_armor: 0.3,
+    },
+    GarmentRecipe {
+        id: "leather_pants",
+        name: "Leather Pants",
+        slot: EquipmentSlot::Legs,
+        material_item: "leather",
+        material_amount: 6,
+        material: ClothingMaterial::Leather,
+        base_cold_insulation: 0.3,
+        base_heat_resistance: 0.3,
+        base_armor: 0.2,
+    },
+    // From the ground: what an agent can make without hunting anything
+    GarmentRecipe {
+        id: "linen_cloak",
+        name: "Linen Cloak",
+        slot: EquipmentSlot::Back,
+        material_item: "flax",
+        material_amount: 6,
+        material: ClothingMaterial::Linen,
+        base_cold_insulation: 0.45,
+        base_heat_resistance: 0.3,
+        base_armor: 0.05,
+    },
+    GarmentRecipe {
+        id: "cotton_cloak",
+        name: "Cotton Cloak",
+        slot: EquipmentSlot::Back,
+        material_item: "cotton",
+        material_amount: 6,
+        material: ClothingMaterial::Cotton,
+        base_cold_insulation: 0.45,
+        base_heat_resistance: 0.35,
+        base_armor: 0.05,
+    },
+    GarmentRecipe {
+        id: "linen_hood",
+        name: "Linen Hood",
+        slot: EquipmentSlot::Head,
+        material_item: "flax",
+        material_amount: 3,
+        material: ClothingMaterial::Linen,
+        base_cold_insulation: 0.3,
+        base_heat_resistance: 0.3,
+        base_armor: 0.05,
+    },
+    GarmentRecipe {
+        id: "cotton_hood",
+        name: "Cotton Hood",
+        slot: EquipmentSlot::Head,
+        material_item: "cotton",
+        material_amount: 3,
+        material: ClothingMaterial::Cotton,
+        base_cold_insulation: 0.3,
+        base_heat_resistance: 0.35,
+        base_armor: 0.05,
+    },
+    GarmentRecipe {
+        id: "linen_shirt",
+        name: "Linen Shirt",
+        slot: EquipmentSlot::Torso,
+        material_item: "flax",
+        material_amount: 5,
+        material: ClothingMaterial::Linen,
+        base_cold_insulation: 0.2,
+        base_heat_resistance: 0.7,
+        base_armor: 0.05,
+    },
+    // The last resort, and the only ones made of something there is always
+    // plenty of. Bark and bast are poor insulators next to fur, but there are
+    // trees everywhere and nobody has to hunt for them.
+    GarmentRecipe {
+        id: "bark_cloak",
+        name: "Bark Cloak",
+        slot: EquipmentSlot::Back,
+        material_item: "wood",
+        material_amount: 6,
+        material: ClothingMaterial::Bark,
+        base_cold_insulation: 0.35,
+        base_heat_resistance: 0.3,
+        base_armor: 0.05,
+    },
+    GarmentRecipe {
+        id: "bark_boots",
+        name: "Bark Boots",
+        slot: EquipmentSlot::Feet,
+        material_item: "wood",
+        material_amount: 4,
+        material: ClothingMaterial::Bark,
+        base_cold_insulation: 0.2,
+        base_heat_resistance: 0.4,
+        base_armor: 0.1,
+    },
+];
+
+/// The recipe for a garment, by the id it is carried under
+pub fn garment_recipe(id: &str) -> Option<&'static GarmentRecipe> {
+    GARMENT_RECIPES.iter().find(|recipe| recipe.id == id)
+}
+
 pub struct ClothingTemplate;
 
 impl ClothingTemplate {
+    /// Build a garment from its id, as made by an agent of the given skill.
+    ///
+    /// Quality carries through to warmth and to how long it lasts, so a first
+    /// attempt is a poor thing that falls apart and a practised hand makes
+    /// something worth wearing.
+    pub fn from_id(id: &str, quality: Quality) -> Option<Equipment> {
+        garment_recipe(id).map(|recipe| {
+            Equipment::new(
+                recipe.name.to_string(),
+                recipe.slot,
+                recipe.material,
+                quality,
+                recipe.base_cold_insulation,
+                recipe.base_heat_resistance,
+                recipe.base_armor,
+            )
+        })
+    }
+
     /// Leather tunic - basic torso protection
     pub fn leather_tunic(quality: Quality) -> Equipment {
         Equipment::new(
@@ -1334,7 +1546,7 @@ impl ClothingTemplate {
     pub fn bark_boots(quality: Quality) -> Equipment {
         Equipment::new(
             "Bark Boots".to_string(),
-            EquipmentSlot::Legs,
+            EquipmentSlot::Feet,
             ClothingMaterial::Bark,
             quality,
             0.2,  // Minimal cold protection

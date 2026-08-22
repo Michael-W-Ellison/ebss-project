@@ -206,6 +206,10 @@ pub enum Action {
     LightFire,
     /// Put carried food on a fire the agent is standing at
     Cook { food_type: String },
+    /// Make a garment from materials the agent is carrying
+    MakeClothing { garment: String },
+    /// Put on a garment the agent is carrying
+    WearClothing { garment: String },
     /// Wait/idle
     Wait,
 }
@@ -235,6 +239,8 @@ impl Action {
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
             Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
+            Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
+            Action::WearClothing { .. } => Some(DriveType::Shelter),
             Action::Move { .. } => None,
             Action::Wait => None,
         }

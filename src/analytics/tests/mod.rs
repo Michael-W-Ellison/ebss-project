@@ -8,3 +8,4 @@ pub mod thirst_tests;
 pub mod sight_tests;
 pub mod scent_tests;
 pub mod cooking_tests;
+pub mod clothing_tests;
