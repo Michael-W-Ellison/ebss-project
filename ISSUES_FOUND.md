@@ -218,7 +218,45 @@ weather.
 Fixing it is not just a cache invalidation: making winter genuinely cold is a
 real change to the balance and would need measuring before and after.
 
-### 5. The ecology settles in most worlds, not all
+### 5. Drives rise on a clock, not on the conditions the specification gives them
+
+The design document's Appendix A gives each of its thirteen drives a list of
+**increase conditions** — Safety on "hostile entity proximity, recent injury,
+darkness", Construction on "buildable templates seen, others building, drive
+synergy", Sustenance on "low food stockpile, crop depletion". Those are what
+make a drive a motivation rather than a timer.
+
+`DriveType::base_accumulation_rate` returns one flat number per drive per tick,
+and that is the whole of it. One drive has a contextual increase (Rest, from
+`fatigue.level`) and one has an undocumented second clock (Curiosity gains
+another 0.002 a tick in `Population::tick`). The rest rise on time alone. The
+line `DriveType::Safety => 0.02, // Spikes with threats` is the sharpest case:
+the comment describes the specification, the code is a constant, and it is the
+highest flat rate any drive has. Threats do reach agents — through the emotion
+system's fear override — but not through the drive the specification assigns
+them to.
+
+Measured on twenty-seven agents at eight thousand ticks, nine of the fifteen
+drives are pinned at 1.00 and active 100% of the time: Shelter, Safety,
+Preparedness, Sustenance, Luxury, Utility, Construction, Protection, and
+Industry at 0.96. Only Hunger, Thirst, Rest, Curiosity, Social and Reproduction
+cycle. Satisfying actions exist for thirteen of the fifteen but are chosen too
+rarely to hold a drive down against even a 0.002-a-tick clock.
+
+Two have no satisfaction path at all. Luxury is never decreased anywhere.
+Protection's behaviour works — a parent goes to a strayed child — but it is
+triggered by where the children are rather than by the drive, nothing brings
+the drive down, and when it wins the fallback it maps to `Action::Wait`.
+
+The consequence for decision-making: the drive fallback chooses among nine
+drives that are all at their ceiling with the denial pressure all at its 4.0
+cap, so the per-agent weight is the only thing separating them. Safety and
+Shelter take twenty-five of twenty-seven agents between them.
+
+"Drive synergy", named in the specification as an increase condition for
+Construction, does not exist in any form: no drive reads another.
+
+### 6. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
 herds stay bounded in thirty-three. In the seven that run away the predators
@@ -226,7 +264,7 @@ died out first, and although animals do wander back in from off the map, the
 trickle is slow enough — by design — that a world can spend thousands of ticks
 with its herds climbing unopposed before a replacement pack arrives.
 
-### 6. Clothing and hunting cost about what they return
+### 7. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -245,7 +283,7 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 7. Fear is a hunger signal, not a danger signal
+### 8. Fear is a hunger signal, not a danger signal
 
 `calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
 rest. Since hunger saturates between meals, fear sits at around 0.8 much of
@@ -256,14 +294,14 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 8. Agents still cannot hear anything
+### 9. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 9. Zoning and territory are never established
+### 10. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -271,7 +309,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 10. Agents carry food they will never eat
+### 11. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -285,16 +323,16 @@ carried weight still includes rot and cinders.
 
 ## Housekeeping
 
-### 11. Committed backup file
+### 12. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 12. Build warnings
+### 13. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 13. Placeholder package metadata
+### 14. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

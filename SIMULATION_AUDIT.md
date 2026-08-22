@@ -230,6 +230,8 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::emergence` (`EmergenceDetector`) | Same — driven by those two examples only |
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
+| `core::drive_progression` (`DriveProgression`) | Basic → Intermediate → Advanced → Luxury tiers for every drive, with tests, and no caller outside its own module |
+| `agents::drive_satisfaction` (`SatisfactionTracker`) | Fed only from tests, so the grief-on-death code in `Population` that asks which agent was a drive's satisfaction source always gets nothing |
 | Seasonal temperature | Computed three ways; the one agents read is frozen. `ClimateManager::get_biome` builds a `Biome` per tile on first touch, stamps the season and hour into it, and caches it for ever - `clear_biome_cache()` is called only from a test - so `get_temperature` returns that first-touch value plus the current weather modifier. Meanwhile `ClimateManager::tick` recomputes `base_climate.temperature` from the season and hour every tick and nothing reads it, and `SeasonalCalendar::apply_modifiers` has no caller outside its own test. Measured: winter and summer report the same temperature to a tenth of a degree |
 | `world::zoning`, `world::territory` | Read by building placement scoring (`spatial_planning.rs`), but nothing outside tests ever calls `add_zone` or `claim_territory`, so both managers are always empty and every bonus they contribute is zero |
 
@@ -545,6 +547,85 @@ the tick before it died: old age 407, health gone with nothing else wrong 374,
 thirst 235, cold 229, energy exhaustion 1, heat 0, **hunger 0**. In a
 simulation whose central drama is food, going without it has never killed
 anybody.
+
+## The drive system against its specification
+
+The design document (Appendix A) specifies thirteen drives, each with a list of
+**increase conditions** and **decrease conditions**. The increase conditions are
+what makes a drive a motivation rather than a timer: Safety is meant to rise on
+"hostile entity proximity, recent injury, darkness", Construction on "buildable
+templates seen, others building, drive synergy", Sustenance on "low food
+stockpile, crop depletion".
+
+**Almost none of the increase conditions exist.** `DriveType::base_accumulation_rate`
+returns one flat number per drive per tick, and that is the whole of it. Two
+things modulate it, neither in the specification: `is_long_term()`, which runs
+the six forward-looking drives faster in an agent whose immediate needs are met,
+and the denial pressure added later. Exactly one drive has a contextual
+increase — Rest rises with `fatigue.level` — and one has an undocumented second
+clock (Curiosity gains another 0.002 a tick in `Population::tick`, on top of its
+own 0.004, until it reaches 0.7).
+
+The `Safety => 0.02, // Spikes with threats` line is the clearest case: the
+comment describes the specified behaviour, the code is a constant, and 0.02 is
+the highest flat rate any drive has — so Safety pins at its ceiling early and
+stays there. Threats do reach agents, but through the emotion system's
+fear-and-anger override, not through the drive the specification assigns them
+to.
+
+Decrease conditions fare better: thirteen of fifteen drives have at least one
+satisfying action wired to them. Luxury and Protection have none at all.
+Protection's *behaviour* works — a parent goes to a child that has strayed —
+but it is triggered by where the children are, not by the drive value, and
+nothing ever brings the drive down; when it wins the fallback it maps to
+`Action::Wait`.
+
+What that adds up to, measured on twenty-seven agents at eight thousand ticks:
+
+| Drive | Value | Pressure | Active |
+| --- | --- | --- | --- |
+| Hunger | 0.49 | 1.00 | 0% |
+| Thirst | 0.37 | 1.00 | 0% |
+| Rest | 0.29 | 1.14 | 19% |
+| Curiosity | 0.56 | 2.67 | 56% |
+| Social | 0.66 | 2.73 | 56% |
+| Reproduction | 0.77 | 3.00 | 63% |
+| Industry | 0.96 | 3.89 | 96% |
+| Protection | 0.93 | 3.83 | 100% |
+| Safety | 0.99 | 4.00 | 100% |
+| Shelter | 1.00 | 4.00 | 100% |
+| Preparedness | 1.00 | 4.00 | 100% |
+| Sustenance | 1.00 | 4.00 | 100% |
+| Luxury | 1.00 | 4.00 | 100% |
+| Utility | 1.00 | 4.00 | 100% |
+| Construction | 1.00 | 4.00 | 100% |
+
+Six drives cycle. Nine are pinned at the ceiling and have been since early in
+the run: their satisfying actions exist but are chosen too rarely to hold them
+down against even a 0.002-a-tick clock. So the drive fallback is decided among
+nine drives that are all at 1.00 with pressure all at its 4.0 cap, which leaves
+the per-agent weight as the only thing separating them — Safety and Shelter
+between them take twenty-five of twenty-seven agents.
+
+That also means the denial pressure added recently does nothing where it looks
+like it should do most: it is saturated for exactly the drives that never get
+answered. It works on Hunger, Thirst and Rest, which are answered often enough
+for the counter to move.
+
+Two further gaps against the specification. "Drive synergy", named as an
+increase condition for Construction, does not exist in any form — no drive
+reads another. And `core::drive_progression` implements the Basic → Intermediate
+→ Advanced → Luxury tiers for every drive, with tests, and has no caller
+outside its own module — as does `SatisfactionTracker`, which is fed only from
+tests, so the grief-on-death code in `Population` that asks which agent was a
+drive's satisfaction source always gets nothing.
+
+**Count.** The specification says thirteen. The code has fifteen: Thirst and
+Protection were added later. The documentation does not agree with itself —
+`PROJECT_SUMMARY.md`, `CODEBASE_ANALYSIS.md`, `ARCHITECTURE_DIAGRAM.txt` and
+`EXPLORATION_SUMMARY.md` say thirteen, `README.md` and
+`CURIOSITY_SYSTEM_ANALYSIS.md` say fourteen, and only `PROJECT_STATUS.txt` and
+this document say fifteen.
 
 ## Test coverage
 

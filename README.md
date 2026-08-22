@@ -6,7 +6,7 @@ A general-purpose AI platform for simulating societies of autonomous agents that
 
 EBSS provides a modular framework where agents develop complex behaviors through:
 - **Weighted Behavior Trees**: Learned decision-making patterns that evolve with experience
-- **Drive-Based Motivation**: 14 core drives (hunger, thirst, safety, curiosity, social, etc.) creating dynamic priorities
+- **Drive-Based Motivation**: 15 core drives (hunger, thirst, safety, curiosity, social, etc.) creating dynamic priorities
 - **Genetic Inheritance**: Offspring inherit successful behavioral patterns from parents
 - **Memory Systems**: Agents remember locations, storage contents, and other agents
 - **Observational Learning**: Young agents learn by following experienced agents
@@ -34,7 +34,7 @@ original specifications.
 ## Key Features
 
 - ✅ Behavior Tree Learning: Agents build and evolve decision trees through experience
-- ✅ Drive Architecture: 14 core drives create emergent behavior patterns
+- ✅ Drive Architecture: 15 core drives create emergent behavior patterns
 - ✅ Survival: hunger, thirst, nutrition, body temperature, exposure and shelter
 - ✅ Genetic Inheritance: offspring inherit traits and behavior from parents
 - ✅ Memory Systems: spatial and episodic memory with decay
@@ -177,7 +177,7 @@ the code actually does, verified by running it — not what was planned.
 ### Phase 1: Core Foundation ✅
 - [x] Project structure and build system
 - [x] Behavior tree implementation with weight-based learning and pruning
-- [x] Core drive system (all 14 drives)
+- [x] Core drive system (all 15 drives)
 - [x] Grid-based world with terrain, resources and regeneration
 - [x] Agent actions and learning
 - [x] ASCII visualization
@@ -196,7 +196,7 @@ the code actually does, verified by running it — not what was planned.
 - [x] Genetic and behavioral inheritance
 - [x] Observational learning
 - [x] Social memory, relationships, gossip and shared knowledge
-- [x] All 14 drives implemented and acted on
+- [x] All 15 drives implemented and acted on
 
 ### Phase 4: Analytics and Polish 🚧
 - [x] Data logging and analysis (metrics, export to JSON/CSV)
@@ -227,7 +227,7 @@ the code actually does, verified by running it — not what was planned.
 Agents maintain forests of behavior trees where successful patterns are reinforced over time. Each tree branch has a weight that increases with positive outcomes.
 
 ### Drive System
-14 core drives motivate agent behavior, in the order they appear in
+15 core drives motivate agent behavior, in the order they appear in
 `DriveType`:
 1. Hunger - Seek and consume food
 2. Thirst - Find and drink water
@@ -243,6 +243,13 @@ Agents maintain forests of behavior trees where successful patterns are reinforc
 12. Luxury - Seek rare or decorative items
 13. Utility - Maintain tools and equipment
 14. Construction - Build structures and infrastructure
+15. Protection - Keep one's children close and safe
+
+The design document specifies thirteen (Thirst and Protection came later) and
+gives each drive a list of conditions that should raise it. In practice all
+fifteen rise on a flat per-tick clock instead, so nine of them sit pinned at
+their ceiling for most of a run. See **The drive system against its
+specification** in [SIMULATION_AUDIT.md](SIMULATION_AUDIT.md).
 
 ### Memory
 Agents remember:

@@ -105,7 +105,9 @@ Verified as reached by Simulation::tick():
   Lifecycle       aging, life stages, reproduction, pregnancy, birth,
                   nursing, inheritance of traits and behaviour, over a life of
                   eight or nine calendar years and thirty-odd seasons
-  Behaviour       15 drives, behaviour trees with weight learning, goals,
+  Behaviour       15 drives (the design document specifies 13; Thirst and
+                  Protection came later), behaviour trees with weight learning,
+                  goals,
                   plans, foraging, drinking, sheltering, exploration, cooking,
                   farming. Drives that look past this afternoon run five times
                   faster in an agent that is fed, watered, rested and warm and
@@ -234,21 +236,25 @@ SUGGESTED NEXT STEPS
   2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  3. Give a settlement something to settle back to. Traced over thirty thousand
+  3. Make drives rise on the conditions the design document gives them rather
+     than on a flat clock. Nine of fifteen sit pinned at their ceiling for most
+     of a run, so the drive fallback is decided by per-agent weight alone. See
+     ISSUES_FOUND.md #5.
+  4. Give a settlement something to settle back to. Traced over thirty thousand
      ticks, an overshooting settlement does not correct - it slides. Growing
      food takes nutrient out of the ground and regrowth is proportional to what
      is left, so production decays with cumulative harvest; the ground recovers
      about sixty-five times slower than a hundred people deplete it; a spent
      field still counts as a field, so nobody breaks new ground; and nothing
      brakes breeding until the standing crop is gone. See ISSUES_FOUND.md #3.
-  4. Decide whether plugins/minecraft_survival should exist at all: it now
+  5. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it
      (Perlin world generation, water structures) into the in-tree module, or
      keep it as the worked example of writing a plugin.
-  5. Clean up the build warnings and the committed
+  6. Clean up the build warnings and the committed
      src/analytics/mod.rs.backup.
-  6. Characterise long-run behaviour: population dynamics, technology
+  7. Characterise long-run behaviour: population dynamics, technology
      spread, and settlement patterns over 100k+ ticks.
 
 
