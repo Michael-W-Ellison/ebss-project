@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `71a4351`
+**Last verified:** August 2026, against commit `0e3500d`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -70,9 +70,23 @@ Verified reachable from `Simulation::tick()`.
 - Inheritance of traits and behaviour trees from both parents
 
 ### Working the land
-- Agents break open grass into fields and sow them. Crops on broken ground grow
-  eight times faster than the same thing growing wild, and wild food is now
-  slower still, so a settlement's food comes increasingly from what it plants
+- Soil on every tile: a stock of nutrients, and two pools of dead matter — soft
+  and woody — waiting to become more of it. What a tile starts with follows the
+  country it is in, from marsh at 0.85 down to sand at 0.08
+- Decay at a rate the ground decides. Humidity does most of it and density the
+  rest: over two agent lifetimes a fallen tree in a swamp is more than half
+  gone and the same tree in a desert has lost two parts in a thousand
+- Around two hundred plants standing in a new world, each growing on whichever
+  of water, light and nutrient it has least of. Foliage shades what is under it
+  and sheds leaf fall onto the ground beneath, so a wood feeds itself
+- Growth draws the ground down, so a settlement that farms hard works its soil
+  from about 0.48 fertility towards 0.2 over twenty thousand ticks
+- Agents break open grass into fields and sow them. A field gets at two and a
+  half times as much of what the soil holds and carries a heavier crop; it does
+  not grow anything faster than that plant's kind can grow
+- Muck-spreading, which nobody is told about: an agent carrying food that has
+  turned, standing on a field, tries tipping it out, sees whether the ground
+  improves, keeps or drops the idea, and is watched doing it
 - Water is fed by where it lies: a river carries it in from upstream, a spring
   in the hills gives whatever the weather does, a pool on open ground lives on
   the rain, and frozen ground gives up a quarter of what it otherwise would
@@ -190,7 +204,11 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
   cross the map for is chosen by warmth over distance, not by what its stores
   can afford.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
-  cannot be reproduced and two tests are intermittently flaky.
+  cannot be reproduced and five tests are intermittently flaky.
+- **A calendar the lifecycle agrees with.** A year is 876,000 ticks — 100 ticks
+  an hour — and an agent lives about 10,000, so a whole life happens inside four
+  calendar days and the seasons never turn in a normal run. Season modifiers on
+  plant growth are therefore all but constant.
 - **Long-run characterisation.** Nobody has studied population dynamics,
   technology spread or settlement patterns past a few tens of thousands of
   ticks.
@@ -320,9 +338,26 @@ about four times slower than a grown population eats it: settlements capped
 around a dozen people and a quarter starved out. The largest now overshoot and
 correct rather than dying.
 
+The land, measured over twenty thousand ticks in five worlds:
+
+| Measure | Result |
+| --- | --- |
+| Settlements still there at 20,000 ticks | 5 of 5 |
+| Population at the end | 91 to 189 |
+| Fields | 75 to 101 per world |
+| Field fertility, start to end | 0.48 → between 0.19 and 0.36 |
+| Agents who tried muck-spreading | 126 |
+| Agents who came to believe in it | 373 |
+
+Three times as many settled on the practice as ever tried it themselves, which
+is the shape of something spreading by being watched rather than being coded.
+One world shows the whole arc: a boom to 165 people, soil worked from 0.48 down
+to 0.19, the standing crop collapsing from 4,176 units to 80, and the
+population falling back to 91.
+
 ## Test coverage
 
-1,121 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,128 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
 pass, except three known flaky tests (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,

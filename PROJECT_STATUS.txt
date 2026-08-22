@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Last verified: August 2026 (against commit 71a4351)
+Last verified: August 2026 (against commit 0e3500d)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -55,8 +55,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,158 tests across the workspace:
-  1,121 library tests
+  1,165 tests across the workspace:
+  1,128 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -96,10 +96,20 @@ Verified as reached by Simulation::tick():
                   farming. Drives that look past this afternoon run five times
                   faster in an agent that is fed, watered, rested and warm and
                   a quarter as fast in one that is not
-  Farming         agents break open grass into fields and sow them; crops on
-                  broken ground grow eight times faster than the same thing
-                  wild, which is what feeds a settlement past the dozen the
-                  hedgerows carry
+  Land            every tile carries soil: nutrients, and two pools of dead
+                  matter waiting to become more of it. What rots and how fast
+                  depends on how dense it was alive and how wet the ground is
+  Flora           about two hundred plants stand in a new world, each growing
+                  on whichever of water, light and nutrient it has least of;
+                  standing foliage shades what is under it and sheds leaf fall
+                  that in time becomes soil
+  Farming         agents break open grass into fields and sow them. A field
+                  gets at two and a half times as much of what the soil holds
+                  and carries a heavier crop; it does not grow anything faster
+                  than that plant's kind can grow
+  Practices       agents work muck-spreading out for themselves - tried out of
+                  curiosity, judged by whether the ground visibly improves,
+                  dropped if it never does, and picked up by whoever watches
   Family          parents keep their children close, going to one that has
                   strayed and running to one that something is stalking;
                   children pick up skill experience watching the adults around
@@ -179,11 +189,11 @@ KNOWN GAPS IN BEHAVIOUR
   - Fauna is stable in most worlds but not all. Over forty worlds, predators
     are still alive at the end in thirty-six and herds stay bounded in
     thirty-three; the rest lose their predators and run to the population cap.
-  - A settlement is not certain to last. Four of five were still there at
-    twenty thousand ticks with farming; the one that went, went early. A
-    farming settlement runs to between twenty and a hundred and fifty people
-    where a foraging one capped around a dozen, and the large ones overshoot
-    and correct rather than dying.
+  - A settlement is not certain to last, though five of five were still there
+    at twenty thousand ticks with soil in the model. They run to between ninety
+    and a hundred and ninety people, work the soil from about 0.48 fertility
+    down towards 0.2, and fall back as the crop fails - which is the pressure
+    that makes muck-spreading worth discovering.
   - Agent fear is computed from unmet hunger, thirst and rest, so it sits
     high whenever an agent is between meals. Fleeing is gated on fear, which
     makes flight a common state rather than a response to danger.
@@ -198,17 +208,20 @@ SUGGESTED NEXT STEPS
   2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  3. Characterise a farming settlement over a very long run. They now reach a
-     hundred and fifty people and overshoot; nobody has looked at what happens
-     past twenty thousand ticks with fields in the ground.
-  4. Decide whether plugins/minecraft_survival should exist at all: it now
+  3. Reconcile the calendar with the lifecycle. A year is 876,000 ticks
+     (100 ticks an hour) and an agent lives about 10,000, so a whole life
+     happens inside four calendar days and seasons never turn in a normal run.
+  4. Characterise a farming settlement over a very long run. They reach nearly
+     two hundred people, work the soil down, and fall back; nobody has watched
+     one past twenty thousand ticks.
+  5. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it
      (Perlin world generation, water structures) into the in-tree module, or
      keep it as the worked example of writing a plugin.
-  5. Clean up the 15 build warnings and the committed
+  6. Clean up the build warnings and the committed
      src/analytics/mod.rs.backup.
-  6. Characterise long-run behaviour: population dynamics, technology
+  7. Characterise long-run behaviour: population dynamics, technology
      spread, and settlement patterns over 100k+ ticks.
 
 

@@ -51,9 +51,16 @@ original specifications.
   it away. Smell is scaled to what a thing actually gives off: a berry on the
   bush carries about two tiles, water three, flesh six, food that has turned
   nine to twenty, and cooking the whole range
-- ✅ Farming: agents break open grass into fields and sow them; crops grow eight
-  times faster on broken ground than anything wild, which is what feeds a
-  settlement past the dozen the hedgerows carry
+- ✅ Soil and flora: every tile carries nutrients and decaying matter, plants
+  grow on whichever of water, light and nutrient they have least of, foliage
+  sheds leaf fall that becomes soil, and what rots depends on how dense it was
+  and how wet the ground is
+- ✅ Farming: agents break open grass into fields and sow them. A field gets at
+  more of what the soil holds and carries a heavier crop — it does not grow
+  anything faster than that plant's kind can grow
+- ✅ Learned practices: nobody tells an agent that muck does a field good. It
+  tries it, watches what happens, keeps or drops the idea, and the neighbours
+  who saw it take something from that too
 - ✅ Family: parents keep their children close and go to one that has strayed or
   that something is stalking; children learn skills by watching the adults
   around them, and most from their own parents
@@ -189,8 +196,10 @@ the code actually does, verified by running it — not what was planned.
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
-- [ ] Characterise a farming settlement past twenty thousand ticks — they now
-      reach a hundred and fifty people and overshoot
+- [ ] Reconcile the calendar with the lifecycle: a year is 876,000 ticks and an
+      agent lives 10,000, so seasons never turn
+- [ ] Characterise a farming settlement past twenty thousand ticks — they reach
+      nearly two hundred people, work the soil down, and fall back
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts

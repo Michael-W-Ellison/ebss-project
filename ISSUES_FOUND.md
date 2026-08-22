@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `71a4351`.
+**Last verified:** August 2026, against commit `0e3500d`.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -48,7 +48,18 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. Nobody has looked at a farming settlement over a very long run
+### 3. The calendar and the lifecycle disagree by two orders of magnitude
+
+A year is 876,000 ticks: the world's calendar runs at 100 ticks an hour. An
+agent lives about 10,000 ticks. So an entire life — infant to elderly — happens
+inside four calendar days, and no run anybody has made has ever seen a season
+turn.
+
+This matters now that plants grow: the season modifier on growth (spring ×1.5
+through winter ×0.3) is in practice a constant, and nothing in the model ever
+has to survive a winter.
+
+### 4. Nobody has looked at a farming settlement over a very long run
 
 Fields changed the shape of this. A settlement that plants its food reaches
 between twenty and a hundred and fifty people where a foraging one capped
@@ -61,7 +72,7 @@ established the earlier collapse were foraging settlements; a farming one at a
 hundred and fifty people is a different animal, and slower to simulate, and
 uncharacterised.
 
-### 4. The ecology settles in most worlds, not all
+### 5. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
 herds stay bounded in thirty-three. In the seven that run away the predators
@@ -69,7 +80,7 @@ died out first, and although animals do wander back in from off the map, the
 trickle is slow enough — by design — that a world can spend thousands of ticks
 with its herds climbing unopposed before a replacement pack arrives.
 
-### 5. Clothing and hunting cost about what they return
+### 6. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -88,7 +99,7 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 6. Fear is a hunger signal, not a danger signal
+### 7. Fear is a hunger signal, not a danger signal
 
 `calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
 rest. Since hunger saturates between meals, fear sits at around 0.8 much of
@@ -99,14 +110,14 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 7. Agents still cannot hear anything
+### 8. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 8. Zoning and territory are never established
+### 9. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -114,10 +125,11 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 9. Agents carry food they will never eat
+### 10. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
-its freshness decays to zero and spoilage removes it. The same is true of food
+its freshness decays to zero and spoilage removes it — or until the agent takes
+it onto a field and tips it out, which some of them work out for themselves. The same is true of food
 an agent burns: a novice cook ruins about one batch in five, and the ruins ride
 along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
@@ -127,16 +139,16 @@ carried weight still includes rot and cinders.
 
 ## Housekeeping
 
-### 10. Committed backup file
+### 11. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 11. Build warnings
+### 12. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 12. Placeholder package metadata
+### 13. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
@@ -184,6 +196,16 @@ Listed so nobody re-investigates them. Each has regression tests in
 - **Sensory traits never reached the senses.**
   `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
   perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Nothing grew out of the ground.** Growth was a number per species times the
+  weather, with nothing taken out of the soil and nothing put back, so a patch
+  picked bare regrew as fast on bare rock as in river silt. And the flora system
+  — species, growth stages, regrowth timers, biome lists, a cultivation flag —
+  had never held a single plant: its spawners had no callers outside the world's
+  own pass-through wrappers.
+- **Every plant in the world was in drought whenever it was not raining.**
+  Growth took the hour's rainfall as its water term rather than what the ground
+  holds, which cut it to a fifth on any clear day and made a marsh no wetter
+  than a dune.
 - **Nobody could see anybody.** Nothing populated `vision.visible_agents`, and
   observation is gated on it, so the whole observational learning system —
   broadcast, record, adopt, teach — ran every twenty ticks over an empty list.
