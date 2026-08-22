@@ -1259,7 +1259,12 @@ impl GarmentRecipe {
     }
 }
 
-/// Every garment an agent knows how to make
+/// Every garment an agent knows how to make.
+///
+/// The animal materials are costed against what one kill actually yields - a
+/// deer gives four to six leather, a sheep four to six wool - because there
+/// are only a handful of animals in a world and a garment nobody can ever
+/// afford is the same as no garment at all.
 pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
     // From animals: the warm things, and the ones an agent has to hunt for
     GarmentRecipe {
@@ -1267,7 +1272,7 @@ pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
         name: "Fur Coat",
         slot: EquipmentSlot::Torso,
         material_item: "hides",
-        material_amount: 6,
+        material_amount: 5,
         material: ClothingMaterial::Fur,
         base_cold_insulation: 0.8,
         base_heat_resistance: 0.1,
@@ -1278,7 +1283,7 @@ pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
         name: "Fur Hat",
         slot: EquipmentSlot::Head,
         material_item: "hides",
-        material_amount: 3,
+        material_amount: 2,
         material: ClothingMaterial::Fur,
         base_cold_insulation: 0.5,
         base_heat_resistance: 0.1,
@@ -1289,7 +1294,7 @@ pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
         name: "Hide Armor",
         slot: EquipmentSlot::Torso,
         material_item: "hides",
-        material_amount: 8,
+        material_amount: 6,
         material: ClothingMaterial::Hide,
         base_cold_insulation: 0.5,
         base_heat_resistance: 0.2,
@@ -1300,7 +1305,7 @@ pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
         name: "Wool Cloak",
         slot: EquipmentSlot::Back,
         material_item: "wool",
-        material_amount: 5,
+        material_amount: 4,
         material: ClothingMaterial::Wool,
         base_cold_insulation: 0.6,
         base_heat_resistance: 0.2,
@@ -1311,7 +1316,7 @@ pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
         name: "Leather Tunic",
         slot: EquipmentSlot::Torso,
         material_item: "leather",
-        material_amount: 8,
+        material_amount: 6,
         material: ClothingMaterial::Leather,
         base_cold_insulation: 0.4,
         base_heat_resistance: 0.3,
@@ -1322,7 +1327,7 @@ pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
         name: "Leather Pants",
         slot: EquipmentSlot::Legs,
         material_item: "leather",
-        material_amount: 6,
+        material_amount: 4,
         material: ClothingMaterial::Leather,
         base_cold_insulation: 0.3,
         base_heat_resistance: 0.3,

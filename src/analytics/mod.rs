@@ -1312,6 +1312,31 @@ impl Simulation {
         // because gathering thin air on the spot accomplishes nothing and
         // blocks everything they could usefully be doing.
         if desperate {
+            // An animal is food. Hunting does not pay against berries and
+            // fish, which is why an agent does not do it for the meat as a
+            // rule - but an agent with nothing else left is a different case.
+            if let Some((animal_id, animal_position)) =
+                self.nearest_prey(agent, agent_position)
+            {
+                let reach = (animal_position.0 - agent_position.0)
+                    .abs()
+                    .max((animal_position.1 - agent_position.1).abs());
+
+                if reach <= Self::HUNT_REACH {
+                    return Some(Action::Hunt {
+                        animal_id,
+                        weapon: agent
+                            .equipment
+                            .get_weapon()
+                            .map(|weapon| weapon.name.clone()),
+                    });
+                }
+
+                return Some(Action::Move {
+                    target: (animal_position.0, animal_position.1, agent_position.2),
+                });
+            }
+
             return Some(Self::search_leg(agent, agent_position, self.current_tick));
         }
 
@@ -1400,11 +1425,12 @@ impl Simulation {
     /// 2. put on or make clothing, if it can be done where it stands
     /// 3. get out of the weather
     /// 4. cook what it is carrying
-    /// 5. go and get the material to clothe itself
-    /// 6. act on something it can see or smell
-    /// 7. carry on with a plan
-    /// 8. work towards a goal
-    /// 9. whatever its most pressing drive suggests
+    /// 5. go after an animal, for the meat or the skin
+    /// 6. go and get the material to clothe itself
+    /// 7. act on something it can see or smell
+    /// 8. carry on with a plan
+    /// 9. work towards a goal
+    /// 10. whatever its most pressing drive suggests
     fn generate_non_emotional_action(
         &self,
         agent: &crate::agents::Agent,
@@ -1453,7 +1479,15 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 5: Go and get what the agent needs to clothe itself.
+        // PRIORITY 5: Go after an animal, for the meat or for the skin.
+        //
+        // Below cooking for the same reason gathering flax is: what an agent
+        // already has in its pack is worth more than what it might catch.
+        if let Some(action) = self.hunting_action(agent, agent_position) {
+            return (action, false);
+        }
+
+        // PRIORITY 6: Go and get what the agent needs to clothe itself.
         //
         // Below cooking, because a meal is worth more than a coat: cooking
         // nearly trebles what a piece of food is worth, and an agent that went
@@ -1462,7 +1496,7 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 6: Check for high-salience percepts (danger, resources, social opportunities)
+        // PRIORITY 7: Check for high-salience percepts (danger, resources, social opportunities)
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
             .iter()
             .cloned()
@@ -1476,14 +1510,14 @@ impl Simulation {
             return (percept_action, false);
         }
 
-        // PRIORITY 7: Execute current plan step (if agent has an active plan)
+        // PRIORITY 8: Execute current plan step (if agent has an active plan)
         if agent.should_execute_plan() {
             if let Some(plan_action) = agent.get_plan_action() {
                 return (plan_action, true);
             }
         }
 
-        // PRIORITY 8: Check active goals and generate goal-directed action
+        // PRIORITY 9: Check active goals and generate goal-directed action
         if let Some(goal) = agent.goals.highest_priority_goal() {
             // Get most urgent drive for fallback
             let fallback_drive = agent.drives.most_urgent()
@@ -1495,7 +1529,7 @@ impl Simulation {
             }
         }
 
-        // PRIORITY 9: Use drive-based action as fallback
+        // PRIORITY 10: Use drive-based action as fallback
         let drive_type = agent.select_drive_with_happiness()
             .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
             .unwrap_or(DriveType::Curiosity);
@@ -1846,6 +1880,148 @@ impl Simulation {
                 a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(material, patch, _)| (material, patch))
+    }
+
+    /// How close a hunter has to be to strike: a spear's throw, not a
+    /// line of sight across the valley
+    const HUNT_REACH: i32 = 2;
+
+    /// How far an agent will go after prey it has spotted.
+    ///
+    /// Short on purpose. Crossing the map for a sheep costs more than the
+    /// skin is worth: at thirty tiles hunting took a seventh of the
+    /// population and returned no more warmth than not hunting at all.
+    const HUNT_SEARCH_RADIUS: f32 = 12.0;
+
+    /// Whether this agent should be taking on this animal at all.
+    ///
+    /// Anything that fights back is a job for someone with a weapon in hand.
+    /// An unarmed agent that walks up to a bear is not hunting, it is dying.
+    fn worth_hunting(
+        &self,
+        agent: &crate::agents::Agent,
+        animal: &crate::environment::Animal,
+    ) -> bool {
+        use crate::environment::AnimalBehavior;
+
+        if !animal.is_alive() || animal.is_domesticated {
+            return false;
+        }
+
+        let species = match self.world.animals.get_species(&animal.species_id) {
+            Some(species) => species,
+            None => return false,
+        };
+
+        let dangerous = matches!(
+            species.behavior,
+            AnimalBehavior::Aggressive | AnimalBehavior::Territorial
+        );
+
+        !dangerous || agent.equipment.get_weapon().is_some()
+    }
+
+    /// The nearest animal this agent could reasonably take, and where it is
+    fn nearest_prey(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(uuid::Uuid, (i32, i32))> {
+        self.world
+            .get_animals_in_radius(
+                (agent_position.0, agent_position.1),
+                Self::HUNT_SEARCH_RADIUS,
+            )
+            .into_iter()
+            .filter(|animal| self.worth_hunting(agent, animal))
+            .min_by_key(|animal| {
+                (animal.position.0 - agent_position.0).abs()
+                    + (animal.position.1 - agent_position.1).abs()
+            })
+            .map(|animal| (animal.id, animal.position))
+    }
+
+    /// Whether the agent has a reason to go after an animal.
+    ///
+    /// Two of them: nothing to eat, or nothing warm to wear and no skins to
+    /// make it from. Fur and hides are the warm half of the garment table and
+    /// the only way to them is off an animal.
+    fn wants_to_hunt(agent: &crate::agents::Agent) -> bool {
+        // An agent hunts for skins, and the meat is a bonus.
+        //
+        // Hunting for the meat as such does not pay: berries and fish are
+        // there for the taking and an animal has to be found, walked to and
+        // hit. Agents that went after every animal because their pack was
+        // empty starved for it, and two settlements in forty died out.
+        //
+        // It also keeps hunting until there are enough skins for the garment,
+        // not until there is one skin: a fur coat takes five hides, and an
+        // agent that stopped at the first came home with a single pelt over
+        // and over and never wore anything warmer than woven flax.
+        if !Self::wants_more_clothing(agent) {
+            return false;
+        }
+
+        let quality = Self::expected_garment_quality(agent);
+
+        let wants = crate::agents::equipment::GARMENT_RECIPES.iter().any(|recipe| {
+            matches!(recipe.material_item, "hides" | "leather" | "wool")
+                && Self::worth_making(
+                    Self::garment_warmth(recipe, quality),
+                    Self::warmth_worn(agent, recipe.slot),
+                )
+        });
+
+        if !wants {
+            return false;
+        }
+
+        // Stop once there is enough of anything to make one. An agent with a
+        // pack full of hides has no business going after a sheep for the wool
+        // it has never had.
+        let can_already_make = crate::agents::equipment::GARMENT_RECIPES.iter().any(|recipe| {
+            matches!(recipe.material_item, "hides" | "leather" | "wool")
+                && Self::worth_making(
+                    Self::garment_warmth(recipe, quality),
+                    Self::warmth_worn(agent, recipe.slot),
+                )
+                && Self::can_spare_material(agent, recipe)
+        });
+
+        !can_already_make
+    }
+
+    /// Going after an animal: strike if it is within reach, close on it if not.
+    ///
+    /// Nothing in the simulation had ever selected `Action::Hunt` - the one
+    /// place it appeared passed a nil animal id that the executor could not
+    /// resolve - so no agent had ever hunted, and meat, hides and wool never
+    /// reached an inventory at all.
+    fn hunting_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        if !Self::wants_to_hunt(agent) {
+            return None;
+        }
+
+        let (animal_id, animal_position) = self.nearest_prey(agent, agent_position)?;
+
+        let reach = (animal_position.0 - agent_position.0)
+            .abs()
+            .max((animal_position.1 - agent_position.1).abs());
+
+        if reach <= Self::HUNT_REACH {
+            return Some(Action::Hunt {
+                animal_id,
+                weapon: agent.equipment.get_weapon().map(|weapon| weapon.name.clone()),
+            });
+        }
+
+        Some(Action::Move {
+            target: (animal_position.0, animal_position.1, agent_position.2),
+        })
     }
 
     /// Getting dressed, in whatever order the situation needs: put on what is
@@ -3737,6 +3913,21 @@ impl Simulation {
                             return ActionResult::failure("Cannot hunt domesticated animals".to_string());
                         }
 
+                        // You have to be near enough to throw something at it.
+                        // Without this an agent could kill a deer on the far
+                        // side of the map without leaving where it stood.
+                        let agent_position = self.population.agents[agent_index].state.position;
+                        let reach = (animal.position.0 - agent_position.0)
+                            .abs()
+                            .max((animal.position.1 - agent_position.1).abs());
+
+                        if reach > Self::HUNT_REACH {
+                            return ActionResult::failure(format!(
+                                "Too far to hunt: {} tiles away",
+                                reach
+                            ));
+                        }
+
                         let species_id = animal.species_id.clone();
                         match self.world.animals.get_species(&species_id) {
                             Some(s) => s.clone(),
@@ -3750,17 +3941,29 @@ impl Simulation {
                 // Now get mutable reference to animal
                 if let Some(animal) = self.world.animals.get_mut(animal_id) {
 
-                    // Calculate success based on agent skill, weapon, and mount
+                    // Calculate success based on agent skill, weapon, and mount.
+                    //
+                    // This used to read MeleeCombat and have no floor, which
+                    // made hunting self-defeating: an untrained agent has that
+                    // skill at -10 and 0.5 + (-10 x 0.05) is zero, so the first
+                    // kill an agent ever made created the skill and left it
+                    // unable to hunt for the rest of its life. It reads the
+                    // Hunting skill now, which existed and had no callers, and
+                    // never falls below a fifth.
                     let agent = &self.population.agents[agent_index];
-                    let hunting_skill = agent.skills.get_skill_if_exists(crate::agents::skills::SkillType::MeleeCombat)
+                    let hunting_skill = agent
+                        .skills
+                        .get_skill_if_exists(crate::agents::skills::SkillType::Hunting)
                         .map(|s| s.level)
-                        .unwrap_or(-5);
+                        .unwrap_or(-10);
                     let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
 
                     // Get mounted combat bonus (hunting from horseback is advantageous!)
                     let mount_bonus = agent.transport.mounted_combat_bonus();
 
-                    let success_prob = (0.5 + (hunting_skill as f32 * 0.05) + weapon_bonus + mount_bonus).min(0.95_f32);
+                    let success_prob = (0.6 + (hunting_skill as f32 * 0.03) + weapon_bonus
+                        + mount_bonus)
+                        .clamp(0.2_f32, 0.95_f32);
 
                     if rng.gen_bool(success_prob as f64) {
                         // Successful hunt - damage the animal
@@ -3783,21 +3986,44 @@ impl Simulation {
                                 }
                             }
 
-                            // Add items to agent inventory
+                            // Butcher what was killed into things an agent can
+                            // actually use: meat that carries nutrition and can
+                            // go on a fire, skins that can become a coat
+                            let current_tick = self.current_tick;
+                            let butchered: Vec<_> = items_gained
+                                .iter()
+                                .map(|stack| {
+                                    let item_id = crate::agents::storage_integration::
+                                        butchered_item_id(&stack.material_id)
+                                        .to_string();
+                                    let food_data = crate::agents::storage_integration::
+                                        id_to_item_type(&item_id)
+                                        .filter(|item_type| item_type.is_consumable())
+                                        .and_then(|item_type| {
+                                            self.food_database
+                                                .create_food_data(&item_type, current_tick)
+                                        });
+                                    (item_id, stack.quantity, food_data)
+                                })
+                                .collect();
+
                             let agent = &mut self.population.agents[agent_index];
-                            for item_stack in &items_gained {
+                            for (item_id, quantity, food_data) in butchered {
                                 use crate::agents::InventoryItem;
-                                let item = InventoryItem::new_with_weight(
-                                    item_stack.material_id.clone(),
-                                    item_stack.quantity,
+                                let mut item = InventoryItem::new_with_weight(
+                                    item_id,
+                                    quantity,
                                     2.0, // Default weight for animal drops
                                 );
+                                item.food_data = food_data;
                                 agent.inventory.add_item(item);
                             }
 
                             // Increase hunting skill
                             let agent = &mut self.population.agents[agent_index];
-                            agent.skills.gain_experience(crate::agents::skills::SkillType::MeleeCombat, 3);
+                            agent
+                                .skills
+                                .gain_experience(crate::agents::skills::SkillType::Hunting, 30);
 
                             let mut result = ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.4)
@@ -3811,14 +4037,43 @@ impl Simulation {
                             }
                             result
                         } else {
+                            let agent = &mut self.population.agents[agent_index];
+                            agent
+                                .skills
+                                .gain_experience(crate::agents::skills::SkillType::Hunting, 10);
+
                             ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.1)
                                 .with_energy_cost(15.0)
                                 .with_message(format!("Wounded {} but it escaped", species.name))
                         }
                     } else {
+                        // You learn something from the ones that get away
+                        self.population.agents[agent_index]
+                            .skills
+                            .gain_experience(crate::agents::skills::SkillType::Hunting, 10);
+
+                        // A rabbit runs. A boar turns round.
+                        let fights_back = matches!(
+                            species.behavior,
+                            crate::environment::AnimalBehavior::Aggressive
+                                | crate::environment::AnimalBehavior::Defensive
+                                | crate::environment::AnimalBehavior::Territorial
+                        );
+
+                        if fights_back && species.attack_damage > 0.0 {
+                            let agent = &mut self.population.agents[agent_index];
+                            agent.take_damage(species.attack_damage);
+
+                            return ActionResult::failure(format!(
+                                "{} turned on the hunter ({:.0} damage)",
+                                species.name, species.attack_damage
+                            ))
+                            .with_energy_cost(10.0);
+                        }
+
                         ActionResult::failure(format!("{} escaped", species.name))
-                            .with_energy_cost(10.0)
+                            .with_energy_cost(5.0)
                     }
                 } else {
                     ActionResult::failure("Animal not found".to_string())
