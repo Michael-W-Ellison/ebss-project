@@ -63,7 +63,19 @@ Verified reachable from `Simulation::tick()`.
   that made it could manage. Wood goes into clothes only once a fire's worth
   is set aside, and the coat a new one replaces is left behind
 
-### Pressure
+### Drives
+- Fifteen drives with per-agent weights and thresholds. Nine of them read the
+  conditions the design document specifies rather than a clock: Shelter on
+  exposure, cold, nightfall, weather and predators; Safety on threat, injury and
+  darkness, answered by cover and a weapon; Preparedness, Industry, Sustenance
+  and Utility on what the agent has put by and what the ground round about is
+  bearing; Construction on room to build, neighbours building, and the shelter
+  drive itself, which is the document's "drive synergy"; Luxury on idleness and
+  the lack of anything fine; Protection on having children and on one of them
+  having strayed. Each moves towards what its situation calls for and falls away
+  when nothing does
+- Hunger, Thirst, Rest, Curiosity, Social and Reproduction still build with
+  time, which is what the document says of them
 - A need presses harder the longer it is denied. Every drive counts how long it
   has been asking without being answered, and that count multiplies both how
   fast it builds and how loudly it argues in action selection, up to fourfold.
@@ -552,84 +564,93 @@ anybody.
 
 The design document (Appendix A) specifies thirteen drives, each with a list of
 **increase conditions** and **decrease conditions**. The increase conditions are
-what makes a drive a motivation rather than a timer: Safety is meant to rise on
+what make a drive a motivation rather than a timer: Safety is meant to rise on
 "hostile entity proximity, recent injury, darkness", Construction on "buildable
 templates seen, others building, drive synergy", Sustenance on "low food
 stockpile, crop depletion".
 
-**Almost none of the increase conditions exist.** `DriveType::base_accumulation_rate`
-returns one flat number per drive per tick, and that is the whole of it. Two
-things modulate it, neither in the specification: `is_long_term()`, which runs
-the six forward-looking drives faster in an agent whose immediate needs are met,
-and the denial pressure added later. Exactly one drive has a contextual
-increase — Rest rises with `fatigue.level` — and one has an undocumented second
-clock (Curiosity gains another 0.002 a tick in `Population::tick`, on top of its
-own 0.004, until it reaches 0.7).
+None of them existed. `DriveType::base_accumulation_rate` returned one flat
+number per drive per tick and that was the whole of it — including for the line
+`DriveType::Safety => 0.02, // Spikes with threats`, whose comment described the
+specification, whose code was a constant, and whose 0.02 was the highest flat
+rate any drive had. Because the satisfying actions for those drives are chosen
+rarely, nine of the fifteen sat pinned at 1.00 and active every tick from early
+in a run, which left the per-agent weight as the only thing telling them apart.
 
-The `Safety => 0.02, // Spikes with threats` line is the clearest case: the
-comment describes the specified behaviour, the code is a constant, and 0.02 is
-the highest flat rate any drive has — so Safety pins at its ceiling early and
-stays there. Threats do reach agents, but through the emotion system's
-fear-and-anger override, not through the drive the specification assigns them
-to.
+**They read their conditions now.** A drive that reads the world moves towards
+what the situation calls for instead of climbing: it settles where the
+conditions put it and falls away when they stop. The gap closes by a share of
+itself each tick, so a drive with a high base rate answers a change quickly —
+Safety is most of the way to a new level within a day of a predator appearing —
+and one with a low rate takes seasons. Hunger, Thirst, Rest, Curiosity, Social
+and Reproduction still build with time, which is what the document says of them
+and what the rest of the survival loop is built on.
 
-Decrease conditions fare better: thirteen of fifteen drives have at least one
-satisfying action wired to them. Luxury and Protection have none at all.
-Protection's *behaviour* works — a parent goes to a child that has strayed —
-but it is triggered by where the children are, not by the drive value, and
-nothing ever brings the drive down; when it wins the fallback it maps to
-`Action::Wait`.
+Half the conditions are things an agent knows about itself — what it is
+carrying, whether it is armed, whether it is cold — and half are things only the
+world knows. `Simulation::read_the_situation` gathers the second kind once per
+agent per tick into `Surroundings`; the agent folds in the first kind when its
+drives are ticked. "Drive synergy", named in the document as an increase
+condition for Construction and never implemented in any form, is the shelter
+drive being passed in: wanting to be out of the weather is a reason to build
+something.
 
-What that adds up to, measured on twenty-seven agents at eight thousand ticks:
+Measured at eight thousand ticks, before and after:
 
-| Drive | Value | Pressure | Active |
-| --- | --- | --- | --- |
-| Hunger | 0.49 | 1.00 | 0% |
-| Thirst | 0.37 | 1.00 | 0% |
-| Rest | 0.29 | 1.14 | 19% |
-| Curiosity | 0.56 | 2.67 | 56% |
-| Social | 0.66 | 2.73 | 56% |
-| Reproduction | 0.77 | 3.00 | 63% |
-| Industry | 0.96 | 3.89 | 96% |
-| Protection | 0.93 | 3.83 | 100% |
-| Safety | 0.99 | 4.00 | 100% |
-| Shelter | 1.00 | 4.00 | 100% |
-| Preparedness | 1.00 | 4.00 | 100% |
-| Sustenance | 1.00 | 4.00 | 100% |
-| Luxury | 1.00 | 4.00 | 100% |
-| Utility | 1.00 | 4.00 | 100% |
-| Construction | 1.00 | 4.00 | 100% |
+| Drive | Before | After |
+| --- | --- | --- |
+| Shelter | 1.00, active 100% | 0.25, active 0% |
+| Safety | 0.99, active 100% | 0.26, active 13% |
+| Construction | 1.00, active 100% | 0.15, active 9% |
+| Protection | 0.93, active 100% | 0.09, active 9% |
+| Industry | 0.96, active 96% | 0.29, active 65% |
+| Sustenance | 1.00, active 100% | 0.52, active 87% |
+| Preparedness | 1.00, active 100% | 0.88, active 100% |
+| Utility | 1.00, active 100% | 0.60, active 100% |
+| Luxury | 1.00, active 100% | 0.98, active 100% |
 
-Six drives cycle. Nine are pinned at the ceiling and have been since early in
-the run: their satisfying actions exist but are chosen too rarely to hold them
-down against even a 0.002-a-tick clock. So the drive fallback is decided among
-nine drives that are all at 1.00 with pressure all at its 4.0 cap, which leaves
-the per-agent weight as the only thing separating them — Safety and Shelter
-between them take twenty-five of twenty-seven agents.
+Six of the nine came unpinned. **The three that did not are the finding.**
+Preparedness asks for stockpiled food, materials and tools; Utility for tools in
+working order; Luxury for something fine. Counting what thirty agents were
+carrying at eight thousand ticks: 102 wood, 21 food, 17 leather, 14 horn, 12
+flax, 11 cotton, 8 wool — and no tools and nothing decorative at all, with zero
+equipped items across the whole settlement. Those three are reading the world
+correctly and the world has no way to answer them. That is a gap in crafting and
+tool-making rather than in the drives, and it was invisible while every drive
+sat at its ceiling for reasons of its own.
 
-That also means the denial pressure added recently does nothing where it looks
-like it should do most: it is saturated for exactly the drives that never get
-answered. It works on Hunger, Thirst and Rest, which are answered often enough
-for the counter to move.
+Two smaller things fall out of it. Luxury is specified to rise on "idle time"
+as well as on lack, and reading the lack alone put it at the top of the fallback
+for half the population; folding in the idleness is what the document actually
+says. And Protection, which is not in the document, is answered by being where
+the children are, so it now asks for nothing when there are none, where before
+it climbed for ever and mapped to `Action::Wait` whenever it won.
 
-Two further gaps against the specification. "Drive synergy", named as an
-increase condition for Construction, does not exist in any form — no drive
-reads another. And `core::drive_progression` implements the Basic → Intermediate
-→ Advanced → Luxury tiers for every drive, with tests, and has no caller
-outside its own module — as does `SatisfactionTracker`, which is fed only from
-tests, so the grief-on-death code in `Population` that asks which agent was a
-drive's satisfaction source always gets nothing.
+The denial pressure works on the drives that are answered often enough for its
+counter to move — Hunger, Thirst, Rest — and is still saturated on the three
+that cannot be answered at all.
 
-**Count.** The specification says thirteen. The code has fifteen: Thirst and
-Protection were added later. The documentation does not agree with itself —
-`PROJECT_SUMMARY.md`, `CODEBASE_ANALYSIS.md`, `ARCHITECTURE_DIAGRAM.txt` and
-`EXPLORATION_SUMMARY.md` say thirteen, `README.md` and
-`CURIOSITY_SYSTEM_ANALYSIS.md` say fourteen, and only `PROJECT_STATUS.txt` and
-this document say fifteen.
+**What it cost to find out.** Unpinning the drives changed which of them wins
+the fallback, agents stopped clustering, and settlements collapsed: three of six
+worlds empty at thirty thousand ticks against six of six before, with peaks of
+30 against 93. Chasing that turned up something older and worse than the drives.
+Both survival clocks are kept as a tick the agent last ate or drank on, and both
+start at zero — right for the twelve people a world begins with, wrong for
+everybody born afterwards, who arrived having last drunk at the beginning of the
+world. An infant born after about four thousand ticks was two days past the
+point where dehydration takes health, lost 1.65 a tick from its first breath,
+and died at sixty-one: at full energy, unhurt, beside its mother, being nursed.
+Newborns now start both clocks at their birth tick.
+
+That also closes the open question in the previous version of this document.
+Mean health across a settled population sat at 65-70 and never recovered, and
+neither exposure nor attacks accounted for it. It was this: every
+second-generation agent that survived at all did so carrying the damage. A
+settlement now runs at 90-96.
 
 ## Test coverage
 
-1,156 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,167 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
 pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,

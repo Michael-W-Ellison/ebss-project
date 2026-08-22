@@ -314,6 +314,11 @@ impl Simulation {
         // Update exposure damage for all agents
         self.update_agent_exposure();
 
+        // Tell each agent what the world around it is doing, so that next
+        // tick its drives rise on the conditions the design document gives
+        // them rather than on a clock
+        self.read_the_situation();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -2187,6 +2192,173 @@ impl Simulation {
 
     /// How far a parent lets a child of its own get before going after it
     const CHILD_LEASH: i32 = 8;
+
+    /// How close something that would eat you counts as close
+    const A_THREAT_NEARBY: i32 = 8;
+
+    /// How far an agent looks when judging whether the ground round about is
+    /// still bearing
+    const GROUND_ROUND_ABOUT: u32 = 10;
+
+    /// What a tile of ground within reach ought to be carrying before an agent
+    /// stops worrying about next year's food
+    const A_TILE_WORTH_HAVING: f32 = 25.0;
+
+    /// Tell every agent what the world around it is doing.
+    ///
+    /// The drives are specified by the conditions that raise them - "hostile
+    /// entity proximity", "nightfall", "others building", "crop depletion" -
+    /// and half of those are things only the world knows. This gathers them
+    /// once a tick per agent. The agent folds in what it knows about itself
+    /// when its own drives are ticked, one tick later, which is near enough:
+    /// nothing here changes faster than an agent can walk.
+    fn read_the_situation(&mut self) {
+        use crate::world::{Position, TerrainType};
+
+        let night = !self.world.climate.is_daytime();
+        let foul_weather = self.world.climate.weather.weather_type.precipitation_intensity() > 0.0
+            || self.world.climate.weather.effective_wind_speed() > 8.0;
+
+        // Where the predators are, and where anybody is building
+        let hunters: Vec<(i32, i32)> = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated)
+            .filter(|animal| {
+                self.world
+                    .animals
+                    .get_species(&animal.species_id)
+                    .map(|species| species.attack_damage > 0.0)
+                    .unwrap_or(false)
+            })
+            .map(|animal| (animal.position.0, animal.position.1))
+            .collect();
+
+        let building_sites: Vec<(i32, i32)> = self
+            .world
+            .buildings
+            .iter()
+            .filter(|building| !building.is_completed())
+            .map(|building| (building.position.x, building.position.y))
+            .collect();
+
+        let current_tick = self.current_tick;
+
+        // Small children, by whose parent they are
+        let young: Vec<(Vec<uuid::Uuid>, (i32, i32, i32))> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .filter(|agent| {
+                matches!(
+                    agent.state.life_stage,
+                    crate::agents::LifeStage::Infant | crate::agents::LifeStage::Child
+                )
+            })
+            .map(|agent| (agent.parent_ids.clone(), agent.state.position))
+            .collect();
+
+        let grown: Vec<(i32, i32, i32)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| agent.state.position)
+            .collect();
+
+        // What the ground within reach is carrying, per agent position
+        let crop_at = |position: (i32, i32, i32)| -> f32 {
+            let here = Position::new(position.0, position.1);
+            let mut standing = 0u32;
+            let mut patches = 0u32;
+
+            for resource in &self.world.resources {
+                if !resource.resource_type.is_edible() {
+                    continue;
+                }
+                if here.distance_to(&resource.position) > Self::GROUND_ROUND_ABOUT {
+                    continue;
+                }
+                standing += resource.amount;
+                patches += 1;
+            }
+
+            if patches == 0 {
+                return 0.0;
+            }
+
+            (standing as f32 / (patches as f32 * Self::A_TILE_WORTH_HAVING)).clamp(0.0, 1.0)
+        };
+
+        let mut readings = Vec::with_capacity(self.population.agents.len());
+
+        for agent in &self.population.agents {
+            if !agent.state.is_alive {
+                readings.push(None);
+                continue;
+            }
+
+            let position = agent.state.position;
+            let near = |spot: &(i32, i32), reach: i32| {
+                (spot.0 - position.0).abs().max((spot.1 - position.1).abs()) <= reach
+            };
+
+            let mine: Vec<&(Vec<uuid::Uuid>, (i32, i32, i32))> = young
+                .iter()
+                .filter(|(parents, _)| parents.contains(&agent.id))
+                .collect();
+
+            let child_astray = mine.iter().any(|(_, child)| {
+                let strayed = (child.0 - position.0).abs().max((child.1 - position.1).abs())
+                    > Self::CHILD_LEASH;
+                let stalked = hunters.iter().any(|hunter| {
+                    (hunter.0 - child.0).abs().max((hunter.1 - child.1).abs())
+                        <= Self::DANGER_TO_A_CHILD
+                });
+                strayed || stalked
+            });
+
+            let here = Position::new(position.0, position.1);
+            let ground = self
+                .world
+                .grid
+                .get_tile(&here)
+                .map(|tile| tile.terrain.terrain_type)
+                .unwrap_or(TerrainType::Plains);
+
+            readings.push(Some(crate::core::Surroundings {
+                predator_near: hunters.iter().any(|spot| near(spot, Self::A_THREAT_NEARBY)),
+                night,
+                foul_weather,
+                under_shelter: self
+                    .world
+                    .buildings
+                    .iter()
+                    .any(|building| building.position == here && building.is_completed()),
+                recently_hurt: agent.emotions.recent_attacker(current_tick).is_some(),
+                crop_near: crop_at(position),
+                somewhere_to_build: crate::world::Terrain::new(ground).can_be_tilled(),
+                neighbours_building: building_sites.iter().any(|spot| near(spot, 12)),
+                children_to_mind: mine.len() as u32,
+                child_astray,
+                company: grown
+                    .iter()
+                    .filter(|other| **other != position)
+                    .any(|other| {
+                        (other.0 - position.0).abs().max((other.1 - position.1).abs()) <= 6
+                    }),
+            }));
+        }
+
+        for (agent, reading) in self.population.agents.iter_mut().zip(readings) {
+            if let Some(reading) = reading {
+                agent.surroundings = reading;
+            }
+        }
+    }
 
     /// How close a predator has to be to a child before its parent runs
     const DANGER_TO_A_CHILD: i32 = 10;

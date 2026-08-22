@@ -322,3 +322,64 @@ fn what_agents_do_in_a_run_becomes_something_they_know() {
         "two thousand ticks of doing things should leave a record of having done them"
     );
 }
+
+/// A newborn arrives having just been fed and watered.
+///
+/// Both survival clocks are kept as a tick the agent last ate or drank on, and
+/// both start at zero. For the twelve people a world begins with that is
+/// right; for anybody born later it meant arriving having last drunk at the
+/// beginning of the world. An infant born after about four thousand ticks was
+/// two days past the point where dehydration takes health, lost 1.65 a tick
+/// from its first breath, and was dead at sixty-one - which is what a
+/// settlement's entire second generation was quietly doing, at full health,
+/// beside its mother, being nursed.
+#[test]
+fn a_newborn_is_not_born_parched() {
+    let born_at = 9_000;
+    let mother = uuid::Uuid::new_v4();
+
+    let mut baby = Agent::with_parents(AgentConfig::default(), vec![mother], born_at);
+
+    assert_eq!(baby.state.ticks_without_water, 0);
+    assert_eq!(baby.state.ticks_without_food, 0);
+    assert!(!baby.state.is_dehydrated(), "a newborn has just been born, not marooned");
+
+    // And the clocks run from birth rather than from the beginning of time
+    baby.state.age_tick_with_modifier(born_at + 50, 1.0);
+
+    assert_eq!(baby.state.ticks_without_water, 50);
+    assert!(
+        baby.state.health > 99.0,
+        "fifty ticks old and it should be in perfect health, not {:.1}",
+        baby.state.health
+    );
+}
+
+/// A settlement's second generation survives its first hour.
+#[test]
+fn the_children_of_a_settlement_live_past_infancy() {
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    for _ in 0..12 {
+        population.spawn_agent(AgentConfig::default());
+    }
+
+    let mut simulation = Simulation::new(world, population);
+
+    for _ in 0..12_000 {
+        simulation.tick();
+    }
+
+    let born_here = simulation
+        .population
+        .agents
+        .iter()
+        .filter(|agent| agent.state.is_alive)
+        .filter(|agent| !agent.parent_ids.is_empty())
+        .count();
+
+    assert!(
+        born_here >= 5,
+        "twelve thousand ticks in, a settlement should hold people born into it, not {born_here}"
+    );
+}

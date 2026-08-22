@@ -113,6 +113,152 @@ impl DriveType {
         }
     }
 
+    /// How much food, materials, tools and finery an agent counts as "enough".
+    ///
+    /// The specification's decrease conditions are worded as sufficiency -
+    /// "sufficient stockpiled food, tools, materials", "sufficient tool variety
+    /// stored" - so each of them needs a number for what sufficient means.
+    const ENOUGH_FOOD: f32 = 20.0;
+    const ENOUGH_MATERIALS: f32 = 30.0;
+    const ENOUGH_TOOLS: f32 = 3.0;
+    const ENOUGH_FINERY: f32 = 2.0;
+
+    /// How much the agent's situation is asking for this drive right now, from
+    /// 0.0 (nothing about the situation calls for it) to 1.0 (everything does).
+    ///
+    /// `None` means this drive does not read the world at all: hunger, thirst
+    /// and tiredness build with time whatever is going on, which is what the
+    /// specification says of them ("time passage", "time since sleep") and what
+    /// the rest of the survival loop is built on.
+    ///
+    /// The nine that do read the world used to build on a clock like the
+    /// others, and because their satisfying actions are chosen rarely they sat
+    /// pinned at their ceiling for whole runs - nine of fifteen drives at 1.00
+    /// and active every tick, which left the per-agent weight as the only thing
+    /// telling them apart. Reading the conditions the specification gives them
+    /// is what unpins them: a drive with nothing asking for it now falls away
+    /// instead of waiting at the top.
+    pub fn demand(&self, ctx: &DriveContext) -> Option<f32> {
+        let short_of = |have: u32, enough: f32| (1.0 - have as f32 / enough).clamp(0.0, 1.0);
+        let yes = |condition: bool, weight: f32| if condition { weight } else { 0.0 };
+
+        let demand = match self {
+            // "Environmental exposure, weather, nightfall, monster proximity",
+            // answered by being inside something.
+            DriveType::Shelter => {
+                if ctx.around.under_shelter {
+                    0.0
+                } else {
+                    // Weighted so that no single ordinary condition carries it
+                    // over the threshold on its own, but any two do: a cold
+                    // night, or a wet one, is a reason to be indoors. Reading
+                    // only damage already taken - which is what a first cut at
+                    // this did - left the drive quiet through every night of a
+                    // run, and agents who never wanted to be indoors spent
+                    // their lives walking about in the open.
+                    yes(ctx.exposed, 0.55)
+                        + yes(ctx.chilly, 0.3)
+                        + yes(ctx.around.night, 0.35)
+                        + yes(ctx.around.foul_weather, 0.3)
+                        + yes(ctx.around.predator_near, 0.2)
+                }
+            }
+
+            // "Hostile entity proximity, recent injury, darkness", answered by
+            // "being in shelter, possessing weapons or armor". This is the one
+            // the old code claimed in a comment - `Safety => 0.02, // Spikes
+            // with threats` - and did not do.
+            DriveType::Safety => {
+                let threat = yes(ctx.around.predator_near, 0.7)
+                    + yes(ctx.around.recently_hurt, 0.5)
+                    + yes(ctx.around.night, 0.35);
+                let cover = yes(ctx.around.under_shelter, 0.5) + yes(ctx.armed, 0.5);
+                threat * (1.0 - cover.min(0.9))
+            }
+
+            // "Tool count zero, missing materials in storage", answered by
+            // "sufficient stockpiled food, tools, materials".
+            DriveType::Preparedness => {
+                let food = short_of(ctx.food_put_by, Self::ENOUGH_FOOD);
+                let materials = short_of(ctx.materials_put_by, Self::ENOUGH_MATERIALS);
+                let tools = short_of(ctx.tools_to_hand, Self::ENOUGH_TOOLS);
+                (food + materials + tools) / 3.0
+            }
+
+            // "Low material stockpiles, high tool durability available",
+            // answered by delivering and storing what was won.
+            DriveType::Industry => {
+                let short = short_of(ctx.materials_put_by, Self::ENOUGH_MATERIALS);
+                // Something to work with, or there is no point going out
+                let able = if ctx.tools_to_hand > 0 { 1.0 } else { 0.45 };
+                short * able
+            }
+
+            // "Low food stockpile, crop depletion, available farming tools",
+            // answered by planting, harvesting and storing.
+            DriveType::Sustenance => {
+                let short = short_of(ctx.food_put_by, Self::ENOUGH_FOOD);
+                let ground_failing = 1.0 - ctx.around.crop_near.clamp(0.0, 1.0);
+                (short * 0.6 + ground_failing * 0.4).clamp(0.0, 1.0)
+            }
+
+            // "Idle time, lack of rare items, unfulfilled crafting goals",
+            // answered by possessing something fine.
+            //
+            // The idleness matters as much as the lack. Read on the lack
+            // alone this sits at its ceiling for every agent in the world -
+            // nothing here makes jewellery - and being both unsatisfiable and
+            // permanently maximal it takes over the drive fallback for half
+            // the population. A person with work to do is not thinking about
+            // ornaments.
+            DriveType::Luxury => {
+                let wanting = short_of(ctx.fine_things, Self::ENOUGH_FINERY);
+                let idle = if ctx.at_leisure { 1.0 } else { 0.15 };
+                wanting * idle
+            }
+
+            // "Task interruptions, tool unavailability, broken tools",
+            // answered by "sufficient tool variety stored, maintained gear".
+            DriveType::Utility => {
+                let short = short_of(ctx.tools_to_hand, Self::ENOUGH_TOOLS);
+                let broken = (ctx.broken_tools as f32 / Self::ENOUGH_TOOLS).clamp(0.0, 1.0);
+                (short * 0.6 + broken * 0.6).clamp(0.0, 1.0)
+            }
+
+            // "Buildable templates seen, others building, drive synergy". The
+            // last of those is why `shelter_pressing` is in the context: an
+            // agent that badly wants to be out of the weather is an agent that
+            // wants to build something.
+            DriveType::Construction => {
+                let room = yes(ctx.around.somewhere_to_build, 0.4);
+                let neighbours = yes(ctx.around.neighbours_building, 0.25);
+                let synergy = ctx.shelter_pressing.clamp(0.0, 1.0) * 0.45;
+                let means = if ctx.materials_put_by > 0 { 1.0 } else { 0.35 };
+                (room + neighbours + synergy) * means
+            }
+
+            // Not in the specification - added when parents were given a
+            // reason to keep their children close. It is answered by being
+            // where the children are, so it asks for nothing when there are
+            // none.
+            DriveType::Protection => {
+                if ctx.around.children_to_mind == 0 {
+                    0.0
+                } else if ctx.around.child_astray {
+                    1.0
+                } else {
+                    0.25
+                }
+            }
+
+            // Hunger, Thirst, Rest, Curiosity, Social and Reproduction build
+            // with time rather than with the situation
+            _ => return None,
+        };
+
+        Some(demand.clamp(0.0, 1.0))
+    }
+
     /// Whether this drive is about the season after next rather than the next
     /// few hours.
     ///
@@ -152,6 +298,79 @@ impl DriveType {
             DriveType::Protection => "Keeping one's children close and safe",
         }
     }
+}
+
+/// What the world around an agent is doing to it, as far as its drives are
+/// concerned.
+///
+/// The design document specifies each drive by the conditions that raise it -
+/// Safety by "hostile entity proximity, recent injury, darkness", Construction
+/// by "buildable templates seen, others building, drive synergy". Some of those
+/// conditions are things an agent knows about itself and some are things only
+/// the world knows. This is the second kind: the simulation fills it in once
+/// per agent per tick, and the agent folds in what it knows about itself when
+/// its drives are ticked.
+///
+/// A default one describes an agent standing in open country in daylight with
+/// nothing happening: no threat, no neighbours at work, no children, and no
+/// ground worth breaking. Agents ticked without a world - a bare `Population`
+/// in a test - get that, which is the right answer for a world that is not
+/// there.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Surroundings {
+    /// Something that would eat the agent is close by
+    pub predator_near: bool,
+    /// It is dark
+    pub night: bool,
+    /// Rain, snow, wind - weather worth being out of
+    pub foul_weather: bool,
+    /// The agent is under a roof or in deep cover
+    pub under_shelter: bool,
+    /// Something has attacked the agent recently
+    pub recently_hurt: bool,
+    /// How well the ground within reach is bearing, 0.0 to 1.0
+    pub crop_near: f32,
+    /// There is ground here worth breaking, and room to build on
+    pub somewhere_to_build: bool,
+    /// Other people nearby are building
+    pub neighbours_building: bool,
+    /// Small children of this agent's own
+    pub children_to_mind: u32,
+    /// One of them has strayed, or something is stalking it
+    pub child_astray: bool,
+    /// Anybody else within talking distance
+    pub company: bool,
+}
+
+/// Everything a drive can consult when working out how much the situation
+/// calls for it: the world around the agent, and the agent's own means.
+#[derive(Debug, Clone, Default)]
+pub struct DriveContext {
+    /// What the world is doing - see [`Surroundings`]
+    pub around: Surroundings,
+    /// Food the agent has put by, in units
+    pub food_put_by: u32,
+    /// Wood, stone, ore and the like
+    pub materials_put_by: u32,
+    /// Tools in working order
+    pub tools_to_hand: u32,
+    /// Tools worn out or broken
+    pub broken_tools: u32,
+    /// Rare or decorative things
+    pub fine_things: u32,
+    /// A weapon or armour to hand
+    pub armed: bool,
+    /// Out in the weather with nothing between the agent and it
+    pub exposed: bool,
+    /// Cold, though not yet dangerously so
+    pub chilly: bool,
+    /// How hard the agent's need for shelter is already pressing, 0.0 to 1.0.
+    /// This is the specification's "drive synergy": what one drive wants can
+    /// raise another.
+    pub shelter_pressing: f32,
+    /// Nothing more pressing on. Several drives are specified to rise on
+    /// "idle time", which is this.
+    pub at_leisure: bool,
 }
 
 /// The state of a single drive
@@ -306,13 +525,55 @@ impl Drive {
         self.tick_at(rate);
     }
 
-    /// One tick of a drive building at the given rate, keeping the tally of
-    /// how long it has been asking.
+    /// Tick, knowing both whether the agent's immediate needs are answered and
+    /// what its situation is asking of it.
     ///
-    /// A drive that is over its threshold and still not answered builds faster
-    /// every tick it waits. That is what makes hunger escalate from a reason
-    /// to go and pick berries into a reason to walk off the map.
-    fn tick_at(&mut self, rate: f32) {
+    /// A drive that reads the world moves towards what the situation calls for
+    /// rather than climbing a clock, so it settles where the conditions put it
+    /// and falls away when they stop. A drive that does not read the world
+    /// builds as it always did.
+    pub fn tick_in(&mut self, ctx: &DriveContext, secure: bool) {
+        let rate = self.drive_type.base_accumulation_rate();
+
+        let rate = if self.drive_type.is_long_term() {
+            if secure {
+                rate * Self::SECURE_LONG_TERM_RATE
+            } else {
+                rate * Self::PRESSED_LONG_TERM_RATE
+            }
+        } else {
+            rate
+        };
+
+        match self.drive_type.demand(ctx) {
+            Some(wanted) => self.approach(wanted, rate),
+            None => self.tick_at(rate),
+        }
+    }
+
+    /// Tick against a situation, without the security modifier
+    pub fn tick_in_context(&mut self, ctx: &DriveContext) {
+        self.tick_in(ctx, false);
+    }
+
+    /// Move towards what the situation calls for.
+    ///
+    /// The gap closes by a share of itself each tick, so a drive whose base
+    /// rate is high answers a change in the situation quickly - Safety, at
+    /// 0.02, is most of the way to a new level within a day of a predator
+    /// appearing - and one whose rate is low takes seasons. Being denied still
+    /// tells: the pressure that builds while a drive waits also makes it close
+    /// the gap faster.
+    fn approach(&mut self, wanted: f32, rate: f32) {
+        self.note_whether_it_had_to_ask();
+
+        let gap = wanted - self.value;
+        self.value = (self.value + gap * rate * self.pressure()).clamp(0.0, 1.0);
+    }
+
+    /// Keep the tally of how long this drive has been asking, and how long it
+    /// has not had to.
+    fn note_whether_it_had_to_ask(&mut self) {
         if self.is_active() {
             self.denied_ticks = self.denied_ticks.saturating_add(1);
             self.answered_ticks = 0;
@@ -326,7 +587,16 @@ impl Drive {
                 self.denied_ticks -= 1;
             }
         }
+    }
 
+    /// One tick of a drive building at the given rate, keeping the tally of
+    /// how long it has been asking.
+    ///
+    /// A drive that is over its threshold and still not answered builds faster
+    /// every tick it waits. That is what makes hunger escalate from a reason
+    /// to go and pick berries into a reason to walk off the map.
+    fn tick_at(&mut self, rate: f32) {
+        self.note_whether_it_had_to_ask();
         self.increase(rate * self.pressure());
     }
 
@@ -429,6 +699,25 @@ impl DriveState {
     pub fn tick_with_security(&mut self, secure: bool) {
         for drive in &mut self.drives {
             drive.tick_with_security(secure);
+        }
+    }
+
+    /// Tick every drive against the agent's situation.
+    ///
+    /// The shelter drive is read before the rest are ticked and handed to them
+    /// in the context, because Construction is specified to rise partly on
+    /// "drive synergy" and this is what that means: wanting to be out of the
+    /// weather is a reason to build something.
+    pub fn tick_in(&mut self, ctx: &DriveContext, secure: bool) {
+        let mut ctx = ctx.clone();
+        ctx.at_leisure = secure;
+        ctx.shelter_pressing = self
+            .get(DriveType::Shelter)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0);
+
+        for drive in &mut self.drives {
+            drive.tick_in(&ctx, secure);
         }
     }
 

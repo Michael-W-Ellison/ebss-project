@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Last verified: August 2026 (against commit 0e3500d)
+Last verified: August 2026 (against commit 0d11751 and the work since)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -55,21 +55,24 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,165 tests across the workspace:
-  1,128 library tests
+  1,204 tests across the workspace:
+  1,167 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
 
-  All pass, with four known flaky tests that fail intermittently:
+  All pass, with six known flaky tests that fail intermittently:
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_...
     analytics::tests::agent_building_integration_tests::
       test_production_building_placed_near_resources
     analytics::tests::agent_building_integration_tests::
       test_production_chain_buildings_cluster
+    analytics::tests::agent_building_integration_tests::
+      test_different_building_types_use_appropriate_strategies
+    analytics::tests::longevity_tests::water_is_not_used_up
 
-  All four seed World::new from thread_rng and assert on properties that a
+  All six seed World::new from thread_rng and assert on properties that a
   randomly generated world does not always satisfy. Measured failure rates of
   roughly 1-in-10 to 1-in-20 per run for the first two, 4-in-120 for the third
   and 1-in-40 for the fourth, all present before any recent work and all
@@ -112,6 +115,14 @@ Verified as reached by Simulation::tick():
                   farming. Drives that look past this afternoon run five times
                   faster in an agent that is fed, watered, rested and warm and
                   a quarter as fast in one that is not
+  Drives          nine of the fifteen read the conditions the design document
+                  specifies - threat, darkness, weather, what is in the pack,
+                  what the ground round about is bearing, whether a child has
+                  strayed - and settle where the situation puts them rather
+                  than climbing a clock. Six of the nine were pinned at their
+                  ceiling for whole runs before this; the three still high ask
+                  for tools, stores and finery, which nothing in the world
+                  makes. Hunger, thirst and tiredness still run on time
   Pressure        a denied drive presses harder the longer it waits, up to
                   fourfold, on both how fast it builds and how loudly it argues
                   - so a settlement that cannot feed somebody loses them to it.
@@ -231,15 +242,16 @@ KNOWN GAPS IN BEHAVIOUR
 
 SUGGESTED NEXT STEPS
 --------------------
-  1. Seed world generation so the three flaky tests become deterministic and
+  1. Seed world generation so the six flaky tests become deterministic and
      runs become reproducible.
   2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  3. Make drives rise on the conditions the design document gives them rather
-     than on a flat clock. Nine of fifteen sit pinned at their ceiling for most
-     of a run, so the drive fallback is decided by per-agent weight alone. See
-     ISSUES_FOUND.md #5.
+  3. Give agents a way to make and keep tools, stores and anything decorative.
+     Now that the drives read their specified conditions, the three that ask
+     for those things sit high because nothing in the world answers them:
+     thirty agents at eight thousand ticks held no tools and nothing fine
+     between them. See ISSUES_FOUND.md #5.
   4. Give a settlement something to settle back to. Traced over thirty thousand
      ticks, an overshooting settlement does not correct - it slides. Growing
      food takes nutrient out of the ground and regrowth is proportional to what

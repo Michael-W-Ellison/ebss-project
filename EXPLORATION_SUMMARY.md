@@ -29,7 +29,7 @@
 
 #### Core AI Systems (`src/core/`)
 1. **drives.rs** (280 lines, ✅ Complete)
-   - All 13 drives fully implemented
+   - All 15 drives fully implemented
    - Drive accumulation mechanics
    - Threshold-based activation
    - Weight-based urgency calculation
@@ -117,7 +117,7 @@
   - Automatic pruning
   - Genetic inheritance support via clone_with_pruning()
   
-- Drive System (All 13 drives)
+- Drive System (All 15 drives)
   - Hunger, Rest, Shelter, Safety
   - Preparedness, Industry, Sustenance
   - Curiosity, Social, Reproduction

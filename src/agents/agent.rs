@@ -739,6 +739,12 @@ pub struct Agent {
     /// hunting.
     #[serde(default)]
     pub lessons: super::practices::Lessons,
+    /// What the world around this agent is doing, as far as its drives care.
+    /// Filled in by the simulation once a tick; empty for an agent ticked
+    /// without a world, which is the right answer for a world that is not
+    /// there.
+    #[serde(default)]
+    pub surroundings: crate::core::Surroundings,
     pub goals: GoalManager,
     pub preferences: Preferences,
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
@@ -802,6 +808,7 @@ impl Agent {
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
+            surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
@@ -854,6 +861,21 @@ impl Agent {
         // Set up infant as newborn
         agent.state.life_stage = LifeStage::Infant;
         agent.state.age = 0;
+
+        // A newborn has just been fed and watered by being born.
+        //
+        // Both clocks are kept as "ticks since", worked out from a tick the
+        // agent last ate or drank on, and both start at zero. For the founding
+        // generation that is correct; for anybody born later it means a
+        // newborn arrives having last drunk at the beginning of the world. An
+        // infant born after about four thousand ticks was therefore two days
+        // past the point where dehydration takes health, lost 1.65 a tick from
+        // its first breath, and was dead at sixty-one - which is what a
+        // settlement's whole second generation was quietly doing.
+        agent.state.last_ate_tick = current_tick;
+        agent.state.last_drank_tick = current_tick;
+        agent.state.ticks_without_food = 0;
+        agent.state.ticks_without_water = 0;
 
         // Rare chance of congenital infertility (~1.5% chance)
         let mut rng = rand::thread_rng();
@@ -909,6 +931,88 @@ impl Agent {
             && !self.body_temperature.is_too_cold()
             && self.exposure_status.active_exposures.is_empty()
     }
+
+    /// What the agent's own means and condition are asking of its drives.
+    ///
+    /// The world-side half of the picture - what is prowling about, whether it
+    /// is dark, who else is building - is filled in by the simulation and kept
+    /// on `surroundings`; this folds in the half the agent knows for itself.
+    pub fn what_the_situation_asks(&self) -> crate::core::DriveContext {
+        use crate::core::DriveContext;
+
+        let mut materials = 0u32;
+        let mut tools = 0u32;
+        let mut broken = 0u32;
+        let mut finery = 0u32;
+
+        for item in self.inventory.get_all_items().values() {
+            if item.quantity == 0 {
+                continue;
+            }
+
+            let name = item.item_id.as_str();
+
+            if Self::MATERIALS.iter().any(|kind| name.contains(kind)) {
+                materials += item.quantity;
+            }
+
+            if Self::TOOLS.iter().any(|kind| name.contains(kind)) {
+                // A tool worn through is a reason to want a new one, which is
+                // the specification's "broken tools" for Utility
+                let worn_out = item
+                    .current_durability
+                    .map(|left| left <= 0.0)
+                    .unwrap_or(false);
+
+                if worn_out {
+                    broken += item.quantity;
+                } else {
+                    tools += item.quantity;
+                }
+            }
+
+            if Self::FINERY.iter().any(|kind| name.contains(kind)) {
+                finery += item.quantity;
+            }
+        }
+
+        // Anything equipped counts too: a hafted axe in the hand is a tool
+        tools += self
+            .equipment
+            .get_all_equipped()
+            .iter()
+            .filter(|item| item.equipment_type.is_tool())
+            .count() as u32;
+
+        DriveContext {
+            around: self.surroundings.clone(),
+            food_put_by: self.food_put_by(),
+            materials_put_by: materials,
+            tools_to_hand: tools,
+            broken_tools: broken,
+            fine_things: finery,
+            armed: self.equipment.get_weapon().is_some(),
+            exposed: !self.exposure_status.active_exposures.is_empty()
+                || self.body_temperature.is_too_cold(),
+            chilly: self.body_temperature.current
+                < self.body_temperature.ideal - self.body_temperature.tolerance * 0.4,
+            shelter_pressing: 0.0,
+            at_leisure: false,
+        }
+    }
+
+    /// What counts as material to work or build with
+    const MATERIALS: [&'static str; 7] = [
+        "wood", "stone", "iron", "clay", "sand", "coal", "brick",
+    ];
+
+    /// What counts as a tool
+    const TOOLS: [&'static str; 8] = [
+        "axe", "pick", "hoe", "shovel", "spade", "knife", "hammer", "tool",
+    ];
+
+    /// What counts as a fine or decorative thing
+    const FINERY: [&'static str; 5] = ["jewel", "gold", "gem", "pottery", "ornament"];
 
     /// How far the agent can make out detail on the ground, in tiles.
     ///
@@ -1243,7 +1347,8 @@ impl Agent {
         // Drives rise differently depending on whether the agent has anything
         // more pressing on. See `DriveType::is_long_term`.
         let secure = self.immediate_needs_met();
-        self.drives.tick_with_security(secure);
+        let situation = self.what_the_situation_asks();
+        self.drives.tick_in(&situation, secure);
 
         // Process sensory input into percepts and store them
         let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);

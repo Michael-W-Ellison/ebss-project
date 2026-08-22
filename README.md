@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
-across 183 source files, with 1,156 library tests.
+across 183 source files, with 1,167 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,193 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,204 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet see each other
 or hear anything. See
@@ -75,6 +75,9 @@ original specifications.
   reads the same in every season
 - ✅ Drives that look past this afternoon run five times faster in an agent
   whose immediate needs are met, and a quarter as fast in one whose are not
+- ✅ Drives that read the world: threat, darkness, weather, what is in the pack,
+  what the ground round about is bearing, whether a child has strayed. A drive
+  with nothing asking for it falls quiet instead of waiting at its ceiling
 - ✅ A need presses harder the longer it goes unanswered — up to fourfold, on
   both how fast it builds and how loudly it argues — so a settlement that
   cannot feed somebody eventually loses them to it. Breeding waits on a
@@ -211,14 +214,15 @@ the code actually does, verified by running it — not what was planned.
 - [ ] Performance has not been profiled at scale
 
 ### Beyond the original plan
-- [ ] Give world generation a seed, so runs are reproducible and three flaky
+- [ ] Give world generation a seed, so runs are reproducible and six flaky
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
+- [ ] Give agents a way to make and keep tools, stores and anything decorative:
+      three drives now ask for those and nothing in the world answers them
 - [ ] Give a settlement something to settle back to: an overshooting one slides
       rather than correcting, because growing food permanently lowers the rate
-      at which more of it arrives and nothing brakes breeding until the crop is
-      gone
+      at which more of it arrives
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts
@@ -246,10 +250,13 @@ Agents maintain forests of behavior trees where successful patterns are reinforc
 15. Protection - Keep one's children close and safe
 
 The design document specifies thirteen (Thirst and Protection came later) and
-gives each drive a list of conditions that should raise it. In practice all
-fifteen rise on a flat per-tick clock instead, so nine of them sit pinned at
-their ceiling for most of a run. See **The drive system against its
-specification** in [SIMULATION_AUDIT.md](SIMULATION_AUDIT.md).
+gives each drive a list of conditions that should raise it. Nine of the fifteen
+read those conditions — threat, darkness, weather, what is in the pack, what the
+ground round about is bearing, whether a child has strayed — and settle where
+the situation puts them; the other six build with time, which is what the
+document says of them. See **The drive system against its specification** in
+[SIMULATION_AUDIT.md](SIMULATION_AUDIT.md) for what that changed and for the
+three drives that stay high because nothing in the world can answer them.
 
 ### Memory
 Agents remember:

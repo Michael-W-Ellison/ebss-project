@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `0e3500d`.
+**Last verified:** August 2026, against commit `0d11751` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -130,16 +130,18 @@ anybody. What kills them in a collapse is old age, cold, accumulated damage
 that never heals off, and — once the near ground is bare and they range further
 to forage — thirst.
 
-A second thing this turned up, not yet chased down: mean health across a
-settled population sits at 65-70 and never recovers. Measured over a thousand
-ticks at a population of 25, agents lose about 430 health and heal back about
-200. Neither exposure (22 of it) nor attacks (none) accounts for the
-difference; the residue is many small repeated hits, most likely
-`process_environmental_hazards` putting cold, heat and fall injuries on body
-parts, infections on top of those, and `state.health` being clamped instantly
-to `body.overall_health()` but clawed back at 0.02 a tick. A population
-carrying a permanent thirty-point health deficit has no reserve for a bad
-winter, which is what a mass die-off looks like when it comes.
+A second thing this turned up: mean health across a settled population sat at
+65-70 and never recovered, and neither exposure nor attacks accounted for it.
+**Since found and fixed** - it was newborns. Both survival clocks are kept as a
+tick the agent last ate or drank on, and both start at zero; that is right for
+the twelve people a world begins with and wrong for everybody born afterwards,
+who arrived having last drunk at the beginning of the world. An infant born
+after about four thousand ticks was two days past the point where dehydration
+takes health, lost 1.65 a tick from its first breath, and died at sixty-one -
+at full energy, unhurt, beside its mother, being nursed. Every second-generation
+agent that survived at all did so carrying the damage, which is what the
+population-wide deficit was. Newborns now start both clocks at their birth
+tick; mean health across a settlement runs at 90-96 instead of 65-70.
 
 **Since measured.** Six things were put in against this: worked-out ground now
 carries a proportionally smaller crop rather than flooring at four tenths; a
@@ -218,43 +220,47 @@ weather.
 Fixing it is not just a cache invalidation: making winter genuinely cold is a
 real change to the balance and would need measuring before and after.
 
-### 5. Drives rise on a clock, not on the conditions the specification gives them
+### 5. Three drives ask for things the world cannot give
 
-The design document's Appendix A gives each of its thirteen drives a list of
-**increase conditions** — Safety on "hostile entity proximity, recent injury,
-darkness", Construction on "buildable templates seen, others building, drive
-synergy", Sustenance on "low food stockpile, crop depletion". Those are what
-make a drive a motivation rather than a timer.
+The design document's Appendix A gives each drive a list of **increase
+conditions** — Safety on "hostile entity proximity, recent injury, darkness",
+Construction on "buildable templates seen, others building, drive synergy",
+Sustenance on "low food stockpile, crop depletion". None of them existed:
+`base_accumulation_rate` returned one flat number per drive per tick and that
+was the whole of it, including for the line `DriveType::Safety => 0.02, //
+Spikes with threats`, whose comment described the specification and whose code
+was a constant.
 
-`DriveType::base_accumulation_rate` returns one flat number per drive per tick,
-and that is the whole of it. One drive has a contextual increase (Rest, from
-`fatigue.level`) and one has an undocumented second clock (Curiosity gains
-another 0.002 a tick in `Population::tick`). The rest rise on time alone. The
-line `DriveType::Safety => 0.02, // Spikes with threats` is the sharpest case:
-the comment describes the specification, the code is a constant, and it is the
-highest flat rate any drive has. Threats do reach agents — through the emotion
-system's fear override — but not through the drive the specification assigns
-them to.
+Because those drives' satisfying actions are chosen rarely, they climbed to
+their ceiling and stayed there: nine of fifteen at 1.00 and active every tick
+after eight thousand ticks, which left the per-agent weight as the only thing
+telling them apart.
 
-Measured on twenty-seven agents at eight thousand ticks, nine of the fifteen
-drives are pinned at 1.00 and active 100% of the time: Shelter, Safety,
-Preparedness, Sustenance, Luxury, Utility, Construction, Protection, and
-Industry at 0.96. Only Hunger, Thirst, Rest, Curiosity, Social and Reproduction
-cycle. Satisfying actions exist for thirteen of the fifteen but are chosen too
-rarely to hold a drive down against even a 0.002-a-tick clock.
+**Since fixed.** The nine now read the conditions the document gives them, and
+move towards what the situation calls for rather than up a clock. Six of the
+nine came unpinned:
 
-Two have no satisfaction path at all. Luxury is never decreased anywhere.
-Protection's behaviour works — a parent goes to a strayed child — but it is
-triggered by where the children are rather than by the drive, nothing brings
-the drive down, and when it wins the fallback it maps to `Action::Wait`.
+| Drive | Before | After |
+| --- | --- | --- |
+| Shelter | 1.00, active 100% | 0.25, active 0% |
+| Safety | 0.99, active 100% | 0.26, active 13% |
+| Construction | 1.00, active 100% | 0.15, active 9% |
+| Protection | 0.93, active 100% | 0.09, active 9% |
+| Industry | 0.96, active 96% | 0.29, active 65% |
+| Sustenance | 1.00, active 100% | 0.52, active 87% |
+| Preparedness | 1.00, active 100% | 0.88, active 100% |
+| Utility | 1.00, active 100% | 0.60, active 100% |
+| Luxury | 1.00, active 100% | 0.98, active 100% |
 
-The consequence for decision-making: the drive fallback chooses among nine
-drives that are all at their ceiling with the denial pressure all at its 4.0
-cap, so the per-agent weight is the only thing separating them. Safety and
-Shelter take twenty-five of twenty-seven agents between them.
-
-"Drive synergy", named in the specification as an increase condition for
-Construction, does not exist in any form: no drive reads another.
+**The three that stayed high are the finding.** Preparedness asks for stockpiled
+food, materials and tools; Utility for tools in working order; Luxury for
+something fine. Counting what thirty agents were carrying at eight thousand
+ticks: 102 wood, 21 food, 17 leather, 14 horn, 12 flax, 11 cotton, 8 wool, and
+**no tools and nothing decorative at all** — zero equipped items across the
+whole settlement. Those three drives are now reading the world correctly and
+the world has no path to satisfy them. That is a gap in crafting and
+tool-making, not in the drive system, and it was invisible while every drive
+sat at its ceiling for reasons of its own.
 
 ### 6. The ecology settles in most worlds, not all
 

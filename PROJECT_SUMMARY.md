@@ -30,7 +30,7 @@ This package contains a complete foundation for the **Emergent Behavior Society 
 - ✅ Full test coverage
 
 #### Drive System (`src/core/drives.rs`)
-- ✅ All 13 core drives implemented:
+- ✅ All 15 core drives implemented:
   1. Hunger
   2. Rest
   3. Shelter
@@ -182,7 +182,9 @@ for _ in 0..10 {
 - Natural fit for weight-based learning
 - Industry-proven in game AI
 
-### Why 13 Drives?
+### Why 15 Drives?
+The design document specifies thirteen; Thirst and Protection were added later.
+
 - Based on research in motivation theory
 - Covers survival, social, and self-actualization needs
 - Enables complex emergent behaviors

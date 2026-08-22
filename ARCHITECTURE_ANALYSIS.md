@@ -103,7 +103,7 @@ pub struct Drive {
 ### DriveState Structure:
 ```rust
 pub struct DriveState {
-    pub drives: Vec<Drive>,  // All 13 drives
+    pub drives: Vec<Drive>,  // All 15 drives
 }
 ```
 
@@ -136,7 +136,7 @@ pub struct Agent {
         pub health: f32,                 // 0.0 to 100.0
         pub position: (i32, i32, i32),   // 3D position
     },
-    pub drives: DriveState,              // 13 drives with values/weights
+    pub drives: DriveState,              // 15 drives with values/weights
     pub behavior_trees: Vec<BehaviorTree>, // Learned behaviors
     pub memory: Memory,                  // Knowledge/observations
 }
