@@ -1,0 +1,173 @@
+// src/world/soil.rs
+//! What is under a plant's feet.
+//!
+//! Growth in this simulation used to be a number per species multiplied by the
+//! weather. Nothing was ever taken out of the ground and nothing was ever put
+//! back, so a patch of berries picked bare regrew exactly as fast on bare rock
+//! in a drought as in river silt after a wet spring.
+//!
+//! A tile now carries soil: a stock of nutrients that plants draw on, and two
+//! pools of dead matter waiting to become more of it. The two pools are the
+//! whole of the decay model - what breaks down fast and what breaks down slowly
+//! - and which one a thing lands in is decided by how dense it was when it was
+//! alive. Leaves, dung and spoiled food are soft; trunks, branches and bone are
+//! woody.
+//!
+//! How fast either turns into nutrients depends on how wet the ground is. A
+//! tree that falls in a swamp is gone in a few years. The same tree in a desert
+//! is still lying there.
+
+use serde::{Deserialize, Serialize};
+
+use super::TerrainType;
+
+/// The state of the ground on one tile
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Soil {
+    /// What a plant can draw on now, 0.0 to 1.0
+    pub nutrients: f32,
+
+    /// Leaves, dung, spoiled food: open, wet, and quick to go
+    pub leaf_litter: f32,
+
+    /// Trunks, branches, bone: dense, dry inside, and slow
+    pub woody_litter: f32,
+}
+
+impl Soil {
+    /// The most nutrient any ground holds at once.
+    ///
+    /// Nutrients above this run off or blow away rather than banking up, which
+    /// is what stops a settlement turning one field into an infinite larder by
+    /// piling refuse on it for ten thousand ticks.
+    pub const MAX_NUTRIENTS: f32 = 1.0;
+
+    /// How much litter one tile can hold before more of it simply will not fit
+    pub const MAX_LITTER: f32 = 4.0;
+
+    /// The ground as it starts, before anything has lived or died on it.
+    ///
+    /// River silt and marsh are rich, mountain and sand are all but bare, and
+    /// woodland sits somewhere in between with a century of leaf fall already
+    /// in it.
+    pub fn for_terrain(terrain: TerrainType) -> Self {
+        let (nutrients, leaf_litter) = match terrain {
+            TerrainType::Wetland => (0.85, 1.2),
+            TerrainType::Riverbank => (0.80, 0.6),
+            TerrainType::Forest => (0.65, 1.5),
+            TerrainType::Meadow => (0.60, 0.4),
+            TerrainType::Plains => (0.50, 0.3),
+            TerrainType::Farmland => (0.55, 0.2),
+            TerrainType::Hills => (0.35, 0.2),
+            TerrainType::Beach => (0.15, 0.1),
+            TerrainType::Mountain => (0.10, 0.05),
+            TerrainType::Desert => (0.08, 0.02),
+            TerrainType::Water => (0.30, 0.2),
+        };
+
+        Self {
+            nutrients,
+            leaf_litter,
+            woody_litter: match terrain {
+                TerrainType::Forest => 0.8,
+                TerrainType::Wetland => 0.3,
+                _ => 0.05,
+            },
+        }
+    }
+
+    /// How wet this ground is, from the country it is in and the weather over
+    /// it.
+    ///
+    /// This is the single thing that decides how fast anything lying on it
+    /// breaks down.
+    pub fn humidity(terrain: TerrainType, precipitation: f32) -> f32 {
+        let ground = match terrain {
+            TerrainType::Water | TerrainType::Wetland => 1.0,
+            TerrainType::Riverbank => 0.85,
+            TerrainType::Forest => 0.7,
+            TerrainType::Meadow => 0.55,
+            TerrainType::Farmland => 0.5,
+            TerrainType::Plains => 0.45,
+            TerrainType::Beach => 0.4,
+            TerrainType::Hills => 0.35,
+            TerrainType::Mountain => 0.25,
+            TerrainType::Desert => 0.05,
+        };
+
+        (ground + precipitation.clamp(0.0, 1.0) * 0.3).clamp(0.0, 1.0)
+    }
+
+    /// Put soft matter on the ground: leaves, dung, spoiled food, offal
+    pub fn add_leaf_litter(&mut self, amount: f32) {
+        self.leaf_litter = (self.leaf_litter + amount).clamp(0.0, Self::MAX_LITTER);
+    }
+
+    /// Put dense matter on the ground: trunks, branches, bone
+    pub fn add_woody_litter(&mut self, amount: f32) {
+        self.woody_litter = (self.woody_litter + amount).clamp(0.0, Self::MAX_LITTER);
+    }
+
+    /// Everything lying on this tile waiting to break down
+    pub fn litter(&self) -> f32 {
+        self.leaf_litter + self.woody_litter
+    }
+
+    /// Break down what is lying here, turning it into nutrient.
+    ///
+    /// `humidity` runs 0.0 to 1.0 and does most of the work: dry ground barely
+    /// rots at all. Density does the rest - soft matter goes an order of
+    /// magnitude faster than wood, which is why a fallen tree outlasts the
+    /// leaves that fell with it by decades.
+    ///
+    /// Returns how much nutrient was released, which is mostly of interest to
+    /// tests.
+    pub fn decay(&mut self, humidity: f32, ticks: f32) -> f32 {
+        /// Share of soft litter that goes per tick in ideal conditions
+        const LEAF_RATE: f32 = 0.0006;
+
+        /// And of wood, which is dense enough to keep the wet out of its middle
+        const WOOD_RATE: f32 = 0.00004;
+
+        // Rot needs water. Bone dry ground holds what falls on it more or less
+        // indefinitely, which is why a desert keeps its dead.
+        let wetness = humidity.clamp(0.0, 1.0);
+        let activity = wetness * wetness;
+
+        if activity <= 0.0 {
+            return 0.0;
+        }
+
+        let from_leaves = (self.leaf_litter * LEAF_RATE * activity * ticks).min(self.leaf_litter);
+        let from_wood = (self.woody_litter * WOOD_RATE * activity * ticks).min(self.woody_litter);
+
+        self.leaf_litter -= from_leaves;
+        self.woody_litter -= from_wood;
+
+        // Some of it is lost to the air rather than staying in the ground
+        let released = (from_leaves + from_wood) * 0.6;
+        let before = self.nutrients;
+        self.nutrients = (self.nutrients + released).min(Self::MAX_NUTRIENTS);
+
+        self.nutrients - before
+    }
+
+    /// Take nutrient out of the ground, returning how much was actually there
+    /// to take
+    pub fn draw(&mut self, wanted: f32) -> f32 {
+        let taken = wanted.min(self.nutrients).max(0.0);
+        self.nutrients -= taken;
+        taken
+    }
+
+    /// How well fed this ground is, as a fraction of what it could hold
+    pub fn fertility(&self) -> f32 {
+        (self.nutrients / Self::MAX_NUTRIENTS).clamp(0.0, 1.0)
+    }
+}
+
+impl Default for Soil {
+    fn default() -> Self {
+        Self::for_terrain(TerrainType::Plains)
+    }
+}

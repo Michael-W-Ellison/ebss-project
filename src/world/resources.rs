@@ -2,7 +2,7 @@
 //! Resource nodes and harvestable materials.
 
 use serde::{Deserialize, Serialize};
-use crate::world::{Position, TerrainType};
+use crate::world::{Position, Soil, TerrainType};
 
 /// Types of resources
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -423,18 +423,31 @@ impl ResourceNode {
         }
     }
 
-    /// How much faster a crop grows than the same thing growing wild.
+    /// How readily a plant here can take up what is in the ground.
     ///
-    /// This is the whole point of breaking ground: a field of grain feeds
-    /// people that a hedgerow never could. It is also the only way a
-    /// settlement gets past the dozen or so that the wild country carries -
-    /// food regrows about four times slower than forty people eat it.
-    pub fn cultivated_multiplier(cultivated: bool) -> f32 {
+    /// This is what breaking ground actually buys. A field is weeded, watered
+    /// and worked, so the crop on it gets at far more of what the soil holds
+    /// than the same plant would growing wild - it reaches its natural best
+    /// pace on ground that would only half feed a hedgerow. What it does not do
+    /// is make a plant grow faster than its kind can grow: uptake enters the
+    /// rate as a factor that is capped at one.
+    pub fn uptake_multiplier(cultivated: bool) -> f32 {
         if cultivated {
-            8.0
+            2.5
         } else {
             1.0
         }
+    }
+
+    /// The most this patch can be carrying at once, given how well fed the
+    /// ground is.
+    ///
+    /// The other half of what a field buys: yield. Rich ground carries a
+    /// heavier crop, thin ground a lighter one, and a field that has had muck
+    /// spread on it carries more than one that has not.
+    pub fn standing_capacity(&self, fertility: f32) -> u32 {
+        let share = 0.4 + 0.6 * fertility.clamp(0.0, 1.0);
+        ((self.max_amount as f32) * share).round() as u32
     }
 
     /// How fast this water refills, given the ground it sits on and the
@@ -499,8 +512,57 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
     ) -> u32 {
-        if self.amount >= self.max_amount {
-            return 0; // Already at max
+        let mut nowhere = Soil::for_terrain(TerrainType::Plains);
+        self.regenerate_from_soil(
+            temperature,
+            precipitation,
+            season_modifier,
+            cultivated,
+            &mut nowhere,
+        )
+    }
+
+    /// Regenerate, drawing on the ground it is growing in.
+    ///
+    /// Growth used to be a number per species multiplied by the weather, with
+    /// nothing taken out of the ground and nothing put back: a patch picked
+    /// bare regrew as fast on bare rock as in river silt. What it can manage
+    /// now is bounded by whichever of warmth, rain and nutrient is scarcest,
+    /// and what it grows with, it takes.
+    pub fn regenerate_from_soil(
+        &mut self,
+        temperature: f32,
+        precipitation: f32,
+        season_modifier: f32,
+        cultivated: bool,
+        soil: &mut Soil,
+    ) -> u32 {
+        self.regenerate_in_ground(
+            temperature,
+            precipitation,
+            season_modifier,
+            cultivated,
+            soil,
+        )
+    }
+
+    /// Regenerate, drawing on the ground, where `precipitation` is how wet
+    /// that ground is rather than whether it happens to be raining.
+    ///
+    /// Plants drink from the soil, not from the sky directly. Passing the
+    /// hour's rainfall in here meant every plant in the world was in drought on
+    /// any day it was not actively raining, which cut growth to a fifth
+    /// wherever a marsh and a dune were treated alike.
+    pub fn regenerate_in_ground(
+        &mut self,
+        temperature: f32,
+        precipitation: f32,
+        season_modifier: f32,
+        cultivated: bool,
+        soil: &mut Soil,
+    ) -> u32 {
+        if self.amount >= self.standing_capacity(soil.fertility()) {
+            return 0; // As heavy a crop as this ground will carry
         }
 
         // Base regeneration rate per tick (0-1 units).
@@ -612,12 +674,19 @@ impl ResourceNode {
             _ => 1.0,
         };
 
+        // What the ground can give, and how well this plant can get at it.
+        // Capped at one: uptake helps a crop reach the best pace its kind is
+        // capable of, it does not carry it past that.
+        let nutrient_factor =
+            (soil.fertility() * Self::uptake_multiplier(cultivated)).clamp(0.0, 1.0);
+
+        if nutrient_factor <= 0.0 {
+            return 0;
+        }
+
         // Calculate total regeneration
-        let regen_amount = base_rate
-            * temp_modifier
-            * precip_modifier
-            * season_modifier
-            * Self::cultivated_multiplier(cultivated);
+        let regen_amount =
+            base_rate * temp_modifier * precip_modifier * season_modifier * nutrient_factor;
 
         // Carry the fraction over rather than rounding it away: wild food
         // regrows slowly enough that rounding to whole units each pass loses most
@@ -626,9 +695,17 @@ impl ResourceNode {
         let regen_units = self.inflow_carried.floor();
         self.inflow_carried -= regen_units;
 
-        // Add regenerated amount, capped at max
-        let actual_regen = (regen_units as u32).min(self.max_amount - self.amount);
+        // Add regenerated amount, capped at what this ground will carry
+        let capacity = self.standing_capacity(soil.fertility());
+        let headroom = capacity.saturating_sub(self.amount);
+        let actual_regen = (regen_units as u32).min(headroom);
         self.amount += actual_regen;
+
+        // What grew, came out of the ground
+        if actual_regen > 0 {
+            const DRAW_PER_UNIT: f32 = 0.0015;
+            soil.draw(actual_regen as f32 * DRAW_PER_UNIT);
+        }
 
         actual_regen
     }

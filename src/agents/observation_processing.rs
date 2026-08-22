@@ -115,6 +115,32 @@ pub fn process_observations(
         // that come first, and it counts for more when it is their own parent
         // they are watching.
         teach_by_watching(agent, broadcast);
+
+        // And anybody, of any age, who sees somebody tip a basket of spoiled
+        // food onto a field takes something from it. Less than doing it
+        // yourself: seeing a thing done tells you it is done, not that it
+        // works.
+        watch_a_practice(agent, broadcast);
+    }
+}
+
+/// Ways of working that spread by being seen.
+///
+/// Muck-spreading is nobody's instinct. One agent works it out, the people
+/// around it see the basket go onto the field, and the practice travels - which
+/// is the difference between a trick one clever person had and something a
+/// settlement does.
+fn watch_a_practice(watcher: &mut Agent, broadcast: &BroadcastAction) {
+    use crate::agents::practices::Practice;
+
+    if !broadcast.success {
+        return;
+    }
+
+    if broadcast.details.contains("SpreadMuck") {
+        watcher
+            .practices
+            .learn_from_watching(Practice::SpreadingMuck);
     }
 }
 

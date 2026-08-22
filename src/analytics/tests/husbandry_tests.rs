@@ -15,28 +15,63 @@ use crate::core::DriveType;
 use crate::environment::Action;
 use crate::world::{TerrainType, World, WorldConfig};
 
-/// Ground broken by an agent grows crops many times faster than the same
-/// ground left wild.
+/// A field carries a heavier crop than the same ground left wild, and gets
+/// there on soil that would only half feed a hedgerow.
+///
+/// It does not grow faster than the plant's kind can grow. Breaking ground buys
+/// two things - what the crop can get at, and how much of it the ground will
+/// carry - and neither of them is speed.
 #[test]
-fn a_field_yields_far_more_than_the_hedgerow() {
+fn a_field_outyields_the_hedgerow_without_outrunning_it() {
+    use crate::world::soil::Soil;
     use crate::world::{Position, ResourceNode, ResourceType};
 
-    let mut wild = ResourceNode::new(ResourceType::Grain, Position::new(10, 10), 5000);
-    let mut sown = ResourceNode::new(ResourceType::Grain, Position::new(11, 10), 5000);
-    wild.amount = 0;
-    sown.amount = 0;
+    fn grown(cultivated: bool, fertility: f32) -> u32 {
+        let mut soil = Soil::for_terrain(TerrainType::Plains);
+        // Large enough that neither run reaches the ceiling: this is about the
+        // rate, and the ceiling is measured separately
+        let mut patch = ResourceNode::new(ResourceType::Grain, Position::new(10, 10), 40000);
+        patch.amount = 0;
 
-    // A season of good growing weather, in the passes the world actually runs
-    for _ in 0..60 {
-        wild.regenerate_on(20.0, 0.5, 1.0, false);
-        sown.regenerate_on(20.0, 0.5, 1.0, true);
+        for _ in 0..300 {
+            // Held steady, so this measures the rate rather than depletion
+            soil.nutrients = fertility;
+            patch.regenerate_in_ground(20.0, 0.6, 1.0, cultivated, &mut soil);
+        }
+
+        patch.amount
     }
 
+    // On middling ground, a worked field gets far more out of it
+    let wild = grown(false, 0.4);
+    let field = grown(true, 0.4);
+
     assert!(
-        sown.amount > wild.amount * 4,
-        "a field should far outyield the wild: {} against {}",
-        sown.amount,
-        wild.amount
+        field > wild * 2,
+        "a field should beat the hedgerow beside it: {field} against {wild}"
+    );
+
+    // On ground that already has everything in it, both grow at the same pace:
+    // that pace is the plant's, not the farmer's
+    let wild_rich = grown(false, 1.0);
+    let field_rich = grown(true, 1.0);
+
+    assert_eq!(
+        field_rich, wild_rich,
+        "nothing grows faster than its kind grows, however well the ground is worked"
+    );
+
+    // What a field does buy on top of that is how heavy a crop the ground will
+    // carry
+    let mut rich = Soil::for_terrain(TerrainType::Plains);
+    rich.nutrients = 1.0;
+    let mut thin = Soil::for_terrain(TerrainType::Plains);
+    thin.nutrients = 0.2;
+
+    let patch = ResourceNode::new(ResourceType::Grain, Position::new(10, 10), 100);
+    assert!(
+        patch.standing_capacity(rich.fertility()) > patch.standing_capacity(thin.fertility()),
+        "rich ground should carry a heavier crop than thin"
     );
 }
 

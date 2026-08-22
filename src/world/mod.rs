@@ -70,9 +70,11 @@ pub mod path_planning;
 pub mod territory;
 pub mod resource_spawning;
 pub mod nutrition;
+pub mod soil;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
+pub use soil::Soil;
 pub use resources::{Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
 pub use inventory::{Inventory, Item, ItemType};
@@ -285,6 +287,9 @@ impl World {
             territory_manager: territory::TerritoryManager::new(),
         };
 
+        // The ground under the terrain that was just generated
+        world.grid.settle_soil();
+
         // Place initial resources
         world.generate_resources(&config.initial_resources);
 
@@ -294,6 +299,9 @@ impl World {
             BuildingType::Longhouse,
             Position::new(center.0 as i32, center.1 as i32),
         ));
+
+        // Stock the country with what grows on it
+        world.plants.spawn_naturalistic(&world.grid);
 
         // Spawn initial wildlife based on terrain
         let spawn_config = AnimalSpawnConfig::default();
@@ -1201,11 +1209,18 @@ impl World {
         // Update animals (AI, movement, aging)
         self.animals.tick();
 
-        // Update plants (growth, regrowth)
-        self.plants.tick();
+        // Update plants: growth on what the ground and sky give them, and the
+        // leaf fall that in time becomes more of it. Every ten ticks, because
+        // plants take thousands to grow and a world holds hundreds of them.
+        if self.tick % 10 == 0 {
+            let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+            self.plants
+                .tick_in_world(&mut self.grid, precipitation, 10.0);
+        }
 
         // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
         if self.tick % 10 == 0 {
+            self.rot_what_is_lying_about();
             self.regenerate_resources();
         }
 
@@ -1219,6 +1234,33 @@ impl World {
     }
 
     /// Regenerate renewable resources based on climate and weather conditions
+    /// Break down everything lying on the ground into nutrient.
+    ///
+    /// The rate is the ground's to decide: wet country turns leaf fall into
+    /// soil inside a season, and a desert holds what falls on it more or less
+    /// forever. Density does the rest - the leaves that come off a tree are
+    /// gone long before the tree is.
+    fn rot_what_is_lying_about(&mut self) {
+        use crate::world::soil::Soil;
+
+        // Rain reaches everywhere; the ground decides what it does with it
+        let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+
+        // One pass every ten ticks, so each pass stands for ten ticks of rot
+        const TICKS_PER_PASS: f32 = 10.0;
+
+        for row in &mut self.grid.tiles {
+            for tile in row.iter_mut() {
+                if tile.soil.litter() <= 0.0 {
+                    continue;
+                }
+
+                let humidity = Soil::humidity(tile.terrain.terrain_type, precipitation);
+                tile.soil.decay(humidity, TICKS_PER_PASS);
+            }
+        }
+    }
+
     fn regenerate_resources(&mut self) {
         let current_season = self.climate.current_season();
         let season_modifier = current_season.plant_growth_modifier();
@@ -1241,14 +1283,28 @@ impl World {
                 continue;
             }
 
-            // Regenerate the resource. Anything growing on broken ground grows
-            // many times faster, which is what a field is for.
+            // Everything else grows out of the ground it is standing in, and
+            // takes what it grows with. Broken ground gets at more of what is
+            // there and carries a heavier crop; it does not grow faster than
+            // the plant's kind can grow.
             let cultivated = terrain_type == TerrainType::Farmland;
-            let _regen_amount = resource.regenerate_on(
+
+            // What a plant drinks is what the ground holds, not whether it
+            // happens to be raining on it this hour
+            let ground_water =
+                crate::world::soil::Soil::humidity(terrain_type, precipitation);
+
+            let soil = match self.grid.get_tile_mut(&resource.position) {
+                Some(tile) => &mut tile.soil,
+                None => continue,
+            };
+
+            let _regen_amount = resource.regenerate_in_ground(
                 temperature,
-                precipitation,
+                ground_water,
                 season_modifier,
                 cultivated,
+                soil,
             );
 
             // Debug log significant regeneration

@@ -696,6 +696,12 @@ pub struct Agent {
     pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
+
+    /// Ways of working the agent has picked up rather than been born knowing.
+    /// Nothing tells an agent to spread muck on a field: it tries it, sees what
+    /// happens, and watches its neighbours.
+    #[serde(default)]
+    pub practices: super::practices::Practices,
     pub goals: GoalManager,
     pub preferences: Preferences,
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
@@ -757,6 +763,7 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
+            practices: super::practices::Practices::new(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight

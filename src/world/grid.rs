@@ -277,6 +277,19 @@ impl Grid {
         }
     }
 
+    /// Give every tile the soil its final terrain deserves.
+    ///
+    /// Terrain is assigned by mutating tiles that were created as plains, so
+    /// without this every marsh and mountainside in the world would be sitting
+    /// on ordinary grassland soil.
+    pub fn settle_soil(&mut self) {
+        for row in &mut self.tiles {
+            for tile in row.iter_mut() {
+                tile.soil = crate::world::soil::Soil::for_terrain(tile.terrain.terrain_type);
+            }
+        }
+    }
+
     pub fn get_tile_mut(&mut self, pos: &Position) -> Option<&mut Tile> {
         if self.is_valid_position(pos) {
             Some(&mut self.tiles[pos.y as usize][pos.x as usize])

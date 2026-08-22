@@ -900,6 +900,7 @@ impl Simulation {
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
+            Action::SpreadMuck => Some(ActionType::Farming),
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)
@@ -1497,7 +1498,14 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 6: Break ground for a field.
+        // PRIORITY 6: Tip the spoiled contents of the pack onto a field, if
+        // this agent has come to believe in that, or is curious enough to find
+        // out. Sits with the other things an agent does when nothing presses.
+        if let Some(action) = self.muck_action(agent, agent_position) {
+            return (action, false);
+        }
+
+        // PRIORITY 7: Break ground for a field.
         //
         // Sits with cooking and hunting, among the things an agent does when
         // nothing is pressing on it, and above them in the sense that it
@@ -1507,7 +1515,7 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 7: Go after an animal, for the meat or for the skin.
+        // PRIORITY 8: Go after an animal, for the meat or for the skin.
         //
         // Below cooking for the same reason gathering flax is: what an agent
         // already has in its pack is worth more than what it might catch.
@@ -1515,7 +1523,7 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 8: Go and get what the agent needs to clothe itself.
+        // PRIORITY 9: Go and get what the agent needs to clothe itself.
         //
         // Below cooking, because a meal is worth more than a coat: cooking
         // nearly trebles what a piece of food is worth, and an agent that went
@@ -1524,7 +1532,7 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 9: Check for high-salience percepts (danger, resources, social opportunities)
+        // PRIORITY 10: Check for high-salience percepts (danger, resources, social opportunities)
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
             .iter()
             .cloned()
@@ -1538,14 +1546,14 @@ impl Simulation {
             return (percept_action, false);
         }
 
-        // PRIORITY 10: Execute current plan step (if agent has an active plan)
+        // PRIORITY 11: Execute current plan step (if agent has an active plan)
         if agent.should_execute_plan() {
             if let Some(plan_action) = agent.get_plan_action() {
                 return (plan_action, true);
             }
         }
 
-        // PRIORITY 11: Check active goals and generate goal-directed action
+        // PRIORITY 12: Check active goals and generate goal-directed action
         if let Some(goal) = agent.goals.highest_priority_goal() {
             // Get most urgent drive for fallback
             let fallback_drive = agent.drives.most_urgent()
@@ -1557,7 +1565,7 @@ impl Simulation {
             }
         }
 
-        // PRIORITY 12: Use drive-based action as fallback
+        // PRIORITY 13: Use drive-based action as fallback
         let drive_type = agent.select_drive_with_happiness()
             .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
             .unwrap_or(DriveType::Curiosity);
@@ -1573,6 +1581,9 @@ impl Simulation {
     /// How close an agent has to be to a fire to light it, feed it or cook on
     /// it: near enough to reach into the flames
     const FIRE_REACH: i32 = 1;
+
+    /// How much soft litter one unit of spoiled food amounts to
+    const MUCK_PER_UNIT: f32 = 0.12;
 
     /// How much a field holds when it is full.
     ///
@@ -2227,6 +2238,74 @@ impl Simulation {
         }
 
         best.map(|(position, _)| position)
+    }
+
+    /// Tipping the spoiled contents of a pack onto the ground.
+    ///
+    /// Nothing tells an agent to do this. It carries refuse it cannot eat, it
+    /// is standing on ground it has broken, and now and again - out of
+    /// curiosity, and more often once it has half a notion the thing works - it
+    /// tips the basket out and sees what happens. What it sees is the ground
+    /// getting richer, which is worth something; what it works out over several
+    /// seasons is whether that was worth the carrying.
+    ///
+    /// The practice spreads by being seen, and it is dropped by agents who try
+    /// it half a dozen times on ground where it does nothing.
+    fn muck_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Practice;
+        use crate::world::Position;
+        use rand::Rng;
+
+        // Nothing to tip out
+        let carrying_refuse = agent
+            .inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0)
+            .any(|item| {
+                item.food_data
+                    .as_ref()
+                    .map(|food| food.is_rotting() || food.is_ruined())
+                    .unwrap_or(false)
+            });
+
+        if !carrying_refuse {
+            return None;
+        }
+
+        // On a field, which is where it might do some good
+        let here = Position::new(agent_position.0, agent_position.1);
+        let on_a_field = self
+            .world
+            .grid
+            .get_tile(&here)
+            .map(|tile| tile.terrain.is_cultivated())
+            .unwrap_or(false);
+
+        if !on_a_field {
+            return None;
+        }
+
+        let curiosity = agent
+            .drives
+            .get(DriveType::Curiosity)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0);
+
+        let roll = rand::thread_rng().gen::<f32>();
+
+        if agent
+            .practices
+            .would_try(Practice::SpreadingMuck, curiosity, roll)
+        {
+            return Some(Action::SpreadMuck);
+        }
+
+        None
     }
 
     /// Breaking ground, and walking to somewhere worth breaking.
@@ -5636,6 +5715,86 @@ impl Simulation {
                     .with_drive_change(DriveType::Sustenance, -0.4)
                     .with_energy_cost(12.0)
                     .with_message("Broke ground and sowed a field".to_string())
+            },
+
+            Action::SpreadMuck => {
+                use crate::agents::practices::Practice;
+                use crate::world::Position;
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let tile_position = Position::new(agent_position.0, agent_position.1);
+
+                // What is in the pack that is fit for nothing else
+                let refuse: Vec<(String, u32)> = {
+                    let agent = &self.population.agents[agent_index];
+                    agent
+                        .inventory
+                        .get_all_items()
+                        .values()
+                        .filter(|item| item.quantity > 0)
+                        .filter(|item| {
+                            item.food_data
+                                .as_ref()
+                                .map(|food| food.is_rotting() || food.is_ruined())
+                                .unwrap_or(false)
+                        })
+                        .map(|item| (item.item_id.clone(), item.quantity))
+                        .collect()
+                };
+
+                if refuse.is_empty() {
+                    return ActionResult::failure("Nothing spoiled to tip out".to_string());
+                }
+
+                let before = self
+                    .world
+                    .grid
+                    .get_tile(&tile_position)
+                    .map(|tile| tile.soil.fertility() + tile.soil.litter())
+                    .unwrap_or(0.0);
+
+                let mut tipped = 0;
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    for (item_id, quantity) in &refuse {
+                        agent.inventory.remove_item(item_id, *quantity);
+                        tipped += quantity;
+                    }
+                }
+
+                // Spoiled food is soft matter and goes quickly, given wet ground
+                if let Some(tile) = self.world.grid.get_tile_mut(&tile_position) {
+                    tile.soil
+                        .add_leaf_litter(tipped as f32 * Self::MUCK_PER_UNIT);
+                }
+
+                let after = self
+                    .world
+                    .grid
+                    .get_tile(&tile_position)
+                    .map(|tile| tile.soil.fertility() + tile.soil.litter())
+                    .unwrap_or(0.0);
+
+                // What the agent can actually see: the ground here is richer
+                // than it was. Whether that was worth doing is a judgement it
+                // makes for itself, and gets wrong sometimes - tipping muck on
+                // bare rock or in a desert does nothing much.
+                let worked = after > before + 0.05;
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.practices.record_outcome(Practice::SpreadingMuck, worked);
+                agent
+                    .skills
+                    .gain_experience(crate::agents::SkillType::Farming, 10);
+
+                debug!(
+                    "Agent {} tipped {} spoiled units onto {:?} (ground {:.2} -> {:.2})",
+                    agent.id, tipped, tile_position, before, after
+                );
+
+                ActionResult::success()
+                    .with_energy_cost(3.0)
+                    .with_message(format!("Spread {} of muck on the ground", tipped))
             },
 
             Action::Wait => {
