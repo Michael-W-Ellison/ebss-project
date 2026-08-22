@@ -303,10 +303,13 @@ impl Simulation {
         // can happen - and until it did, agents found food by smell alone.
         self.population.process_exploration_with_world(&mut self.world);
 
-        // Tick world systems (fauna and flora AI, growth, etc.)
-        self.world.climate.tick();
-        self.world.animals.tick();
-        self.world.plants.tick();
+        // World systems - climate, fauna, flora - are ticked by World::tick
+        // further down this function. Ticking them here as well ran the whole
+        // living world at double speed: animals aged, starved, bred and grazed
+        // twice for every tick an agent lived through.
+
+        // Let hungry predators try their luck with the people
+        self.process_predator_attacks();
 
         // Update exposure damage for all agents
         self.update_agent_exposure();
@@ -6005,6 +6008,107 @@ impl Simulation {
     }
 
     /// Update exposure damage for all agents based on weather and environmental conditions
+    /// How close a predator has to be to an agent to try it
+    const PREDATOR_STRIKE_RANGE: i32 = 3;
+
+    /// A hungry predator turns on the people.
+    ///
+    /// Nothing in the model let an animal touch an agent: predation was
+    /// animal-on-animal only, so a wolf could starve beside a settlement. A
+    /// predator that is merely hungry keeps to the herds; one that is close
+    /// to starving takes what it can reach, and that includes an agent.
+    ///
+    /// This is where thinning the herds comes back on the settlement that did
+    /// it. Agents hunt for skins, the herds go down, the predators go hungry,
+    /// and hungry predators come looking.
+    fn process_predator_attacks(&mut self) {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let current_tick = self.current_tick;
+
+        // Who is where, and who is desperate enough to try
+        let agent_positions: Vec<(usize, (i32, i32))> = self
+            .population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, agent)| agent.state.is_alive)
+            .map(|(index, agent)| (index, (agent.state.position.0, agent.state.position.1)))
+            .collect();
+
+        if agent_positions.is_empty() {
+            return;
+        }
+
+        let mut strikes: Vec<(uuid::Uuid, usize, f32, f32)> = Vec::new();
+
+        for animal in self.world.animals.get_all() {
+            if !animal.is_alive() || animal.is_domesticated || !animal.is_hungry() {
+                continue;
+            }
+
+            let species = match self.world.animals.get_species(&animal.species_id) {
+                Some(species) => species,
+                None => continue,
+            };
+
+            if species.prey_species.is_empty() || species.attack_damage <= 0.0 {
+                continue;
+            }
+
+            // Nearest agent within striking distance
+            let target = agent_positions
+                .iter()
+                .filter(|(_, position)| {
+                    (position.0 - animal.position.0).abs() <= Self::PREDATOR_STRIKE_RANGE
+                        && (position.1 - animal.position.1).abs() <= Self::PREDATOR_STRIKE_RANGE
+                })
+                .min_by_key(|(_, position)| {
+                    (position.0 - animal.position.0).abs()
+                        + (position.1 - animal.position.1).abs()
+                });
+
+            let (agent_index, _) = match target {
+                Some(target) => target,
+                None => continue,
+            };
+
+            // A full belly makes a cautious animal. Hunger is what changes
+            // its mind, and only really at the end of it.
+            let pressure =
+                ((animal.hunger / animal.max_hunger.max(1.0)) - 0.5).clamp(0.0, 0.5) / 0.5;
+            let odds = 0.01 + pressure * pressure * 0.14;
+
+            if rng.gen::<f32>() < odds {
+                strikes.push((
+                    animal.id,
+                    *agent_index,
+                    species.attack_damage,
+                    species.food_value * 0.25,
+                ));
+            }
+        }
+
+        for (animal_id, agent_index, damage, fed) in strikes {
+            {
+                let agent = &mut self.population.agents[agent_index];
+                agent.take_damage(damage);
+                agent.emotions.record_attack(animal_id, current_tick);
+
+                debug!(
+                    "Agent {} was attacked by a hungry animal ({:.0} damage)",
+                    agent.id, damage
+                );
+            }
+
+            // Even a glancing blow is something in the stomach
+            if let Some(animal) = self.world.animals.get_mut(&animal_id) {
+                animal.feed(fed);
+            }
+        }
+    }
+
     fn update_agent_exposure(&mut self) {
         let weather = self.world.climate.weather.clone();
         let time_of_day = self.world.climate.calendar.time_of_day;

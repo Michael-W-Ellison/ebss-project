@@ -10,3 +10,4 @@ pub mod scent_tests;
 pub mod cooking_tests;
 pub mod clothing_tests;
 pub mod hunting_tests;
+pub mod predator_prey_tests;

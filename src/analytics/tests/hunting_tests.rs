@@ -200,6 +200,9 @@ fn nobody_walks_up_to_a_bear_empty_handed() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
 
+    // The bear is the only animal in this world, so what the agent does is
+    // about the bear and not about a rabbit two fields over
+    world.animals.get_all_mut().clear();
     world
         .spawn_animal("bear".to_string(), (30, 31))
         .expect("a bear should spawn");

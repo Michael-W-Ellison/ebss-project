@@ -141,7 +141,11 @@ fn an_agent_will_not_eat_what_it_has_ruined() {
 /// twenty-percent chance of burning the first batch.
 #[test]
 fn an_agent_lights_a_fire_and_cooks_on_it() {
-    let world = World::new(WorldConfig::default());
+    let mut world = World::new(WorldConfig::default());
+
+    // Nothing to hunt and nothing to be hunted by: this is about the fire
+    world.animals.get_all_mut().clear();
+
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
 
@@ -197,6 +201,10 @@ fn an_agent_lights_a_fire_and_cooks_on_it() {
 #[test]
 fn an_agent_with_nothing_worth_cooking_lights_no_fire() {
     let mut world = World::new(WorldConfig::default());
+
+    // Nothing to hunt, either: a deer would put meat in the pack and meat is
+    // worth cooking
+    world.animals.get_all_mut().clear();
 
     // No wild flesh or grain to pick up part way through the run
     world.resources.retain(|resource| {
