@@ -57,6 +57,9 @@ original specifications.
   them. A garment is worth what its material is worth and what the hand that
   made it could manage; wood goes into clothes only once a fire's worth is set
   aside
+- ✅ Ecology: herds are held down by the predators that live off them and by
+  the ground they graze. A predator that cannot find prey starves, widens what
+  it will take, and turns on the people living beside it
 - ✅ Hunting: agents go after animals for the skins and eat what comes with
   them. A hunter has to be within a spear's throw, an unarmed one leaves the
   dangerous animals alone, and a kill is butchered into meat, hides, leather
@@ -178,8 +181,8 @@ the code actually does, verified by running it — not what was planned.
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
-- [ ] Make fauna numbers settle: herds either die out or run to hundreds, and
-      hunting is the only brake on the second
+- [ ] Find out why a settlement dies out somewhere past ten thousand ticks —
+      it happens with or without the animals
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts

@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `6ddd95a`
+**Last verified:** August 2026, against commit `5c74481`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -114,7 +114,11 @@ Verified reachable from `Simulation::tick()`.
   regrow, non-renewable deposits are removed
 - Buildings, construction and maintenance
 - Crafting, smelting, technology progression
-- Fauna (movement, hunger, breeding, predation) and flora (growth, regrowth)
+- Fauna: movement, hunger, breeding, and predation that is an actual brake -
+  every hungry predator hunts on its own account, a herd is limited by the
+  ground it grazes as well as by what eats it, a starving predator widens what
+  it will take, and one beside a settlement turns on the people
+- Flora (growth, regrowth)
 - Combat between agents and hunting of animals
 
 ### Persistence and display
@@ -168,9 +172,6 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
   can afford.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
   cannot be reproduced and two tests are intermittently flaky.
-- **A fauna model that settles.** Herbivore numbers either collapse to nothing
-  or run to hundreds within a few thousand ticks, with or without agents
-  hunting them. Hunting is the only brake, and it is not enough of one.
 - **Long-run characterisation.** Nobody has studied population dynamics,
   technology spread or settlement patterns past a few tens of thousands of
   ticks.
@@ -250,9 +251,30 @@ Thermal model behaviour, by settled core temperature of an unclothed agent:
 
 ---
 
+The ecology, measured the same way on the commit before it and the one that
+added it:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Worlds with predators still alive at the end | 7 of 40 | 30 of 40 |
+| Worlds with herds bounded (under 150) | — | 32 of 40 |
+| Herbivores, as a multiple of the founding stock | 11x | 4.8x |
+| Agents mauled by animals | 0 | 31 |
+| Agent population | 903 | 817 |
+
+Before this, predation sat behind one roll for the whole world per tick, a
+predator only hunted when half starved, predators were stocked without regard
+to what they could eat, and nothing but the hard population cap of a thousand
+limited a herd. Nothing in the model let an animal touch an agent at all.
+
+It is not stable everywhere. In the eight worlds where herds are not bounded,
+the predators died out first; in some others the herd goes instead and takes
+the predators with it. A world holding both at once is the common case now
+rather than the rare one, which it was not before.
+
 ## Test coverage
 
-1,095 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
+1,101 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
 pass, except three known flaky tests (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
 `test_production_building_placed_near_resources`) that assert on properties a

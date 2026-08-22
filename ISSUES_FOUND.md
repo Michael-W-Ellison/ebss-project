@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `6ddd95a`.
+**Last verified:** August 2026, against commit `5c74481`.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -44,21 +44,26 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. Fauna numbers never settle
+### 3. Settlements die out over a long run
 
-Herbivore populations either collapse to nothing or run away to hundreds
-within a few thousand ticks, and both happen with no agent touching them —
-measured on the commit before agents could hunt, three worlds in six went to
-zero animals and one reached 740. Hunting is now the only brake on the
-runaway case, holding herds to about a quarter of what they reach without it,
-and it does nothing for the collapses.
+Every population tested was gone by thirty thousand ticks — three worlds of
+three, on this commit and on the one before any of the ecology work, so the
+animals are not the cause. Nobody has looked at what is killing them.
 
-Nothing in the model carries a herd towards a stable size. Now that agents
-depend on animals for the warm half of their clothing, that instability
-reaches them: whether a settlement can dress itself in fur is decided by
-which way the local herd happened to go.
+Up to eight thousand ticks, which is what everything else here is measured
+over, settlements grow. What happens between there and thirty thousand is
+uncharacterised.
 
-### 4. Clothing and hunting cost about what they return
+### 4. The ecology settles in most worlds, not all
+
+Over forty worlds, predators are still alive at the end in thirty and herds
+stay bounded in thirty-two. In the eight that run away the predators died out
+first; in some others the herd goes and takes the predators with it. Nothing
+recolonises: once a species is gone from a world it is gone for good, so a
+world that loses its predators early spends the rest of the run with herds
+climbing to the population cap.
+
+### 5. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -77,7 +82,7 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 5. Fear is a hunger signal, not a danger signal
+### 6. Fear is a hunger signal, not a danger signal
 
 `calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
 rest. Since hunger saturates between meals, fear sits at around 0.8 much of
@@ -88,7 +93,7 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 6. Agents still cannot see each other, or hear anything
+### 7. Agents still cannot see each other, or hear anything
 
 Sight now discovers terrain, resources and buildings, but only through the
 exploration path. The percept pipeline's own vision channel reads
@@ -98,7 +103,7 @@ behaviour works because `Population` computes proximity directly. Hearing is
 unfed entirely, so every sound-derived percept is a dead path. See
 SIMULATION_AUDIT.md.
 
-### 7. Zoning and territory are never established
+### 8. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -106,7 +111,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 8. Agents carry food they will never eat
+### 9. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it. The same is true of food
@@ -119,16 +124,16 @@ carried weight still includes rot and cinders.
 
 ## Housekeeping
 
-### 9. Committed backup file
+### 10. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 10. Build warnings
+### 11. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 11. Placeholder package metadata
+### 12. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
@@ -176,6 +181,14 @@ Listed so nobody re-investigates them. Each has regression tests in
 - **Sensory traits never reached the senses.**
   `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
   perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Herbivores had nothing holding them down.** The world was ticked twice per
+  simulation tick; predation sat behind one roll for the whole world per tick;
+  a predator only hunted when half starved; predators were stocked without
+  regard to whether anything they ate lived there; the default world got two
+  herds in total; and nothing but the hard population cap limited a herd. All
+  six are fixed, and predators now survive in thirty worlds of forty rather
+  than seven. A starving predator also widens what it will take and will turn
+  on a settlement — nothing in the model let an animal touch an agent before.
 - **Nothing ever hunted.** `Action::Hunt` and the fauna model worked, and the
   one place the action appeared passed a nil animal id the executor could not
   resolve, so meat, hides and wool never reached an inventory. Three things
