@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Last verified: August 2026 (against commit 1b98aa4)
+Last verified: August 2026 (against commit 20c47fa)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -18,10 +18,9 @@ itself, waters itself, shelters from the weather, and reproduces over tens of
 thousands of ticks without intervention.
 
 What remains is not "write the systems" but "connect what exists": several
-analytics components are libraries nobody calls, agents still cannot see one
-another or hear anything, and a handful of behaviours the design calls for
-(agents making clothing, for one) have supporting code but nothing that
-drives them.
+analytics components are libraries nobody calls, and agents still cannot see
+one another or hear anything. The behaviours that had code but no driver -
+cooking, and clothing - now have one.
 
 
 SIZE AND ACTIVITY
@@ -56,8 +55,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,116 tests across the workspace:
-  1,079 library tests
+  1,125 tests across the workspace:
+  1,088 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -91,6 +90,11 @@ Verified as reached by Simulation::tick():
                   anything else put over one is ruined - worthless, unsafe to
                   eat and smelling of it. How often a cook burns a batch falls
                   with practice, from one in five to none
+  Clothing        agents gather flax, cotton and bark, make garments and wear
+                  them. What a garment is worth follows its material - fur and
+                  wool best, plant fibre next, bark last - and the hand that
+                  made it. Wood is kept back for fires before it goes into
+                  clothes
   Perception      sight of terrain, resources and buildings within 25 tiles,
                   refreshed every tick and negated by the Blind trait; smell
                   scaled to what a thing actually gives off - a berry about
@@ -137,9 +141,14 @@ missing features:
 
 KNOWN GAPS IN BEHAVIOUR
 -----------------------
-  - Agents never make or wear clothing. Insulation is always zero, so they
-    cycle between cold and shelter for their whole lives. Clothing recipes
-    and an equipment system exist; nothing drives an agent to use them.
+  - Clothing costs about as much as it returns in this climate. Over forty
+    worlds it halves how often agents are cold (28% to 16%) and warms them
+    half a degree, at three points of the fed population and three percent of
+    the population itself. The material is scarce and the weather is mild.
+  - Agents cannot make anything warmer than plant fibre, because that needs
+    hides or wool and nothing drives an agent to hunt. The fur and wool
+    garments are defined and work; no agent in a default run has ever had the
+    material for one.
   - Agent fear is computed from unmet hunger, thirst and rest, so it sits
     high whenever an agent is between meals. Fleeing is gated on fear, which
     makes flight a common state rather than a response to danger.
@@ -154,10 +163,10 @@ SUGGESTED NEXT STEPS
   2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  3. Give agents a reason to make clothing, so cold is something they solve
-     rather than endure. Cooking was the same shape of gap until recently and
-     is worth copying: the machinery existed, what was missing was an agent
-     with a reason to reach for it.
+  3. Give agents a reason to hunt. It is the last big gap of the shape cooking
+     and clothing used to have: `Action::Hunt` and the whole fauna model work,
+     and nothing ever selects the action, so meat, hides and wool never reach
+     an agent and the warm half of the clothing table is unreachable.
   4. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it

@@ -53,8 +53,13 @@ original specifications.
   nine to twenty, and cooking the whole range
 - 🚧 Agents cannot yet see each other or hear anything: those percept channels
   are built but unfed
-- 📋 Clothing behavior: recipes and equipment exist, but no agent is driven to
-  make or wear anything, so insulation is always zero
+- ✅ Clothing: agents gather flax, cotton and bark, make garments and wear
+  them. A garment is worth what its material is worth and what the hand that
+  made it could manage; wood goes into clothes only once a fire's worth is set
+  aside
+- 📋 Hunting: `Action::Hunt` and the fauna model work, but nothing ever selects
+  the action, so meat, hides and wool never reach an agent — which is why the
+  warm half of the clothing table is out of reach
 
 Legend: ✅ Implemented and running | 🚧 Built but not fully connected | 📋 Not yet driven
 
@@ -172,7 +177,8 @@ the code actually does, verified by running it — not what was planned.
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
-- [ ] Drive agents to make and wear clothing, so cold is solvable
+- [ ] Give agents a reason to hunt, so fur and wool — and warm clothing —
+      become reachable
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts

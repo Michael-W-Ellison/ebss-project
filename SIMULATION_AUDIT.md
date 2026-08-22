@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `1b98aa4`
+**Last verified:** August 2026, against commit `20c47fa`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -52,6 +52,11 @@ Verified reachable from `Simulation::tick()`.
   ruined, as is anything already cooked or preserved. Ruined food has nothing
   left in it, is unsafe to eat and smells of decay. How often a cook burns a
   batch falls from one in five to none with practice
+- Clothing: agents gather flax, cotton and bark, make garments and wear them,
+  and insulation is no longer zero. A garment is worth what its material is
+  worth (fur and wool best, plant fibre next, bark last) and what the hand
+  that made it could manage. Wood goes into clothes only once a fire's worth
+  is set aside, and the coat a new one replaces is left behind
 
 ### Lifecycle
 - Aging through infant, child, adolescent, adult and elderly stages
@@ -150,12 +155,18 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
 
 ## Absent
 
-- **Clothing behaviour.** Clothing recipes, equipment slots and cold
-  insulation all exist and work when equipment is present. Nothing drives an
-  agent to make or wear anything, so insulation is always zero and agents
-  cycle between cold and shelter for their whole lives. This is the last gap
-  of the shape cooking used to have: the machinery is built and no agent has a
-  reason to reach for it.
+- **Hunting.** `Action::Hunt` and the whole fauna model work, and nothing in
+  action selection ever produces the action — the one place it appears passes
+  a nil animal id. So no agent has ever hunted, and meat, hides and wool never
+  reach an inventory. This is what puts a ceiling on clothing: the fur and
+  wool garments are defined and correct, and unreachable in a default run.
+  It is the last gap of the shape cooking and clothing used to have.
+- **Trading warmth for food.** Clothing halves how often agents are cold and
+  costs about three points of the fed population (see **Measured behaviour**).
+  Nothing weighs the two against each other; the ordering in
+  `generate_non_emotional_action` is fixed, and the material an agent will
+  cross the map for is chosen by warmth over distance, not by what its stores
+  can afford.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
   cannot be reproduced and two tests are intermittently flaky.
 - **Long-run characterisation.** Nobody has studied population dynamics,
@@ -182,6 +193,27 @@ last three steps:
 Cooking is what moved feeding: raw food gives up about a third of what is in
 it and cooked food nearly all, so the same forage feeds far more agents.
 
+Clothing, measured the same way on the commit before it and the commit that
+added it (a different harness from the runs above, so read each column
+against its own pair rather than against the table before it):
+
+| Measure | Before clothing | With clothing |
+| --- | --- | --- |
+| Populations dying out | 0 of 40 | 0 of 40 |
+| Population at the end | 1054 from 480 | 1021 from 480 |
+| Agents wearing anything | 0 | 536 (53%) |
+| Average cold insulation | 0.00 | 0.13 |
+| Agents cold at the end | 297 (28.2%) | 164 (16.1%) |
+| Average core temperature | 35.8 °C | 36.3 °C |
+| Agents fed at the end | 96.8% | 93.6% |
+| Agents hydrated at the end | 99.1% | 99.0% |
+
+Clothing is not free, and in this climate it is close to an even trade: it
+halves how often an agent is cold and warms cores half a degree, and the time
+and material go somewhere — three points of the fed population and three
+percent of the population itself. It would pay better in a colder world, or
+once agents can hunt for fur.
+
 Worth knowing before reading too much into a single run: the spread between
 worlds is wide. Twenty-world samples of the same build came out anywhere
 between 92% and 98% fed, which is why the comparisons above are over forty.
@@ -201,7 +233,7 @@ Thermal model behaviour, by settled core temperature of an unclothed agent:
 
 ## Test coverage
 
-1,079 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
+1,088 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
 pass, except three known flaky tests (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
 `test_production_building_placed_near_resources`) that assert on properties a

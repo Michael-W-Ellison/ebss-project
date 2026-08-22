@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `1b98aa4`.
+**Last verified:** August 2026, against commit `20c47fa`.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -44,19 +44,37 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. Agents never make or wear clothing
+### 3. Agents never hunt, so they cannot dress warmly
 
-Cold insulation comes only from equipment, and nothing drives an agent to
-craft or equip anything. Insulation is therefore always zero, and agents spend
-their lives cycling between being cold and sheltering. Clothing recipes
-(`src/environment/clothing_recipes.rs`) and the equipment system both exist
-and work when items are placed on an agent by hand.
+`Action::Hunt` and the whole fauna model work. Nothing in action selection
+ever produces the action — the one place it appears, a skill-practice goal,
+passes a nil animal id, which the executor cannot resolve. So no agent has
+ever hunted, and meat, hides and wool never reach an inventory.
 
-This is the largest behavioural gap: cold is currently a condition agents
-endure rather than a problem they solve, which is exactly the kind of
-emergence the project exists to produce.
+That is what puts a ceiling on clothing. Fur and wool make the warm garments;
+flax, cotton and bark make the ones agents can actually reach, and they are
+worth roughly a third as much. Agents now dress themselves, but only in what
+grows on the ground.
 
-### 4. Fear is a hunger signal, not a danger signal
+This is the largest behavioural gap left, and the same shape as the ones
+cooking and clothing used to have: the machinery is built and nothing selects
+it.
+
+### 4. Clothing costs about what it returns
+
+Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
+warms cores by half a degree, at three points of the fed population and three
+percent of the population itself. The material is scarce and the climate is
+mild, so the time spent gathering flax is close to break-even against the time
+it would have spent on food. Nothing in the model weighs the two: the ordering
+in `generate_non_emotional_action` is fixed, and an agent picks material by
+warmth against distance rather than by what its stores can afford.
+
+An inventory stack also carries one quality for the whole stack, which is why
+making and wearing had to become a single act: a better second coat merged
+into the first and was recorded as no better than it.
+
+### 5. Fear is a hunger signal, not a danger signal
 
 `calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
 rest. Since hunger saturates between meals, fear sits at around 0.8 much of
@@ -67,7 +85,7 @@ Survival actions now outrank fleeing, so this no longer strands agents, but
 the emotional model is still reporting something misleading, and anything
 built on `should_flee` inherits that.
 
-### 5. Agents still cannot see each other, or hear anything
+### 6. Agents still cannot see each other, or hear anything
 
 Sight now discovers terrain, resources and buildings, but only through the
 exploration path. The percept pipeline's own vision channel reads
@@ -77,7 +95,7 @@ behaviour works because `Population` computes proximity directly. Hearing is
 unfed entirely, so every sound-derived percept is a dead path. See
 SIMULATION_AUDIT.md.
 
-### 6. Zoning and territory are never established
+### 7. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -85,7 +103,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 7. Agents carry food they will never eat
+### 8. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it. The same is true of food
@@ -98,16 +116,16 @@ carried weight still includes rot and cinders.
 
 ## Housekeeping
 
-### 8. Committed backup file
+### 9. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 9. Build warnings
+### 10. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 10. Placeholder package metadata
+### 11. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
@@ -155,6 +173,15 @@ Listed so nobody re-investigates them. Each has regression tests in
 - **Sensory traits never reached the senses.**
   `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
   perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Insulation was always zero.** Clothing recipes, equipment slots and cold
+  insulation all existed and worked when a garment was put on an agent by
+  hand; nothing drove an agent to make or wear anything, so cold was endured
+  rather than solved. Agents now gather flax, cotton and bark, make garments
+  and wear them, and just over half the population ends a run dressed. Four
+  things had to be fixed before it worked at all: wood being burned on boots
+  instead of fires, garments piling up unworn because a stack carries one
+  quality, coats being replaced for ordinary wear, and cast-offs being carried
+  around at two kilos each.
 - **Nothing ever cooked.** Heat sources, fuel, lighting and the whole
   preparation model existed, and nothing in a run had ever lit a fire, so every
   meal was eaten raw at about a third of its value and the strongest smell in
