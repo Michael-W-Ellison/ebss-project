@@ -78,7 +78,10 @@ TEST STATUS
 
   One test is marked ignored and left out of the count above:
   analytics::tests::longevity_tests::a_settlement_lasts_thirty_thousand_ticks
-  runs thirty thousand ticks and a quarter of worlds die of their own accord.
+  runs thirty thousand ticks - twenty-six years now that the calendar turns -
+  and eleven of twelve worlds are still inhabited at the end, holding 77.7
+  people on average. The rest die of their own accord, having first grown past
+  what the land will carry.
   Run it by hand: cargo test --release -- --ignored a_settlement_lasts
 
 

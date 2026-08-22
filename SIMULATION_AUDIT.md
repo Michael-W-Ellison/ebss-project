@@ -386,6 +386,23 @@ move. What changed is the shape of the year rather than the total: a summer
 hedgerow now outgrows a winter one, and a settlement has to get from one to
 the next.
 
+Over a long run, twelve worlds of twelve taken to thirty thousand ticks -
+twenty-six years, a hundred and four seasons, three generations:
+
+| Measure | Result |
+| --- | --- |
+| Settlements still inhabited | 11 of 12 (was 9 of 12) |
+| People at the end | 77.7 on average, 0 to 120 |
+| Highest the population got | 141.3 on average, 33 to 225 |
+| Oldest person alive at the end | 8,049 to 10,827 ticks (7.0 to 9.4 years) |
+
+The shape is the same one farming produced: a settlement that booms past a
+hundred and fifty works the standing crop down to almost nothing - four
+worlds ended under 130 units of it - and falls back. The ones that never
+overshoot sit small and comfortable, 15 or 50 people against 5,000 units of
+crop still standing. Nobody starves in a straight line; they starve after
+having been too many.
+
 ## Test coverage
 
 1,137 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus

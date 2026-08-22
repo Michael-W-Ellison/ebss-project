@@ -132,9 +132,11 @@ fn the_young_are_kept_warm_by_the_adults_around_them() {
 /// Measured over twelve independent worlds on the commit that added this,
 /// nine were still inhabited at thirty thousand ticks and thirteen of sixteen
 /// at twenty thousand. Before the two fixes above, three of three were empty -
-/// at 15,994, 18,253 and 26,907 ticks. A single world is therefore worth
-/// running by hand and not asserting on: a quarter of them die of their own
-/// accord, on a fifty-by-fifty map that carries perhaps forty people.
+/// at 15,994, 18,253 and 26,907 ticks. Once the calendar turned, eleven of
+/// twelve were still inhabited at thirty thousand, with 77.7 people on average
+/// and a high-water mark of 141. A single world is therefore still worth
+/// running by hand and not asserting on: some of them die of their own accord,
+/// having first grown past what the land will carry.
 #[test]
 #[ignore]
 fn a_settlement_lasts_thirty_thousand_ticks() {
