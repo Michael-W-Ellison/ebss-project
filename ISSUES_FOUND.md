@@ -150,18 +150,20 @@ from a test. So `get_temperature` — the temperature agents actually feel, via
 exposure and body temperature — is that first-touch value plus whatever the
 weather is doing now, and the season never reaches it again.
 
-Measured over 15,600 ticks spanning every season, for a plains tile:
+Measured over 160,000 ticks, holding the weather constant so that only the
+season varies — the temperature `get_temperature` reports for a plains tile
+under a clear sky:
 
-| Season | Mean | Lowest | Highest |
-| --- | --- | --- | --- |
-| Spring | 20.75 °C | 19.3 | 21.3 |
-| Summer | 20.68 °C | 19.3 | 21.3 |
-| Fall | 20.75 °C | 19.3 | 21.3 |
-| Winter | 20.79 °C | 19.3 | 21.3 |
+| Season | Clear-sky temperature |
+| --- | --- |
+| Spring | 18.667 °C |
+| Summer | 18.667 °C |
+| Fall | 18.667 °C |
+| Winter | 18.667 °C |
 
-Winter is the warmest season by four hundredths of a degree. Mortality agrees:
-deaths per ten thousand agent-ticks over six worlds to twenty-four thousand
-come out at 1.62, 1.58, 1.47 and 1.71 for spring, summer, autumn and winter.
+Identical to three decimal places, on about fourteen thousand samples each. The
+season contributes nothing at all; every degree of variation in the number an
+agent feels comes from the weather type sitting over it.
 
 Two correct seasonal-temperature paths are computed and thrown away.
 `ClimateManager::tick` sets `base_climate.temperature = base_temp * season_mod
@@ -169,11 +171,14 @@ Two correct seasonal-temperature paths are computed and thrown away.
 does the same job and has no caller outside its own test. The live path is the
 frozen one.
 
-The seasons do reach the world by two other routes, both working: the growth
-modifier on regrowth, and the `WeatherGenerator`, which turns winter into snow,
-sleet and blizzards. What does not reach it is the baseline swing — and with it
-the reason a settlement would need to store food, put on a coat or get indoors
-at one time of year rather than another.
+The seasons do reach the world by three other routes, all working: the growth
+modifier on regrowth, the length of the day that plants feel, and the
+`WeatherGenerator`, which turns winter into snow, sleet and blizzards. That
+last one carries the only cold there is — a winter runs about half a degree
+below the other seasons because it snows, not because winter is cold. What
+never arrives is the baseline swing, and with it most of the reason a
+settlement would store food, put on a coat or get indoors at one time of year
+rather than another.
 
 Fixing it is not just a cache invalidation: making winter genuinely cold is a
 real change to the balance and would need measuring before and after.

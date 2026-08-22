@@ -4,7 +4,27 @@
 use serde::{Deserialize, Serialize};
 use crate::agents::temperature::Temperature;
 use crate::environment::BiomeType;
-use super::seasons::Season;
+use super::seasons::{Season, TICKS_PER_DAY};
+
+/// How long a stretch of weather lasts, given in hours and answered in ticks.
+///
+/// Durations used to be written straight in ticks, back when a tick was
+/// thirty-six seconds and five hundred to two thousand of them was five to
+/// twenty hours - about how long a front sits over one place. A tick is two
+/// hours now, so those same numbers had become forty to a hundred and sixty
+/// days: a single blizzard outlasting the winter that started it and still
+/// blowing the following summer, which is what the runs showed. Snow turned up
+/// in all four seasons in equal measure.
+fn hours_in_ticks(hours: u32) -> u32 {
+    (hours * TICKS_PER_DAY / 24).max(1)
+}
+
+/// A spell of weather somewhere between the two lengths, in hours.
+fn spell_of_weather(rng: &mut impl rand::Rng, from_hours: u32, to_hours: u32) -> u32 {
+    let from = hours_in_ticks(from_hours);
+    let to = hours_in_ticks(to_hours).max(from + 1);
+    rng.gen_range(from..to)
+}
 
 /// Types of precipitation
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,7 +185,7 @@ impl Weather {
     pub fn new(weather_type: WeatherType) -> Self {
         Self {
             weather_type,
-            duration_remaining: 1000, // Default: weather lasts 1000 ticks
+            duration_remaining: hours_in_ticks(10),
             base_temperature: 20.0,
             base_wind_speed: 2.0,
         }
@@ -278,7 +298,7 @@ impl WeatherGenerator {
 
         // Check for biome-specific weather first
         if let Some(biome_weather) = self.generate_biome_specific_weather(&mut rng) {
-            let duration = rng.gen_range(300..1500);
+            let duration = spell_of_weather(&mut rng, 3, 15);
             let mut weather = Weather::new(biome_weather);
             weather.duration_remaining = duration;
             self.previous_weather = Some(biome_weather);
@@ -287,7 +307,7 @@ impl WeatherGenerator {
 
         // Check for fog conditions (high humidity, calm weather)
         if self.humidity > 0.7 && rng.gen::<f32>() < 0.15 {
-            let duration = rng.gen_range(200..800);
+            let duration = spell_of_weather(&mut rng, 2, 8);
             let mut weather = Weather::new(WeatherType::Fog);
             weather.duration_remaining = duration;
             self.previous_weather = Some(WeatherType::Fog);
@@ -316,8 +336,8 @@ impl WeatherGenerator {
             self.generate_precipitation_weather(&mut rng)
         };
 
-        // Determine duration (500-2000 ticks)
-        let duration = rng.gen_range(500..2000);
+        // Five to twenty hours: about as long as a front sits over one place
+        let duration = spell_of_weather(&mut rng, 5, 20);
 
         let mut weather = Weather::new(weather_type);
         weather.duration_remaining = duration;

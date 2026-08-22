@@ -17,7 +17,9 @@
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
 use crate::environment::flora::GrowingConditions;
-use crate::environment::{Season, SeasonalCalendar, DAYS_PER_YEAR, TICKS_PER_DAY, TICKS_PER_YEAR};
+use crate::environment::{
+    Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, TICKS_PER_DAY, TICKS_PER_YEAR,
+};
 use crate::world::soil::Soil;
 use crate::world::{ClimateManager, Position, ResourceNode, ResourceType, TerrainType, World, WorldConfig};
 use std::collections::HashSet;
@@ -210,6 +212,82 @@ fn short_days_slow_a_plant_down() {
         "fifteen hours of sun should beat nine: {:.2} against {:.2}",
         in_summer.growth_share(),
         in_winter.growth_share()
+    );
+}
+
+/// A spell of weather is shorter than the season it falls in.
+///
+/// Durations were written in ticks when a tick was thirty-six seconds, so
+/// 500-2,000 of them meant five to twenty hours. Once a tick was two hours the
+/// same numbers meant forty to a hundred and sixty days, and a single blizzard
+/// outlasted the winter that started it: snow was turning up in all four
+/// seasons in equal measure.
+#[test]
+fn weather_does_not_outlast_the_season_it_starts_in() {
+    let mut climate = ClimateManager::new(false, false);
+    let season_length = TICKS_PER_DAY * DAYS_PER_SEASON;
+
+    let mut longest = 0;
+    let mut spells = 0;
+    let mut last = climate.weather.weather_type;
+
+    for _ in 0..TICKS_PER_YEAR * 4 {
+        climate.tick();
+        if climate.weather.weather_type != last {
+            spells += 1;
+            last = climate.weather.weather_type;
+        }
+        longest = longest.max(climate.weather.duration_remaining);
+    }
+
+    assert!(
+        longest < season_length,
+        "a spell of weather ran {longest} ticks against a season of {season_length}"
+    );
+    assert!(
+        spells > 40,
+        "four years should hold more than a handful of changes of weather, not {spells}"
+    );
+}
+
+/// Snow is a winter thing.
+#[test]
+fn it_snows_in_winter_and_not_in_summer() {
+    use crate::environment::WeatherType;
+
+    let mut climate = ClimateManager::new(false, false);
+    let mut wintry = [0u32; 4];
+    let mut ticks = [0u32; 4];
+
+    for _ in 0..TICKS_PER_YEAR * 8 {
+        climate.tick();
+        let season = match climate.current_season() {
+            Season::Spring => 0,
+            Season::Summer => 1,
+            Season::Fall => 2,
+            Season::Winter => 3,
+        };
+        ticks[season] += 1;
+        if matches!(
+            climate.weather.weather_type,
+            WeatherType::LightSnow | WeatherType::Snow | WeatherType::Blizzard
+        ) {
+            wintry[season] += 1;
+        }
+    }
+
+    let share = |i: usize| wintry[i] as f32 / ticks[i].max(1) as f32;
+
+    assert!(
+        share(3) > share(1),
+        "winter should be snowier than summer: {:.3} against {:.3}",
+        share(3),
+        share(1)
+    );
+    assert_eq!(
+        wintry[1], 0,
+        "it should never snow in summer, and it did for {} ticks",
+        wintry[1]
     );
 }
 

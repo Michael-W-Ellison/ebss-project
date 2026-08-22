@@ -97,9 +97,11 @@ Verified as reached by Simulation::tick():
                   spring; eight thousand ticks cover seven years and all four
                   seasons, where every run before this one ended on Year 0,
                   Day 4, having never left winter. The season decides regrowth,
-                  daylight and the weather. It does NOT decide the temperature
-                  a tile reports - that is frozen at first touch, so winter is
-                  no colder than summer. See ISSUES_FOUND.md #4
+                  daylight and the weather - winter snows a tenth of the time
+                  and no other season snows at all. It does NOT decide the
+                  temperature a tile reports: that is frozen at first touch, so
+                  a clear day reads 18.667 C in every season alike. See
+                  ISSUES_FOUND.md #4
   Lifecycle       aging, life stages, reproduction, pregnancy, birth,
                   nursing, inheritance of traits and behaviour, over a life of
                   eight or nine calendar years and thirty-odd seasons

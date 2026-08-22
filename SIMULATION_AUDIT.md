@@ -74,9 +74,17 @@ Verified reachable from `Simulation::tick()`.
   the day, which plants feel directly - nine hours of winter sun against
   summer's fifteen. A winter is a winter for a plant whatever the weather is
   doing that hour
-- The season also picks the weather (`WeatherGenerator` turns winter into snow,
-  sleet and blizzards), but see **Built but not connected** for the temperature
-  a tile actually reports: the season reaches it once and then sticks
+- The season also picks the weather. `WeatherGenerator` turns winter into snow,
+  sleet and blizzards: measured over four years, winter is wintry a tenth of
+  the time and no other season snows at all. That took a fix — weather
+  durations were written in ticks back when a tick was thirty-six seconds, so
+  500-2,000 of them meant five to twenty hours and now meant forty to a hundred
+  and sixty days. A single blizzard outlasted the winter that started it and
+  blew through the following summer, and snow fell in all four seasons in equal
+  measure. Durations are given in hours now and converted through
+  `TICKS_PER_DAY`
+- What the season still does **not** reach is the temperature a tile reports —
+  see **Built but not connected**
 
 ### Lifecycle
 - Aging through infant, child, adolescent, adult and elderly stages, over eight
@@ -407,21 +415,22 @@ overshoot sit small and comfortable, 15 or 50 people against 5,000 units of
 crop still standing. Nobody starves in a straight line; they starve after
 having been too many.
 
-**Winter is not a stressor, because the temperature a tile reports never
-changes.** Measured over 15,600 ticks spanning every season, sampling the
-temperature `ClimateManager::get_temperature` returns for a plains tile:
+**The season never reaches the temperature a tile reports.** Measured over
+160,000 ticks, holding the weather constant so that only the season varies —
+what `ClimateManager::get_temperature` returns for a plains tile under a clear
+sky:
 
-| Season | Mean | Lowest | Highest |
-| --- | --- | --- | --- |
-| Spring | 20.75 °C | 19.3 | 21.3 |
-| Summer | 20.68 °C | 19.3 | 21.3 |
-| Fall | 20.75 °C | 19.3 | 21.3 |
-| Winter | 20.79 °C | 19.3 | 21.3 |
+| Season | Clear-sky temperature |
+| --- | --- |
+| Spring | 18.667 °C |
+| Summer | 18.667 °C |
+| Fall | 18.667 °C |
+| Winter | 18.667 °C |
 
-Winter is the warmest season by four hundredths of a degree, and the only thing
-moving the number at all is the weather type. Mortality is flat to match:
-deaths per ten thousand agent-ticks over six worlds run to twenty-four thousand
-come out at 1.62 in spring, 1.58 in summer, 1.47 in autumn and 1.71 in winter.
+Identical to three decimal places on about fourteen thousand samples each. All
+the cold there is comes through the weather instead: winter snows nearly a
+tenth of the time and no other season snows at all, which pulls a winter about
+half a degree below the rest. See **Built but not connected** for why.
 
 **Why a settlement that overshoots does not settle back.** Six worlds traced to
 thirty thousand ticks, sampling the ground the settlement actually farms rather
@@ -474,7 +483,7 @@ anybody.
 
 ## Test coverage
 
-1,137 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,139 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
 pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
