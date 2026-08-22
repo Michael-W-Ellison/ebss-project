@@ -439,6 +439,20 @@ mod tests {
     /// The personal reproduction modifier goes as high as 1.8 and the
     /// developmental one to 1.1, so an unclamped agent in its prime multiplied
     /// out to nearly 2.0.
+
+    /// Give an agent food in hand, which reproduction now requires: being
+    /// un-hungry for a moment says nothing about whether the next meal exists.
+    fn give_food(agent: &mut Agent, quantity: u32) {
+        use crate::agents::InventoryItem;
+        use crate::world::nutrition::FoodDatabase;
+        use crate::world::ItemType;
+
+        let database = FoodDatabase::new();
+        let mut item = InventoryItem::new_with_weight("food".to_string(), quantity, 0.1);
+        item.food_data = database.create_food_data(&ItemType::Food, 0);
+        agent.inventory.add_item(item);
+    }
+
     #[test]
     fn test_fertility_stays_within_probability_range() {
         let mut agent = Agent::new(AgentConfig::default());
@@ -499,10 +513,25 @@ mod tests {
 
     #[test]
     fn test_can_mate_basic() {
-        let (male, female) = create_mating_pair();
+        let (mut male, mut female) = create_mating_pair();
+        give_food(&mut male, 12);
+        give_food(&mut female, 12);
 
         let criteria = MateSelectionCriteria::default();
         assert!(can_mate(&male, &female, &criteria));
+    }
+
+    /// A pair with nothing put by will not have a child, however full they are
+    /// at this moment.
+    #[test]
+    fn a_pair_with_nothing_put_by_do_not_have_a_child() {
+        let (male, female) = create_mating_pair();
+
+        let criteria = MateSelectionCriteria::default();
+        assert!(
+            !can_mate(&male, &female, &criteria),
+            "an empty pack is not a plan for feeding a child"
+        );
     }
 
     #[test]
@@ -645,8 +674,11 @@ mod tests {
             thirst.value = 0.2;
         }
 
+        give_food(&mut male, 12);
+        give_food(&mut female, 12);
+
         let criteria = MateSelectionCriteria::default();
-        // Should be able to mate - both are well-fed
+        // Should be able to mate - both are well-fed and have food in hand
         assert!(can_mate(&male, &female, &criteria));
     }
 
@@ -674,8 +706,9 @@ mod tests {
         let mut agent = Agent::new(AgentConfig::default());
         agent.state.age = 3000;
         agent.state.life_stage = crate::agents::LifeStage::Adult;
+        give_food(&mut agent, 12);
 
-        // Well-fed agent should attempt reproduction
+        // Fed, watered, and carrying enough for two: should attempt reproduction
         assert!(agent.should_attempt_reproduction());
 
         // Hungry agent should NOT attempt reproduction

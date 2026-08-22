@@ -2,3 +2,4 @@
 //! Test modules for core AI systems
 
 mod drive_satisfaction_tests;
+mod drive_pressure_tests;

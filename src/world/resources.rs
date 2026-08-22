@@ -445,10 +445,22 @@ impl ResourceNode {
     /// The other half of what a field buys: yield. Rich ground carries a
     /// heavier crop, thin ground a lighter one, and a field that has had muck
     /// spread on it carries more than one that has not.
+    ///
+    /// The floor used to be four tenths of the full crop, which meant ground
+    /// worked down to nothing still nominally carried nearly half of what it
+    /// had when it was rich. Over a long run that hid the cost of farming: a
+    /// settlement's fields fell to a twentieth of their fertility while their
+    /// stated yield fell by four per cent. A worked-out field now carries
+    /// almost nothing, which is what a worked-out field does.
     pub fn standing_capacity(&self, fertility: f32) -> u32 {
-        let share = 0.4 + 0.6 * fertility.clamp(0.0, 1.0);
+        let share = Self::MIN_YIELD_SHARE
+            + (1.0 - Self::MIN_YIELD_SHARE) * fertility.clamp(0.0, 1.0);
         ((self.max_amount as f32) * share).round() as u32
     }
+
+    /// What ground with nothing left in it still carries: the odd volunteer
+    /// plant living off what blows in, and not a crop.
+    const MIN_YIELD_SHARE: f32 = 0.05;
 
     /// How fast this water refills, given the ground it sits on and the
     /// weather over it.

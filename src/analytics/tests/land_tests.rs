@@ -191,6 +191,43 @@ fn a_field_helps_a_plant_feed_itself_but_cannot_hurry_it() {
     );
 }
 
+/// Ground that has been worked out carries almost nothing.
+///
+/// The yield floor used to be four tenths of the full crop whatever the ground
+/// was like, so a field mined down to a twentieth of its fertility still
+/// nominally carried nearly half a crop. Traced over thirty thousand ticks
+/// that hid the whole cost of farming: fertility fell by ninety-five per cent
+/// and stated yield by four.
+#[test]
+fn a_worked_out_field_carries_almost_nothing() {
+    let field = ResourceNode::new(ResourceType::Grain, Position::new(5, 5), 100);
+
+    let rich = field.standing_capacity(1.0);
+    let fair = field.standing_capacity(0.5);
+    let spent = field.standing_capacity(0.025);
+
+    assert_eq!(rich, 100, "ground with everything in it carries a full crop");
+    assert!(
+        fair > 45 && fair < 60,
+        "half-fed ground should carry about half a crop, not {fair}"
+    );
+    assert!(
+        spent < 10,
+        "ground worked down to a fortieth should carry next to nothing, not {spent}"
+    );
+
+    // And the fall in yield should track the fall in the ground rather than
+    // flattening out well above it
+    let lost_fertility = 1.0 - 0.025;
+    let lost_yield = 1.0 - spent as f32 / rich as f32;
+    assert!(
+        lost_yield > lost_fertility * 0.9,
+        "yield fell {:.0}% while the ground fell {:.0}%",
+        lost_yield * 100.0,
+        lost_fertility * 100.0
+    );
+}
+
 /// Growth comes out of the ground, and thin ground gives less.
 #[test]
 fn a_patch_grows_as_well_as_the_ground_it_stands_in() {
@@ -198,7 +235,10 @@ fn a_patch_grows_as_well_as_the_ground_it_stands_in() {
         let mut soil = Soil::for_terrain(TerrainType::Plains);
         soil.nutrients = fertility;
 
-        let mut patch = ResourceNode::new(ResourceType::Grain, Position::new(5, 5), 500);
+        // Room enough that nothing here runs into the ceiling: what the
+        // ground can carry is a separate question from how fast it fills, and
+        // this test is about the second one
+        let mut patch = ResourceNode::new(ResourceType::Grain, Position::new(5, 5), 20_000);
         patch.amount = 0;
 
         for _ in 0..200 {

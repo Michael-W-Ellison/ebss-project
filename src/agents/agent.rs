@@ -515,6 +515,25 @@ impl LifeStage {
             LifeStage::Elderly => 0.3,
         }
     }
+
+    /// How long this body can go on what it has stored, as a share of what a
+    /// grown adult can manage.
+    ///
+    /// A famine does not take a settlement evenly. A grown adult carries fat
+    /// and muscle worth weeks; a small child carries days of it, and burns
+    /// through what there is faster for its size. The old and the very young
+    /// go first, and they go long before anybody in their prime, which is why
+    /// a hungry year shows up as a missing generation rather than as a smaller
+    /// one.
+    pub fn hunger_reserve(&self) -> f32 {
+        match self {
+            LifeStage::Infant => 0.25,
+            LifeStage::Child => 0.45,
+            LifeStage::Adolescent => 0.75,
+            LifeStage::Adult => 1.0,
+            LifeStage::Elderly => 0.6,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -575,24 +594,31 @@ impl AgentState {
         // Track dehydration (faster than starvation - 3 days vs 7 days)
         self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
+        // What this body has stored to go on. A grown adult carries fat and
+        // muscle worth weeks of it; a small child carries days. Every
+        // threshold below is measured against that, so a famine takes the
+        // young and the old first and the people in their prime last.
+        let reserve = self.life_stage.hunger_reserve().max(0.05);
+
         // Energy depletion (normal metabolism)
         let base_energy_loss = 0.05 * energy_multiplier; // Apply pregnancy/other multiplier
         let mut energy_loss = base_energy_loss;
 
-        // After 24 hours (1440 ticks) without food: energy depletes faster
-        if self.ticks_without_food > 1440 {
-            energy_loss *= 2.0; // 2x faster energy depletion
+        // After a day without food: energy depletes faster, and a small body
+        // with little put by depletes faster still
+        if self.ticks_without_food as f32 > 1440.0 * reserve {
+            energy_loss *= 1.0 + 1.0 / reserve;
         }
 
-        // After 3 days (4320 ticks) without food: health starts decreasing
-        if self.ticks_without_food > 4320 {
-            let health_loss = 0.1; // Slow health degradation
+        // Three days on an adult's reserves; sooner on a child's
+        if self.ticks_without_food as f32 > 4320.0 * reserve {
+            let health_loss = 0.1 / reserve;
             self.health = (self.health - health_loss).max(0.0);
         }
 
-        // After 7 days (10080 ticks) without food: rapid health loss (death imminent)
-        if self.ticks_without_food > 10080 {
-            let severe_health_loss = 1.0; // Rapid health loss
+        // A week on an adult's reserves, and death is close
+        if self.ticks_without_food as f32 > 10080.0 * reserve {
+            let severe_health_loss = 1.0 / reserve;
             self.health = (self.health - severe_health_loss).max(0.0);
         }
 
@@ -707,6 +733,12 @@ pub struct Agent {
     /// happens, and watches its neighbours.
     #[serde(default)]
     pub practices: super::practices::Practices,
+    /// What the agent has found out about the kinds of thing it does. Every
+    /// attempt is counted and what came of it shifts what the agent will try
+    /// next, which is what makes a hunter who never catches anything stop
+    /// hunting.
+    #[serde(default)]
+    pub lessons: super::practices::Lessons,
     pub goals: GoalManager,
     pub preferences: Preferences,
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
@@ -769,6 +801,7 @@ impl Agent {
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
+            lessons: super::practices::Lessons::new(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
@@ -2151,29 +2184,107 @@ impl Agent {
         self.pregnancy.is_some()
     }
 
+    /// How much food an agent has to be carrying, over and above its own
+    /// needs, before it will consider a child.
+    ///
+    /// A few days' eating for two. Not a stockpile - just enough that the
+    /// answer to "could this child be fed next week" is something other than
+    /// "I had a meal this morning".
+    pub const FOOD_TO_RAISE_A_CHILD: u32 = 4;
+
+    /// How long hunger has to have been a non-issue before an agent treats
+    /// the future as settled.
+    ///
+    /// Twenty days of never once going short. Long enough that a good week
+    /// does not count, short enough that a settlement living well can grow.
+    pub const SETTLED_ENOUGH_TO_GROW: u32 = 240;
+
+    /// How much of a stretch of going short counts against it.
+    ///
+    /// Not zero: hunger crossing its threshold is the ordinary signal that
+    /// sends an agent to eat, so every well-fed agent trips it regularly. What
+    /// matters is whether the asking went unanswered for any length of time.
+    pub const GOING_SHORT: u32 = 12;
+
+    /// Whether this agent has been going hungry rather than merely getting
+    /// hungry.
+    pub fn has_not_been_going_short(&self) -> bool {
+        self.drives
+            .get(DriveType::Hunger)
+            .map(|drive| drive.denied_ticks() < Self::GOING_SHORT)
+            .unwrap_or(true)
+    }
+
+    /// How long hunger has not had to ask at all
+    pub fn how_long_food_has_been_easy(&self) -> u32 {
+        self.drives
+            .get(DriveType::Hunger)
+            .map(|drive| drive.answered_ticks())
+            .unwrap_or(0)
+    }
+
+    /// What the agent is carrying that it or a child could eat.
+    ///
+    /// Counts untracked stacks as well as ones with nutrition data on them:
+    /// most of what an agent picks up off the land arrives as a plain "food"
+    /// stack with no freshness attached, and a count that ignored those would
+    /// report an empty pack for an agent carrying a fortnight's eating.
+    pub fn food_put_by(&self) -> u32 {
+        self.inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0)
+            .filter(|item| match &item.food_data {
+                Some(food) => !food.is_spoiled() && !food.is_harmful(),
+                None => Self::LOOKS_EDIBLE
+                    .iter()
+                    .any(|edible| item.item_id.contains(edible)),
+            })
+            .map(|item| item.quantity)
+            .sum()
+    }
+
+    /// Item names that mean food when there is no nutrition data to go on
+    const LOOKS_EDIBLE: [&'static str; 6] = ["food", "grain", "meat", "fish", "berr", "bread"];
+
+    /// Whether this agent has any reason to think a child could be fed.
+    ///
+    /// Not "am I hungry this minute". That is answered by the last meal and
+    /// says nothing about the next one, and a model that asks only that
+    /// produces settlements which double in size while the crop halves - which
+    /// is what thirty thousand ticks of tracing showed. A person who ate today
+    /// but has nothing put by, on ground that has stopped giving, is in no
+    /// position to raise a child.
+    ///
+    /// So: fed, watered and warm right now, no stretch of going short behind
+    /// them, and food actually in hand for two.
+    pub fn expects_to_be_able_to_feed_a_child(&self) -> bool {
+        if !self.immediate_needs_met() || !self.has_not_been_going_short() {
+            return false;
+        }
+
+        // Either there is food in hand for two, or feeding themselves has
+        // simply not been a problem for a long stretch. The second matters as
+        // much as the first: an agent living beside a full field eats as it
+        // goes and carries nothing, and it is in a far better position to
+        // raise a child than one with a full pack on ground that has stopped
+        // giving.
+        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD
+            || self.how_long_food_has_been_easy() >= Self::SETTLED_ENOUGH_TO_GROW
+    }
+
     /// Check if agent should attempt reproduction given current survival state
     ///
-    /// Returns false if critical survival drives (hunger, thirst) are active,
-    /// as the agent should prioritize immediate survival over reproduction.
-    /// Agents will not reproduce when starving - they must be well-fed first.
+    /// Returns false unless the agent is fed, watered and warm now, has not
+    /// been going short, and is carrying enough food to feed a child as well
+    /// as itself. Being un-hungry for a moment is not enough: it says nothing
+    /// about whether the next meal exists.
     pub fn should_attempt_reproduction(&self) -> bool {
         if !self.can_reproduce() {
             return false;
         }
 
-        // Check if critical survival drives are threatening the agent
-        // If any of these are active (above threshold), reproduction is suppressed
-        let hunger_active = self.drives.get(DriveType::Hunger)
-            .map(|d| d.is_active())
-            .unwrap_or(false);
-
-        let thirst_active = self.drives.get(DriveType::Thirst)
-            .map(|d| d.is_active())
-            .unwrap_or(false);
-
-        // Agent must not be hungry or thirsty to reproduce
-        // This ensures offspring are only created when resources are sufficient
-        !hunger_active && !thirst_active
+        self.expects_to_be_able_to_feed_a_child()
     }
 
     /// Get fertility level (0.0 to 1.0)
@@ -2359,6 +2470,43 @@ impl Agent {
             "reproduce" => Action::Wait, // Special handling needed
             "seek_luxury" | "decorate" => Action::Gather { resource_type: "luxury".to_string() },
             _ => Action::Wait,
+        }
+    }
+
+    /// Note how an attempt turned out, so the agent can stop doing what does
+    /// not work and do more of what does.
+    ///
+    /// Called for every action an agent takes. Most actions teach it nothing
+    /// worth remembering - walking somewhere either works or the ground was in
+    /// the way - so only the undertakings an agent could sensibly form an
+    /// opinion about are recorded.
+    pub fn learn_from(&mut self, action: &Action, worked: bool) {
+        use super::practices::Undertaking;
+
+        let undertaking = match action {
+            Action::Hunt { .. } => Undertaking::Hunting,
+            Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
+            Action::TillSoil | Action::SpreadMuck => Undertaking::Farming,
+            Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
+            Action::Gather { .. } => Undertaking::Foraging,
+            Action::Build { .. } => Undertaking::Building,
+            Action::Craft { .. } => Undertaking::Crafting,
+            Action::Socialize { .. } | Action::ShareInformation { .. } => Undertaking::Dealing,
+            _ => return,
+        };
+
+        self.lessons.record(undertaking, worked);
+
+        // And drive the behaviour-tree weights from the same outcome. Those
+        // weights were built to be the record of what works and never had a
+        // caller, so nothing an agent did had ever changed what it did next.
+        let action_name = format!("{:?}", undertaking).to_lowercase();
+        for tree in &mut self.behavior_trees {
+            if worked {
+                tree.reinforce_action(&action_name, 0.05);
+            } else {
+                tree.penalize_action(&action_name, 0.05);
+            }
         }
     }
 

@@ -159,7 +159,9 @@ fn an_agent_ages_by_the_calendar() {
 fn the_ground_gives_more_in_summer() {
     fn grown_over(season: Season) -> u32 {
         let mut soil = Soil::for_terrain(TerrainType::Plains);
-        let mut patch = ResourceNode::new(ResourceType::Food, Position::new(5, 5), 500);
+        // Room enough that neither season runs into the ceiling: this is
+        // about how fast the ground gives, not how much it will hold
+        let mut patch = ResourceNode::new(ResourceType::Food, Position::new(5, 5), 20_000);
         patch.amount = 0;
         let mut grown = 0;
 

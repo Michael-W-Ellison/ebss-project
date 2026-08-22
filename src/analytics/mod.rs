@@ -611,6 +611,10 @@ impl Simulation {
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
 
+                // And note how it went, so the agent does more of what pays
+                // and less of what does not
+                agent.learn_from(&action, action_result.success);
+
                 // Apply trait-based happiness rewards for successful actions
                 if action_result.success {
                     agent.apply_trait_action_rewards(&action);
@@ -1315,6 +1319,14 @@ impl Simulation {
             return Some(Action::Gather { resource_type: "food".to_string() });
         }
 
+        // Hungry for long enough, with the country round about picked bare:
+        // go somewhere else. This is above the local search below because
+        // walking twelve tiles and back is what an agent does when it has
+        // mislaid its dinner, not when the ground has stopped producing one.
+        if let Some(action) = self.migration_action(agent, agent_position) {
+            return Some(action);
+        }
+
         // Starving with nowhere known to go: search rather than stand still
         // and wait to die. Agents that are merely hungry let the tick go to
         // whatever comes next - sheltering from the cold, a plan, a goal -
@@ -1396,6 +1408,99 @@ impl Simulation {
     /// an agent would jitter in place while what it needed sat just outside
     /// its range. It varies per agent and per leg, so agents setting out from
     /// the same place fan out instead of marching together.
+    /// How long hunger has to go unanswered before an agent gives up on the
+    /// country it is standing in.
+    ///
+    /// Ten days of the world's calendar of being hungry and not being fed.
+    /// Short enough that a settlement whose ground has stopped producing does
+    /// something about it; long enough that a bad afternoon, a hard winter or
+    /// one picked-over hedgerow does not empty a village.
+    const HUNGRY_ENOUGH_TO_LEAVE: u32 = 120;
+
+    /// How far off counts as somewhere else rather than the next field over.
+    const FAR_ENOUGH_TO_BE_WORTH_THE_WALK: i32 = 20;
+
+    /// Leaving: what an agent does when the ground where it lives has stopped
+    /// feeding it.
+    ///
+    /// Nobody decides this on the settlement's behalf. It falls out of the
+    /// drive: hunger that keeps being denied presses harder every tick it
+    /// waits, and past a certain point the agent stops working the fields it
+    /// has and walks. Where it walks to is the best thing it can remember
+    /// that is far enough away to be different country; failing any memory,
+    /// it strikes out on a bearing of its own and keeps going, which is what
+    /// turns a starving settlement into a scattering one.
+    fn migration_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::core::memory::SpatialMemoryType;
+
+        let starved_for = agent
+            .drives
+            .get(DriveType::Hunger)
+            .map(|hunger| hunger.denied_ticks())
+            .unwrap_or(0);
+
+        if starved_for < Self::HUNGRY_ENOUGH_TO_LEAVE {
+            return None;
+        }
+
+        let far_off = |candidate: &(i32, i32, i32)| {
+            (candidate.0 - agent_position.0)
+                .abs()
+                .max((candidate.1 - agent_position.1).abs())
+        };
+
+        // Somewhere it remembers food that is not on this doorstep. Anything
+        // near enough to walk to in the ordinary way has already been tried by
+        // the code above, and found wanting.
+        let remembered = agent
+            .memory
+            .spatial_memories
+            .iter()
+            .filter(|memory| matches!(memory.memory_type, SpatialMemoryType::Food))
+            .map(|memory| (memory.position.0, memory.position.1, agent_position.2))
+            .filter(|candidate| far_off(candidate) >= Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK)
+            .max_by_key(far_off);
+
+        if let Some(target) = remembered {
+            return Some(Action::Move { target });
+        }
+
+        // Nothing remembered worth the walk: pick a bearing and hold it. The
+        // bearing comes from the agent rather than the tick, so somebody who
+        // sets out keeps going the same way instead of milling about, and two
+        // people leaving the same place do not necessarily leave together.
+        let bearings = [
+            (1, 0),
+            (0, 1),
+            (-1, 0),
+            (0, -1),
+            (1, 1),
+            (-1, 1),
+            (1, -1),
+            (-1, -1),
+        ];
+        let (dx, dy) = bearings[(agent.id.as_u128() % bearings.len() as u128) as usize];
+
+        let target = (
+            (agent_position.0 + dx * Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK)
+                .clamp(0, self.world.grid.width as i32 - 1),
+            (agent_position.1 + dy * Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK)
+                .clamp(0, self.world.grid.height as i32 - 1),
+            agent_position.2,
+        );
+
+        // Already hard against that edge: there is nowhere further this way
+        if target.0 == agent_position.0 && target.1 == agent_position.1 {
+            return None;
+        }
+
+        Some(Action::Move { target })
+    }
+
     fn search_leg(
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
@@ -2048,7 +2153,17 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+
         if !Self::wants_to_hunt(agent) {
+            return None;
+        }
+
+        // Somebody who has gone after animals a dozen times and come back
+        // empty every time stops going after animals. Nothing tells them to:
+        // it is what their own record says, and a hunter with a good record
+        // keeps at it on the same evidence.
+        if !agent.lessons.worth_trying(Undertaking::Hunting) {
             return None;
         }
 

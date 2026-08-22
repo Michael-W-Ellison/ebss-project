@@ -15,3 +15,4 @@ pub mod longevity_tests;
 pub mod husbandry_tests;
 pub mod land_tests;
 pub mod calendar_tests;
+pub mod survival_pressure_tests;

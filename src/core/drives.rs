@@ -164,6 +164,12 @@ pub struct Drive {
     pub threshold: f32,
     /// Personal weight/importance for this agent
     pub weight: f32,
+    /// How long this drive has been asking without being answered
+    #[serde(default)]
+    pub denied_ticks: u32,
+    /// And how long it has gone without needing to ask at all
+    #[serde(default)]
+    pub answered_ticks: u32,
 }
 
 impl Drive {
@@ -174,6 +180,21 @@ impl Drive {
     /// And how much slower in one whose are not
     const PRESSED_LONG_TERM_RATE: f32 = 0.25;
 
+    /// How long a drive has to go unanswered to press twice as hard.
+    ///
+    /// A day and a half on the world's calendar. A person who missed a meal
+    /// this morning is a little distracted; one who has not eaten in three
+    /// days is not thinking about anything else, and that difference is what
+    /// makes a settlement abandon its fields rather than starve politely
+    /// beside them.
+    const PRESSURE_SPAN: f32 = 18.0;
+
+    /// The most a drive can be magnified by having been denied.
+    ///
+    /// Bounded, because an unbounded one would make a single old grievance
+    /// outrank an immediate threat for ever.
+    const MAX_PRESSURE: f32 = 4.0;
+
     /// Create a new drive with default values
     pub fn new(drive_type: DriveType) -> Self {
         Self {
@@ -181,6 +202,8 @@ impl Drive {
             value: 0.0,
             threshold: drive_type.default_threshold(),
             weight: 1.0,
+            denied_ticks: 0,
+            answered_ticks: 0,
         }
     }
 
@@ -191,7 +214,36 @@ impl Drive {
             value: 0.0,
             threshold: drive_type.default_threshold(),
             weight,
+            denied_ticks: 0,
+            answered_ticks: 0,
         }
+    }
+
+    /// How hard this drive is pressing, over and above how high it stands.
+    ///
+    /// One while the drive is being answered often enough, climbing towards
+    /// [`Self::MAX_PRESSURE`] the longer it is left asking. This multiplies
+    /// both how fast the drive builds and how loudly it argues for the agent's
+    /// attention, so a need that keeps being deferred does not sit politely at
+    /// its threshold - it takes the agent over.
+    pub fn pressure(&self) -> f32 {
+        1.0 + (self.denied_ticks as f32 / Self::PRESSURE_SPAN).min(Self::MAX_PRESSURE - 1.0)
+    }
+
+    /// How long this drive has gone unanswered while asking
+    pub fn denied_ticks(&self) -> u32 {
+        self.denied_ticks
+    }
+
+    /// How long this drive has gone without having to ask at all.
+    ///
+    /// The other side of the same coin, and the only forward-looking thing an
+    /// agent has: a need that has not been a problem for a long stretch is
+    /// evidence that it is not about to become one. This is what a settlement
+    /// uses to decide it can afford a child, in place of "I had a meal this
+    /// morning", which says nothing about next week.
+    pub fn answered_ticks(&self) -> u32 {
+        self.answered_ticks
     }
 
     /// Increase the drive value
@@ -199,9 +251,17 @@ impl Drive {
         self.value = (self.value + amount).min(1.0);
     }
 
-    /// Decrease the drive value
+    /// Decrease the drive value.
+    ///
+    /// Answering a drive enough to stop it asking also takes the weight of
+    /// having been ignored off it, though not all at once: an agent that has
+    /// been starving stays wary for a while after its first meal.
     pub fn decrease(&mut self, amount: f32) {
         self.value = (self.value - amount).max(0.0);
+
+        if !self.is_active() {
+            self.denied_ticks /= 2;
+        }
     }
 
     /// Check if the drive is above threshold
@@ -209,15 +269,21 @@ impl Drive {
         self.value >= self.threshold
     }
 
-    /// Get the effective urgency (value * weight)
+    /// Get the effective urgency (value * weight, magnified by how long the
+    /// drive has been denied)
     pub fn urgency(&self) -> f32 {
+        self.value * self.weight * self.pressure()
+    }
+
+    /// What this drive would argue for on its face, before the weight of
+    /// having been ignored is added
+    pub fn bare_urgency(&self) -> f32 {
         self.value * self.weight
     }
 
     /// Update the drive for one tick
     pub fn tick(&mut self) {
-        let rate = self.drive_type.base_accumulation_rate();
-        self.increase(rate);
+        self.tick_at(self.drive_type.base_accumulation_rate());
     }
 
     /// Tick, knowing whether the agent's immediate needs are answered.
@@ -237,12 +303,37 @@ impl Drive {
             rate
         };
 
-        self.increase(rate);
+        self.tick_at(rate);
+    }
+
+    /// One tick of a drive building at the given rate, keeping the tally of
+    /// how long it has been asking.
+    ///
+    /// A drive that is over its threshold and still not answered builds faster
+    /// every tick it waits. That is what makes hunger escalate from a reason
+    /// to go and pick berries into a reason to walk off the map.
+    fn tick_at(&mut self, rate: f32) {
+        if self.is_active() {
+            self.denied_ticks = self.denied_ticks.saturating_add(1);
+            self.answered_ticks = 0;
+        } else {
+            self.answered_ticks = self.answered_ticks.saturating_add(1);
+
+            if self.denied_ticks > 0 {
+                // Below the threshold the grievance fades, but not instantly:
+                // an agent that has been starving is wary for a while after
+                // its first meal.
+                self.denied_ticks -= 1;
+            }
+        }
+
+        self.increase(rate * self.pressure());
     }
 
     /// Fully satisfy this drive
     pub fn satisfy(&mut self) {
         self.value = 0.0;
+        self.denied_ticks = 0;
     }
 
     /// Partially satisfy this drive
