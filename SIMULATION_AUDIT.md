@@ -1,6 +1,6 @@
 # EBSS Simulation Feature Audit
 
-**Last verified:** August 2026, against commit `20c47fa`
+**Last verified:** August 2026, against commit `6ddd95a`
 **Method:** every claim below was checked by reading the call chain from
 `Simulation::tick()` outward, or by running the simulation and measuring the
 result. Claims that could not be verified either way are marked as such.
@@ -52,6 +52,11 @@ Verified reachable from `Simulation::tick()`.
   ruined, as is anything already cooked or preserved. Ruined food has nothing
   left in it, is unsafe to eat and smells of decay. How often a cook burns a
   batch falls from one in five to none with practice
+- Hunting: agents go after animals for the skins and eat what comes with them.
+  A hunter has to be within a spear's throw; an unarmed one leaves anything
+  that fights back alone, and dangerous prey that gets away leaves a mark. A
+  kill is butchered into meat, hides, leather and wool - the meat carrying
+  nutrition, so it can be cooked and eaten
 - Clothing: agents gather flax, cotton and bark, make garments and wear them,
   and insulation is no longer zero. A garment is worth what its material is
   worth (fur and wool best, plant fibre next, bark last) and what the hand
@@ -155,12 +160,6 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
 
 ## Absent
 
-- **Hunting.** `Action::Hunt` and the whole fauna model work, and nothing in
-  action selection ever produces the action — the one place it appears passes
-  a nil animal id. So no agent has ever hunted, and meat, hides and wool never
-  reach an inventory. This is what puts a ceiling on clothing: the fur and
-  wool garments are defined and correct, and unreachable in a default run.
-  It is the last gap of the shape cooking and clothing used to have.
 - **Trading warmth for food.** Clothing halves how often agents are cold and
   costs about three points of the fed population (see **Measured behaviour**).
   Nothing weighs the two against each other; the ordering in
@@ -169,6 +168,9 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
   can afford.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
   cannot be reproduced and two tests are intermittently flaky.
+- **A fauna model that settles.** Herbivore numbers either collapse to nothing
+  or run to hundreds within a few thousand ticks, with or without agents
+  hunting them. Hunting is the only brake, and it is not enough of one.
 - **Long-run characterisation.** Nobody has studied population dynamics,
   technology spread or settlement patterns past a few tens of thousands of
   ticks.
@@ -193,9 +195,9 @@ last three steps:
 Cooking is what moved feeding: raw food gives up about a third of what is in
 it and cooked food nearly all, so the same forage feeds far more agents.
 
-Clothing, measured the same way on the commit before it and the commit that
-added it (a different harness from the runs above, so read each column
-against its own pair rather than against the table before it):
+Clothing, measured on the commit before it and the commit that added it (a
+different harness from the runs above, so read each column against its own
+pair rather than against the table before it):
 
 | Measure | Before clothing | With clothing |
 | --- | --- | --- |
@@ -211,8 +213,25 @@ against its own pair rather than against the table before it):
 Clothing is not free, and in this climate it is close to an even trade: it
 halves how often an agent is cold and warms cores half a degree, and the time
 and material go somewhere — three points of the fed population and three
-percent of the population itself. It would pay better in a colder world, or
-once agents can hunt for fur.
+percent of the population itself. It would pay better in a colder world.
+
+Hunting, measured the same way, the two runs made back to back:
+
+| Measure | Without hunting | With hunting |
+| --- | --- | --- |
+| Populations dying out | 0 of 40 | 1 of 40 |
+| Population at the end | 941 from 480 | 862 from 480 |
+| Agents dressed in skins | 0 | 44 |
+| Average cold insulation | 0.12 | 0.14 |
+| Agents cold at the end | 15.0% | 13.7% |
+| Agents fed at the end | 98.8% | 96.8% |
+| Animals alive at the end | 11,386 | 2,878 |
+
+Two things there are worth reading twice. Hunting is what makes fur, hide and
+leather reachable at all, and 44 agents of 862 get there — most never find an
+animal, because a world starts with under a dozen. And hunters hold the
+herbivores down by about four times: the fauna population runs away without
+them, which it did long before agents could hunt and is nobody's design.
 
 Worth knowing before reading too much into a single run: the spread between
 worlds is wide. Twenty-world samples of the same build came out anywhere
@@ -233,7 +252,7 @@ Thermal model behaviour, by settled core temperature of an unclothed agent:
 
 ## Test coverage
 
-1,088 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
+1,095 library tests, 15 integration tests, 21 plugin tests, 1 doc test. All
 pass, except three known flaky tests (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
 `test_production_building_placed_near_resources`) that assert on properties a

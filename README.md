@@ -57,9 +57,10 @@ original specifications.
   them. A garment is worth what its material is worth and what the hand that
   made it could manage; wood goes into clothes only once a fire's worth is set
   aside
-- 📋 Hunting: `Action::Hunt` and the fauna model work, but nothing ever selects
-  the action, so meat, hides and wool never reach an agent — which is why the
-  warm half of the clothing table is out of reach
+- ✅ Hunting: agents go after animals for the skins and eat what comes with
+  them. A hunter has to be within a spear's throw, an unarmed one leaves the
+  dangerous animals alone, and a kill is butchered into meat, hides, leather
+  and wool
 
 Legend: ✅ Implemented and running | 🚧 Built but not fully connected | 📋 Not yet driven
 
@@ -177,8 +178,8 @@ the code actually does, verified by running it — not what was planned.
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
-- [ ] Give agents a reason to hunt, so fur and wool — and warm clothing —
-      become reachable
+- [ ] Make fauna numbers settle: herds either die out or run to hundreds, and
+      hunting is the only brake on the second
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts

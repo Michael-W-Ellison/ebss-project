@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `20c47fa`.
+**Last verified:** August 2026, against commit `6ddd95a`.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -44,23 +44,21 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. Agents never hunt, so they cannot dress warmly
+### 3. Fauna numbers never settle
 
-`Action::Hunt` and the whole fauna model work. Nothing in action selection
-ever produces the action — the one place it appears, a skill-practice goal,
-passes a nil animal id, which the executor cannot resolve. So no agent has
-ever hunted, and meat, hides and wool never reach an inventory.
+Herbivore populations either collapse to nothing or run away to hundreds
+within a few thousand ticks, and both happen with no agent touching them —
+measured on the commit before agents could hunt, three worlds in six went to
+zero animals and one reached 740. Hunting is now the only brake on the
+runaway case, holding herds to about a quarter of what they reach without it,
+and it does nothing for the collapses.
 
-That is what puts a ceiling on clothing. Fur and wool make the warm garments;
-flax, cotton and bark make the ones agents can actually reach, and they are
-worth roughly a third as much. Agents now dress themselves, but only in what
-grows on the ground.
+Nothing in the model carries a herd towards a stable size. Now that agents
+depend on animals for the warm half of their clothing, that instability
+reaches them: whether a settlement can dress itself in fur is decided by
+which way the local herd happened to go.
 
-This is the largest behavioural gap left, and the same shape as the ones
-cooking and clothing used to have: the machinery is built and nothing selects
-it.
-
-### 4. Clothing costs about what it returns
+### 4. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -73,6 +71,11 @@ warmth against distance rather than by what its stores can afford.
 An inventory stack also carries one quality for the whole stack, which is why
 making and wearing had to become a single act: a better second coat merged
 into the first and was recorded as no better than it.
+
+Hunting is the same shape. Over forty worlds it puts 44 agents of 862 into
+fur, hide or leather — which nothing else can — at two points of the fed
+population and about eight percent of the population itself. A world starts
+with under a dozen animals, so most agents never find one.
 
 ### 5. Fear is a hunger signal, not a danger signal
 
@@ -173,6 +176,14 @@ Listed so nobody re-investigates them. Each has regression tests in
 - **Sensory traits never reached the senses.**
   `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
   perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Nothing ever hunted.** `Action::Hunt` and the fauna model worked, and the
+  one place the action appeared passed a nil animal id the executor could not
+  resolve, so meat, hides and wool never reached an inventory. Three things
+  had to be fixed with it: kills dropped names nothing downstream knew
+  (mutton, deer_meat, thick_hide) and are butchered now; the odds read the
+  MeleeCombat skill with no floor, so an untrained agent's chance was exactly
+  zero and the first kill it made locked it out of hunting for life; and a
+  hunter could kill an animal on the far side of the map without moving.
 - **Insulation was always zero.** Clothing recipes, equipment slots and cold
   insulation all existed and worked when a garment was put on an agent by
   hand; nothing drove an agent to make or wear anything, so cold was endured
