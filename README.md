@@ -201,8 +201,10 @@ the code actually does, verified by running it — not what was planned.
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight
       now, but still cannot see each other or hear anything
-- [ ] Characterise a farming settlement past twenty thousand ticks — they reach
-      nearly two hundred people, work the soil down, and fall back
+- [ ] Give a settlement something to settle back to: an overshooting one slides
+      rather than correcting, because growing food permanently lowers the rate
+      at which more of it arrives and nothing brakes breeding until the crop is
+      gone
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts

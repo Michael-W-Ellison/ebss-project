@@ -53,18 +53,93 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. Nobody has looked at a farming settlement over a very long run
+### 3. A settlement that overshoots slides instead of settling back
 
-Fields changed the shape of this. A settlement that plants its food reaches
-between twenty and a hundred and fifty people where a foraging one capped
-around a dozen, and four of five were still there at twenty thousand ticks. The
-large ones overshoot and correct — one ran to 212 people and settled back to
-131 — rather than dying out.
+Traced over six worlds to thirty thousand ticks. A settlement grows, strips the
+ground it farms, and then slides — it does not find a smaller level and hold
+there. One world went 12 → 219 people and was down to 81 and still falling at
+thirty thousand ticks, on a standing crop of twenty-four units.
 
-What nobody has done is watch one past twenty thousand ticks. The runs that
-established the earlier collapse were foraging settlements; a farming one at a
-hundred and fifty people is a different animal, and slower to simulate, and
-uncharacterised.
+Three things make it a slide rather than a correction.
+
+**Growing food takes nutrient out of the tile, and regrowth is proportional to
+what is left.** `ResourceNode::regenerate_in_ground` draws `0.0015` nutrients
+per unit grown and scales the rate by `soil.fertility()`. Every unit eaten
+makes the next one slower to arrive, so production decays with cumulative
+harvest towards zero. The only equilibrium is the one where almost nobody
+lives there. Measured on the ground a settlement actually farms:
+
+| tick | people | standing crop | fertility of the farmed ground |
+| --- | --- | --- | --- |
+| 0 | 12 | 1,414 | 0.529 |
+| 10,000 | 50 | 6,138 | 0.509 |
+| 20,000 | 111 | 3,875 | 0.304 |
+| 24,500 | 219 | 1,367 | 0.106 |
+| 30,000 | 81 | 24 | 0.025 |
+
+**The ground does not come back on any timescale the simulation reaches.**
+Twenty-two thousand ticks of settlement took farmed ground from 0.528 to 0.362.
+Thirty thousand further ticks with every agent removed from the world returned
+0.017 of it — a tenth, over a span longer than the run that did the damage, and
+slowing as it went, because the litter that feeds the recovery is running out
+too. Depletion under a hundred people runs about sixty-five times faster than
+recovery under nobody.
+
+**Nothing brakes the population until the standing crop is gone.**
+`should_attempt_reproduction` suppresses breeding only while the Hunger or
+Thirst drive is above threshold. Hunger's threshold is 0.7 and the measured
+value sits at 0.5-0.6 for the whole run: a shrinking stock that still yields a
+meal today reads as "not hungry". The population went 111 → 219 while the crop
+fell from 3,875 to 1,367, and peaked about nine calendar years after the ground
+had already lost eighty per cent of its fertility.
+
+Two things make it worse.
+
+**A spent field still counts as a field.** `fields_within` counts cultivated
+tiles, not producing ones, and `farming_action` stops at `FIELDS_WANTED` within
+`FIELD_WALK_RADIUS`. A tile that already carries a resource node cannot be
+tilled again. So six exhausted fields inside twelve tiles stop a settlement
+breaking new ground for ever. The farmed tiles in the run above ended at 0.025
+fertility while the map around them averaged 0.358 — one fourteenth of the
+ground they were standing on. The world is not short of nutrient; the four per
+cent of it that anybody farms is.
+
+**Nutrient only ever leaves.** Food eaten is gone from the world. Food that
+spoils in a pack is deleted outright by `tick_food_spoilage` rather than
+falling to the ground as litter. The single return path is muck-spreading,
+which needs an agent to be carrying rotting food, standing on a field, and to
+have learned the practice.
+
+Worth knowing: **nobody has ever died of hunger.** `is_starving()` needs 1,440
+ticks without food, health loss 4,320 and death 10,080 — most of a lifetime.
+Attributing every death in four worlds over thirty thousand ticks by what was
+actually true of the agent the tick before it died:
+
+| Cause | Deaths |
+| --- | --- |
+| Old age | 407 |
+| Health gone, nothing else wrong | 374 |
+| Thirst (over 4,320 ticks without water) | 235 |
+| Cold (core under 33 °C) | 229 |
+| Energy exhaustion | 1 |
+| **Hunger (over 4,320 ticks without food)** | **0** |
+| Heat | 0 |
+
+In a simulation whose central drama is food, going without it has never killed
+anybody. What kills them in a collapse is old age, cold, accumulated damage
+that never heals off, and — once the near ground is bare and they range further
+to forage — thirst.
+
+A second thing this turned up, not yet chased down: mean health across a
+settled population sits at 65-70 and never recovers. Measured over a thousand
+ticks at a population of 25, agents lose about 430 health and heal back about
+200. Neither exposure (22 of it) nor attacks (none) accounts for the
+difference; the residue is many small repeated hits, most likely
+`process_environmental_hazards` putting cold, heat and fall injuries on body
+parts, infections on top of those, and `state.health` being clamped instantly
+to `body.overall_health()` but clawed back at 0.02 a tick. A population
+carrying a permanent thirty-point health deficit has no reserve for a bad
+winter, which is what a mass die-off looks like when it comes.
 
 ### 4. The ecology settles in most worlds, not all
 

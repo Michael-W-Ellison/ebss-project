@@ -403,6 +403,55 @@ overshoot sit small and comfortable, 15 or 50 people against 5,000 units of
 crop still standing. Nobody starves in a straight line; they starve after
 having been too many.
 
+**Why a settlement that overshoots does not settle back.** Six worlds traced to
+thirty thousand ticks, sampling the ground the settlement actually farms rather
+than the map as a whole.
+
+A settlement's food is not a stock it can over-draw and then let recover. It is
+a flow that its own harvesting permanently reduces: `regenerate_in_ground`
+takes 0.0015 nutrients out of a tile per unit grown and scales the rate by the
+fertility that remains, so every unit eaten makes the next one slower to
+arrive. Production decays with cumulative harvest towards zero, and the only
+equilibrium is the one where hardly anybody lives there.
+
+| tick | people | standing crop | fertility of the farmed ground |
+| --- | --- | --- | --- |
+| 0 | 12 | 1,414 | 0.529 |
+| 10,000 | 50 | 6,138 | 0.509 |
+| 20,000 | 111 | 3,875 | 0.304 |
+| 24,500 | 219 | 1,367 | 0.106 |
+| 30,000 | 81 | 24 | 0.025 |
+
+The ground does not come back. Taking every agent out of a world that had
+farmed for twenty-two thousand ticks and leaving it fallow for thirty thousand
+more — twenty-six calendar years with nobody in it — returned 0.017 fertility
+of the 0.166 that had been taken, a tenth, and slowing as it went. Depletion
+under a hundred people runs about sixty-five times faster than recovery under
+nobody.
+
+Nothing brakes the population until the standing crop is gone.
+`should_attempt_reproduction` looks only at whether the Hunger and Thirst
+drives are above threshold right now; Hunger's is 0.7 and the measured value
+sat at 0.5-0.6 throughout. The population doubled from 111 to 219 while the
+crop fell from 3,875 to 1,367, and peaked about nine calendar years after the
+ground had lost eighty per cent of its fertility.
+
+Two things sharpen it. A spent field still counts as a field — `fields_within`
+counts cultivated tiles rather than producing ones, and a tile carrying a
+resource node cannot be tilled again — so six exhausted fields stop a
+settlement breaking new ground for good, while the map around it averages 0.358
+fertility against the 0.025 it has left itself. And nutrient only ever leaves:
+food eaten is gone from the world, food that spoils in a pack is deleted rather
+than dropped, and the one return path is muck-spreading.
+
+Nobody has ever died of hunger. `is_starving()` needs 1,440 ticks without food,
+health loss 4,320 and death 10,080, which is most of a life. Attributing every
+death in four worlds over thirty thousand ticks by what was true of the agent
+the tick before it died: old age 407, health gone with nothing else wrong 374,
+thirst 235, cold 229, energy exhaustion 1, heat 0, **hunger 0**. In a
+simulation whose central drama is food, going without it has never killed
+anybody.
+
 ## Test coverage
 
 1,137 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus

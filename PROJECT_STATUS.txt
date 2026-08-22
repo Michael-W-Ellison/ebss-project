@@ -219,9 +219,13 @@ SUGGESTED NEXT STEPS
   2. Decide the fate of the unconnected analytics: wire metrics, emergence
      detection and performance monitoring into Simulation::tick behind a
      config flag, or move them out of the crate.
-  3. Characterise a farming settlement over a very long run. They reach nearly
-     two hundred people, work the soil down, and fall back; nobody has watched
-     one past twenty thousand ticks.
+  3. Give a settlement something to settle back to. Traced over thirty thousand
+     ticks, an overshooting settlement does not correct - it slides. Growing
+     food takes nutrient out of the ground and regrowth is proportional to what
+     is left, so production decays with cumulative harvest; the ground recovers
+     about sixty-five times slower than a hundred people deplete it; a spent
+     field still counts as a field, so nobody breaks new ground; and nothing
+     brakes breeding until the standing crop is gone. See ISSUES_FOUND.md #3.
   4. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it
