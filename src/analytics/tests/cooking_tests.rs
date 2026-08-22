@@ -200,22 +200,7 @@ fn an_agent_lights_a_fire_and_cooks_on_it() {
 /// Nobody lights a fire to cook berries.
 #[test]
 fn an_agent_with_nothing_worth_cooking_lights_no_fire() {
-    let mut world = World::new(WorldConfig::default());
-
-    // Nothing to hunt, either: a deer would put meat in the pack and meat is
-    // worth cooking
-    world.animals.get_all_mut().clear();
-
-    // No wild flesh or grain to pick up part way through the run
-    world.resources.retain(|resource| {
-        !matches!(
-            resource.resource_type,
-            crate::world::ResourceType::Meat
-                | crate::world::ResourceType::Fish
-                | crate::world::ResourceType::Grain
-        )
-    });
-
+    let world = World::new(WorldConfig::default());
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
 
@@ -229,13 +214,25 @@ fn an_agent_with_nothing_worth_cooking_lights_no_fire() {
         agent.inventory.add_item(food_item("food", ItemType::Food, 20));
     }
 
-    for _ in 0..400 {
-        simulation.tick();
-    }
+    let position = simulation.population.agents[0].state.position;
 
     assert!(
-        simulation.world.heat_sources.all().is_empty(),
+        simulation
+            .cooking_action(&simulation.population.agents[0], position)
+            .is_none(),
         "an agent carrying only berries has no reason to light a fire"
+    );
+
+    // Give it a fish and it changes its mind
+    simulation.population.agents[0]
+        .inventory
+        .add_item(food_item("fish", ItemType::Fish, 5));
+
+    assert!(
+        simulation
+            .cooking_action(&simulation.population.agents[0], position)
+            .is_some(),
+        "a fish is worth a fire"
     );
 }
 

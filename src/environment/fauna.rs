@@ -19,6 +19,7 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
         | TerrainType::Wetland
         | TerrainType::Riverbank
         | TerrainType::Beach
+        | TerrainType::Farmland
         | TerrainType::Water => ClimateZone::Temperate,
         // Mountains can be cold (arctic adjacent)
         TerrainType::Mountain => ClimateZone::Arctic,

@@ -24,6 +24,8 @@ pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
         TerrainType::Hills => BiomeType::Grassland,
         TerrainType::Beach => BiomeType::Coast,
         TerrainType::Riverbank => BiomeType::Wetland,
+        // A field is grassland that somebody has taken in hand
+        TerrainType::Farmland => BiomeType::Grassland,
     }
 }
 

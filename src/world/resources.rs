@@ -2,7 +2,7 @@
 //! Resource nodes and harvestable materials.
 
 use serde::{Deserialize, Serialize};
-use crate::world::Position;
+use crate::world::{Position, TerrainType};
 
 /// Types of resources
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -348,6 +348,11 @@ pub struct ResourceNode {
     pub position: Position,
     pub amount: u32,
     pub max_amount: u32,
+
+    /// Fraction of a unit carried over between regeneration passes, so a
+    /// trickle eventually amounts to something
+    #[serde(default)]
+    pub inflow_carried: f32,
 }
 
 impl ResourceNode {
@@ -357,6 +362,7 @@ impl ResourceNode {
             position,
             amount,
             max_amount: amount,
+            inflow_carried: 0.0,
         }
     }
 
@@ -397,19 +403,117 @@ impl ResourceNode {
         )
     }
 
+    /// Take in a fractional amount of water, carrying the remainder over.
+    ///
+    /// Inflow is a rate, not a whole number of units: a pool on open ground
+    /// gains a tenth of a unit a pass and would otherwise never gain anything
+    /// at all, because resource amounts are integers.
+    pub fn take_inflow(&mut self, amount: f32) {
+        if self.amount >= self.max_amount {
+            self.inflow_carried = 0.0;
+            return;
+        }
+
+        self.inflow_carried += amount;
+
+        let whole = self.inflow_carried.floor();
+        if whole >= 1.0 {
+            self.inflow_carried -= whole;
+            self.amount = (self.amount + whole as u32).min(self.max_amount);
+        }
+    }
+
+    /// How much faster a crop grows than the same thing growing wild.
+    ///
+    /// This is the whole point of breaking ground: a field of grain feeds
+    /// people that a hedgerow never could. It is also the only way a
+    /// settlement gets past the dozen or so that the wild country carries -
+    /// food regrows about four times slower than forty people eat it.
+    pub fn cultivated_multiplier(cultivated: bool) -> f32 {
+        if cultivated {
+            8.0
+        } else {
+            1.0
+        }
+    }
+
+    /// How fast this water refills, given the ground it sits on and the
+    /// weather over it.
+    ///
+    /// Water does not grow back the way berries do. A river carries it in from
+    /// somewhere upstream and is effectively bottomless; a spring in the hills
+    /// keeps giving whatever the weather does; a pool on open ground is
+    /// standing water and lives on the rain. It used to regenerate at nothing
+    /// at all and was not counted as renewable, so every drink took a unit out
+    /// of the world for good and a lake drunk dry was deleted. A world lost
+    /// more than half its water in fifteen thousand ticks.
+    ///
+    /// Returns units per regeneration pass, which runs every ten world ticks.
+    pub fn water_inflow(&self, terrain: TerrainType, precipitation: f32, freezing: bool) -> f32 {
+        if self.resource_type != ResourceType::Water {
+            return 0.0;
+        }
+
+        // What the ground itself brings. Water sources are scattered across
+        // the map rather than sitting on water tiles - they are the streams,
+        // springs and ponds of the country they are in, and what feeds them
+        // depends on which.
+        let source = match terrain {
+            // Running water: whatever is drawn is replaced from upstream
+            TerrainType::Water | TerrainType::Riverbank => 3.0,
+
+            // Springs and snowmelt come off high ground
+            TerrainType::Mountain | TerrainType::Hills => 1.5,
+
+            // Seeps and marsh hold what they get
+            TerrainType::Wetland | TerrainType::Forest => 1.2,
+
+            // Anywhere else it is open water, and lives mostly on the sky
+            _ => 0.8,
+        };
+
+        // Rain tops everything up; a dry spell is felt most by the pools
+        let rain = precipitation.clamp(0.0, 1.0);
+        let from_sky = rain * 0.6;
+
+        // Frozen ground gives nothing up, and the rain falls as snow
+        let flow = source + from_sky;
+        if freezing {
+            flow * 0.25
+        } else {
+            flow
+        }
+    }
+
     /// Regenerate resources based on climate and weather conditions
     /// Returns the amount regenerated
     pub fn regenerate(&mut self, temperature: f32, precipitation: f32, season_modifier: f32) -> u32 {
+        self.regenerate_on(temperature, precipitation, season_modifier, false)
+    }
+
+    /// Regenerate, saying whether this is growing on broken ground
+    pub fn regenerate_on(
+        &mut self,
+        temperature: f32,
+        precipitation: f32,
+        season_modifier: f32,
+        cultivated: bool,
+    ) -> u32 {
         if self.amount >= self.max_amount {
             return 0; // Already at max
         }
 
-        // Base regeneration rate per tick (0-1 units)
+        // Base regeneration rate per tick (0-1 units).
+        //
+        // Wild food comes back slowly: a hedge of berries feeds a few people
+        // and no more, which is what a settlement of a dozen lives on and what
+        // a settlement of forty starves against. Ground that has been broken
+        // and sown is a different matter - see `cultivated_multiplier`.
         let base_rate = match self.resource_type {
             // Renewable resources
             ResourceType::Wood => 0.01,       // Trees grow slowly
-            ResourceType::Food => 0.05,       // Berries/fruits regenerate faster
-            ResourceType::Grain => 0.03,      // Crops regenerate moderately
+            ResourceType::Food => 0.025,      // Berries and fruit, in their own time
+            ResourceType::Grain => 0.015,     // Wild grain is thin stuff
             ResourceType::Herbs => 0.04,      // Herbs grow quickly
             ResourceType::Flax => 0.03,
             ResourceType::Cotton => 0.03,
@@ -418,15 +522,10 @@ impl ResourceNode {
             // Slow renewable
             ResourceType::Fish => 0.02,       // Fish populations regenerate
 
-            // Rivers and lakes refill from rain and from what feeds them.
-            //
-            // Water used to regenerate at nothing at all and was not counted
-            // as renewable, so every drink took a unit out of the world for
-            // good and a lake that ran dry was deleted. Over fifteen thousand
-            // ticks a world lost more than half its water that way, and the
-            // settlements drinking from it died of thirst and then of hunger,
-            // walking further and further for both.
-            ResourceType::Water => 0.5,
+            // Water is fed by what carries it, which is worked out from the
+            // ground it sits on rather than from a flat rate - see
+            // `water_inflow`.
+            ResourceType::Water => 0.0,
 
             // Non-renewable (mineral resources don't regenerate)
             ResourceType::Stone |
@@ -514,11 +613,21 @@ impl ResourceNode {
         };
 
         // Calculate total regeneration
-        let regen_amount = base_rate * temp_modifier * precip_modifier * season_modifier;
-        let regen_units = (regen_amount * 100.0).round() as u32; // Convert to whole units
+        let regen_amount = base_rate
+            * temp_modifier
+            * precip_modifier
+            * season_modifier
+            * Self::cultivated_multiplier(cultivated);
+
+        // Carry the fraction over rather than rounding it away: wild food
+        // regrows slowly enough that rounding to whole units each pass loses most
+        // of it
+        self.inflow_carried += regen_amount * 100.0;
+        let regen_units = self.inflow_carried.floor();
+        self.inflow_carried -= regen_units;
 
         // Add regenerated amount, capped at max
-        let actual_regen = regen_units.min(self.max_amount - self.amount);
+        let actual_regen = (regen_units as u32).min(self.max_amount - self.amount);
         self.amount += actual_regen;
 
         actual_regen

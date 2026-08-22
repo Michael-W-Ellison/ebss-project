@@ -73,6 +73,7 @@ impl ActionType {
             ActionType::Social => 8.0,         // Close-range interaction
             ActionType::Navigation => 15.0,    // Movement is visible
             ActionType::ProblemSolving => 8.0, // Subtle, requires close observation
+            ActionType::Farming => 18.0,       // Done in the open, in a field
         }
     }
 }
@@ -107,6 +108,44 @@ pub fn process_observations(
             broadcast.details.clone(),
             broadcast.timestamp,
         );
+
+        // The young pick something up every time they watch, long before they
+        // have seen enough of it to take it up themselves. Adoption is the
+        // moment a child starts doing a thing; this is the years of watching
+        // that come first, and it counts for more when it is their own parent
+        // they are watching.
+        teach_by_watching(agent, broadcast);
+    }
+}
+
+/// Skill experience a child gains from watching an adult work.
+///
+/// Only the young learn this way - a grown agent picks things up by doing them
+/// - and a child learns most from its own parents, who it is with and paying
+/// attention to.
+fn teach_by_watching(watcher: &mut Agent, broadcast: &BroadcastAction) {
+    use crate::agents::LifeStage;
+
+    let learning_age = matches!(
+        watcher.state.life_stage,
+        LifeStage::Infant | LifeStage::Child | LifeStage::Adolescent
+    );
+
+    if !learning_age || !broadcast.success {
+        return;
+    }
+
+    // Watching a stranger work teaches something; watching your mother teaches
+    // more
+    let from_a_parent = watcher.parent_ids.contains(&broadcast.performer_id);
+    let attention = if from_a_parent { 3 } else { 1 };
+
+    for (skill_type, experience) in get_skill_gains_for_action(broadcast.action_type) {
+        // A fraction of what taking the behaviour up outright would give
+        let learned = (experience * attention) / 10;
+        if learned > 0 {
+            watcher.skills.gain_experience(skill_type, learned);
+        }
     }
 }
 
@@ -157,6 +196,10 @@ fn get_skill_gains_for_action(action_type: ActionType) -> Vec<(SkillType, u32)> 
         ],
         ActionType::Cooking => vec![
             (SkillType::Cooking, 15),
+        ],
+        ActionType::Farming => vec![
+            (SkillType::Farming, 20),
+            (SkillType::Herbalism, 5),
         ],
         ActionType::ToolUse => vec![
             (SkillType::Crafting, 15),

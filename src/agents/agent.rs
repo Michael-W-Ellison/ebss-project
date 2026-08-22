@@ -842,6 +842,29 @@ impl Agent {
         agent
     }
 
+    /// Whether the agent has nothing pressing on it right now.
+    ///
+    /// Fed, watered, rested and warm. This is what separates an agent that can
+    /// afford to think about next winter from one that cannot.
+    pub fn immediate_needs_met(&self) -> bool {
+        use crate::core::DriveType;
+
+        let quiet = |drive_type: DriveType| {
+            self.drives
+                .get(drive_type)
+                .map(|drive| !drive.is_active())
+                .unwrap_or(true)
+        };
+
+        quiet(DriveType::Hunger)
+            && quiet(DriveType::Thirst)
+            && quiet(DriveType::Rest)
+            && !self.state.is_starving()
+            && !self.state.is_dehydrated()
+            && !self.body_temperature.is_too_cold()
+            && self.exposure_status.active_exposures.is_empty()
+    }
+
     /// How far the agent can make out detail on the ground, in tiles.
     ///
     /// This is shorter than `Vision::detection_range`, which is about spotting
@@ -1172,7 +1195,10 @@ impl Agent {
 
         // Update emotions based on drive states (every tick)
         self.update_emotions_from_drives();
-        self.drives.tick();
+        // Drives rise differently depending on whether the agent has anything
+        // more pressing on. See `DriveType::is_long_term`.
+        let secure = self.immediate_needs_met();
+        self.drives.tick_with_security(secure);
 
         // Process sensory input into percepts and store them
         let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);
@@ -1743,7 +1769,7 @@ impl Agent {
             // Survival drives don't map to happiness-influenced jobs
             DriveType::Hunger | DriveType::Thirst | DriveType::Rest |
             DriveType::Safety | DriveType::Shelter | DriveType::Reproduction |
-            DriveType::Luxury => None,
+            DriveType::Protection | DriveType::Luxury => None,
         }
     }
 
@@ -2226,6 +2252,12 @@ impl Agent {
                 sequence.add_child(BehaviorNode::new(NodeType::Condition("has_materials".to_string())));
                 sequence.add_child(BehaviorNode::new(NodeType::Action("build_structure".to_string())));
                 sequence
+            }
+            DriveType::Protection => {
+                let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("go_to_child".to_string())));
+                selector.add_child(BehaviorNode::new(NodeType::Action("seek_shelter".to_string())));
+                selector
             }
             DriveType::Industry => {
                 let mut selector = BehaviorNode::new(NodeType::Selector);

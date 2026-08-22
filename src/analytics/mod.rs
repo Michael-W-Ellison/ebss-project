@@ -899,6 +899,7 @@ impl Simulation {
             Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
+            Action::TillSoil => Some(ActionType::Farming),
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)
@@ -984,6 +985,10 @@ impl Simulation {
                 position
             },
             DriveType::Industry => Action::Gather { resource_type: "generic".to_string() },
+            // Answered by going to the children, which needs to know where
+            // they are - see `protective_action`. On its own it comes to
+            // waiting where they last were.
+            DriveType::Protection => Action::Wait,
             DriveType::Curiosity => {
                 // Explore by moving to a random distant location
                 let target_x = position.0 + rng.gen_range(-20..=20);
@@ -1444,7 +1449,17 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 2: Put on or make clothing, if that can be done on the spot.
+        // PRIORITY 2: Go to a child of one's own that has strayed, or that
+        // something is stalking.
+        //
+        // Above the agent's own coat and its own roof: a parent sees to the
+        // children first. Below PRIORITY 1 because an agent starving to death
+        // is no use to anybody.
+        if let Some(action) = self.protective_action(agent, agent_position) {
+            return (action, false);
+        }
+
+        // PRIORITY 3: Put on or make clothing, if that can be done on the spot.
         //
         // This comes before sheltering because a coat is the durable answer to
         // cold and a roof is the temporary one: an agent that walks to shelter
@@ -1456,7 +1471,7 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 3: Check if agent needs shelter due to exposure
+        // PRIORITY 4: Check if agent needs shelter due to exposure
         //
         // Triggered on what the agent is suffering right now, not on the
         // running total of damage taken: that total only ever rises, so once
@@ -1466,7 +1481,7 @@ impl Simulation {
             return (Action::SeekShelter, false);
         }
 
-        // PRIORITY 4: Cook the raw food the agent is carrying.
+        // PRIORITY 5: Cook the raw food the agent is carrying.
         //
         // Anything reaching this point is fed, watered and warm - survival
         // answered first - so this is an agent with raw meat and time on its
@@ -1482,7 +1497,17 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 5: Go after an animal, for the meat or for the skin.
+        // PRIORITY 6: Break ground for a field.
+        //
+        // Sits with cooking and hunting, among the things an agent does when
+        // nothing is pressing on it, and above them in the sense that it
+        // outlasts them: a meal feeds one person once and a field feeds the
+        // settlement every year after.
+        if let Some(action) = self.farming_action(agent, agent_position) {
+            return (action, false);
+        }
+
+        // PRIORITY 7: Go after an animal, for the meat or for the skin.
         //
         // Below cooking for the same reason gathering flax is: what an agent
         // already has in its pack is worth more than what it might catch.
@@ -1490,7 +1515,7 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 6: Go and get what the agent needs to clothe itself.
+        // PRIORITY 8: Go and get what the agent needs to clothe itself.
         //
         // Below cooking, because a meal is worth more than a coat: cooking
         // nearly trebles what a piece of food is worth, and an agent that went
@@ -1499,7 +1524,7 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 7: Check for high-salience percepts (danger, resources, social opportunities)
+        // PRIORITY 9: Check for high-salience percepts (danger, resources, social opportunities)
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
             .iter()
             .cloned()
@@ -1513,14 +1538,14 @@ impl Simulation {
             return (percept_action, false);
         }
 
-        // PRIORITY 8: Execute current plan step (if agent has an active plan)
+        // PRIORITY 10: Execute current plan step (if agent has an active plan)
         if agent.should_execute_plan() {
             if let Some(plan_action) = agent.get_plan_action() {
                 return (plan_action, true);
             }
         }
 
-        // PRIORITY 9: Check active goals and generate goal-directed action
+        // PRIORITY 11: Check active goals and generate goal-directed action
         if let Some(goal) = agent.goals.highest_priority_goal() {
             // Get most urgent drive for fallback
             let fallback_drive = agent.drives.most_urgent()
@@ -1532,7 +1557,7 @@ impl Simulation {
             }
         }
 
-        // PRIORITY 10: Use drive-based action as fallback
+        // PRIORITY 12: Use drive-based action as fallback
         let drive_type = agent.select_drive_with_happiness()
             .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
             .unwrap_or(DriveType::Curiosity);
@@ -1548,6 +1573,13 @@ impl Simulation {
     /// How close an agent has to be to a fire to light it, feed it or cook on
     /// it: near enough to reach into the flames
     const FIRE_REACH: i32 = 1;
+
+    /// How much a field holds when it is full.
+    ///
+    /// Wild food regrows about four times slower than a grown settlement eats
+    /// it. A handful of fields is what closes that gap: the same patch of
+    /// ground yields many times what the hedgerow beside it does.
+    const FIELD_YIELD: u32 = 80;
 
     /// Wood a campfire is built from, matching `HeatSourceType::Campfire`
     const FIRE_BUILD_WOOD: u32 = 5;
@@ -2024,6 +2056,220 @@ impl Simulation {
 
         Some(Action::Move {
             target: (animal_position.0, animal_position.1, agent_position.2),
+        })
+    }
+
+    /// How far a parent lets a child of its own get before going after it
+    const CHILD_LEASH: i32 = 8;
+
+    /// How close a predator has to be to a child before its parent runs
+    const DANGER_TO_A_CHILD: i32 = 10;
+
+    /// Going to a child of one's own.
+    ///
+    /// A parent keeps its children near it, and goes to one that has strayed
+    /// or that something is stalking. This is the whole of the Protection
+    /// drive: it is answered by being where the children are, not by
+    /// acquiring anything.
+    ///
+    /// It matters more than it looks. The young are kept warm by whoever is
+    /// beside them, so a parent that wanders off leaves its child to the
+    /// weather - and children freezing is what emptied settlements before.
+    fn protective_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::LifeStage;
+
+        // Only the small ones. An adolescent can look after itself.
+        let mine: Vec<(i32, i32, i32)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.parent_ids.contains(&agent.id))
+            .filter(|child| {
+                matches!(child.state.life_stage, LifeStage::Infant | LifeStage::Child)
+            })
+            .map(|child| child.state.position)
+            .collect();
+
+        if mine.is_empty() {
+            return None;
+        }
+
+        // Anything with teeth near one of them brings a parent at a run
+        let hunted = mine.iter().find(|child| {
+            self.world
+                .get_animals_in_radius((child.0, child.1), Self::DANGER_TO_A_CHILD as f32)
+                .into_iter()
+                .any(|animal| {
+                    animal.is_alive()
+                        && !animal.is_domesticated
+                        && self
+                            .world
+                            .animals
+                            .get_species(&animal.species_id)
+                            .map(|species| !species.prey_species.is_empty())
+                            .unwrap_or(false)
+                })
+        });
+
+        if let Some(child) = hunted {
+            return Some(Action::Move {
+                target: (child.0, child.1, agent_position.2),
+            });
+        }
+
+        // Otherwise, the one that has wandered furthest off
+        let strayed = mine
+            .iter()
+            .map(|child| {
+                let distance = (child.0 - agent_position.0)
+                    .abs()
+                    .max((child.1 - agent_position.1).abs());
+                (child, distance)
+            })
+            .max_by_key(|(_, distance)| *distance)
+            .filter(|(_, distance)| *distance > Self::CHILD_LEASH);
+
+        strayed.map(|(child, _)| Action::Move {
+            target: (child.0, child.1, agent_position.2),
+        })
+    }
+
+    /// How far an agent will walk to break new ground
+    const FIELD_WALK_RADIUS: u32 = 12;
+
+    /// How many fields a settlement wants within reach of where it is standing
+    const FIELDS_WANTED: usize = 6;
+
+    /// Fields already broken within reach
+    fn fields_within(&self, position: (i32, i32, i32), radius: u32) -> usize {
+        use crate::world::Position;
+
+        let from = Position::new(position.0, position.1);
+
+        let reach = radius as i32;
+        let mut fields = 0;
+
+        for dx in -reach..=reach {
+            for dy in -reach..=reach {
+                let candidate = Position::new(from.x + dx, from.y + dy);
+
+                if from.distance_to(&candidate) > radius {
+                    continue;
+                }
+
+                if self
+                    .world
+                    .grid
+                    .get_tile(&candidate)
+                    .map(|tile| tile.terrain.is_cultivated())
+                    .unwrap_or(false)
+                {
+                    fields += 1;
+                }
+            }
+        }
+
+        fields
+    }
+
+    /// Somewhere nearby worth breaking: open grass with nothing growing on it
+    fn ground_to_break(&self, position: (i32, i32, i32)) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        let from = Position::new(position.0, position.1);
+        let radius = Self::FIELD_WALK_RADIUS as i32;
+
+        // What is already growing, gathered once: asking the resource list per
+        // candidate tile turns this into tens of thousands of comparisons per
+        // agent per tick
+        let occupied: std::collections::HashSet<(i32, i32)> = self
+            .world
+            .resources
+            .iter()
+            .map(|resource| (resource.position.x, resource.position.y))
+            .collect();
+
+        let mut best: Option<(Position, u32)> = None;
+
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                let candidate = Position::new(from.x + dx, from.y + dy);
+
+                if occupied.contains(&(candidate.x, candidate.y)) {
+                    continue;
+                }
+
+                if !self.world.grid.is_valid_position(&candidate) {
+                    continue;
+                }
+
+                let tillable = self
+                    .world
+                    .grid
+                    .get_tile(&candidate)
+                    .map(|tile| tile.terrain.can_be_tilled())
+                    .unwrap_or(false);
+
+                if !tillable {
+                    continue;
+                }
+
+                let distance = from.distance_to(&candidate);
+                if best.map(|(_, d)| distance < d).unwrap_or(true) {
+                    best = Some((candidate, distance));
+                }
+            }
+        }
+
+        best.map(|(position, _)| position)
+    }
+
+    /// Breaking ground, and walking to somewhere worth breaking.
+    ///
+    /// Wild food regrows about four times slower than a grown settlement eats
+    /// it, which is why settlements that got past a dozen people starved back
+    /// down again. A field yields many times what the same ground does wild,
+    /// and this is how one comes to exist: an agent with the immediate needs
+    /// answered and the Sustenance drive up on it goes and breaks ground.
+    fn farming_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        // Only somebody with nothing more pressing on. The drive itself only
+        // climbs in an agent that is fed, watered, rested and warm.
+        if !agent.immediate_needs_met() {
+            return None;
+        }
+
+        let wants_to_provide = agent
+            .drives
+            .get(DriveType::Sustenance)
+            .map(|drive| drive.is_active())
+            .unwrap_or(false);
+
+        if !wants_to_provide {
+            return None;
+        }
+
+        // Enough fields around here already
+        if self.fields_within(agent_position, Self::FIELD_WALK_RADIUS) >= Self::FIELDS_WANTED {
+            return None;
+        }
+
+        let ground = self.ground_to_break(agent_position)?;
+
+        if ground.x == agent_position.0 && ground.y == agent_position.1 {
+            return Some(Action::TillSoil);
+        }
+
+        Some(Action::Move {
+            target: (ground.x, ground.y, agent_position.2),
         })
     }
 
@@ -5335,6 +5581,61 @@ impl Simulation {
                     .with_drive_change(DriveType::Shelter, -0.2)
                     .with_energy_cost(1.0)
                     .with_message(format!("Put on a {}", recipe.name))
+            },
+
+            Action::TillSoil => {
+                use crate::world::{Position, ResourceNode, ResourceType, TerrainType};
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let tile_position = Position::new(agent_position.0, agent_position.1);
+
+                let ground = match self.world.grid.get_tile(&tile_position) {
+                    Some(tile) => tile.terrain.terrain_type,
+                    None => return ActionResult::failure("Nowhere to dig".to_string()),
+                };
+
+                if !crate::world::Terrain::new(ground).can_be_tilled() {
+                    return ActionResult::failure(format!(
+                        "Cannot break {:?} into a field",
+                        ground
+                    ));
+                }
+
+                // Somewhere to put the crop, and something to sow it with.
+                // A field is only worth breaking where there is room for one.
+                if self
+                    .world
+                    .resources
+                    .iter()
+                    .any(|resource| resource.position == tile_position)
+                {
+                    return ActionResult::failure("Something already grows here".to_string());
+                }
+
+                if let Some(tile) = self.world.grid.get_tile_mut(&tile_position) {
+                    tile.terrain = crate::world::Terrain::new(TerrainType::Farmland);
+                }
+
+                // A newly sown field starts empty and fills as it grows
+                let mut field = ResourceNode::new(
+                    ResourceType::Grain,
+                    tile_position,
+                    Self::FIELD_YIELD,
+                );
+                field.amount = 0;
+                self.world.resources.push(field);
+
+                let agent = &mut self.population.agents[agent_index];
+                agent
+                    .skills
+                    .gain_experience(crate::agents::SkillType::Farming, 25);
+
+                debug!("Agent {} broke ground at {:?}", agent.id, tile_position);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Sustenance, -0.4)
+                    .with_energy_cost(12.0)
+                    .with_message("Broke ground and sowed a field".to_string())
             },
 
             Action::Wait => {

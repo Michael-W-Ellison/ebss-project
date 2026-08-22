@@ -41,11 +41,13 @@ pub enum DriveType {
     Utility,
     /// Need to build structures
     Construction,
+    /// Need to keep one's children safe and close
+    Protection,
 }
 
 impl DriveType {
     /// Get all drive types
-    pub fn all() -> [DriveType; 14] {
+    pub fn all() -> [DriveType; 15] {
         [
             DriveType::Hunger,
             DriveType::Thirst,
@@ -61,6 +63,7 @@ impl DriveType {
             DriveType::Luxury,
             DriveType::Utility,
             DriveType::Construction,
+            DriveType::Protection,
         ]
     }
 
@@ -81,6 +84,9 @@ impl DriveType {
             DriveType::Luxury => 0.1,
             DriveType::Utility => 0.4,
             DriveType::Construction => 0.3,
+            // Low, because it should be easy to trip: a parent does not wait
+            // until a child is in real trouble to go and look for it
+            DriveType::Protection => 0.3,
         }
     }
 
@@ -101,7 +107,29 @@ impl DriveType {
             DriveType::Luxury => 0.001,
             DriveType::Utility => 0.002,
             DriveType::Construction => 0.002,
+            // Driven by where the children are rather than by the clock, so
+            // this only ticks over slowly on its own
+            DriveType::Protection => 0.001,
         }
+    }
+
+    /// Whether this drive is about the season after next rather than the next
+    /// few hours.
+    ///
+    /// A person with nothing to eat is not thinking about next winter's grain,
+    /// and a person who has eaten is. These rise when the immediate needs are
+    /// answered and fall quiet when they are not, which is what turns a
+    /// settlement that survives into one that provides for itself.
+    pub fn is_long_term(&self) -> bool {
+        matches!(
+            self,
+            DriveType::Preparedness
+                | DriveType::Sustenance
+                | DriveType::Industry
+                | DriveType::Construction
+                | DriveType::Utility
+                | DriveType::Luxury
+        )
     }
 
     /// Get a description of what satisfies this drive
@@ -121,6 +149,7 @@ impl DriveType {
             DriveType::Luxury => "Acquiring rare or decorative items",
             DriveType::Utility => "Crafting and maintaining tools",
             DriveType::Construction => "Building structures",
+            DriveType::Protection => "Keeping one's children close and safe",
         }
     }
 }
@@ -138,6 +167,13 @@ pub struct Drive {
 }
 
 impl Drive {
+    /// How much faster the long view builds in an agent whose immediate needs
+    /// are met
+    const SECURE_LONG_TERM_RATE: f32 = 5.0;
+
+    /// And how much slower in one whose are not
+    const PRESSED_LONG_TERM_RATE: f32 = 0.25;
+
     /// Create a new drive with default values
     pub fn new(drive_type: DriveType) -> Self {
         Self {
@@ -181,6 +217,26 @@ impl Drive {
     /// Update the drive for one tick
     pub fn tick(&mut self) {
         let rate = self.drive_type.base_accumulation_rate();
+        self.increase(rate);
+    }
+
+    /// Tick, knowing whether the agent's immediate needs are answered.
+    ///
+    /// Long-term drives run several times faster in an agent that is fed,
+    /// watered, rested and warm, and nearly stop in one that is not.
+    pub fn tick_with_security(&mut self, secure: bool) {
+        let rate = self.drive_type.base_accumulation_rate();
+
+        let rate = if self.drive_type.is_long_term() {
+            if secure {
+                rate * Self::SECURE_LONG_TERM_RATE
+            } else {
+                rate * Self::PRESSED_LONG_TERM_RATE
+            }
+        } else {
+            rate
+        };
+
         self.increase(rate);
     }
 
@@ -278,6 +334,13 @@ impl DriveState {
         }
     }
 
+    /// Tick every drive, knowing whether the agent's immediate needs are met
+    pub fn tick_with_security(&mut self, secure: bool) {
+        for drive in &mut self.drives {
+            drive.tick_with_security(secure);
+        }
+    }
+
     /// Get all active drives sorted by urgency
     pub fn active_drives(&self) -> Vec<&Drive> {
         let mut active: Vec<&Drive> = self.drives
@@ -342,7 +405,7 @@ mod tests {
     #[test]
     fn test_drive_state_creation() {
         let state = DriveState::new();
-        assert_eq!(state.drives.len(), 14);
+        assert_eq!(state.drives.len(), 15);
     }
 
     #[test]

@@ -58,6 +58,7 @@ pub fn drive_color(drive: DriveType) -> Color32 {
         DriveType::Luxury => Color32::from_rgb(230, 230, 250),
         DriveType::Utility => Color32::from_rgb(192, 192, 192),
         DriveType::Construction => Color32::from_rgb(139, 69, 19),
+        DriveType::Protection => Color32::from_rgb(255, 215, 0),
     }
 }
 
@@ -74,6 +75,7 @@ pub fn terrain_color(terrain: TerrainType) -> Color32 {
         TerrainType::Wetland => Color32::from_rgb(85, 107, 47),
         TerrainType::Beach => Color32::from_rgb(238, 214, 175),
         TerrainType::Riverbank => Color32::from_rgb(107, 142, 35),
+        TerrainType::Farmland => Color32::from_rgb(205, 170, 90),
     }
 }
 
@@ -179,6 +181,7 @@ pub fn terrain_name(terrain: TerrainType) -> &'static str {
         TerrainType::Hills => "Hills",
         TerrainType::Beach => "Beach",
         TerrainType::Riverbank => "Riverbank",
+        TerrainType::Farmland => "Farmland",
     }
 }
 

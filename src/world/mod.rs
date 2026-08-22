@@ -1232,8 +1232,24 @@ impl World {
 
             let temperature = self.climate.get_temperature(resource.position, terrain_type);
 
-            // Regenerate the resource
-            let _regen_amount = resource.regenerate(temperature, precipitation, season_modifier);
+            // Water is fed by the ground it sits on and the weather over it,
+            // not by growing back the way a berry patch does
+            if resource.resource_type == ResourceType::Water {
+                let inflow =
+                    resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+                resource.take_inflow(inflow);
+                continue;
+            }
+
+            // Regenerate the resource. Anything growing on broken ground grows
+            // many times faster, which is what a field is for.
+            let cultivated = terrain_type == TerrainType::Farmland;
+            let _regen_amount = resource.regenerate_on(
+                temperature,
+                precipitation,
+                season_modifier,
+                cultivated,
+            );
 
             // Debug log significant regeneration
             // if regen_amount > 0 {

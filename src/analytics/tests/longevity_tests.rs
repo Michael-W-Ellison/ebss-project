@@ -47,8 +47,11 @@ fn water_is_not_used_up() {
 
     let after = water_at(&simulation);
 
+    // Sources start full, so the total can only ever sit at or a little below
+    // where it began - what matters is that drinking does not eat into it.
+    // Before this it fell by more than half in fifteen thousand ticks.
     assert!(
-        after >= before,
+        after as f32 >= before as f32 * 0.95,
         "a river should not be drunk dry: {before} -> {after}"
     );
     assert!(
@@ -194,4 +197,42 @@ fn a_settlement_still_raises_children_late_on() {
         grown_here > 0,
         "nine thousand ticks in, the settlement should hold people born into it"
     );
+}
+
+/// Where a water source sits decides what refills it.
+///
+/// A stream coming off the hills is fed by the spring behind it; a pool on
+/// open ground lives on the rain. Both were a flat rate before, and before
+/// that they were not refilled at all.
+#[test]
+fn water_is_fed_by_where_it_lies() {
+    use crate::world::{Position, ResourceNode, TerrainType};
+
+    let pool = ResourceNode::new(ResourceType::Water, Position::new(10, 10), 100);
+
+    let dry = 0.0;
+    let wet = 1.0;
+
+    let river = pool.water_inflow(TerrainType::Water, dry, false);
+    let spring = pool.water_inflow(TerrainType::Mountain, dry, false);
+    let open = pool.water_inflow(TerrainType::Plains, dry, false);
+
+    assert!(
+        river > spring && spring > open,
+        "a river should outrun a spring, and a spring open water: {river} {spring} {open}"
+    );
+
+    assert!(
+        pool.water_inflow(TerrainType::Plains, wet, false) > open,
+        "rain should top up a pool on open ground"
+    );
+
+    assert!(
+        pool.water_inflow(TerrainType::Mountain, dry, true) < spring,
+        "a frozen spring should give up less"
+    );
+
+    // And nothing but water is fed this way
+    let berries = ResourceNode::new(ResourceType::Food, Position::new(10, 10), 100);
+    assert_eq!(berries.water_inflow(TerrainType::Water, wet, false), 0.0);
 }

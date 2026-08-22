@@ -210,6 +210,8 @@ pub enum Action {
     MakeClothing { garment: String },
     /// Put on a garment the agent is carrying
     WearClothing { garment: String },
+    /// Break the grass where the agent stands into a field, and sow it
+    TillSoil,
     /// Wait/idle
     Wait,
 }
@@ -239,6 +241,7 @@ impl Action {
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
             Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
+            Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),
             Action::Move { .. } => None,

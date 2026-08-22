@@ -18,6 +18,11 @@ pub enum TerrainType {
     Hills,    // Between plains and mountains - coal deposits, grazing
     Beach,    // Coastal area - sand, shells, fish access
     Riverbank, // Along rivers - clay, flax, fishing
+
+    /// Ground broken and sown by an agent - crops grow here far faster than
+    /// anything wild, which is how a settlement feeds more people than the
+    /// country around it would carry
+    Farmland,
 }
 
 /// Terrain with properties
@@ -36,9 +41,25 @@ impl Terrain {
         match self.terrain_type {
             TerrainType::Plains | TerrainType::Forest | TerrainType::Mountain |
             TerrainType::Desert | TerrainType::Meadow | TerrainType::Hills |
-            TerrainType::Beach | TerrainType::Riverbank | TerrainType::Wetland => true,
+            TerrainType::Beach | TerrainType::Riverbank | TerrainType::Wetland |
+            TerrainType::Farmland => true,
             TerrainType::Water => false, // Requires swimming
         }
+    }
+
+    /// Whether this ground can be broken into a field.
+    ///
+    /// Open grass only: nobody ploughs a forest, a mountainside or a marsh.
+    pub fn can_be_tilled(&self) -> bool {
+        matches!(
+            self.terrain_type,
+            TerrainType::Plains | TerrainType::Meadow
+        )
+    }
+
+    /// Whether crops grow here
+    pub fn is_cultivated(&self) -> bool {
+        matches!(self.terrain_type, TerrainType::Farmland)
     }
 
     /// Check if terrain requires swimming
@@ -60,7 +81,8 @@ impl Terrain {
     /// Get movement cost (for pathfinding)
     pub fn movement_cost(&self) -> u32 {
         match self.terrain_type {
-            TerrainType::Plains | TerrainType::Meadow | TerrainType::Beach => 1,
+            TerrainType::Plains | TerrainType::Meadow | TerrainType::Beach
+            | TerrainType::Farmland => 1,
             TerrainType::Forest | TerrainType::Hills | TerrainType::Riverbank => 2,
             TerrainType::Mountain | TerrainType::Desert => 3, // Desert is slow due to sand
             TerrainType::Wetland => 4, // Slow slogging through marsh
@@ -109,6 +131,7 @@ impl Terrain {
     pub fn stamina_multiplier(&self) -> f32 {
         match self.terrain_type {
             TerrainType::Plains | TerrainType::Meadow | TerrainType::Beach => 1.0,
+            TerrainType::Farmland => 1.2, // Worked ground is heavier going
             TerrainType::Forest | TerrainType::Hills | TerrainType::Riverbank => 1.3,
             TerrainType::Mountain => 2.0,
             TerrainType::Desert => 1.8, // Heat makes it tiring
@@ -130,6 +153,7 @@ impl Terrain {
             TerrainType::Hills => 'n',
             TerrainType::Beach => '_',
             TerrainType::Riverbank => '=',
+            TerrainType::Farmland => '#',
         }
     }
 
@@ -146,6 +170,7 @@ impl Terrain {
             TerrainType::Hills => "\x1b[90m",    // Dark Gray
             TerrainType::Beach => "\x1b[97m",    // Bright White
             TerrainType::Riverbank => "\x1b[96m", // Bright Cyan
+            TerrainType::Farmland => "\x1b[33m",  // Yellow, like the crop on it
         }
     }
 }

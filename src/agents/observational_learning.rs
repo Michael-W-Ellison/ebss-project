@@ -34,6 +34,8 @@ pub enum ObservableActionType {
     Navigation,
     /// Problem solving
     ProblemSolving,
+    /// Working the land - breaking ground, sowing, harvesting
+    Farming,
 }
 
 /// Type alias for backwards compatibility
@@ -52,6 +54,7 @@ impl ObservableActionType {
             ObservableActionType::Social => 0.5,        // Context-dependent
             ObservableActionType::Navigation => 0.3,    // Learning paths
             ObservableActionType::ProblemSolving => 0.8, // Very complex
+            ObservableActionType::Farming => 0.4,       // Patient work, plainly done
         }
     }
 
@@ -67,6 +70,7 @@ impl ObservableActionType {
             ObservableActionType::Social => 6,
             ObservableActionType::Navigation => 4,
             ObservableActionType::ProblemSolving => 12,
+            ObservableActionType::Farming => 5,
         }
     }
 }

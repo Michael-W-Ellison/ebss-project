@@ -270,6 +270,14 @@ impl Population {
             self.process_trait_proximity_effects();
         }
 
+        // Who can see whom.
+        //
+        // Nothing populated `vision.visible_agents`, and observation is gated
+        // on it, so no agent had ever recorded seeing another do anything:
+        // the whole observational learning system ran every twenty ticks over
+        // an empty list. It is also what `Percept::AgentDetected` is built on.
+        self.update_who_can_see_whom();
+
         // Process observational learning (every 20 ticks to reduce overhead)
         if current_tick % 20 == 0 {
             self.process_observational_learning();
@@ -1851,6 +1859,46 @@ impl Population {
                     }
                 }
             }
+        }
+    }
+
+    /// Work out which agents each agent can currently see.
+    ///
+    /// Sight range is the same one that finds berries and firewood, so a blind
+    /// agent sees nobody and learns nothing by watching - it has to be told.
+    pub fn update_who_can_see_whom(&mut self) {
+        let seen: Vec<(uuid::Uuid, (i32, i32, i32))> = self
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| (agent.id, agent.state.position))
+            .collect();
+
+        for agent in &mut self.agents {
+            if !agent.state.is_alive {
+                agent.senses.vision.visible_agents.clear();
+                continue;
+            }
+
+            let range = agent.sight_range() as i32;
+            if range == 0 {
+                agent.senses.vision.visible_agents.clear();
+                continue;
+            }
+
+            let position = agent.state.position;
+
+            let visible: Vec<uuid::Uuid> = seen
+                .iter()
+                .filter(|(id, _)| *id != agent.id)
+                .filter(|(_, other)| {
+                    (other.0 - position.0).abs() <= range
+                        && (other.1 - position.1).abs() <= range
+                })
+                .map(|(id, _)| *id)
+                .collect();
+
+            agent.senses.vision.update_visible_agents(visible);
         }
     }
 

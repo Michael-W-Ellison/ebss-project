@@ -142,7 +142,7 @@ fn test_drive_state_initialization() {
     let drive_state = DriveState::new();
 
     // Should have all 14 drives
-    assert_eq!(drive_state.drives.len(), 14);
+    assert_eq!(drive_state.drives.len(), 15);
 
     // All should start at zero
     for drive in &drive_state.drives {

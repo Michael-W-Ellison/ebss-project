@@ -77,6 +77,9 @@ impl DriveProgression {
             DriveType::Luxury => Self::luxury_tiers(),
             DriveType::Utility => Self::utility_tiers(),
             DriveType::Construction => Self::construction_tiers(),
+            // Protection has no ladder of its own: it is answered by being
+            // where the children are, not by acquiring anything
+            DriveType::Protection => Self::safety_tiers(),
         };
 
         Self {
