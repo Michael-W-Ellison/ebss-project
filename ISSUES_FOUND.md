@@ -224,11 +224,43 @@ worlds. What changed is the slope. A settlement that overshoots now settles
 back onto ground that can still carry it, rather than sliding to the level
 where hardly anybody lives there.
 
-What remains: the ground still runs down, only slowly enough that a settlement
-outlives the run rather than the run outliving the settlement. The other two
-sharpeners above are untouched — a spent field still counts as a field, so a
-settlement still will not break new ground while exhausted ones sit inside its
-radius, and nobody has still ever died of hunger.
+**And then a fishery, which reverses it.** Everything above is a return: the
+ground gets back some part of what it already paid out, minus what rot loses,
+so the best a farming people can do is run down slowly. A fish is not grown on
+the land. It is grown at sea, fed on a whole catchment, and it comes up the
+river under its own power whatever last year's fishing left behind — so what is
+left of one, put on a field, makes the country richer than it was.
+
+Four worlds to thirty thousand ticks with a fishery in the model:
+
+| Measure | No return path | Crop residue | Residue and a fishery |
+| --- | --- | --- | --- |
+| Worlds run | 6 | 4 | 4 |
+| Still inhabited | 6 | 4 | 4 |
+| People at the end | 78.2 | 154.0 | 150.5 |
+| Highest reached | 211.5 | 226.2 | 220.8 |
+| End over peak | 0.37 | 0.69 | 0.69 |
+| Fertility of the farmed ground | 0.055 | 0.268 | **0.607** |
+
+**All four worlds ended with better ground than they started on** — a mean of
+0.545 at tick zero against 0.607 at thirty thousand, and every world
+individually up, from 0.539→0.594 at worst to 0.544→0.641 at best. Map
+nutrients rose from about 800 to between 1,049 and 1,103 rather than sitting
+flat. Standing crop ended between 4,900 and 6,000 units.
+
+The peak and the end-over-peak are the part to read twice. They did not move:
+226 and 0.69 without the fishery, 221 and 0.69 with it. The settlement still
+overshoots and still settles back onto what the ground will carry. What changed
+is that the ground it settles back onto is no longer poorer each time. Nothing
+was made easier for the people; something was added to the country.
+
+Twelve to thirty-four people in a settlement of a hundred and fifty had settled
+into fishing as a matter of course by the end, having each worked it out from
+their own record of whether it paid.
+
+What remains: a spent field still counts as a field, so a settlement still will
+not break new ground while exhausted ones sit inside its radius, and nobody has
+still ever died of hunger.
 
 ### 4. Winter is not cold: the tile temperature is frozen at first touch
 
@@ -408,12 +440,20 @@ The project's stated purpose is emergent social behaviour out of drives and
 personality. The drives are live and now read the world. The personality half
 is not running at all.
 
-**No agent holds a trait.** `Agent::new` sets `traits: TraitSet::default()`,
-which is empty, and the only `add_trait` on any live path is the 1.5 per cent
+**No agent held a trait.** `Agent::new` set `traits: TraitSet::default()`,
+which is empty, and the only `add_trait` on any live path was the 1.5 per cent
 congenital infertility roll in `with_parents`. Inheritance in `reproduction.rs`
-works, but it inherits from founders who have none, so it propagates nothing.
+worked, but it inherited from founders who had none, so it propagated nothing.
 Measured over three worlds: **zero traits held across a hundred and
-twenty-one surviving agents**, out of sixty-odd defined.
+twenty-one surviving agents**, out of sixty-odd defined. **Since fixed** — see
+point 1 below.
+
+Worse, that one roll never survived either: `give_birth_internal` assigned
+`offspring.traits = inherit_traits(..)` straight over the top of it, so
+congenital infertility was thrown away on every live birth. The one trait
+anything in the running simulation ever assigned, and it never once reached a
+living agent. Also since fixed: what a child is born *with* now survives what
+it is born *to*.
 
 Everything downstream of traits is therefore dormant: the trait-to-job
 affinities in `job_happiness.rs`, the gossip distortion in `gossip.rs`, the
@@ -449,19 +489,41 @@ nothing for a personal interaction to be *about*.
 
 The three things that would fix it, in order of what they buy:
 
-1. **Assign traits at spawn**, and let `with_parents` inherit them — the
-   inheritance code is already written and waiting.
-2. **Let traits reach the drives.** A trait should scale a drive's weight or
-   move an action threshold, not only a happiness delta. `Lazy` lowering the
-   Industry weight, `Greedy` raising Preparedness, `Extrovert` raising Social,
-   `Altruist` letting an agent give food away while its own store is thin.
-   That is one hook in `DriveState` and it is what turns sixty decorative
-   labels into sixty different people.
-3. **Give agents a reason to need each other.** Everyone currently does
-   everything, so no agent is ever the person who has what another wants. A
+1. ~~**Assign traits at spawn**~~ — **done.** `Population::spawn_agent` now
+   draws three to five compatible traits for a founder; everybody born
+   afterwards inherits, which the existing code already did. Forty founders
+   between them hold sixty-odd distinct traits and no two are the same person.
+   The draw is in `spawn_agent` rather than `Agent::new` deliberately: a bare
+   `Agent::new` stays the same agent every time, which several dozen tests of
+   other machinery rely on, and a personality is something somebody has on
+   entering a world rather than a property of a body.
+2. **Let traits reach the drives.** Still open, and now measurable rather than
+   hypothetical. With personalities assigned, the action mix is *identical*
+   across them — over three worlds of six thousand ticks, agents holding
+   `Handy` spent 83% of their attempts foraging, `Builder` 81%, `Greedy` 84%,
+   `Introvert` 81%. A Builder does not build more. The one exception is
+   `core/planning.rs`, which reads traits to size how long a plan somebody will
+   countenance — so the path exists, it is just used once. A trait should scale
+   a drive's weight or move an action threshold, not only a happiness delta:
+   `Lazy` lowering Industry, `Greedy` raising Preparedness, `Extrovert` raising
+   Social, `Altruist` giving food away while its own store is thin. That is one
+   hook in `DriveState`, and it is what turns sixty labels into sixty people.
+3. **Give agents a reason to need each other.** Everyone still does
+   everything, so no agent is ever the one who has what another wants. The
    fishery is the first thing in the model that is *place-bound* — you must be
-   at the water — which is the raw material for the first real division of
-   labour.
+   at the water — which is the raw material for a real division of labour.
+
+**And a fourth, which assigning traits revealed.** The relationship graph is
+still undifferentiated: 33 to 43 relationships each, of which 31 to 37 are
+close, and **none hostile**, in settlements of 43 to 69. That is no longer
+because traits do not vary. It is arithmetic.
+`Relationship::update_from_trait_interaction` subtracts 0.01 to 0.03 for each
+clashing pair of traits, while `Population::update_relationships` adds up to
+0.10 in proximity bonus to every nearby pair on every tick. Being near somebody
+outweighs disliking them by three to ten times, and applies always rather than
+only when there is a clash, so every relationship saturates at close regardless
+of who the two people are. Nobody ever undertakes a social act either:
+`Undertaking::Dealing` is attempted zero times in a whole run.
 
 ---
 

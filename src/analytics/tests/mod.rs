@@ -18,3 +18,4 @@ pub mod calendar_tests;
 pub mod survival_pressure_tests;
 pub mod nutrient_loop_tests;
 pub mod fishery_tests;
+pub mod personality_tests;

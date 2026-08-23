@@ -605,6 +605,42 @@ still falling at thirty thousand ticks in three worlds of the four. What
 changed is the slope, and with it the shape: a settlement that overshoots now
 comes back onto ground that can still carry it.
 
+**A fishery turns the slope the other way.** Everything above is a return - the
+ground getting back part of what it already paid out, less what rot takes. A
+fish is not grown on the land at all: it is grown at sea, fed on a whole
+catchment, and it comes up the river under its own power whatever was taken out
+of that reach last year. What is left of one, put on a field, is the only thing
+in the model that makes a country richer than it was. Four worlds, thirty
+thousand ticks:
+
+| Measure | No return path | Crop residue | Residue and a fishery |
+| --- | --- | --- | --- |
+| Worlds run | 6 | 4 | 4 |
+| Still inhabited | 6 | 4 | 4 |
+| People at the end | 78.2 | 154.0 | 150.5 |
+| Highest the population reached | 211.5 | 226.2 | 220.8 |
+| End over peak | 0.37 | 0.69 | 0.69 |
+| Fertility of the farmed ground | 0.055 | 0.268 | **0.607** |
+
+Every one of the four ended on better ground than it started on: 0.545 at tick
+zero against 0.607 at the end, and no world went down. Map nutrients climbed
+from about 800 to between 1,049 and 1,103. The best of them:
+
+| tick | people | standing crop | fertility of the farmed ground |
+| --- | --- | --- | --- |
+| 0 | 12 | 1,402 | 0.544 |
+| 10,000 | 46 | 4,459 | 0.594 |
+| 20,000 | 184 | 5,372 | 0.577 |
+| 30,000 | 136 | 6,030 | 0.641 |
+
+The peak did not move, and neither did end-over-peak: 226 and 0.69 without a
+fishery, 221 and 0.69 with one. The settlement still overshoots and still
+settles back onto what the ground will carry. What changed is that the ground
+is no longer poorer every time it does. Nothing was made easier for the people;
+something was added to the country - and somebody has to stand in a river to
+fetch it, which twelve to thirty-four of every hundred and fifty had settled
+into doing by the end, each having worked out for themselves that it paid.
+
 **Why a settlement that overshoots did not settle back.** Six worlds traced to
 thirty thousand ticks, sampling the ground the settlement actually farms rather
 than the map as a whole.
@@ -745,7 +781,7 @@ settlement now runs at 90-96.
 
 ## Test coverage
 
-1,183 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,191 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,

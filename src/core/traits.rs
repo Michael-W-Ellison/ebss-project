@@ -528,16 +528,54 @@ impl TraitSet {
         ];
 
         let mut rng = thread_rng();
-        let selected = all_traits.choose_multiple(&mut rng, count * 2).cloned().collect::<Vec<_>>();
+
+        // Walk the whole pool in a random order rather than drawing a fixed
+        // handful. Drawing twice the wanted number and stopping was near
+        // enough while nobody used this, but it hands back short sets whenever
+        // the draw happens to contain a pair that cannot both be true of one
+        // person - and a settlement where some people have four traits and
+        // others one for no reason is a settlement of accidents.
+        let mut pool = all_traits;
+        pool.shuffle(&mut rng);
 
         let mut trait_set = TraitSet::new();
-        for trait_candidate in selected {
-            if trait_set.add_trait(trait_candidate) && trait_set.traits.len() >= count {
+        for trait_candidate in pool {
+            if trait_set.traits.len() >= count {
                 break;
             }
+            trait_set.add_trait(trait_candidate);
         }
 
         trait_set
+    }
+
+    /// How many traits a person is drawn with.
+    ///
+    /// Enough that no two people in a settlement are quite alike, few enough
+    /// that each one still tells: at three to five out of sixty-odd, two
+    /// agents sharing even one trait is uncommon, and nobody is a bundle of
+    /// every tendency at once.
+    pub const TRAITS_AT_BIRTH: std::ops::RangeInclusive<usize> = 3..=5;
+
+    /// Draw a personality for somebody nobody was born to.
+    ///
+    /// The founding generation of a world has no parents to take after, so
+    /// they are drawn from the pool; everybody afterwards inherits from the
+    /// two people who made them, with a chance of mutation, which is what
+    /// `inherit_traits` does.
+    pub fn a_person() -> Self {
+        use rand::Rng;
+
+        let count = rand::thread_rng().gen_range(Self::TRAITS_AT_BIRTH);
+
+        // Ordinary tendencies only. Blindness, deafness and muteness are in
+        // the pool `inherit_traits` mutates from but not in this one, so they
+        // arise in a people over generations rather than in the handful who
+        // founded the place - which is where congenital infertility already
+        // sat, and is the same reasoning: these are things somebody is born
+        // with, and a founding twelve who walked into a country are the one
+        // group in the model nobody was born into.
+        Self::generate_random(count)
     }
 }
 

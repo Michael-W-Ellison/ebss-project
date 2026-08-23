@@ -190,8 +190,23 @@ fn give_birth_internal(
     // Inherit behavior trees from parents with pruning and mutation
     offspring.behavior_trees = inherit_behavior_trees(&parent1.behavior_trees, &parent2.behavior_trees);
 
-    // Inherit traits from parents (mix of both with mutation)
+    // Inherit traits from parents (mix of both with mutation).
+    //
+    // What the child was born with rather than born to survives this: the
+    // congenital rolls happen in `with_parents`, before we get here, and
+    // assigning straight over the top used to throw them away - so congenital
+    // infertility, the one trait anything ever assigned, never once survived a
+    // live birth.
+    let born_with: Vec<crate::core::traits::Trait> =
+        offspring.traits.get_traits().iter().copied()
+            .filter(|t| matches!(t, crate::core::traits::Trait::Infertile))
+            .collect();
+
     offspring.traits = inherit_traits(&parent1.traits, &parent2.traits);
+
+    for born_with in born_with {
+        offspring.traits.add_trait(born_with);
+    }
 
     // Traits are assigned after construction, so let the inherited ones reach
     // the senses: a child born blind or deaf must actually be so

@@ -129,6 +129,15 @@ fn test_multiple_dependencies_compound_grief() {
     pop.spawn_agent(AgentConfig::default());
     pop.spawn_agent(AgentConfig::default());
 
+    // This measures how grief compounds, not whose grief it is. Founders are
+    // drawn with three to five traits now and half the pool exists to modify
+    // exactly this - a Stoic feels everything at half strength, a ColdHearted
+    // gains sadness at half and sheds it at double - so a personality left in
+    // would be measuring the draw rather than the mechanism.
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
+
     let agent2_id = pop.agents[1].id;
 
     // Agent 2 satisfies multiple drives for agent 1

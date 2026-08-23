@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
-across 198 source files, with 1,183 library tests.
+across 199 source files, with 1,191 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,220 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,228 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet see each other
 or hear anything. See
@@ -61,6 +61,19 @@ original specifications.
 - ✅ Learned practices: nobody tells an agent that muck does a field good. It
   tries it, watches what happens, keeps or drops the idea, and the neighbours
   who saw it take something from that too
+- ✅ Everybody is somebody: a founder is drawn with three to five compatible
+  traits out of sixty-odd, and everybody born afterwards takes after their two
+  parents. Forty founders are forty different people. What personality reaches
+  so far is how somebody feels about what happens to them, who they get on
+  with, what they distort in passing a rumour on, and how long a plan they will
+  countenance — not yet what they choose to do with their day. See
+  ISSUES_FOUND.md #12
+- ✅ A fishery, which is the one food the land does not pay for: fish come up
+  the river on the season rather than growing back out of what is left of them,
+  so a reach fished out fills again from the catchment. What is left of a fish,
+  put on a field, is worth forty times a unit of crop — it was grown at sea. A
+  settlement that works one ends thirty thousand ticks on *better* ground than
+  it started on, without its peak population moving at all
 - ✅ Nutrient goes back into the ground as well as coming out of it: what a body
   passes, what spoils in a pack, what a body is when it stops, and the roots
   and stalk a plant leaves in the tile it grew in. Rot loses two fifths of what

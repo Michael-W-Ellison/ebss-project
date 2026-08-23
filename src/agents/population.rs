@@ -220,6 +220,27 @@ impl Population {
     pub fn spawn_agent(&mut self, config: AgentConfig) {
         let mut agent = Agent::new(config);
 
+        // Give the person a personality.
+        //
+        // Agents used to carry `TraitSet::default()`, which is empty, and
+        // nothing on any live path added a trait except the congenital
+        // infertility roll. So no agent in a running world held one of the
+        // sixty-odd defined traits, and everything downstream of them - the
+        // job affinities, the gossip distortion, the affinity model that
+        // decides who gets on with whom, the emotional modifiers, how long a
+        // plan a person will countenance, the religious effects - had an input
+        // that never varied. A settlement of eighty people was eighty copies of
+        // the same person.
+        //
+        // Inheritance was already written and already being called on every
+        // birth. It simply had nothing to inherit, because the founding
+        // generation had nothing. This is the one place that was missing: a
+        // founder has no parents to take after, so they are drawn from the
+        // pool, and everybody born afterwards takes after the two people who
+        // made them.
+        agent.traits = crate::core::traits::TraitSet::a_person();
+        agent.apply_trait_sensory_modifications();
+
         // Give new agents basic starting knowledge
         
         agent.technology_knowledge.add_initial_technology(

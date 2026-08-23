@@ -876,6 +876,13 @@ impl Agent {
         // Initialize default behavior trees for each drive type
         agent.initialize_behavior_trees();
 
+        // No personality here. `Agent::new` builds a body; who that body turns
+        // out to be is settled when somebody enters a world, by
+        // `Population::spawn_agent` for the founding generation and by
+        // inheritance for everybody born afterwards. Keeping the draw out of
+        // the constructor means a bare `Agent::new` is the same agent every
+        // time, which is what several dozen tests of other machinery rely on.
+
         // Let the traits reach the senses. Without this a Deaf agent hears
         // normally and a Blind one sees normally, because nothing else calls
         // this - it had no callers at all.
