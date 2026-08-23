@@ -2921,6 +2921,7 @@ impl Agent {
 
         let undertaking = match action {
             Action::Hunt { .. } => Undertaking::Hunting,
+            Action::Fight { .. } => Undertaking::Fighting,
             Action::Fish => Undertaking::Fishing,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil | Action::SpreadMuck => Undertaking::Farming,
@@ -3094,7 +3095,8 @@ impl Agent {
             }
 
             // Hunting can reward Protector trait (protecting community from threats)
-            crate::environment::Action::Hunt { .. } => {
+            crate::environment::Action::Hunt { .. }
+            | crate::environment::Action::Fight { .. } => {
                 if self.traits.has(Trait::Protector) {
                     happiness_bonus += 0.04;
                     reward_reason = "protector_satisfaction".to_string();
@@ -3198,7 +3200,9 @@ impl Agent {
             Action::Build { .. } => Some(ActionType::Building),
 
             // Combat actions
-            Action::Attack { .. } | Action::Hunt { .. } => Some(ActionType::Combat),
+            Action::Attack { .. } | Action::Hunt { .. } | Action::Fight { .. } => {
+                Some(ActionType::Combat)
+            }
 
             // Cooking and food preparation
             Action::Eat { .. } => Some(ActionType::Cooking),

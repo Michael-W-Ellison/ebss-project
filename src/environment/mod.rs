@@ -175,6 +175,17 @@ pub enum Action {
         animal_id: uuid::Uuid,
         weapon: Option<String>,
     },
+    /// Stand your ground against an animal that is not being hunted.
+    ///
+    /// Distinct from `Hunt`, which is how an agent goes after food and skins
+    /// and reads the Hunting skill. This is what an angry agent does to the
+    /// thing that is frightening everybody: it reads MeleeCombat, it teaches
+    /// the agent about fighting rather than about hunting, and it is worth
+    /// doing on a full stomach.
+    Fight {
+        animal_id: uuid::Uuid,
+        weapon: Option<String>,
+    },
     /// Tame a wild animal
     Tame {
         animal_id: uuid::Uuid,
@@ -241,6 +252,7 @@ impl Action {
             Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
+            Action::Fight { .. } => Some(DriveType::Safety), // Driving a thing off, not eating it
             Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering

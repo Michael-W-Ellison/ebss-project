@@ -82,6 +82,13 @@ pub struct Simulation {
     last_autosave_tick: u32,
     /// Nutritional data for food items, used when agents forage and eat
     food_database: FoodDatabase,
+    /// A tally of every action any agent has chosen, by name.
+    ///
+    /// "Seventy-nine per cent of everything a settlement does is foraging" is
+    /// the kind of claim this project keeps needing and kept answering by
+    /// patching a counter in by hand and throwing it away afterwards. Kept
+    /// here so the answer is reproducible and costs one hash lookup a tick.
+    pub actions_taken: std::collections::HashMap<String, u64>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -243,6 +250,7 @@ impl Simulation {
             autosave_config: None,
             last_autosave_tick: 0,
             food_database: FoodDatabase::default(),
+            actions_taken: std::collections::HashMap::new(),
         }
     }
 
@@ -324,6 +332,7 @@ impl Simulation {
 
         // And feel about whatever is standing in the way
         self.feel_about_what_stands_in_the_way();
+        self.square_up_to_the_people_i_resent();
 
         debug!("=== Tick {} ===", self.current_tick);
 
@@ -507,6 +516,10 @@ impl Simulation {
 
                 // Generate action based on priority:
                 // starvation > emotions > shelter > percepts > plan > goals > drives
+                //
+                // Running away comes out as an ordinary Move, so without a
+                // note of why it was chosen it is invisible in the tally
+                let mut running_away = false;
                 let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
 
@@ -521,10 +534,30 @@ impl Simulation {
                         );
                         (survival_action, false)
                     }
-                    // PRIORITY 0: Check emotional overrides (fear/anger from being attacked)
+                    // PRIORITY 0: Check emotional overrides (fear/anger from
+                    // what is in front of the agent, or from being attacked)
                     else if agent.emotions.should_flee() {
+                        // Frightened of something that is actually there: put
+                        // ground between the two of you. This is the branch
+                        // the appraisal feeds; the attacker branches below it
+                        // are for agents, who are not creatures.
+                        if let Some(away) = self
+                            .run_from_what_frightens_me(agent, agent_position)
+                            .or_else(|| {
+                                self.run_from_whoever_frightens_me(agent, agent_position)
+                            })
+                        {
+                            debug!(
+                                "Agent {} RUNNING from {:?} (fear={:.2})",
+                                agent_id,
+                                agent.emotions.what_frightens_me_most().map(|(k, _)| k),
+                                agent.emotions.fear
+                            );
+                            running_away = true;
+                            (away, false)
+                        }
                         // High fear - flee from attacker or danger
-                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                        else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
                             // Find attacker position and flee away from them
                             if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
                                 let attacker_pos = attacker.state.position;
@@ -559,8 +592,24 @@ impl Simulation {
                             self.generate_non_emotional_action(agent, agent_position)
                         }
                     } else if agent.emotions.should_attack() {
+                        // Angry at something within arm's reach: turn on it.
+                        // An angry agent stands its ground - it does not walk
+                        // across the map after a wolf it can see, which is
+                        // what keeps this from eating a settlement's whole day.
+                        if let Some(strike) = self
+                            .round_on_whoever_angers_me(agent, agent_position)
+                            .or_else(|| self.round_on_what_angers_me(agent, agent_position))
+                        {
+                            debug!(
+                                "Agent {} STANDING GROUND against {:?} (anger={:.2})",
+                                agent_id,
+                                agent.emotions.what_angers_me_most().map(|(k, _)| k),
+                                agent.emotions.anger
+                            );
+                            (strike, false)
+                        }
                         // High anger, low fear - retaliate against attacker
-                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                        else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
                             debug!(
                                 "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
                                 agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
@@ -589,6 +638,14 @@ impl Simulation {
 
                 // Drop travel plans toward places the agent cannot reach
                 let action = self.retarget_unreachable_move(agent_index, action);
+
+                // What the settlement spends its days doing
+                let did = if running_away {
+                    "Flee".to_string()
+                } else {
+                    Self::name_of(&action)
+                };
+                *self.actions_taken.entry(did).or_insert(0) += 1;
 
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
@@ -2176,6 +2233,52 @@ impl Simulation {
     /// line of sight across the valley
     const HUNT_REACH: i32 = 2;
 
+    /// The bare name of an action, without whatever it is aimed at.
+    ///
+    /// `Gather { resource_type: "berries" }` and `Gather { resource_type:
+    /// "wood" }` are the same kind of day's work for counting purposes.
+    fn name_of(action: &Action) -> String {
+        let full = format!("{:?}", action);
+        match full.find(|c: char| c == ' ' || c == '{' || c == '(') {
+            Some(at) => full[..at].to_string(),
+            None => full,
+        }
+    }
+
+    /// Turn what a carcass drops into things an agent can actually use.
+    ///
+    /// A kill drops names from the fauna model - mutton, deer_meat, thick_hide
+    /// - that nothing downstream knows about, so meat that was never renamed
+    /// could not be cooked or eaten. This is where a carcass becomes food with
+    /// nutrition in it and skins that can become a coat.
+    fn butcher(
+        &self,
+        dropped: &[crate::environment::ItemStack],
+    ) -> Vec<crate::agents::InventoryItem> {
+        use crate::agents::InventoryItem;
+
+        let current_tick = self.current_tick;
+        dropped
+            .iter()
+            .map(|stack| {
+                let item_id =
+                    crate::agents::storage_integration::butchered_item_id(&stack.material_id)
+                        .to_string();
+                let food_data = crate::agents::storage_integration::id_to_item_type(&item_id)
+                    .filter(|item_type| item_type.is_consumable())
+                    .and_then(|item_type| {
+                        self.food_database.create_food_data(&item_type, current_tick)
+                    });
+
+                // Two kilos is what an animal drop weighs unless something
+                // else says otherwise
+                let mut item = InventoryItem::new_with_weight(item_id, stack.quantity, 2.0);
+                item.food_data = food_data;
+                item
+            })
+            .collect()
+    }
+
     /// How far an agent will go after prey it has spotted.
     ///
     /// Short on purpose. Crossing the map for a sheep costs more than the
@@ -2501,6 +2604,289 @@ impl Simulation {
     /// How far off something has to be before it stops being this agent's
     /// problem
     const CLOSE_ENOUGH_TO_WORRY_ABOUT: i32 = 10;
+
+    /// How far a frightened agent puts between itself and the thing
+    ///
+    /// Far enough to be out of the range at which it would appraise the thing
+    /// again, or it runs one pace, looks round, and runs one pace again.
+    const FAR_ENOUGH_AWAY: i32 = Self::CLOSE_ENOUGH_TO_WORRY_ABOUT + 5;
+
+    /// How far an angry agent will go to reach the thing it is angry at
+    const WITHIN_A_STEP_OR_TWO: i32 = 5;
+
+    /// The nearest living animal of a named kind, and how far off it is.
+    ///
+    /// An agent's fear and anger are held against a species name rather than
+    /// against a particular animal - it is afraid of wolves, not of wolf #4 -
+    /// so acting on the feeling means finding which wolf it can see.
+    fn nearest_of_kind(
+        &self,
+        kind: &str,
+        from: (i32, i32, i32),
+    ) -> Option<(uuid::Uuid, (i32, i32), i32)> {
+        self.world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated)
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                if species.name != kind {
+                    return None;
+                }
+
+                let paces = (animal.position.0 - from.0)
+                    .abs()
+                    .max((animal.position.1 - from.1).abs());
+                if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                    return None;
+                }
+
+                Some((animal.id, animal.position, paces))
+            })
+            .min_by_key(|(_, _, paces)| *paces)
+    }
+
+    /// Go, and put the thing behind you.
+    ///
+    /// The flight branch of action selection was keyed on `last_attacker`,
+    /// which is only ever another agent, so an agent frightened of a wolf fell
+    /// straight through it and carried on foraging with the wolf at its elbow.
+    /// Fear of a creature now moves the agent directly away from it.
+    fn run_from_what_frightens_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (kind, _) = agent.emotions.what_frightens_me_most()?;
+        let (_, where_it_is, _) = self.nearest_of_kind(kind, agent_position)?;
+
+        Some(Self::put_ground_between(agent_position, (where_it_is.0, where_it_is.1)))
+    }
+
+    /// Head off in the opposite direction, far enough not to arrive back where
+    /// you started worrying.
+    fn put_ground_between(from: (i32, i32, i32), away_from: (i32, i32)) -> Action {
+        let dx = from.0 - away_from.0;
+        let dy = from.1 - away_from.1;
+
+        // Standing on top of it, which should not happen, is still a reason to
+        // be somewhere else
+        let span = ((dx * dx + dy * dy) as f32).sqrt();
+        let (dx, dy, span) = if span < 1.0 { (1, 0, 1.0) } else { (dx, dy, span) };
+
+        let far = Self::FAR_ENOUGH_AWAY as f32;
+        Action::Move {
+            target: (
+                from.0 + (dx as f32 / span * far) as i32,
+                from.1 + (dy as f32 / span * far) as i32,
+                from.2,
+            ),
+        }
+    }
+
+
+    /// How much an agent has to resent one particular person before it will do
+    /// anything about it.
+    ///
+    /// Read per person rather than off the total, because `should_attack` sums
+    /// every source: three mild grudges of 0.2 read as a man ready to fight,
+    /// and there is nobody he is actually ready to fight.
+    const ENOUGH_TO_ROUND_ON_SOMEBODY: f32 = 0.5;
+
+    /// Square up to the people you resent, or shrink from them.
+    ///
+    /// A grudge is the reason; whether it comes out as standing up or backing
+    /// down is the same appraisal a wolf gets. Measured before this existed,
+    /// anger at people ran at 0.806 for every agent that read as ready to
+    /// fight and anger at creatures at 0.025 - so nearly all the anger in the
+    /// model was a grudge against somebody, held against them for life,
+    /// decaying at one per cent a tick and with no way to be acted on at all.
+    ///
+    /// The grudge itself is not touched. Only which feeling it comes out as.
+    fn square_up_to_the_people_i_resent(&mut self) {
+        let standing: Vec<(uuid::Uuid, (i32, i32, i32), f32, bool)> = self
+            .population
+            .agents
+            .iter()
+            .map(|agent| {
+                (
+                    agent.id,
+                    agent.state.position,
+                    agent.own_strength(),
+                    agent.state.is_alive,
+                )
+            })
+            .collect();
+
+        for index in 0..self.population.agents.len() {
+            let (mine, from) = {
+                let agent = &self.population.agents[index];
+                if !agent.state.is_alive {
+                    continue;
+                }
+                (agent.own_strength(), agent.state.position)
+            };
+
+            let resented: Vec<(uuid::Uuid, f32)> = {
+                let agent = &self.population.agents[index];
+                agent
+                    .emotions
+                    .anger_at_people()
+                    .into_iter()
+                    .filter(|(_, held)| *held >= Self::ENOUGH_TO_ROUND_ON_SOMEBODY)
+                    .collect()
+            };
+
+            for (who, held) in resented {
+                let Some((_, where_they_are, theirs, alive)) =
+                    standing.iter().copied().find(|(id, ..)| *id == who)
+                else {
+                    continue;
+                };
+                if !alive {
+                    continue;
+                }
+
+                let paces = (where_they_are.0 - from.0)
+                    .abs()
+                    .max((where_they_are.1 - from.1).abs());
+
+                let agent = &mut self.population.agents[index];
+
+                // Out of sight is not out of mind - the grudge stands - but
+                // there is nothing to shrink from, and leaving the fear
+                // standing would keep the agent running from an empty field
+                // and keep it below the bar for ever squaring up to anybody.
+                if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                    agent
+                        .emotions
+                        .set_fear(crate::agents::EmotionSource::Agent(who), 0.0);
+                    continue;
+                }
+
+                if theirs > mine {
+                    // You cannot take them. What you feel about them is the
+                    // same; what you will do about it is get out of the way.
+                    let nearness = 1.0
+                        - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
+                    agent.emotions.set_fear(
+                        crate::agents::EmotionSource::Agent(who),
+                        held * nearness,
+                    );
+                } else {
+                    // You can, so it stays anger and stays where it was
+                    agent
+                        .emotions
+                        .set_fear(crate::agents::EmotionSource::Agent(who), 0.0);
+                }
+            }
+        }
+    }
+
+    /// Turn on the person you resent, if they are within arm's reach.
+    ///
+    /// Gated on the grudge against that one person rather than on total anger,
+    /// and on the agent reckoning it can take them - which the appraisal above
+    /// has already decided by turning the hopeless cases into fear.
+    fn round_on_whoever_angers_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (who, held) = agent.emotions.who_angers_me_most()?;
+        if held < Self::ENOUGH_TO_ROUND_ON_SOMEBODY {
+            return None;
+        }
+
+        let them = self
+            .population
+            .agents
+            .iter()
+            .find(|other| other.id == who && other.state.is_alive)?;
+
+        // Nobody raises a hand to a child, and nobody to their own parent
+        if them.state.life_stage == crate::agents::LifeStage::Infant
+            || them.state.life_stage == crate::agents::LifeStage::Child
+            || them.parent_ids.contains(&agent.id)
+            || agent.parent_ids.contains(&who)
+        {
+            return None;
+        }
+
+        let paces = (them.state.position.0 - agent_position.0)
+            .abs()
+            .max((them.state.position.1 - agent_position.1).abs());
+        if paces > Self::HUNT_REACH {
+            return None;
+        }
+
+        Some(Action::Attack {
+            target_agent_id: who,
+            weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+        })
+    }
+
+    /// Get away from the person you are afraid of.
+    fn run_from_whoever_frightens_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (who, _) = agent.emotions.who_frightens_me_most()?;
+        let them = self
+            .population
+            .agents
+            .iter()
+            .find(|other| other.id == who && other.state.is_alive)?;
+
+        let where_they_are = them.state.position;
+        let paces = (where_they_are.0 - agent_position.0)
+            .abs()
+            .max((where_they_are.1 - agent_position.1).abs());
+        if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+            return None;
+        }
+
+        Some(Self::put_ground_between(
+            agent_position,
+            (where_they_are.0, where_they_are.1),
+        ))
+    }
+
+    /// Turn on the thing, if it is close enough to hit.
+    ///
+    /// An angry agent stands its ground; it does not cross the map looking for
+    /// a fight. Anything out of arm's reach is left alone and the agent gets on
+    /// with its day, which is also what keeps a settlement from spending a
+    /// quarter of its life walking towards wolves.
+    fn round_on_what_angers_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (kind, _) = agent.emotions.what_angers_me_most()?;
+        let (which, where_it_is, paces) = self.nearest_of_kind(kind, agent_position)?;
+
+        if paces <= Self::HUNT_REACH {
+            return Some(Action::Fight {
+                animal_id: which,
+                weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+            });
+        }
+
+        // Close the last pace or two, but no further. The appraisal already
+        // scales a creature's strength by how near it is, so anything that
+        // angers an agent past the threshold is close by anyway - this is for
+        // the wolf that is nearly in reach, not the one across the field.
+        if paces <= Self::WITHIN_A_STEP_OR_TWO {
+            return Some(Action::Move {
+                target: (where_it_is.0, where_it_is.1, agent_position.2),
+            });
+        }
+
+        None
+    }
 
     /// What share of what an agent has left counts as having got off lightly
     const A_SCRATCH: f32 = 0.25;
@@ -5067,36 +5453,9 @@ impl Simulation {
                                 }
                             }
 
-                            // Butcher what was killed into things an agent can
-                            // actually use: meat that carries nutrition and can
-                            // go on a fire, skins that can become a coat
-                            let current_tick = self.current_tick;
-                            let butchered: Vec<_> = items_gained
-                                .iter()
-                                .map(|stack| {
-                                    let item_id = crate::agents::storage_integration::
-                                        butchered_item_id(&stack.material_id)
-                                        .to_string();
-                                    let food_data = crate::agents::storage_integration::
-                                        id_to_item_type(&item_id)
-                                        .filter(|item_type| item_type.is_consumable())
-                                        .and_then(|item_type| {
-                                            self.food_database
-                                                .create_food_data(&item_type, current_tick)
-                                        });
-                                    (item_id, stack.quantity, food_data)
-                                })
-                                .collect();
-
+                            let butchered = self.butcher(&items_gained);
                             let agent = &mut self.population.agents[agent_index];
-                            for (item_id, quantity, food_data) in butchered {
-                                use crate::agents::InventoryItem;
-                                let mut item = InventoryItem::new_with_weight(
-                                    item_id,
-                                    quantity,
-                                    2.0, // Default weight for animal drops
-                                );
-                                item.food_data = food_data;
+                            for item in butchered {
                                 agent.inventory.add_item(item);
                             }
 
@@ -5158,6 +5517,134 @@ impl Simulation {
                     }
                 } else {
                     ActionResult::failure("Animal not found".to_string())
+                }
+            },
+            Action::Fight { animal_id, weapon } => {
+                // Standing your ground. The agent is not after this thing's
+                // skin - it is here because the thing is close enough to be a
+                // problem and the agent reckons it can be driven off.
+                let (species, animal_position) = {
+                    let Some(animal) = self.world.animals.get(animal_id) else {
+                        return ActionResult::failure("Nothing there to fight".to_string());
+                    };
+                    if !animal.is_alive() {
+                        return ActionResult::failure("It is already dead".to_string());
+                    }
+
+                    let species_id = animal.species_id.clone();
+                    let position = animal.position;
+                    match self.world.animals.get_species(&species_id) {
+                        Some(found) => (found.clone(), position),
+                        None => return ActionResult::failure("Unknown creature".to_string()),
+                    }
+                };
+
+                // You cannot fight what you cannot reach, and an agent that
+                // stands its ground does not go looking - if the thing has
+                // moved off, that is the fight over.
+                let standing = self.population.agents[agent_index].state.position;
+                let reach = (animal_position.0 - standing.0)
+                    .abs()
+                    .max((animal_position.1 - standing.1).abs());
+                if reach > Self::HUNT_REACH {
+                    return ActionResult::failure(format!(
+                        "{} is {} tiles off",
+                        species.name, reach
+                    ));
+                }
+
+                // Whether the blow lands is what the agent is worth against
+                // what the creature is worth, on the same scale the appraisal
+                // used to decide to be here at all.
+                let mine = self.population.agents[agent_index].own_strength();
+                let condition = {
+                    let animal = self.world.animals.get(animal_id);
+                    animal
+                        .map(|a| (a.current_health / species.health.max(1.0)).clamp(0.0, 1.0))
+                        .unwrap_or(1.0)
+                };
+                let theirs = condition * (species.attack_damage / 20.0).clamp(0.1, 2.0);
+                let odds = (mine / (mine + theirs).max(0.01)).clamp(0.1, 0.9);
+
+                let landed = rng.gen_bool(odds as f64);
+
+                // A blow struck in a fight teaches the arm that struck it,
+                // whichever way the fight goes
+                self.population.agents[agent_index].skills.practise(
+                    crate::agents::skills::SkillType::MeleeCombat,
+                    if landed { 25 } else { 10 },
+                    tick_now,
+                );
+
+                if landed {
+                    let hurt = 25.0 + mine * 25.0;
+                    let killed = {
+                        let Some(animal) = self.world.animals.get_mut(animal_id) else {
+                            return ActionResult::failure("Nothing there to fight".to_string());
+                        };
+                        animal.take_damage(hurt);
+                        !animal.is_alive()
+                    };
+
+                    // Winning without a mark on you is what teaches an agent
+                    // that fighting is worth doing
+                    self.population.agents[agent_index]
+                        .lessons
+                        .record(crate::agents::practices::Undertaking::Fighting, true);
+
+                    if !killed {
+                        return ActionResult::success()
+                            .with_energy_cost(12.0)
+                            .with_experience(3.0)
+                            .with_message(format!("Beat {} back", species.name));
+                    }
+
+                    // What is killed in a fight is still worth butchering -
+                    // a wolf driven off is a wolf, a wolf killed is a hide
+                    let mut items_gained = Vec::new();
+                    for drop in &species.drops {
+                        if rng.gen_bool(drop.drop_chance as f64) {
+                            let quantity =
+                                rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                            items_gained.push(crate::environment::ItemStack {
+                                material_id: drop.material_id.clone(),
+                                quantity,
+                            });
+                        }
+                    }
+
+                    let butchered = self.butcher(&items_gained);
+                    {
+                        let agent = &mut self.population.agents[agent_index];
+                        for item in butchered {
+                            agent.inventory.add_item(item);
+                        }
+                    }
+
+                    let mut result = ActionResult::success()
+                        .with_drive_change(DriveType::Safety, -0.3)
+                        .with_energy_cost(20.0)
+                        .with_experience(6.0)
+                        .with_message(format!("Killed {}", species.name));
+                    for item in items_gained {
+                        result = result.with_item_gained(item);
+                    }
+                    result
+                } else {
+                    // It got the better of the exchange
+                    let damage = species.attack_damage.max(1.0);
+                    let agent = &mut self.population.agents[agent_index];
+                    let came_off_well = damage < agent.state.health * Self::A_SCRATCH;
+                    agent.take_damage(damage);
+                    agent
+                        .lessons
+                        .record(crate::agents::practices::Undertaking::Fighting, came_off_well);
+
+                    ActionResult::failure(format!(
+                        "{} got the better of it ({:.0} damage)",
+                        species.name, damage
+                    ))
+                    .with_energy_cost(12.0)
                 }
             },
 
@@ -7695,6 +8182,8 @@ impl Simulation {
             autosave_config: None,
             last_autosave_tick: 0,
             food_database: FoodDatabase::default(),
+            // A tally of this run, not of the saved one
+            actions_taken: std::collections::HashMap::new(),
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);

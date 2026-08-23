@@ -20,3 +20,4 @@ pub mod nutrient_loop_tests;
 pub mod fishery_tests;
 pub mod personality_tests;
 pub mod specialisation_tests;
+pub mod fight_or_flight_tests;

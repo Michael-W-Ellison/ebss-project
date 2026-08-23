@@ -158,6 +158,87 @@ impl EmotionState {
         self.update_totals();
     }
 
+    /// The creature this agent is most afraid of, and how much.
+    ///
+    /// Fear is kept per source so an agent can be terrified of one thing and
+    /// indifferent to another. Running away is only possible if you know what
+    /// you are running from, and until this existed nothing could read the
+    /// sources back out: the flight branch of action selection was keyed on
+    /// `last_attacker`, which is only ever another agent, so an agent
+    /// frightened of a wolf fell straight through it and carried on foraging.
+    pub fn what_frightens_me_most(&self) -> Option<(&str, f32)> {
+        Self::worst_creature(&self.fear_sources)
+    }
+
+    /// The creature this agent is angriest at, and how much.
+    pub fn what_angers_me_most(&self) -> Option<(&str, f32)> {
+        Self::worst_creature(&self.anger_sources)
+    }
+
+    /// The agent this one is angriest at, and how much.
+    ///
+    /// Anger at a person is kept separately from anger at a wolf because the
+    /// two want different things done about them, and because a grudge
+    /// outlives the person being in the room.
+    pub fn who_angers_me_most(&self) -> Option<(Uuid, f32)> {
+        Self::worst_agent(&self.anger_sources)
+    }
+
+    /// The agent this one is most afraid of, and how much.
+    pub fn who_frightens_me_most(&self) -> Option<(Uuid, f32)> {
+        Self::worst_agent(&self.fear_sources)
+    }
+
+    /// Everybody this agent holds something against, and how much.
+    pub fn anger_at_people(&self) -> Vec<(Uuid, f32)> {
+        self.anger_sources
+            .iter()
+            .filter_map(|(source, amount)| match source {
+                EmotionSource::Agent(who) => Some((*who, *amount)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn worst_agent(sources: &HashMap<EmotionSource, f32>) -> Option<(Uuid, f32)> {
+        sources
+            .iter()
+            .filter_map(|(source, amount)| match source {
+                EmotionSource::Agent(who) => Some((*who, *amount)),
+                _ => None,
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
+    /// How much of this agent's anger comes from each kind of source.
+    ///
+    /// Reported so that "a fifth of the settlement would fight" can be broken
+    /// into what it would fight, which is the difference between a model that
+    /// does something and one that only looks like it might.
+    pub fn anger_by_kind(&self) -> (f32, f32, f32) {
+        let mut at_people = 0.0;
+        let mut at_creatures = 0.0;
+        let mut at_everything_else = 0.0;
+        for (source, amount) in self.anger_sources.iter() {
+            match source {
+                EmotionSource::Agent(_) => at_people += amount,
+                EmotionSource::Creature(_) => at_creatures += amount,
+                _ => at_everything_else += amount,
+            }
+        }
+        (at_people, at_creatures, at_everything_else)
+    }
+
+    fn worst_creature(sources: &HashMap<EmotionSource, f32>) -> Option<(&str, f32)> {
+        sources
+            .iter()
+            .filter_map(|(source, amount)| match source {
+                EmotionSource::Creature(what) => Some((what.as_str(), *amount)),
+                _ => None,
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
     /// The thing that was stalking this agent has gone.
     ///
     /// Fear of a creature is kept as its own source, so it can be let go of
