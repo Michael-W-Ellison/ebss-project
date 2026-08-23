@@ -319,6 +319,9 @@ impl Simulation {
         // them rather than on a clock
         self.read_the_situation();
 
+        // Put back on the ground what came off it
+        self.return_what_the_living_and_the_dead_leave();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -2192,6 +2195,53 @@ impl Simulation {
 
     /// How far a parent lets a child of its own get before going after it
     const CHILD_LEASH: i32 = 8;
+
+    /// Leave on the ground what bodies have to leave.
+    ///
+    /// Everything a settlement grew used to leave the world for good: eaten
+    /// and gone, spoiled and deleted, buried nowhere. The soil was a stock
+    /// being mined with no return at all, and the only thing that ever put
+    /// anything back was an agent who had learned to tip a spoiled basket onto
+    /// a field. Traced over thirty thousand ticks, farmed ground went from
+    /// 0.53 fertility to 0.03 and stayed there.
+    ///
+    /// What a body takes in mostly comes out again, and what a body is comes
+    /// back when it stops. Neither is a free lunch - rot keeps three fifths of
+    /// what it works on and loses the rest, so the loop turns and loses on
+    /// every turn. And it lands where the agent is standing rather than where
+    /// the crop grew, which is exactly why carting muck onto a field is worth
+    /// an agent's time.
+    fn return_what_the_living_and_the_dead_leave(&mut self) {
+        use crate::world::Position;
+
+        // What the living have to pass
+        let leavings: Vec<((i32, i32, i32), f32)> = self
+            .population
+            .agents
+            .iter_mut()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| (agent.state.position, agent.state.void_waste()))
+            .filter(|(_, waste)| *waste > 0.0)
+            .collect();
+
+        for (position, waste) in leavings {
+            let here = Position::new(position.0, position.1);
+            if let Some(tile) = self.world.grid.get_tile_mut(&here) {
+                tile.soil.add_leaf_litter(waste);
+            }
+        }
+
+        // And what the dead leave where they fell
+        let bodies = std::mem::take(&mut self.population.bodies_where_they_fell);
+
+        for (position, soft, bone) in bodies {
+            let here = Position::new(position.0, position.1);
+            if let Some(tile) = self.world.grid.get_tile_mut(&here) {
+                tile.soil.add_leaf_litter(soft);
+                tile.soil.add_woody_litter(bone);
+            }
+        }
+    }
 
     /// How close something that would eat you counts as close
     const A_THREAT_NEARBY: i32 = 8;

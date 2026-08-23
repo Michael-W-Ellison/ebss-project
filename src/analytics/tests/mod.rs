@@ -16,3 +16,4 @@ pub mod husbandry_tests;
 pub mod land_tests;
 pub mod calendar_tests;
 pub mod survival_pressure_tests;
+pub mod nutrient_loop_tests;

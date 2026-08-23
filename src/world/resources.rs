@@ -713,10 +713,12 @@ impl ResourceNode {
         let actual_regen = (regen_units as u32).min(headroom);
         self.amount += actual_regen;
 
-        // What grew, came out of the ground
+        // What grew, came out of the ground - and most of the plant stays in
+        // the ground it grew in. Roots, stalk and leaf go back into this same
+        // tile; only the part somebody carries away is gone from it.
         if actual_regen > 0 {
-            const DRAW_PER_UNIT: f32 = 0.0015;
-            soil.draw(actual_regen as f32 * DRAW_PER_UNIT);
+            soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
+            soil.add_leaf_litter(actual_regen as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
         }
 
         actual_regen

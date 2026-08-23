@@ -45,6 +45,50 @@ impl Soil {
     /// How much litter one tile can hold before more of it simply will not fit
     pub const MAX_LITTER: f32 = 4.0;
 
+    /// What share of the matter in litter ends up in the ground rather than
+    /// going off into the air.
+    ///
+    /// The rest is lost. This is the number that makes a closed loop
+    /// impossible: everything that goes round comes back a little smaller.
+    pub const KEPT_FROM_ROT: f32 = 0.6;
+
+    /// What one unit of standing crop takes out of the ground to grow.
+    ///
+    /// Growth and return are two ends of the same arithmetic, so they live
+    /// beside each other. `ResourceNode::regenerate_in_ground` draws this per
+    /// unit it grows; everything that puts matter back is measured against it.
+    pub const NUTRIENT_PER_UNIT_GROWN: f32 = 0.0015;
+
+    /// The litter left by one unit of food that was eaten.
+    ///
+    /// A body keeps some of what it eats and passes the rest. Set so that a
+    /// meal returns about three fifths of the nutrient that growing it took,
+    /// once rot has taken its own cut - the loop turns, and loses on every
+    /// turn, which is what a loop of this kind does.
+    pub const WASTE_PER_MEAL: f32 = Self::NUTRIENT_PER_UNIT_GROWN;
+
+    /// And by one unit that spoiled before anybody could eat it.
+    ///
+    /// Nothing took a share of this on the way, so all of what it was grown
+    /// with is still in it.
+    pub const WASTE_PER_SPOILED: f32 =
+        Self::NUTRIENT_PER_UNIT_GROWN / Self::KEPT_FROM_ROT;
+
+    /// What a plant leaves in the ground it grew in, per unit of crop.
+    ///
+    /// The largest return of the three, and the one that was missing longest.
+    /// A plant takes up far more than ends up in the part anybody carries
+    /// away: the roots, the stalk and the leaves stay where they grew and go
+    /// back into that same tile. Only the grain leaves the field.
+    ///
+    /// Set so that about half of what the plant took up stays put, which is
+    /// roughly where a cereal sits. Without it the model treated every plant
+    /// as though the whole of it were carried off, and a settlement's fields
+    /// fell from 0.53 fertility to 0.04 inside thirty thousand ticks however
+    /// much its people put back at the other end.
+    pub const RESIDUE_PER_UNIT_GROWN: f32 =
+        Self::NUTRIENT_PER_UNIT_GROWN * 0.5 / Self::KEPT_FROM_ROT;
+
     /// The ground as it starts, before anything has lived or died on it.
     ///
     /// River silt and marsh are rich, mountain and sand are all but bare, and
@@ -145,7 +189,7 @@ impl Soil {
         self.woody_litter -= from_wood;
 
         // Some of it is lost to the air rather than staying in the ground
-        let released = (from_leaves + from_wood) * 0.6;
+        let released = (from_leaves + from_wood) * Self::KEPT_FROM_ROT;
         let before = self.nutrients;
         self.nutrients = (self.nutrients + released).min(Self::MAX_NUTRIENTS);
 

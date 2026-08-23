@@ -123,6 +123,10 @@ pub struct Population {
     pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
     /// Events that occurred this tick (for GUI timeline)
     pub pending_events: Vec<SimulationEvent>,
+    /// Where bodies fell since the simulation last collected them, and what
+    /// each is worth to the ground as soft matter and as bone. A population
+    /// has no world to put them in, so it holds them here until one does.
+    pub bodies_where_they_fell: Vec<((i32, i32, i32), f32, f32)>,
 }
 
 impl Population {
@@ -141,6 +145,7 @@ impl Population {
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
             pending_events: Vec::new(),
+            bodies_where_they_fell: Vec::new(),
         }
     }
 
@@ -160,6 +165,7 @@ impl Population {
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
             pending_events: Vec::new(),
+            bodies_where_they_fell: Vec::new(),
         }
     }
 
@@ -665,6 +671,15 @@ impl Population {
 
         if dead_agents.is_empty() {
             return; // No deaths to process
+        }
+
+        // Where the bodies fell, and what each was worth to the ground. The
+        // simulation puts them there: the population has no world to put them
+        // in.
+        for agent in self.agents.iter().filter(|agent| !agent.state.is_alive) {
+            let (soft, bone) = agent.state.life_stage.body_left_behind();
+            self.bodies_where_they_fell
+                .push((agent.state.position, soft, bone));
         }
 
         // Emit death events for timeline

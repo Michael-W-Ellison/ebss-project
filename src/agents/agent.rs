@@ -516,6 +516,26 @@ impl LifeStage {
         }
     }
 
+    /// What a body of this size leaves on the ground when it stops.
+    ///
+    /// Soft matter and bone, as a share of what a grown adult leaves. Measured
+    /// against a meal: a person is worth some tens of meals of matter, and
+    /// most of what a settlement grows passes through people, so this is a
+    /// smaller return than eating but not a negligible one.
+    pub fn body_left_behind(&self) -> (f32, f32) {
+        let share = match self {
+            LifeStage::Infant => 0.15,
+            LifeStage::Child => 0.4,
+            LifeStage::Adolescent => 0.75,
+            LifeStage::Adult => 1.0,
+            LifeStage::Elderly => 0.85,
+        };
+
+        // Forty meals' worth of soft matter and half as much again in bone
+        let soft = 40.0 * crate::world::Soil::WASTE_PER_SPOILED * share;
+        (soft, soft * 0.5)
+    }
+
     /// How long this body can go on what it has stored, as a share of what a
     /// grown adult can manage.
     ///
@@ -549,6 +569,13 @@ pub struct AgentState {
     pub ticks_without_food: u32, // Count starvation duration
     pub last_drank_tick: u32, // Track when agent last drank water
     pub ticks_without_water: u32, // Count dehydration duration
+    /// What this body has to pass, waiting to be left on the ground.
+    ///
+    /// Everything eaten used to leave the world for good, so a settlement was
+    /// a one-way pump from the soil into nothing. What a body takes in, most
+    /// of it comes out again somewhere.
+    #[serde(default)]
+    pub waste_carried: f32,
 }
 
 impl AgentState {
@@ -570,6 +597,7 @@ impl AgentState {
             ticks_without_food: 0,
             last_drank_tick: 0,
             ticks_without_water: 0,
+            waste_carried: 0.0,
         }
     }
 
@@ -675,8 +703,19 @@ impl AgentState {
     /// Eat food and restore energy
     pub fn eat(&mut self, current_tick: u32, energy_restored: f32) {
         self.energy = (self.energy + energy_restored).min(100.0);
+        self.took_a_meal(current_tick);
+    }
+
+    /// Record a meal: the clocks reset, and the body has something to pass.
+    pub fn took_a_meal(&mut self, current_tick: u32) {
         self.last_ate_tick = current_tick;
         self.ticks_without_food = 0;
+        self.waste_carried += crate::world::Soil::WASTE_PER_MEAL;
+    }
+
+    /// Leave what the body has to leave, and report how much.
+    pub fn void_waste(&mut self) -> f32 {
+        std::mem::take(&mut self.waste_carried)
     }
 
     /// Drink water and reset dehydration
@@ -1543,7 +1582,14 @@ impl Agent {
             .collect();
 
         for item_id in spoiled_items {
-            self.inventory.items.remove(&item_id);
+            // What has gone off is still matter. Deleting it outright made a
+            // pack the one place in the world where things could rot to
+            // nothing, which is half of why the ground never got anything
+            // back.
+            if let Some(item) = self.inventory.items.remove(&item_id) {
+                self.state.waste_carried +=
+                    item.quantity as f32 * crate::world::Soil::WASTE_PER_SPOILED;
+            }
         }
     }
 
@@ -3493,8 +3539,7 @@ impl Agent {
                 self.inventory.remove_item(item_id, 1);
                 let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
                 self.nutrition.consume(&flat_nutrition);
-                self.state.last_ate_tick = current_tick;
-                self.state.ticks_without_food = 0;
+                self.state.took_a_meal(current_tick);
                 if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
                     hunger.decrease(0.2);
                 }
@@ -3531,9 +3576,8 @@ impl Agent {
             }
         }
 
-        // Reset starvation timer
-        self.state.last_ate_tick = current_tick;
-        self.state.ticks_without_food = 0;
+        // Reset starvation timer, and note what the body will have to pass
+        self.state.took_a_meal(current_tick);
 
         // Satisfy hunger based on total nutrition
         let hunger_reduction = nutrition.total() / 100.0 * 0.3;
