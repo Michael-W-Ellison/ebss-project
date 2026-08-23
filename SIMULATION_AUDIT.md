@@ -511,6 +511,34 @@ proportion to how much unfarmed country is left — on a fifty-by-fifty map with
 ninety-odd fields already broken, an agent that walks out does not have far to
 walk.
 
+**And it did not hold.** The measurement above was taken while a settlement's
+whole second generation was quietly dying of the newborn dehydration bug (see
+below). Fixing that roughly doubled how many people a world can grow, and at the
+larger scale the brakes are not enough. The same six worlds, thirty thousand
+ticks, across all three states of the code:
+
+| Measure | Before any of it | With the survival pressure | With healthy newborns |
+| --- | --- | --- | --- |
+| Worlds still inhabited | 11 of 12 | 6 of 6 | 6 of 6 |
+| People at the end | 77.7 | 76.0 | 78.2 |
+| Highest the population reached | 141.3 | 93.2 | **211.5** |
+| End over peak | 0.55 | 0.82 | **0.37** |
+| Fertility of the farmed ground | 0.025 | 0.179 | **0.055** |
+
+Every world is still inhabited at thirty thousand ticks, which is the thing that
+matters most and which no version of this before held. But the shape is the
+overshoot-and-slide again, and worse than the shape it started as: a settlement
+now runs to two hundred and eleven and is down to a third of that by the end,
+having mined its ground to 0.055.
+
+The reading is that breeding-on-a-surplus, migration and the rest bought a
+settlement of ninety a soft landing, and buy a settlement of two hundred
+nothing. The soil economics are unchanged and were always the binding
+constraint: production decays with cumulative harvest, recovery runs about
+sixty-five times slower than depletion, and nothing puts nutrient back. Curing
+the infant mortality removed a brake nobody had intended, and what it revealed
+was that the intended brakes are calibrated for a population half the size.
+
 **Why a settlement that overshoots did not settle back.** Six worlds traced to
 thirty thousand ticks, sampling the ground the settlement actually farms rather
 than the map as a whole.

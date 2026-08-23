@@ -158,10 +158,33 @@ third below it, and the farmed ground ended at 0.179 fertility rather than
 the migration pressure was firing on a quarter to a half of the population by
 the end.
 
-What remains: the ground is still mined, only more slowly, because there are
-fewer people on it - nothing puts nutrient back at the rate it is taken. And
-on a fifty-by-fifty map with ninety fields already broken, an agent that walks
-out has nowhere much to walk to.
+**Then it stopped holding.** That measurement was taken while every settlement
+was losing its second generation to the newborn dehydration bug described above.
+Fixing that roughly doubled how many people a world grows, and the brakes turn
+out to be calibrated for the smaller number. The same six worlds, all three
+states of the code:
+
+| Measure | Before any of it | With the survival pressure | With healthy newborns |
+| --- | --- | --- | --- |
+| Worlds still inhabited | 11 of 12 | 6 of 6 | 6 of 6 |
+| People at the end | 77.7 | 76.0 | 78.2 |
+| Highest reached | 141.3 | 93.2 | 211.5 |
+| End over peak | 0.55 | 0.82 | 0.37 |
+| Fertility of the farmed ground | 0.025 | 0.179 | 0.055 |
+
+Every world is still inhabited at thirty thousand ticks, which no version of
+this held before. But the overshoot-and-slide is back and steeper than it
+started. The soil economics are untouched and were always the binding
+constraint; breeding-on-a-surplus and migration bought a settlement of ninety a
+soft landing and buy a settlement of two hundred nothing.
+
+What remains, and it is the whole of it: the ground is still mined and nothing
+puts nutrient back at the rate it is taken. Every measure that helped did so by
+holding the population down, and none of them touched the constraint. A
+settlement of two hundred works its ground out in thirty thousand ticks whatever
+else is true, so the next thing worth doing is a return path for nutrient -
+agents putting waste, bone and bedding back on the fields, or abandoning spent
+ground and letting it lie - rather than another brake on the people.
 
 ### 4. Winter is not cold: the tile temperature is frozen at first touch
 

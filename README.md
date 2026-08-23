@@ -220,9 +220,9 @@ the code actually does, verified by running it — not what was planned.
       now, but still cannot see each other or hear anything
 - [ ] Give agents a way to make and keep tools, stores and anything decorative:
       three drives now ask for those and nothing in the world answers them
-- [ ] Give a settlement something to settle back to: an overshooting one slides
-      rather than correcting, because growing food permanently lowers the rate
-      at which more of it arrives
+- [ ] Give the ground a way back: every measure against overshoot so far works
+      by holding the population down, and none touches the constraint that
+      growing food permanently lowers the rate at which more of it arrives
 - [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts
