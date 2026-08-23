@@ -6,7 +6,7 @@ A general-purpose AI platform for simulating societies of autonomous agents that
 
 EBSS provides a modular framework where agents develop complex behaviors through:
 - **Weighted Behavior Trees**: Learned decision-making patterns that evolve with experience
-- **Drive-Based Motivation**: 13 core drives (hunger, safety, curiosity, social, etc.) creating dynamic priorities
+- **Drive-Based Motivation**: 15 core drives (hunger, thirst, safety, curiosity, social, etc.) creating dynamic priorities
 - **Genetic Inheritance**: Offspring inherit successful behavioral patterns from parents
 - **Memory Systems**: Agents remember locations, storage contents, and other agents
 - **Observational Learning**: Young agents learn by following experienced agents
@@ -16,21 +16,117 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 
 ## Project Status
 
-**Current Phase**: Foundation Development (Phase 1)
+**Current state**: all four planned phases are implemented. A default
+simulation runs a society that feeds itself, waters itself, shelters from the
+weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
+across 200 source files, with 1,199 library tests.
 
-This project is in early development. See the [Software Design Document](docs/Software_Design_Document.docx) for complete specifications.
+Every build configuration compiles: default, `--features gui`,
+`--features bevy_gui` and `--workspace`, with 1,236 tests across the workspace.
+The work left is connecting rather than building — several analytics
+components are libraries with no caller, and agents cannot yet see each other
+or hear anything. See
+[PROJECT_STATUS.txt](PROJECT_STATUS.txt) for measured detail and
+[ISSUES_FOUND.md](ISSUES_FOUND.md) for the current defect list. The
+[Software Design Document](EBSS_Software_Design_Document.docx) holds the
+original specifications.
 
 ## Key Features
 
 - ✅ Behavior Tree Learning: Agents build and evolve decision trees through experience
-- ✅ Drive Architecture: 13 core drives create emergent behavior patterns
-- 🚧 Genetic Inheritance: Offspring learn from successful parent strategies
-- 🚧 Environment Abstraction: Plugin system for different world types
-- 📋 Memory Systems: Knowledge persistence with decay
-- 📋 Social Learning: Observation and imitation mechanics
-- 📋 Analytics: Emergence detection and behavior analysis
+- ✅ Drive Architecture: 15 core drives create emergent behavior patterns
+- ✅ Survival: hunger, thirst, nutrition, body temperature, exposure and shelter
+- ✅ Genetic Inheritance: offspring inherit traits and behavior from parents
+- ✅ Memory Systems: spatial and episodic memory with decay
+- ✅ Social Learning: observation, imitation, gossip and shared knowledge
+- ✅ Environment Abstraction: plugin interface, crafting, technology progression
+- 🚧 Analytics: emergence detection, metrics and replay exist but the
+  simulation loop does not drive them — examples do
+- ✅ Fire and cooking: agents gather wood, light campfires and cook at them.
+  Only meat, fish and grain are improved by a fire; anything else put over one
+  is ruined, and so is anything cooked twice. Burning a batch gets rarer with
+  practice
+- ✅ Perception: sight is how agents find things — terrain, resources and
+  buildings within 25 tiles, refreshed every tick, and the Blind trait takes
+  it away. Smell is scaled to what a thing actually gives off: a berry on the
+  bush carries about two tiles, water three, flesh six, food that has turned
+  nine to twenty, and cooking the whole range
+- ✅ Soil and flora: every tile carries nutrients and decaying matter, plants
+  grow on whichever of water, light and nutrient they have least of, foliage
+  sheds leaf fall that becomes soil, and what rots depends on how dense it was
+  and how wet the ground is
+- ✅ Farming: agents break open grass into fields and sow them. A field gets at
+  more of what the soil holds and carries a heavier crop — it does not grow
+  anything faster than that plant's kind can grow
+- ✅ Learned practices: nobody tells an agent that muck does a field good. It
+  tries it, watches what happens, keeps or drops the idea, and the neighbours
+  who saw it take something from that too
+- ✅ Everybody is somebody: a founder is drawn with three to five compatible
+  traits out of sixty-odd, and everybody born afterwards takes after their two
+  parents. Forty founders are forty different people
+- 🚧 Personality reaches the drives — a trait scales how loudly a drive argues
+  and moves the point at which somebody acts on it, so a lazy person needs more
+  pushing before starting work and a coward starts running at a smaller wolf —
+  but it still changes almost nothing about what anybody does. Drives are
+  consulted at the thirteenth of thirteen action priorities, and when they are,
+  three drives nothing can answer take every turn. See ISSUES_FOUND.md #12
+- ✅ A fishery, which is the one food the land does not pay for: fish come up
+  the river on the season rather than growing back out of what is left of them,
+  so a reach fished out fills again from the catchment. What is left of a fish,
+  put on a field, is worth forty times a unit of crop — it was grown at sea. A
+  settlement that works one ends thirty thousand ticks on *better* ground than
+  it started on, without its peak population moving at all
+- ✅ Nutrient goes back into the ground as well as coming out of it: what a body
+  passes, what spoils in a pack, what a body is when it stops, and the roots
+  and stalk a plant leaves in the tile it grew in. Rot loses two fifths of what
+  it works on, so the loop turns and loses on every turn — but a settlement now
+  holds two thirds of its peak on ground at 0.27 fertility, where before it
+  kept a quarter of it on ground at 0.058. The three that go through people are
+  worth almost nothing on their own, because what goes through a person comes
+  out wherever the person happens to be standing — which is exactly why carting
+  muck onto a field is a thing worth learning
+- ✅ Family: parents keep their children close and go to one that has strayed or
+  that something is stalking; children learn skills by watching the adults
+  around them, and most from their own parents
+- ✅ A calendar that turns: a tick is two hours, a day twelve ticks, a season
+  twenty-four days and a year 1,152 ticks. A world opens in spring, an
+  eight-thousand-tick run covers seven years and all four seasons, and a life
+  spans eight or nine of them. Every run before this ended on Year 0, Day 4,
+  having never left the winter it began in
+- 🚧 The season decides regrowth, daylight and the weather — winter snows a
+  tenth of the time and no other season snows at all — but not the temperature
+  a tile reports: that is frozen the first time anything asks, so a clear day
+  reads the same in every season
+- ✅ Drives that look past this afternoon run five times faster in an agent
+  whose immediate needs are met, and a quarter as fast in one whose are not
+- ✅ Drives that read the world: threat, darkness, weather, what is in the pack,
+  what the ground round about is bearing, whether a child has strayed. A drive
+  with nothing asking for it falls quiet instead of waiting at its ceiling
+- ✅ A need presses harder the longer it goes unanswered — up to fourfold, on
+  both how fast it builds and how loudly it argues — so a settlement that
+  cannot feed somebody eventually loses them to it. Breeding waits on a
+  surplus rather than a full stomach, children have a fraction of an adult's
+  reserves against a famine, and ten days of unanswered hunger sends an agent
+  out of the country it is standing in
+- ✅ Agents learn what pays: every attempt is recorded against the kind of
+  undertaking it was and shifts what they try next. Failures count for more
+  than successes, nothing is written off before five attempts, and a hunter
+  who never catches anything stops hunting
+- 🚧 Agents cannot yet hear anything: that percept channel is built but unfed
+- ✅ Clothing: agents gather flax, cotton and bark, make garments and wear
+  them. A garment is worth what its material is worth and what the hand that
+  made it could manage; wood goes into clothes only once a fire's worth is set
+  aside
+- ✅ Ecology: herds are held down by the predators that live off them and by
+  the ground they graze. A predator that cannot find prey starves, widens what
+  it will take, and turns on the people living beside it. A species wiped out of a
+  world is slowly replaced by animals wandering in from off the map
+- ✅ Hunting: agents go after animals for the skins and eat what comes with
+  them. A hunter has to be within a spear's throw, an unarmed one leaves the
+  dangerous animals alone, and a kill is butchered into meat, hides, leather
+  and wool
 
-Legend: ✅ Implemented | 🚧 In Progress | 📋 Planned
+Legend: ✅ Implemented and running | 🚧 Built but not fully connected | 📋 Not yet driven
 
 ## Project Structure
 
@@ -102,34 +198,56 @@ fn main() {
 
 ## Development Roadmap
 
-### Phase 1: Core Foundation (Months 1-4) ⏳
+All four originally planned phases are implemented. Boxes below reflect what
+the code actually does, verified by running it — not what was planned.
+
+### Phase 1: Core Foundation ✅
 - [x] Project structure and build system
-- [ ] Basic behavior tree implementation
-- [ ] Core drive system (5 drives)
-- [ ] Simple grid-based world
-- [ ] Agent actions and learning
-- [ ] ASCII visualization
+- [x] Behavior tree implementation with weight-based learning and pruning
+- [x] Core drive system (all 15 drives)
+- [x] Grid-based world with terrain, resources and regeneration
+- [x] Agent actions and learning
+- [x] ASCII visualization
 
-### Phase 2: Environment Abstraction (Months 5-8)
-- [ ] Plugin architecture
-- [ ] Material property system
-- [ ] Template-based crafting
-- [ ] Minecraft-style environment
-- [ ] Tool effectiveness calculations
+### Phase 2: Environment Abstraction ✅
+- [x] Plugin architecture (`src/environment/plugin.rs`, registry)
+- [x] Material property system
+- [x] Template-based crafting, smelting and clothing recipes
+- [x] Minecraft-style environment (`src/environment/minecraft_survival.rs`)
+- [x] Tool effectiveness calculations
+- [x] Bundled `plugins/minecraft_survival` crate, a worked example of the
+      plugin interface — though it duplicates the in-tree module above
 
-### Phase 3: Social Systems (Months 9-12)
-- [ ] Reproduction mechanics
-- [ ] Genetic inheritance
-- [ ] Observational learning
-- [ ] Social memory
-- [ ] All 13 drives implemented
+### Phase 3: Social Systems ✅
+- [x] Reproduction, pregnancy, birth and nursing
+- [x] Genetic and behavioral inheritance
+- [x] Observational learning
+- [x] Social memory, relationships, gossip and shared knowledge
+- [x] All 15 drives implemented and acted on
 
-### Phase 4: Analytics and Polish (Months 13-18)
-- [ ] Data logging and analysis
-- [ ] Web-based visualization
-- [ ] Emergence detection
-- [ ] Performance optimization
-- [ ] Additional environment plugins
+### Phase 4: Analytics and Polish 🚧
+- [x] Data logging and analysis (metrics, export to JSON/CSV)
+- [x] Emergence detection
+- [x] Save/load and autosave with checkpoint rotation
+- [x] Interactive GUI (egui) alongside the ASCII renderer
+- [ ] Analytics are not driven by the simulation loop — they run only when a
+      caller feeds them, as `examples/ascii_simulation.rs` does
+- [ ] Web-based visualization: an HTTP API exists in `analytics/web_api.rs`
+      but has no call sites and no front end
+- [x] Bevy front end (`cargo run --features bevy_gui --bin ebss_bevy`)
+- [ ] Performance has not been profiled at scale
+
+### Beyond the original plan
+- [ ] Give world generation a seed, so runs are reproducible and six flaky
+      tests become deterministic
+- [ ] Feed the remaining percept channels: agents discover the world by sight
+      now, but still cannot see each other or hear anything
+- [ ] Give agents a way to make and keep tools, stores and anything decorative:
+      three drives now ask for those and nothing in the world answers them
+- [ ] Give the ground a way back: every measure against overshoot so far works
+      by holding the population down, and none touches the constraint that
+      growing food permanently lowers the rate at which more of it arrives
+- [ ] Characterise long-run behaviour past 100k ticks
 
 ## Core Concepts
 
@@ -137,20 +255,32 @@ fn main() {
 Agents maintain forests of behavior trees where successful patterns are reinforced over time. Each tree branch has a weight that increases with positive outcomes.
 
 ### Drive System
-13 core drives motivate agent behavior:
+15 core drives motivate agent behavior, in the order they appear in
+`DriveType`:
 1. Hunger - Seek and consume food
-2. Rest - Find shelter and sleep
-3. Shelter - Build or locate protective structures
-4. Safety - Avoid threats, create defenses
-5. Preparedness - Stockpile resources and tools
-6. Industry - Mine, smelt, and process materials
-7. Sustenance - Farm and produce food
-8. Curiosity - Explore and learn
-9. Social - Interact with other agents
-10. Reproduction - Create offspring
-11. Luxury - Seek rare or decorative items
-12. Utility - Maintain tools and equipment
-13. Construction - Build structures and infrastructure
+2. Thirst - Find and drink water
+3. Rest - Sleep and recover from fatigue
+4. Shelter - Build or locate protective structures
+5. Safety - Avoid threats, create defenses
+6. Preparedness - Stockpile resources and tools
+7. Industry - Mine, smelt, and process materials
+8. Sustenance - Farm and produce food
+9. Curiosity - Explore and learn
+10. Social - Interact with other agents
+11. Reproduction - Create offspring
+12. Luxury - Seek rare or decorative items
+13. Utility - Maintain tools and equipment
+14. Construction - Build structures and infrastructure
+15. Protection - Keep one's children close and safe
+
+The design document specifies thirteen (Thirst and Protection came later) and
+gives each drive a list of conditions that should raise it. Nine of the fifteen
+read those conditions — threat, darkness, weather, what is in the pack, what the
+ground round about is bearing, whether a child has strayed — and settle where
+the situation puts them; the other six build with time, which is what the
+document says of them. See **The drive system against its specification** in
+[SIMULATION_AUDIT.md](SIMULATION_AUDIT.md) for what that changed and for the
+three drives that stay high because nothing in the world can answer them.
 
 ### Memory
 Agents remember:
@@ -184,10 +314,16 @@ cargo tarpaulin --out Html
 
 ## Documentation
 
-- [Software Design Document](docs/Software_Design_Document.docx) - Complete system architecture and specifications
-- [API Documentation](docs/api/README.md) - Detailed API reference
-- [Environment Plugin Guide](docs/environment_plugins.md) - Creating custom environments
-- [Examples](examples/README.md) - Tutorials and example simulations
+- [Software Design Document](EBSS_Software_Design_Document.docx) - Original architecture and specifications
+- [PROJECT_STATUS.txt](PROJECT_STATUS.txt) - Measured state of the project: what builds, what runs, what does not
+- [SIMULATION_AUDIT.md](SIMULATION_AUDIT.md) - Which subsystems the simulation loop actually drives
+- [ISSUES_FOUND.md](ISSUES_FOUND.md) - Current known defects, with reproduction steps
+- [TESTING.md](TESTING.md) - How to run and write tests
+- [SETUP.md](SETUP.md) - Development environment setup
+- [docs/VISUALIZATION.md](docs/VISUALIZATION.md) - Rendering and display
+- API reference: `cargo doc --open` (there is no checked-in API document)
+- Examples: 21 runnable programs in [examples/](examples/), starting with
+  `basic_survival.rs`
 
 ## Research Applications
 

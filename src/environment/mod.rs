@@ -52,7 +52,9 @@ pub use fauna::{
 pub use biome::{BiomeType, Biome};
 pub use weather::{Weather, WeatherType, WeatherGenerator, PrecipitationType};
 pub use exposure::{ExposureType, ExposureStatus, ExposureProtection};
-pub use seasons::{Season, SeasonalCalendar};
+pub use seasons::{
+    Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, TICKS_PER_DAY, TICKS_PER_YEAR,
+};
 
 /// Result type for environment operations
 pub type EnvironmentResult<T> = Result<T, EnvironmentError>;
@@ -202,6 +204,20 @@ pub enum Action {
     Dismount,
     /// Seek shelter from dangerous weather
     SeekShelter,
+    /// Build, fuel and light a fire where the agent is standing
+    LightFire,
+    /// Put carried food on a fire the agent is standing at
+    Cook { food_type: String },
+    /// Make a garment from materials the agent is carrying
+    MakeClothing { garment: String },
+    /// Put on a garment the agent is carrying
+    WearClothing { garment: String },
+    /// Break the grass where the agent stands into a field, and sow it
+    TillSoil,
+    /// Tip whatever is spoiling in the pack onto the ground here
+    SpreadMuck,
+    /// Take what the run is carrying, from the reach the agent is standing at
+    Fish,
     /// Wait/idle
     Wait,
 }
@@ -225,10 +241,17 @@ impl Action {
             Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
+            Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
+            Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
+            Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
+            Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
+            Action::SpreadMuck => Some(DriveType::Sustenance),
+            Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
+            Action::WearClothing { .. } => Some(DriveType::Shelter),
             Action::Move { .. } => None,
             Action::Wait => None,
         }

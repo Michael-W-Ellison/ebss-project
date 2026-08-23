@@ -55,7 +55,7 @@ AGENT SYSTEM (Partial Implementation)
 │  │ ├─ state: AgentState                                        │        │
 │  │ │   ├─ health: f32                                          │        │
 │  │ │   └─ position: (i32, i32, i32)                            │        │
-│  │ ├─ drives: DriveState (13 drives)          [COMPLETE]      │        │
+│  │ ├─ drives: DriveState (15 drives)          [COMPLETE]      │        │
 │  │ ├─ behavior_trees: Vec<BehaviorTree>       [EMPTY]         │        │
 │  │ └─ memory: Memory                          [STUB]          │        │
 │  │                                                              │        │

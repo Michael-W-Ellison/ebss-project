@@ -35,10 +35,15 @@ WHAT'S FULLY IMPLEMENTED ✅
    - 6 comprehensive tests
 
 2. Drive System (src/core/drives.rs - 280 lines)
-   - All 13 drives: Hunger, Rest, Shelter, Safety, Preparedness, Industry,
-     Sustenance, Curiosity, Social, Reproduction, Luxury, Utility, Construction
+   - All 15 drives: Hunger, Thirst, Rest, Shelter, Safety, Preparedness,
+     Industry, Sustenance, Curiosity, Social, Reproduction, Luxury, Utility,
+     Construction, Protection
+   - Nine of them read the conditions the design document specifies (threat,
+     darkness, weather, stores to hand, the ground round about, a child gone
+     astray) and settle where the situation puts them; the other six build
+     with time
    - Accumulation mechanics (0.1% to 2% per tick)
-   - Urgency = value × weight (personalization)
+   - Urgency = value × weight × how long the need has gone unanswered
    - Activation thresholds (0.1 to 0.8)
    - 10+ comprehensive tests
 
@@ -168,7 +173,7 @@ DIRECTORY STRUCTURE
 ebss-project/
 ├── src/
 │   ├── core/              # AI systems
-│   │   ├── drives.rs      # ✅ All 13 drives
+│   │   ├── drives.rs      # ✅ All 15 drives
 │   │   ├── behavior_tree.rs # ✅ Tree system
 │   │   ├── memory.rs      # 🚧 Stub
 │   │   ├── learning.rs    # 🚧 Stub

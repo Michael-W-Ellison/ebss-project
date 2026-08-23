@@ -76,6 +76,7 @@ pub enum Trait {
     // Investigation and Awareness Traits
     Suspicious,     // Noise curiosity increases at twice rate
     Deaf,           // Immune to noise events
+    Blind,          // Cannot see: no sight-based discovery of the world
     Uncaring,       // Reduces noise curiosity by half
     Paranoid,       // Doesn't trust word, assumes malice
 
@@ -179,6 +180,7 @@ impl Trait {
             Trait::Curious => "Happiness from learning and discovering",
             Trait::Suspicious => "Noise curiosity increases at twice rate",
             Trait::Deaf => "Immune to noise events",
+            Trait::Blind => "Cannot see; finds the world by smell and memory alone",
             Trait::Uncaring => "Reduces noise curiosity by half",
             Trait::Paranoid => "Doesn't trust others, assumes malice",
             Trait::Vengeful => "Prevents anger loss unless action taken against target",
@@ -266,6 +268,7 @@ impl Trait {
             Trait::Curious => "Curious",
             Trait::Suspicious => "Suspicious",
             Trait::Deaf => "Deaf",
+            Trait::Blind => "Blind",
             Trait::Uncaring => "Uncaring",
             Trait::Paranoid => "Paranoid",
             Trait::Vengeful => "Vengeful",
@@ -293,6 +296,98 @@ impl Trait {
             Trait::Infertile => "Infertile",
             Trait::Narcoleptic => "Narcoleptic",
             Trait::SoundSleeper => "Sound Sleeper",
+        }
+    }
+
+    /// What this trait argues for, and what it argues against.
+    ///
+    /// Each entry is a drive, what this trait does to how loudly that drive
+    /// argues for the agent's attention, and what it does to how much of the
+    /// need it takes before the agent will act on it at all. Both are
+    /// multipliers on the drive's ordinary values, so 1.0 is no opinion.
+    ///
+    /// The two do different work and a trait usually wants both. Weight is how
+    /// much somebody cares once they have noticed; threshold is how long they
+    /// go before noticing. A lazy person and a diligent one both eventually
+    /// get up and work - the lazy one needs more pushing to start (higher
+    /// threshold) and drops it sooner for anything else (lower weight). A
+    /// coward is not more frightened of a given wolf than a brave person; the
+    /// coward starts running at a smaller wolf.
+    ///
+    /// This is the table that was missing. Sixty traits were defined almost
+    /// entirely as modifiers on how an agent *feels* about what happened -
+    /// "Lazy: constant happiness decrease when working", "Builder: happiness
+    /// from building structures" - and `core/drives.rs` did not mention traits
+    /// at all. With personalities assigned but nothing reading them, agents
+    /// holding Handy spent 83% of their attempts foraging, Builder 81% and
+    /// Greedy 84%: a Builder did not build. Feeling differently about the same
+    /// life is not having a different one.
+    ///
+    /// Traits absent from this table have no view on what to do, which is
+    /// right for most of them - Goth, Clown, Melancholic and the rest are
+    /// about mood, and mood is somewhere else's business.
+    pub fn leanings(&self) -> &'static [(crate::core::DriveType, f32, f32)] {
+        use crate::core::DriveType as D;
+
+        match self {
+            // Work, and what somebody will put their hands to
+            Trait::Lazy => &[(D::Industry, 0.5, 1.4), (D::Construction, 0.6, 1.3)],
+            Trait::Diligent => &[(D::Industry, 1.4, 0.75), (D::Sustenance, 1.15, 1.0)],
+            Trait::Handy => &[(D::Industry, 1.25, 0.9), (D::Utility, 1.3, 0.85)],
+            Trait::Builder => &[(D::Construction, 1.7, 0.7)],
+            Trait::CraftObsessed => &[(D::Utility, 1.6, 0.7), (D::Industry, 1.2, 0.9)],
+            Trait::Ambitious => &[(D::Construction, 1.25, 0.9), (D::Industry, 1.2, 0.9)],
+            Trait::Proud => &[(D::Construction, 1.15, 0.95), (D::Luxury, 1.2, 0.9)],
+
+            // What somebody keeps, and how much of it they want about them
+            Trait::Greedy => &[(D::Preparedness, 1.5, 0.7), (D::Luxury, 1.4, 0.8)],
+            Trait::Frugal => &[(D::Preparedness, 1.45, 0.75), (D::Luxury, 0.6, 1.3)],
+            Trait::Survivalist => &[(D::Preparedness, 1.4, 0.65), (D::Sustenance, 1.3, 0.8)],
+            Trait::Ascetic => &[(D::Luxury, 0.3, 1.9), (D::Preparedness, 0.8, 1.15)],
+            Trait::Envious => &[(D::Luxury, 1.45, 0.75)],
+
+            // Other people
+            Trait::Extrovert | Trait::Sociable => &[(D::Social, 1.7, 0.65)],
+            Trait::Introvert | Trait::Introverted => &[(D::Social, 0.45, 1.5)],
+            Trait::Charismatic => &[(D::Social, 1.3, 0.85)],
+            Trait::Gossip => &[(D::Social, 1.4, 0.8)],
+            Trait::Romantic => &[(D::Reproduction, 1.35, 0.8), (D::Social, 1.2, 0.9)],
+            Trait::Mute => &[(D::Social, 0.6, 1.3)],
+
+            // Looking after people who are not oneself
+            Trait::Caretaker => &[(D::Protection, 1.5, 0.65)],
+            Trait::Altruist => &[(D::Protection, 1.4, 0.7), (D::Social, 1.2, 0.9)],
+            Trait::KindHearted => &[(D::Protection, 1.3, 0.8)],
+            Trait::Protector => &[(D::Protection, 1.4, 0.7), (D::Safety, 1.2, 0.9)],
+            Trait::Callous => &[(D::Protection, 0.55, 1.4), (D::Social, 0.8, 1.15)],
+            Trait::Cruel => &[(D::Protection, 0.5, 1.5)],
+
+            // Danger, and how big a thing has to be before it is one
+            Trait::Coward => &[(D::Safety, 1.6, 0.6)],
+            Trait::Brave => &[(D::Safety, 0.6, 1.45)],
+            Trait::Anxious => &[(D::Safety, 1.4, 0.7), (D::Preparedness, 1.2, 0.85)],
+            Trait::Paranoid => &[(D::Safety, 1.5, 0.65), (D::Preparedness, 1.15, 0.9)],
+            Trait::Suspicious => &[(D::Safety, 1.2, 0.85)],
+            Trait::Aggressive => &[(D::Safety, 0.7, 1.3)],
+            Trait::Peaceful | Trait::Pacifist => &[(D::Safety, 1.15, 0.9)],
+
+            // Wanting to know
+            Trait::Curious => &[(D::Curiosity, 1.6, 0.65)],
+            Trait::Explorer => &[(D::Curiosity, 1.5, 0.7)],
+            Trait::Bookworm => &[(D::Curiosity, 1.4, 0.75)],
+            Trait::Imaginative => &[(D::Curiosity, 1.25, 0.85)],
+            Trait::Stubborn => &[(D::Curiosity, 0.7, 1.3)],
+            Trait::Traditionalist => &[(D::Curiosity, 0.75, 1.25), (D::Utility, 1.15, 0.9)],
+
+            // The body
+            Trait::Glutton => &[(D::Hunger, 1.3, 0.8), (D::Sustenance, 1.3, 0.8)],
+            Trait::Narcoleptic => &[(D::Rest, 1.3, 0.8)],
+            Trait::SoundSleeper => &[(D::Rest, 0.75, 1.25)],
+            Trait::Resilient => &[(D::Rest, 0.85, 1.15), (D::Shelter, 0.85, 1.15)],
+
+            // Everything else is about how a life feels rather than what is
+            // done with it, which is somewhere else's business
+            _ => &[],
         }
     }
 
@@ -525,16 +620,54 @@ impl TraitSet {
         ];
 
         let mut rng = thread_rng();
-        let selected = all_traits.choose_multiple(&mut rng, count * 2).cloned().collect::<Vec<_>>();
+
+        // Walk the whole pool in a random order rather than drawing a fixed
+        // handful. Drawing twice the wanted number and stopping was near
+        // enough while nobody used this, but it hands back short sets whenever
+        // the draw happens to contain a pair that cannot both be true of one
+        // person - and a settlement where some people have four traits and
+        // others one for no reason is a settlement of accidents.
+        let mut pool = all_traits;
+        pool.shuffle(&mut rng);
 
         let mut trait_set = TraitSet::new();
-        for trait_candidate in selected {
-            if trait_set.add_trait(trait_candidate) && trait_set.traits.len() >= count {
+        for trait_candidate in pool {
+            if trait_set.traits.len() >= count {
                 break;
             }
+            trait_set.add_trait(trait_candidate);
         }
 
         trait_set
+    }
+
+    /// How many traits a person is drawn with.
+    ///
+    /// Enough that no two people in a settlement are quite alike, few enough
+    /// that each one still tells: at three to five out of sixty-odd, two
+    /// agents sharing even one trait is uncommon, and nobody is a bundle of
+    /// every tendency at once.
+    pub const TRAITS_AT_BIRTH: std::ops::RangeInclusive<usize> = 3..=5;
+
+    /// Draw a personality for somebody nobody was born to.
+    ///
+    /// The founding generation of a world has no parents to take after, so
+    /// they are drawn from the pool; everybody afterwards inherits from the
+    /// two people who made them, with a chance of mutation, which is what
+    /// `inherit_traits` does.
+    pub fn a_person() -> Self {
+        use rand::Rng;
+
+        let count = rand::thread_rng().gen_range(Self::TRAITS_AT_BIRTH);
+
+        // Ordinary tendencies only. Blindness, deafness and muteness are in
+        // the pool `inherit_traits` mutates from but not in this one, so they
+        // arise in a people over generations rather than in the handful who
+        // founded the place - which is where congenital infertility already
+        // sat, and is the same reasoning: these are things somebody is born
+        // with, and a founding twelve who walked into a country are the one
+        // group in the model nobody was born into.
+        Self::generate_random(count)
     }
 }
 

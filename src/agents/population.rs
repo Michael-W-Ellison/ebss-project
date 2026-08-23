@@ -123,6 +123,10 @@ pub struct Population {
     pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
     /// Events that occurred this tick (for GUI timeline)
     pub pending_events: Vec<SimulationEvent>,
+    /// Where bodies fell since the simulation last collected them, and what
+    /// each is worth to the ground as soft matter and as bone. A population
+    /// has no world to put them in, so it holds them here until one does.
+    pub bodies_where_they_fell: Vec<((i32, i32, i32), f32, f32)>,
 }
 
 impl Population {
@@ -141,6 +145,7 @@ impl Population {
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
             pending_events: Vec::new(),
+            bodies_where_they_fell: Vec::new(),
         }
     }
 
@@ -160,6 +165,7 @@ impl Population {
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
             pending_events: Vec::new(),
+            bodies_where_they_fell: Vec::new(),
         }
     }
 
@@ -214,6 +220,32 @@ impl Population {
     pub fn spawn_agent(&mut self, config: AgentConfig) {
         let mut agent = Agent::new(config);
 
+        // Give the person a personality.
+        //
+        // Agents used to carry `TraitSet::default()`, which is empty, and
+        // nothing on any live path added a trait except the congenital
+        // infertility roll. So no agent in a running world held one of the
+        // sixty-odd defined traits, and everything downstream of them - the
+        // job affinities, the gossip distortion, the affinity model that
+        // decides who gets on with whom, the emotional modifiers, how long a
+        // plan a person will countenance, the religious effects - had an input
+        // that never varied. A settlement of eighty people was eighty copies of
+        // the same person.
+        //
+        // Inheritance was already written and already being called on every
+        // birth. It simply had nothing to inherit, because the founding
+        // generation had nothing. This is the one place that was missing: a
+        // founder has no parents to take after, so they are drawn from the
+        // pool, and everybody born afterwards takes after the two people who
+        // made them.
+        agent.traits = crate::core::traits::TraitSet::a_person();
+        agent.apply_trait_sensory_modifications();
+
+        // And let it reach what they want, not only what they can see. Without
+        // this a personality decides how somebody feels about their life and
+        // nothing about how they spend it.
+        agent.drives.lean_towards(&agent.traits);
+
         // Give new agents basic starting knowledge
         
         agent.technology_knowledge.add_initial_technology(
@@ -247,11 +279,8 @@ impl Population {
         let current_tick = self.current_tick;
         for agent in &mut self.agents {
             agent.tick_with_percepts(current_tick); // Process percepts with timestamp
-            // Apply pregnancy energy multiplier to age_tick
-            let energy_multiplier = agent.pregnancy.as_ref()
-                .map(|p| p.energy_multiplier(current_tick))
-                .unwrap_or(1.0);
-            agent.state.age_tick_with_modifier(current_tick, energy_multiplier);
+            // Aging, metabolism, food spoilage and fatigue (pregnancy modifier applied inside)
+            agent.process_survival_tick(current_tick);
         }
 
         // Update relationships between nearby agents
@@ -272,6 +301,14 @@ impl Population {
         if current_tick % 10 == 0 {
             self.process_trait_proximity_effects();
         }
+
+        // Who can see whom.
+        //
+        // Nothing populated `vision.visible_agents`, and observation is gated
+        // on it, so no agent had ever recorded seeing another do anything:
+        // the whole observational learning system ran every twenty ticks over
+        // an empty list. It is also what `Percept::AgentDetected` is built on.
+        self.update_who_can_see_whom();
 
         // Process observational learning (every 20 ticks to reduce overhead)
         if current_tick % 20 == 0 {
@@ -660,6 +697,15 @@ impl Population {
 
         if dead_agents.is_empty() {
             return; // No deaths to process
+        }
+
+        // Where the bodies fell, and what each was worth to the ground. The
+        // simulation puts them there: the population has no world to put them
+        // in.
+        for agent in self.agents.iter().filter(|agent| !agent.state.is_alive) {
+            let (soft, bone) = agent.state.life_stage.body_left_behind();
+            self.bodies_where_they_fell
+                .push((agent.state.position, soft, bone));
         }
 
         // Emit death events for timeline
@@ -1475,6 +1521,7 @@ impl Population {
     /// Process exploration for all living agents
     /// Agents discover tiles within their vision range
     pub fn process_exploration_with_world(&mut self, world: &mut crate::world::World) {
+        use crate::core::memory::SpatialMemoryType;
         use crate::core::DriveType;
 
         let current_tick = self.current_tick;
@@ -1490,8 +1537,13 @@ impl Population {
                 agent.state.position.1,
             );
 
-            // Vision range based on terrain and conditions (default 10 tiles)
-            let vision_range = 10;
+            // How far this agent can make out detail, which is zero if it
+            // cannot see: a blind agent discovers nothing by sight, and finds
+            // the world by smell and memory instead.
+            let vision_range = agent.sight_range();
+            if vision_range == 0 {
+                continue;
+            }
 
             // Process exploration - discovers tiles, resources, buildings
             let new_discoveries = world.process_exploration(
@@ -1513,17 +1565,64 @@ impl Population {
                 agent.skills.gain_experience(super::SkillType::Navigation, new_discoveries as u32 * 2);
             }
 
-            // Learn skills from discovered resources
-            for (pos, resource_type) in &agent.exploration_knowledge.known_resources {
-                // Only give XP for recently discovered resources (within last 10 ticks)
-                if let Some(&discover_tick) = agent.exploration_knowledge.resource_discovery_ticks.get(pos) {
-                    if current_tick.saturating_sub(discover_tick) < 10 {
-                        let skill_xp = Self::get_skill_for_resource_discovery(resource_type);
-                        for (skill_type, xp) in skill_xp {
-                            agent.skills.gain_experience(skill_type, xp);
-                        }
-                    }
+            // Learn skills from newly discovered resources.
+            let newly_seen: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
+                .exploration_knowledge
+                .known_resources
+                .iter()
+                .filter(|(pos, _)| {
+                    agent
+                        .exploration_knowledge
+                        .resource_discovery_ticks
+                        .get(pos)
+                        .map(|&tick| current_tick.saturating_sub(tick) < 10)
+                        .unwrap_or(false)
+                })
+                .map(|(pos, resource_type)| (*pos, *resource_type))
+                .collect();
+
+            for (_, resource_type) in &newly_seen {
+                for (skill_type, xp) in Self::get_skill_for_resource_discovery(resource_type) {
+                    agent.skills.gain_experience(skill_type, xp);
                 }
+            }
+
+            // Remember the food and water currently in view.
+            //
+            // Exploration reports a tile only the first time it is looked at,
+            // so an agent driven by that alone would stop noticing a berry
+            // patch the moment it had walked past it once. Sight is not a
+            // one-off: whatever is in range is seen again every tick, which is
+            // what keeps foraging memory current as patches are emptied and
+            // regrow. Foraging reads spatial memory rather than the
+            // exploration record, so without this an agent would have a patch
+            // catalogued and still starve walking past it.
+            let sight = vision_range as i32;
+            let in_view: Vec<(crate::world::Position, SpatialMemoryType)> = world
+                .resources
+                .iter()
+                .filter(|resource| resource.amount > 0)
+                .filter(|resource| {
+                    let dx = resource.position.x - agent_pos.x;
+                    let dy = resource.position.y - agent_pos.y;
+                    dx * dx + dy * dy <= sight * sight
+                })
+                .filter_map(|resource| {
+                    let memory_type = if resource.resource_type.is_edible() {
+                        SpatialMemoryType::Food
+                    } else if resource.resource_type == crate::world::ResourceType::Water {
+                        SpatialMemoryType::Water
+                    } else {
+                        return None;
+                    };
+                    Some((resource.position, memory_type))
+                })
+                .collect();
+
+            for (pos, memory_type) in in_view {
+                agent
+                    .memory
+                    .remember_location(memory_type, (pos.x, pos.y, 0));
             }
 
             // Learn skills from discovered buildings
@@ -1801,6 +1900,46 @@ impl Population {
                     }
                 }
             }
+        }
+    }
+
+    /// Work out which agents each agent can currently see.
+    ///
+    /// Sight range is the same one that finds berries and firewood, so a blind
+    /// agent sees nobody and learns nothing by watching - it has to be told.
+    pub fn update_who_can_see_whom(&mut self) {
+        let seen: Vec<(uuid::Uuid, (i32, i32, i32))> = self
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| (agent.id, agent.state.position))
+            .collect();
+
+        for agent in &mut self.agents {
+            if !agent.state.is_alive {
+                agent.senses.vision.visible_agents.clear();
+                continue;
+            }
+
+            let range = agent.sight_range() as i32;
+            if range == 0 {
+                agent.senses.vision.visible_agents.clear();
+                continue;
+            }
+
+            let position = agent.state.position;
+
+            let visible: Vec<uuid::Uuid> = seen
+                .iter()
+                .filter(|(id, _)| *id != agent.id)
+                .filter(|(_, other)| {
+                    (other.0 - position.0).abs() <= range
+                        && (other.1 - position.1).abs() <= range
+                })
+                .map(|(id, _)| *id)
+                .collect();
+
+            agent.senses.vision.update_visible_agents(visible);
         }
     }
 

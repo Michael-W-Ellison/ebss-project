@@ -1304,6 +1304,59 @@ pub struct Plant {
     pub is_cultivated: bool, // Whether it's a farm plant vs wild
 }
 
+/// What a plant has to work with where it is standing.
+///
+/// All three run 0.0 to 1.0. Growth takes the worst of them, not the average:
+/// a plant with all the water and light in the world and nothing in the ground
+/// is still a plant with nothing in the ground. This is the whole of why a
+/// field is worth manuring and a hedgerow picked bare takes years to come back.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GrowingConditions {
+    /// Rain, ground water, and what the terrain holds
+    pub water: f32,
+    /// Sun reaching this plant, which is mostly a question of what is standing
+    /// over it
+    pub light: f32,
+    /// What the soil has to give
+    pub nutrients: f32,
+    /// How readily this plant can take up what is there. Broken ground and a
+    /// tended crop take up more than the same plant would growing wild.
+    pub uptake: f32,
+}
+
+impl GrowingConditions {
+    /// Everything a plant could ask for, which is what an untended world used
+    /// to give every plant unconditionally
+    pub fn ideal() -> Self {
+        Self {
+            water: 1.0,
+            light: 1.0,
+            nutrients: 1.0,
+            uptake: 1.0,
+        }
+    }
+
+    /// The share of its natural best pace a plant grows at here.
+    ///
+    /// Liebig's rule: whatever is scarcest sets the pace, and nothing makes up
+    /// for it. Uptake helps a plant get at what is there; it cannot conjure
+    /// what is not, and it never carries growth past the natural maximum.
+    pub fn growth_share(&self) -> f32 {
+        let water = self.water.clamp(0.0, 1.0);
+        let light = self.light.clamp(0.0, 1.0);
+        let nutrients = (self.nutrients * self.uptake.max(0.0)).clamp(0.0, 1.0);
+
+        water.min(light).min(nutrients)
+    }
+
+    /// How much nutrient a plant growing here draws out of the ground per tick
+    pub fn draw_per_tick(&self) -> f32 {
+        const APPETITE: f32 = 0.00015;
+
+        APPETITE * self.uptake.max(0.0) * self.growth_share()
+    }
+}
+
 impl Plant {
     /// Create a new plant instance
     pub fn new(species_id: String, position: (i32, i32)) -> Self {
@@ -1340,8 +1393,23 @@ impl Plant {
 
     /// Advance growth by one tick
     pub fn grow(&mut self, species: &PlantSpecies) -> bool {
+        self.grow_in(species, GrowingConditions::ideal(), 1.0)
+    }
+
+    /// Grow, given what this plant actually has to work with.
+    ///
+    /// `grow` used to advance a plant one step per tick regardless of water,
+    /// light or soil - the biome lists on every species were declared and never
+    /// read - so a cactus grew as fast in a bog as an oak did, and neither ever
+    /// took anything out of the ground.
+    pub fn grow_in(
+        &mut self,
+        species: &PlantSpecies,
+        conditions: GrowingConditions,
+        ticks: f32,
+    ) -> bool {
         if self.has_been_harvested && self.regrow_timer > 0 {
-            self.regrow_timer -= 1;
+            self.regrow_timer = self.regrow_timer.saturating_sub(ticks.max(1.0) as u32);
             if self.regrow_timer == 0 {
                 // Reset for regrowth
                 self.growth_stage = GrowthStage::Seedling;
@@ -1356,11 +1424,18 @@ impl Plant {
             return false; // Dead plant
         }
 
-        self.age_ticks += 1;
+        self.age_ticks += ticks.max(0.0) as u32;
 
-        // Calculate growth for current stage
+        // Calculate growth for current stage, at whatever share of its natural
+        // best pace this ground allows. Nothing here can exceed that pace: the
+        // most a plant can do is grow as well as its kind grows.
+        let share = conditions.growth_share();
+        if share <= 0.0 {
+            return false;
+        }
+
         let stage_duration = self.stage_duration(species);
-        self.growth_progress += 1.0 / stage_duration as f32;
+        self.growth_progress += share * ticks / stage_duration as f32;
 
         if self.growth_progress >= 1.0 {
             // Advance to next stage
@@ -1592,6 +1667,242 @@ impl PlantManager {
         for plant in &mut self.plants {
             if let Some(species) = registry.get(&plant.species_id) {
                 plant.grow(species);
+            }
+        }
+    }
+
+    /// Stock a freshly generated world with the vegetation its country would
+    /// carry.
+    ///
+    /// Nothing had ever created a plant. `spawn_plant`, `plant_crop` and
+    /// `spawn_patch` existed, were tested, and had no callers outside the
+    /// world's own pass-through wrappers, so `world.plants` was empty in every
+    /// run that has ever been made and `tick` iterated nothing.
+    pub fn spawn_naturalistic(&mut self, grid: &crate::world::Grid) {
+        use rand::Rng;
+
+        let registry = match &self.registry {
+            Some(registry) => registry.clone(),
+            None => return,
+        };
+
+        let mut rng = rand::thread_rng();
+
+        // What grows where, and how thickly
+        for y in 0..grid.height {
+            for x in 0..grid.width {
+                if self.plants.len() >= self.max_population {
+                    return;
+                }
+
+                let terrain = grid.tiles[y][x].terrain.terrain_type;
+
+                let (density, want_trees) = match terrain {
+                    crate::world::TerrainType::Forest => (0.35, true),
+                    crate::world::TerrainType::Meadow => (0.25, false),
+                    crate::world::TerrainType::Wetland => (0.20, false),
+                    crate::world::TerrainType::Riverbank => (0.15, false),
+                    crate::world::TerrainType::Plains => (0.10, false),
+                    crate::world::TerrainType::Hills => (0.06, false),
+                    crate::world::TerrainType::Desert => (0.02, false),
+                    _ => (0.0, false),
+                };
+
+                if density <= 0.0 || rng.gen::<f32>() > density {
+                    continue;
+                }
+
+                let candidates: Vec<&PlantSpecies> = registry
+                    .all_species()
+                    .into_iter()
+                    .filter(|species| species.is_tree == want_trees)
+                    .filter(|species| {
+                        species
+                            .primary_biomes
+                            .contains(&crate::environment::fauna::terrain_to_climate_zone(terrain))
+                    })
+                    .collect();
+
+                if candidates.is_empty() {
+                    continue;
+                }
+
+                let species = candidates[rng.gen_range(0..candidates.len())];
+                let species_id = species.id.clone();
+
+                if let Some(id) = self.spawn_plant(species_id, (x as i32, y as i32)) {
+                    // A world does not start as bare seedlings: what is
+                    // standing has been standing a while
+                    if let Some(plant) = self.plants.iter_mut().find(|plant| plant.id == id) {
+                        plant.growth_stage = GrowthStage::Mature;
+                        plant.growth_progress = rng.gen::<f32>();
+                        plant.is_harvestable = true;
+                    }
+                }
+            }
+        }
+    }
+
+    /// How much this plant shades what is under and around it
+    fn canopy_of(size: PlantSize, is_tree: bool) -> f32 {
+        let base = match size {
+            PlantSize::Huge => 0.9,
+            PlantSize::Large => 0.7,
+            PlantSize::Medium => 0.4,
+            PlantSize::Small => 0.15,
+            PlantSize::Tiny => 0.05,
+        };
+
+        if is_tree {
+            base
+        } else {
+            base * 0.5
+        }
+    }
+
+    /// How much leaf fall this plant puts on the ground each tick
+    fn leaf_fall_of(size: PlantSize) -> f32 {
+        match size {
+            PlantSize::Huge => 0.00040,
+            PlantSize::Large => 0.00025,
+            PlantSize::Medium => 0.00010,
+            PlantSize::Small => 0.00004,
+            PlantSize::Tiny => 0.00001,
+        }
+    }
+
+    /// Grow everything standing, on what the ground and sky actually give it.
+    ///
+    /// This is where the vegetation and the soil meet. Each plant takes its
+    /// water from the country and the weather, its light from whatever is
+    /// standing over it, and its nutrient out of the ground - which it depletes
+    /// - and puts leaf fall back where it stands, which in time becomes more
+    /// nutrient. A wood feeds itself. A hedgerow stripped bare on thin ground
+    /// does not.
+    ///
+    /// Runs one pass per `ticks` ticks rather than every tick: plants take
+    /// thousands of ticks to grow and the world has hundreds of them.
+    pub fn tick_in_world(
+        &mut self,
+        grid: &mut crate::world::Grid,
+        precipitation: f32,
+        ticks: f32,
+        season: crate::environment::Season,
+    ) {
+        use crate::world::soil::Soil;
+        use crate::world::Position;
+
+        let registry = match &self.registry {
+            Some(registry) => registry.clone(),
+            None => return,
+        };
+
+        // Clear out what has died and will not come back
+        self.plants.retain(|plant| {
+            if plant.has_been_harvested {
+                registry
+                    .get(&plant.species_id)
+                    .map(|species| species.regrows || plant.regrow_timer > 0)
+                    .unwrap_or(false)
+            } else {
+                true
+            }
+        });
+
+        // What is standing over each tile, gathered once. Doing this per plant
+        // would be a comparison against every other plant in the world.
+        let mut canopy: std::collections::HashMap<(i32, i32), f32> =
+            std::collections::HashMap::new();
+
+        for plant in &self.plants {
+            let species = match registry.get(&plant.species_id) {
+                Some(species) => species,
+                None => continue,
+            };
+
+            if !matches!(
+                plant.growth_stage,
+                GrowthStage::Mature | GrowthStage::Flowering | GrowthStage::Fruiting
+            ) {
+                continue;
+            }
+
+            let shade = Self::canopy_of(species.size, species.is_tree);
+            *canopy.entry(plant.position).or_insert(0.0) += shade;
+
+            // Big things shade their neighbours too
+            if shade >= 0.4 {
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    *canopy
+                        .entry((plant.position.0 + dx, plant.position.1 + dy))
+                        .or_insert(0.0) += shade * 0.35;
+                }
+            }
+        }
+
+        for plant in &mut self.plants {
+            let species = match registry.get(&plant.species_id) {
+                Some(species) => species,
+                None => continue,
+            };
+
+            let position = Position::new(plant.position.0, plant.position.1);
+            let tile = match grid.get_tile_mut(&position) {
+                Some(tile) => tile,
+                None => continue,
+            };
+
+            let terrain = tile.terrain.terrain_type;
+
+            // Water: what the ground holds, and what falls on it
+            let water = Soil::humidity(terrain, precipitation);
+
+            // Light: full sun less whatever is standing over it. A plant does
+            // not shade itself out of existence, so its own canopy is
+            // discounted.
+            let over_it = canopy.get(&plant.position).copied().unwrap_or(0.0);
+            let own = if matches!(
+                plant.growth_stage,
+                GrowthStage::Mature | GrowthStage::Flowering | GrowthStage::Fruiting
+            ) {
+                Self::canopy_of(species.size, species.is_tree)
+            } else {
+                0.0
+            };
+            // A short day is less light, whatever is or is not standing over
+            // the plant. This is what makes a winter a winter for a plant:
+            // nine hours of sun against summer's fifteen.
+            let daylight = season.day_length() / 15.0;
+            let light = ((1.0 - (over_it - own).max(0.0)) * daylight).clamp(0.05, 1.0);
+
+            // Nutrient: what is in the ground, and how readily this plant can
+            // get at it. Broken ground is worked, weeded and watered, so a crop
+            // on it takes up far more of what is there - it does not grow
+            // faster than its kind can grow.
+            let uptake = if tile.terrain.is_cultivated() { 2.5 } else { 1.0 };
+
+            let conditions = GrowingConditions {
+                water,
+                light,
+                nutrients: tile.soil.fertility(),
+                uptake,
+            };
+
+            plant.grow_in(species, conditions, ticks);
+
+            // What it grows with, it takes out of the ground
+            let wanted = conditions.draw_per_tick() * ticks;
+            if wanted > 0.0 {
+                tile.soil.draw(wanted);
+            }
+
+            // And what it sheds, it puts back
+            if matches!(
+                plant.growth_stage,
+                GrowthStage::Mature | GrowthStage::Flowering | GrowthStage::Fruiting
+            ) {
+                tile.soil
+                    .add_leaf_litter(Self::leaf_fall_of(species.size) * ticks);
             }
         }
     }

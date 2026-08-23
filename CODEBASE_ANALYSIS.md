@@ -13,7 +13,8 @@ ebss-project/
 ├── src/
 │   ├── core/                    # AI systems (IMPLEMENTED)
 │   │   ├── behavior_tree.rs     # ✅ Complete (200+ lines)
-│   │   ├── drives.rs            # ✅ Complete (280+ lines, all 13 drives)
+│   │   ├── drives.rs            # ✅ Complete (all 15 drives, nine of them
+│   │   │                          #    reading their specified conditions)
 │   │   ├── memory.rs            # 🚧 Placeholder
 │   │   ├── learning.rs          # 🚧 Placeholder
 │   │   └── mod.rs
@@ -53,7 +54,7 @@ ebss-project/
 pub struct Agent {
     pub id: Uuid,                        // Unique identifier
     pub state: AgentState,               // Health and position
-    pub drives: DriveState,              // All 13 motivation drives
+    pub drives: DriveState,              // All 15 motivation drives
     pub behavior_trees: Vec<BehaviorTree>,  // Decision trees (empty!)
     pub memory: Memory,                  // Knowledge storage (stub)
 }
@@ -104,7 +105,7 @@ pub struct Population {
 
 ### Fully Implemented (`src/core/drives.rs` - 280+ lines)
 
-#### All 13 Drives Defined:
+#### All 15 Drives Defined:
 1. **Hunger** (0.7 threshold) - Food consumption
 2. **Rest** (0.6 threshold) - Sleep in shelter
 3. **Shelter** (0.5 threshold) - Protective structures
@@ -393,9 +394,9 @@ Requirements:
    - Behavior complexity
 ```
 
-#### 7.6 All 13 Drives Fully Implemented (Priority: MEDIUM)
+#### 7.6 All 15 Drives Fully Implemented (Priority: MEDIUM)
 ```
-Current Status: All 13 drives defined, but...
+Current Status: All 15 drives defined, but...
 Missing:
 1. Drive-driven action selection
 2. Action satisfaction mechanics
@@ -608,7 +609,7 @@ git checkout -b feature/reproduction
 
 ### Completed ✅
 - Behavior tree system with learning
-- 13 drives fully defined with mechanics
+- 15 drives fully defined with mechanics
 - Agent and population basic structure
 - Build system and CI/CD
 - Comprehensive documentation

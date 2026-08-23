@@ -19,11 +19,30 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
         | TerrainType::Wetland
         | TerrainType::Riverbank
         | TerrainType::Beach
+        | TerrainType::Farmland
         | TerrainType::Water => ClimateZone::Temperate,
         // Mountains can be cold (arctic adjacent)
         TerrainType::Mountain => ClimateZone::Arctic,
     }
 }
+
+/// How much longer an animal waits between litters than its species data says.
+///
+/// The species numbers give a sheep about eight litters in a lifetime and a
+/// wolf about seven. At that rate a herd of forty needs some thirty wolves to
+/// hold it level - an inverted pyramid, and one the spawn ratio of four prey
+/// groups to one predator group can never supply. Stretching the interval
+/// brings herd growth back within what a plausible number of predators can
+/// take.
+const BREEDING_INTERVAL_SCALE: f32 = 3.0;
+
+/// Side of the patches the world is divided into when asking how crowded a
+/// piece of ground is
+const GRAZING_PATCH: i32 = 6;
+
+/// How many animals a patch of that size will carry before the ones on it stop
+/// breeding
+const PATCH_CARRYING_CAPACITY: u32 = 8;
 
 /// Configuration for naturalistic animal spawning during world generation
 #[derive(Debug, Clone)]
@@ -41,9 +60,20 @@ pub struct AnimalSpawnConfig {
 impl Default for AnimalSpawnConfig {
     fn default() -> Self {
         Self {
-            herds_per_10000_tiles: 8,
+            // Eight herds per ten thousand tiles is two herds on the default
+            // fifty-by-fifty world: one of prey and one of predators, four
+            // sheep and a fox. Nothing balances at that size - the predators
+            // die out and the herbivores run to the population cap - so the
+            // density is set to give a world that can actually hold a
+            // predator and a prey population at once.
+            herds_per_10000_tiles: 40,
             spawn_predators: true,
-            prey_to_predator_ratio: 4.0,
+            // Two prey groups per predator group rather than four. A world
+            // that starts with one or two predators loses them to bad luck -
+            // a random walk apart, one lean winter - and once they are gone
+            // nothing holds the herds at all. What the herds breed needs a
+            // pack that can actually keep up with them.
+            prey_to_predator_ratio: 2.0,
             max_initial_population: 200,
         }
     }
@@ -68,7 +98,7 @@ pub enum DietType {
 }
 
 /// Size classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AnimalSize {
     Tiny,      // Rabbits, squirrels
     Small,     // Foxes, wolves
@@ -1781,7 +1811,11 @@ impl Animal {
             && !self.is_pregnant
             && self.reproduction_cooldown == 0
             && !self.is_starving
-            && self.hunger < self.max_hunger * 0.7 // Not too hungry
+            // Well fed, not merely coping. At seven tenths of everything it
+            // can hold an animal still counts as fit to breed, which let both
+            // herds and packs go on multiplying through the lean stretch that
+            // should have stopped them.
+            && self.hunger < self.max_hunger * 0.4
     }
 
     /// Start pregnancy with gestation period
@@ -1839,6 +1873,18 @@ impl Animal {
         self.hunger > self.max_hunger * 0.8
     }
 
+    /// Whether a predator will bother going after something it sees.
+    ///
+    /// Much lower than `is_hungry`, which is half of everything the animal can
+    /// hold. A predator that only hunted when it was half starved killed about
+    /// one animal in a thousand ticks - far below what the herds breed - so it
+    /// stayed hungry, never bred, and the herbivores it was supposed to be
+    /// holding down ran to the population cap. A predator that is not nearly
+    /// full will take what is in front of it.
+    pub fn will_hunt(&self) -> bool {
+        self.hunger > self.max_hunger * 0.15
+    }
+
     /// Get health percentage
     pub fn health_percentage(&self) -> f32 {
         self.current_health / self.max_health
@@ -1864,6 +1910,20 @@ pub struct AnimalManager {
     spawn_rate: f32, // Chance per tick to spawn
     max_population: usize,
 
+    /// The most of each species this world has ever held, which is what a
+    /// depleted population is judged against
+    #[serde(default)]
+    peak_population: HashMap<String, u32>,
+
+    /// Size of the map, so animals wandering in from outside know where the
+    /// edge is
+    #[serde(default)]
+    world_bounds: Option<(i32, i32)>,
+
+    /// Ticks since the last time anything was allowed to wander in
+    #[serde(default)]
+    ticks_since_migration: u32,
+
     /// Reference to fauna registry (not serialized)
     #[serde(skip)]
     registry: Option<FaunaRegistry>,
@@ -1876,6 +1936,9 @@ impl AnimalManager {
             groups: HashMap::new(),
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
+            peak_population: HashMap::new(),
+            world_bounds: None,
+            ticks_since_migration: 0,
             registry: Some(FaunaRegistry::new()),
         }
     }
@@ -1929,6 +1992,11 @@ impl AnimalManager {
     /// Get all animals
     pub fn get_all(&self) -> &Vec<Animal> {
         &self.animals
+    }
+
+    /// All animals, mutably
+    pub fn get_all_mut(&mut self) -> &mut Vec<Animal> {
+        &mut self.animals
     }
 
     /// Get specific animal
@@ -2153,6 +2221,10 @@ impl AnimalManager {
         // Fourth pass: Predator hunting
         self.process_predation();
 
+        // Animals from beyond the edge of the map, for species that have been
+        // wiped out or hunted down to nothing here
+        self.process_immigration();
+
         // Fifth pass: Herbivore feeding (grazing reduces hunger)
         self.process_grazing();
 
@@ -2204,7 +2276,7 @@ impl AnimalManager {
                     a.position,
                     a.group_id,
                     litter_size,
-                    species.breeding_cooldown,
+                    ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32,
                 ))
             })
             .collect();
@@ -2249,15 +2321,41 @@ impl AnimalManager {
             return;
         }
 
+        // How many mouths are already on each patch of ground.
+        //
+        // Animals breed when the land around them will carry another. Without
+        // this a herd has no size it stops at: grazing feeds every animal
+        // nearly a hundred times what it burns, so hunger never becomes the
+        // limit, and herds grew until they hit the hard population cap however
+        // little ground they were on.
+        let mut crowding: HashMap<(i32, i32), u32> = HashMap::new();
+        for animal in &self.animals {
+            if animal.is_alive() {
+                *crowding
+                    .entry((animal.position.0 / GRAZING_PATCH, animal.position.1 / GRAZING_PATCH))
+                    .or_insert(0) += 1;
+            }
+        }
+
         // Find breeding candidates by species
         let mut breeding_candidates: HashMap<String, Vec<usize>> = HashMap::new();
         for (idx, animal) in self.animals.iter().enumerate() {
-            if animal.can_breed() {
-                breeding_candidates
-                    .entry(animal.species_id.clone())
-                    .or_insert_with(Vec::new)
-                    .push(idx);
+            if !animal.can_breed() {
+                continue;
             }
+
+            let patch = (
+                animal.position.0 / GRAZING_PATCH,
+                animal.position.1 / GRAZING_PATCH,
+            );
+            if crowding.get(&patch).copied().unwrap_or(0) > PATCH_CARRYING_CAPACITY {
+                continue;
+            }
+
+            breeding_candidates
+                .entry(animal.species_id.clone())
+                .or_insert_with(Vec::new)
+                .push(idx);
         }
 
         // For each species with 2+ candidates, attempt breeding
@@ -2281,9 +2379,15 @@ impl AnimalManager {
                     let pos_a = self.animals[idx_a].position;
                     let pos_b = self.animals[idx_b].position;
 
-                    // Check proximity (within 5 tiles)
+                    // Check proximity. Ten tiles rather than five because
+                    // nothing in the model keeps a group together: animals
+                    // spawn as a herd and then wander off on their own. A
+                    // herd of ten still has pairs in range after that; a pair
+                    // of wolves does not, which left predators unable to
+                    // breed at all while the herbivores they were supposed to
+                    // be holding down ran to the population cap.
                     let distance = ((pos_a.0 - pos_b.0).abs() + (pos_a.1 - pos_b.1).abs()) as f32;
-                    if distance <= 5.0 {
+                    if distance <= 10.0 {
                         // Breeding chance based on proximity
                         if rng.gen::<f32>() < 0.3 {
                             // One becomes pregnant (or both go on cooldown for egg-layers)
@@ -2291,13 +2395,13 @@ impl AnimalManager {
                                 // Mammal-style: one becomes pregnant
                                 self.animals[idx_a].become_pregnant(
                                     species.gestation_period,
-                                    species.breeding_cooldown,
+                                    ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32,
                                 );
-                                self.animals[idx_b].reproduction_cooldown = species.breeding_cooldown;
+                                self.animals[idx_b].reproduction_cooldown = ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
                             } else {
                                 // Egg-layer: both go on cooldown, eggs spawn immediately
-                                self.animals[idx_a].reproduction_cooldown = species.breeding_cooldown;
-                                self.animals[idx_b].reproduction_cooldown = species.breeding_cooldown;
+                                self.animals[idx_a].reproduction_cooldown = ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
+                                self.animals[idx_b].reproduction_cooldown = ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
 
                                 // Spawn eggs (as new animals with age 0)
                                 let litter = rng.gen_range(species.litter_size.0..=species.litter_size.1);
@@ -2333,42 +2437,77 @@ impl AnimalManager {
             None => return,
         };
 
-        // Only process predation occasionally
-        if rng.gen::<f32>() > 0.02 {
-            return;
-        }
+        // Every hungry predator hunts on its own account.
+        //
+        // This used to sit behind a single roll for the whole world - one
+        // chance in fifty per tick that any predation happened anywhere - so
+        // predators were barely a presence and herbivores grew until they hit
+        // the population cap. A predator hunts when it is hungry and not
+        // otherwise, which is what ties its numbers to the herds.
+        const HUNT_ATTEMPT_CHANCE: f32 = 0.05;
 
         // Find hungry predators and their prey
-        let predator_data: Vec<(usize, String, Vec<String>, (i32, i32), f32)> = self.animals
-            .iter()
-            .enumerate()
-            .filter(|(_, a)| a.is_alive() && a.is_hungry())
-            .filter_map(|(idx, a)| {
-                let species = registry.get(&a.species_id)?;
-                if species.prey_species.is_empty() {
-                    return None;
-                }
-                Some((
-                    idx,
-                    a.species_id.clone(),
-                    species.prey_species.clone(),
-                    a.position,
-                    species.attack_damage,
-                ))
-            })
-            .collect();
+        let predator_data: Vec<(usize, String, Vec<String>, (i32, i32), f32, bool, AnimalSize)> =
+            self.animals
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a.is_alive() && a.will_hunt())
+                .filter_map(|(idx, a)| {
+                    let species = registry.get(&a.species_id)?;
+                    if species.prey_species.is_empty() {
+                        return None;
+                    }
+                    // The biggest thing it knows how to bring down, which is
+                    // what bounds what it will try when it is desperate. A
+                    // wolf takes deer, so a goat is fair game; a fox takes
+                    // rabbits, and no amount of hunger makes a cow catchable.
+                    let usual_limit = species
+                        .prey_species
+                        .iter()
+                        .filter_map(|prey| registry.get(prey))
+                        .map(|prey| prey.size)
+                        .max()
+                        .unwrap_or(species.size);
+
+                    Some((
+                        idx,
+                        a.species_id.clone(),
+                        species.prey_species.clone(),
+                        a.position,
+                        species.attack_damage,
+                        a.is_very_hungry(),
+                        usual_limit,
+                    ))
+                })
+                .collect();
 
         // For each predator, look for nearby prey
         let mut kills = Vec::new();
-        for (pred_idx, _pred_species, prey_species, pred_pos, attack) in predator_data {
+        for (pred_idx, _pred_species, prey_species, pred_pos, attack, desperate, usual_limit) in
+            predator_data
+        {
+            if rng.gen::<f32>() > HUNT_ATTEMPT_CHANCE {
+                continue;
+            }
+
             // Find nearby prey
             for (prey_idx, prey) in self.animals.iter().enumerate() {
                 if !prey.is_alive() || prey_idx == pred_idx {
                     continue;
                 }
 
-                // Check if this is a valid prey species
-                if !prey_species.contains(&prey.species_id) {
+                // Normally a predator takes what it knows how to take. One
+                // that is close to starving takes whatever it can catch: any
+                // grazing animal no bigger than itself will do.
+                let usual_prey = prey_species.contains(&prey.species_id);
+                let worth_trying = usual_prey
+                    || (desperate
+                        && registry
+                            .get(&prey.species_id)
+                            .map(|s| s.prey_species.is_empty() && s.size <= usual_limit)
+                            .unwrap_or(false));
+
+                if !worth_trying {
                     continue;
                 }
 
@@ -2414,12 +2553,137 @@ impl AnimalManager {
         }
     }
 
-    /// Process grazing - herbivores reduce hunger when grazing
+    /// Animals wander in from beyond the edge of the map.
+    ///
+    /// A species that has been wiped out here, or hunted down to a quarter of
+    /// the most this world ever held of it, is not gone from the world
+    /// entirely - only from this corner of it - and a few will find their way
+    /// back. Only species that have lived here migrate in: the map does not
+    /// invent lions for a valley that never had any.
+    ///
+    /// Deliberately rare. One small group per depleted species every eight
+    /// thousand ticks or so, which is a lifetime for most of them. It is meant
+    /// to keep a world from emptying out for good, not to be a larder that
+    /// refills itself faster than it can be emptied - a settlement that clears
+    /// the herds waits a long time for more.
+    fn process_immigration(&mut self) {
+        use rand::Rng;
+
+        /// How often anything is allowed to arrive at all
+        const MIGRATION_INTERVAL: u32 = 2000;
+
+        /// And how often, at those moments, anything actually does
+        const MIGRATION_CHANCE: f64 = 0.25;
+
+        /// Below this share of the most this world ever held, a species counts
+        /// as needing help
+        const DEPLETED_SHARE: f32 = 0.25;
+
+        /// How many arrive at once
+        const ARRIVALS: (u32, u32) = (1, 3);
+
+        self.ticks_since_migration += 1;
+        if self.ticks_since_migration < MIGRATION_INTERVAL {
+            return;
+        }
+        self.ticks_since_migration = 0;
+
+        let bounds = match self.world_bounds {
+            Some(bounds) => bounds,
+            None => return,
+        };
+
+        // What is here now, and the most there has ever been
+        let mut present: HashMap<String, u32> = HashMap::new();
+        for animal in &self.animals {
+            if animal.is_alive() {
+                *present.entry(animal.species_id.clone()).or_insert(0) += 1;
+            }
+        }
+
+        for (species_id, count) in &present {
+            let peak = self.peak_population.entry(species_id.clone()).or_insert(0);
+            *peak = (*peak).max(*count);
+        }
+
+        let depleted: Vec<String> = self
+            .peak_population
+            .iter()
+            .filter(|(species_id, peak)| {
+                let here = present.get(*species_id).copied().unwrap_or(0) as f32;
+                here < (**peak as f32) * DEPLETED_SHARE
+            })
+            .map(|(species_id, _)| species_id.clone())
+            .collect();
+
+        if depleted.is_empty() {
+            return;
+        }
+
+        let mut rng = rand::thread_rng();
+
+        for species_id in depleted {
+            if self.animals.len() >= self.max_population {
+                break;
+            }
+
+            if !rng.gen_bool(MIGRATION_CHANCE) {
+                continue;
+            }
+
+            // In from one of the four edges
+            let arrival = match rng.gen_range(0..4) {
+                0 => (rng.gen_range(0..bounds.0), 0),
+                1 => (rng.gen_range(0..bounds.0), bounds.1 - 1),
+                2 => (0, rng.gen_range(0..bounds.1)),
+                _ => (bounds.0 - 1, rng.gen_range(0..bounds.1)),
+            };
+
+            let arriving = rng.gen_range(ARRIVALS.0..=ARRIVALS.1);
+            self.spawn_group(species_id, arrival, arriving);
+        }
+    }
+
+    /// Process grazing - herbivores reduce hunger when grazing.
+    ///
+    /// What a mouthful is worth depends on how many other mouths are on the
+    /// same ground. Grazing used to feed every animal the same amount however
+    /// many of them there were, which is to say the grass was infinite: nothing
+    /// stopped a herd growing until it hit the hard population cap, and no
+    /// number of predators could hold a herd that had no other limit on it.
     fn process_grazing(&mut self) {
+        /// How many grazers a patch feeds properly before they start
+        /// competing for it
+        const GRAZERS_PER_PATCH: f32 = 6.0;
+
         let registry = match &self.registry {
             Some(r) => r,
             None => return,
         };
+
+        // How many grazers are on each patch of ground
+        let mut crowding: HashMap<(i32, i32), f32> = HashMap::new();
+        for animal in &self.animals {
+            if !animal.is_alive() {
+                continue;
+            }
+
+            let grazes = registry
+                .get(&animal.species_id)
+                .map(|species| {
+                    matches!(species.diet, DietType::Herbivore | DietType::Omnivore)
+                })
+                .unwrap_or(false);
+
+            if grazes {
+                *crowding
+                    .entry((
+                        animal.position.0 / GRAZING_PATCH,
+                        animal.position.1 / GRAZING_PATCH,
+                    ))
+                    .or_insert(0.0) += 1.0;
+            }
+        }
 
         for animal in &mut self.animals {
             if !animal.is_alive() {
@@ -2443,7 +2707,17 @@ impl AnimalManager {
                             AnimalSize::Large => 10.0,
                             AnimalSize::Huge => 15.0,
                         };
-                        animal.feed(graze_amount);
+
+                        let mouths = crowding
+                            .get(&(
+                                animal.position.0 / GRAZING_PATCH,
+                                animal.position.1 / GRAZING_PATCH,
+                            ))
+                            .copied()
+                            .unwrap_or(1.0);
+                        let share = 1.0 / (1.0 + (mouths / GRAZERS_PER_PATCH));
+
+                        animal.feed(graze_amount * share);
                     }
                     DietType::Carnivore => {
                         // Carnivores don't benefit from grazing
@@ -2582,6 +2856,8 @@ impl AnimalManager {
             None => return,
         };
 
+        self.world_bounds = Some((grid.width as i32, grid.height as i32));
+
         let total_tiles = grid.width * grid.height;
         let total_herds = (total_tiles * config.herds_per_10000_tiles) / 10000;
 
@@ -2626,6 +2902,7 @@ impl AnimalManager {
 
         // Spawn herbivore herds
         let mut spawned = 0;
+        let mut prey_present: std::collections::HashSet<String> = std::collections::HashSet::new();
         for _ in 0..prey_herds {
             if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
                 break;
@@ -2648,20 +2925,38 @@ impl AnimalManager {
 
                     if let Some(_) = self.spawn_group(species.id.clone(), pos, herd_size) {
                         spawned += herd_size as usize;
+                        prey_present.insert(species.id.clone());
                     }
                 }
             }
         }
 
-        // Spawn predator groups (smaller)
-        if config.spawn_predators && !predators.is_empty() {
+        // Spawn predator groups (smaller).
+        //
+        // Only predators that eat something living here. Drawing the two lists
+        // independently put foxes, which eat rabbits and squirrels, into
+        // worlds of sheep and cattle: they never found a meal in eight
+        // thousand ticks, their hunger climbed in a straight line from birth
+        // to death, and the herds they should have been holding down ran to
+        // the population cap unopposed.
+        let feedable: Vec<_> = predators
+            .iter()
+            .filter(|species| {
+                species
+                    .prey_species
+                    .iter()
+                    .any(|prey| prey_present.contains(prey))
+            })
+            .collect();
+
+        if config.spawn_predators && !feedable.is_empty() {
             for _ in 0..predator_herds {
                 if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
                     break;
                 }
 
-                // Pick a random predator species
-                let species = &predators[rng.gen_range(0..predators.len())];
+                // Pick a predator that can live off what is here
+                let species = feedable[rng.gen_range(0..feedable.len())];
 
                 // Find a position in an appropriate biome
                 let climate = if !species.primary_biomes.is_empty() {

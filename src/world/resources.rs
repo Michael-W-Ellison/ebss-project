@@ -2,7 +2,8 @@
 //! Resource nodes and harvestable materials.
 
 use serde::{Deserialize, Serialize};
-use crate::world::Position;
+use crate::environment::seasons::Season;
+use crate::world::{Position, Soil, TerrainType};
 
 /// Types of resources
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -62,6 +63,41 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
+    /// How strongly this gives itself away by smell where it lies untouched,
+    /// as a fraction of an agent's full smelling range.
+    ///
+    /// Human noses are poor. Berries on the bush and standing grain are close
+    /// to odourless until you are almost on top of them - they are found by
+    /// looking, not by sniffing. Flesh carries further. Nothing raw on the
+    /// ground competes with cooking or with rot, which are what a nose is
+    /// actually good for.
+    pub fn raw_scent_strength(&self) -> f32 {
+        match self {
+            // Barely detectable: you have to be standing among them
+            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => 0.08,
+
+            // Flesh gives itself away from further off
+            ResourceType::Meat | ResourceType::Fish => 0.24,
+
+            // Damp ground and vegetation, faintly
+            ResourceType::Water => 0.12,
+
+            // Wood, stone and ore have no smell worth the name
+            _ => 0.0,
+        }
+    }
+
+    /// Whether an agent can eat this straight from the land.
+    ///
+    /// The single answer to "is this food", used by foraging, by what an agent
+    /// remembers seeing, and by the scents the world gives off.
+    pub fn is_edible(&self) -> bool {
+        matches!(
+            self,
+            ResourceType::Food | ResourceType::Grain | ResourceType::Fish | ResourceType::Meat
+        )
+    }
+
     /// Get ASCII character for rendering
     pub fn ascii_char(&self) -> char {
         match self {
@@ -250,6 +286,21 @@ impl ResourceType {
         )
     }
 
+    /// Whether this grows in water rather than out of the ground it sits beside.
+    ///
+    /// A fish is not grown from the bank it is caught on. It is grown in the
+    /// sea and in the whole catchment above, and it swims into a settlement's
+    /// reach under its own power. That makes a fishery the one food a
+    /// settlement can take without the land paying for it - and, once the
+    /// leavings go on a field, the one food that brings the land something
+    /// from outside.
+    ///
+    /// Before this, fish drew nutrient out of the riverbank exactly as a crop
+    /// draws it out of a field, which had the ground feeding the river.
+    pub fn grows_in_water(&self) -> bool {
+        matches!(self, ResourceType::Fish)
+    }
+
     /// Check if this is an animal product (requires animals)
     pub fn is_animal_product(&self) -> bool {
         matches!(
@@ -313,6 +364,11 @@ pub struct ResourceNode {
     pub position: Position,
     pub amount: u32,
     pub max_amount: u32,
+
+    /// Fraction of a unit carried over between regeneration passes, so a
+    /// trickle eventually amounts to something
+    #[serde(default)]
+    pub inflow_carried: f32,
 }
 
 impl ResourceNode {
@@ -322,6 +378,7 @@ impl ResourceNode {
             position,
             amount,
             max_amount: amount,
+            inflow_carried: 0.0,
         }
     }
 
@@ -345,19 +402,271 @@ impl ResourceNode {
         (self.amount as f32 / self.max_amount as f32) * 100.0
     }
 
+    /// Whether this resource regrows on its own once harvested
+    pub fn is_renewable(&self) -> bool {
+        matches!(
+            self.resource_type,
+            ResourceType::Wood
+                | ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Herbs
+                | ResourceType::Flax
+                | ResourceType::Cotton
+                | ResourceType::Honey
+                | ResourceType::Fish
+                // A river is not used up by the people drinking from it
+                | ResourceType::Water
+        )
+    }
+
+    /// Take in a fractional amount of water, carrying the remainder over.
+    ///
+    /// Inflow is a rate, not a whole number of units: a pool on open ground
+    /// gains a tenth of a unit a pass and would otherwise never gain anything
+    /// at all, because resource amounts are integers.
+    pub fn take_inflow(&mut self, amount: f32) {
+        if self.amount >= self.max_amount {
+            self.inflow_carried = 0.0;
+            return;
+        }
+
+        self.inflow_carried += amount;
+
+        let whole = self.inflow_carried.floor();
+        if whole >= 1.0 {
+            self.inflow_carried -= whole;
+            self.amount = (self.amount + whole as u32).min(self.max_amount);
+        }
+    }
+
+    /// How readily a plant here can take up what is in the ground.
+    ///
+    /// This is what breaking ground actually buys. A field is weeded, watered
+    /// and worked, so the crop on it gets at far more of what the soil holds
+    /// than the same plant would growing wild - it reaches its natural best
+    /// pace on ground that would only half feed a hedgerow. What it does not do
+    /// is make a plant grow faster than its kind can grow: uptake enters the
+    /// rate as a factor that is capped at one.
+    pub fn uptake_multiplier(cultivated: bool) -> f32 {
+        if cultivated {
+            2.5
+        } else {
+            1.0
+        }
+    }
+
+    /// The most this patch can be carrying at once, given how well fed the
+    /// ground is.
+    ///
+    /// The other half of what a field buys: yield. Rich ground carries a
+    /// heavier crop, thin ground a lighter one, and a field that has had muck
+    /// spread on it carries more than one that has not.
+    ///
+    /// The floor used to be four tenths of the full crop, which meant ground
+    /// worked down to nothing still nominally carried nearly half of what it
+    /// had when it was rich. Over a long run that hid the cost of farming: a
+    /// settlement's fields fell to a twentieth of their fertility while their
+    /// stated yield fell by four per cent. A worked-out field now carries
+    /// almost nothing, which is what a worked-out field does.
+    pub fn standing_capacity(&self, fertility: f32) -> u32 {
+        let share = Self::MIN_YIELD_SHARE
+            + (1.0 - Self::MIN_YIELD_SHARE) * fertility.clamp(0.0, 1.0);
+        ((self.max_amount as f32) * share).round() as u32
+    }
+
+    /// What ground with nothing left in it still carries: the odd volunteer
+    /// plant living off what blows in, and not a crop.
+    const MIN_YIELD_SHARE: f32 = 0.05;
+
+    /// How fast this water refills, given the ground it sits on and the
+    /// weather over it.
+    ///
+    /// Water does not grow back the way berries do. A river carries it in from
+    /// somewhere upstream and is effectively bottomless; a spring in the hills
+    /// keeps giving whatever the weather does; a pool on open ground is
+    /// standing water and lives on the rain. It used to regenerate at nothing
+    /// at all and was not counted as renewable, so every drink took a unit out
+    /// of the world for good and a lake drunk dry was deleted. A world lost
+    /// more than half its water in fifteen thousand ticks.
+    ///
+    /// Returns units per regeneration pass, which runs every ten world ticks.
+    pub fn water_inflow(&self, terrain: TerrainType, precipitation: f32, freezing: bool) -> f32 {
+        if self.resource_type != ResourceType::Water {
+            return 0.0;
+        }
+
+        // What the ground itself brings. Water sources are scattered across
+        // the map rather than sitting on water tiles - they are the streams,
+        // springs and ponds of the country they are in, and what feeds them
+        // depends on which.
+        let source = match terrain {
+            // Running water: whatever is drawn is replaced from upstream
+            TerrainType::Water | TerrainType::Riverbank => 3.0,
+
+            // Springs and snowmelt come off high ground
+            TerrainType::Mountain | TerrainType::Hills => 1.5,
+
+            // Seeps and marsh hold what they get
+            TerrainType::Wetland | TerrainType::Forest => 1.2,
+
+            // Anywhere else it is open water, and lives mostly on the sky
+            _ => 0.8,
+        };
+
+        // Rain tops everything up; a dry spell is felt most by the pools
+        let rain = precipitation.clamp(0.0, 1.0);
+        let from_sky = rain * 0.6;
+
+        // Frozen ground gives nothing up, and the rain falls as snow
+        let flow = source + from_sky;
+        if freezing {
+            flow * 0.25
+        } else {
+            flow
+        }
+    }
+
+    /// What the run brings into a reach of water, per pass of the resource
+    /// tick (one pass every ten ticks, as `water_inflow` is also reckoned).
+    ///
+    /// Fish do not grow back the way a berry patch grows back. A berry patch
+    /// regrows out of what is left of itself, in the ground it stands in, so
+    /// fishing a reach out would end it the way harvesting a field to nothing
+    /// ends the field. Fish arrive: they are spawned upstream and fed at sea,
+    /// and they come back up the rivers under their own power whatever was
+    /// taken out of this particular pool last year.
+    ///
+    /// So the run does not depend on how many are left here. That is what
+    /// makes a fishery worth having and what makes it nearly inexhaustible:
+    /// it is fed from outside the country a settlement can see, by water that
+    /// is not the settlement's to use up. What bounds a catch is the season,
+    /// the reach, and how many hours somebody is willing to stand in a river.
+    ///
+    /// The runs are the point of the year in a fishing people's calendar.
+    /// Spring and autumn are heavy; high summer is thin because the run is
+    /// past; winter is thinnest of all, and a frozen river gives up almost
+    /// nothing.
+    pub fn fish_run(&self, terrain: TerrainType, season: Season, freezing: bool) -> f32 {
+        if !self.resource_type.grows_in_water() {
+            return 0.0;
+        }
+
+        // How much water this reach connects to. A river carries a run; a
+        // beach gets what comes along the shore; a pond gets whatever
+        // wandered in.
+        let reach = match terrain {
+            TerrainType::Water | TerrainType::Riverbank => 1.0,
+            TerrainType::Beach => 0.7,
+            TerrainType::Wetland => 0.4,
+            _ => 0.2,
+        };
+
+        // The run itself
+        let run = match season {
+            Season::Spring => 1.0,
+            Season::Fall => 0.85,
+            Season::Summer => 0.4,
+            Season::Winter => 0.15,
+        };
+
+        let flow = Self::FISH_PER_PASS_AT_FULL_RUN * reach * run;
+
+        if freezing {
+            flow * 0.2
+        } else {
+            flow
+        }
+    }
+
+    /// What a full spring run brings into one reach of river in one pass.
+    ///
+    /// Set so that a reach fished down to nothing is full again inside a year,
+    /// most of it arriving in the two runs: a spring season of twenty-four days
+    /// is twenty-eight or nine passes, which at this rate is a good half of
+    /// what a reach holds. That is the shape of the thing - a river is empty
+    /// enough to be worth nobody's time for most of the year and thick with
+    /// fish twice in it, and a people who live on one arrange the rest of what
+    /// they do around those two stretches.
+    const FISH_PER_PASS_AT_FULL_RUN: f32 = 1.0;
+
     /// Regenerate resources based on climate and weather conditions
     /// Returns the amount regenerated
     pub fn regenerate(&mut self, temperature: f32, precipitation: f32, season_modifier: f32) -> u32 {
-        if self.amount >= self.max_amount {
-            return 0; // Already at max
+        self.regenerate_on(temperature, precipitation, season_modifier, false)
+    }
+
+    /// Regenerate, saying whether this is growing on broken ground
+    pub fn regenerate_on(
+        &mut self,
+        temperature: f32,
+        precipitation: f32,
+        season_modifier: f32,
+        cultivated: bool,
+    ) -> u32 {
+        let mut nowhere = Soil::for_terrain(TerrainType::Plains);
+        self.regenerate_from_soil(
+            temperature,
+            precipitation,
+            season_modifier,
+            cultivated,
+            &mut nowhere,
+        )
+    }
+
+    /// Regenerate, drawing on the ground it is growing in.
+    ///
+    /// Growth used to be a number per species multiplied by the weather, with
+    /// nothing taken out of the ground and nothing put back: a patch picked
+    /// bare regrew as fast on bare rock as in river silt. What it can manage
+    /// now is bounded by whichever of warmth, rain and nutrient is scarcest,
+    /// and what it grows with, it takes.
+    pub fn regenerate_from_soil(
+        &mut self,
+        temperature: f32,
+        precipitation: f32,
+        season_modifier: f32,
+        cultivated: bool,
+        soil: &mut Soil,
+    ) -> u32 {
+        self.regenerate_in_ground(
+            temperature,
+            precipitation,
+            season_modifier,
+            cultivated,
+            soil,
+        )
+    }
+
+    /// Regenerate, drawing on the ground, where `precipitation` is how wet
+    /// that ground is rather than whether it happens to be raining.
+    ///
+    /// Plants drink from the soil, not from the sky directly. Passing the
+    /// hour's rainfall in here meant every plant in the world was in drought on
+    /// any day it was not actively raining, which cut growth to a fifth
+    /// wherever a marsh and a dune were treated alike.
+    pub fn regenerate_in_ground(
+        &mut self,
+        temperature: f32,
+        precipitation: f32,
+        season_modifier: f32,
+        cultivated: bool,
+        soil: &mut Soil,
+    ) -> u32 {
+        if self.amount >= self.standing_capacity(soil.fertility()) {
+            return 0; // As heavy a crop as this ground will carry
         }
 
-        // Base regeneration rate per tick (0-1 units)
+        // Base regeneration rate per tick (0-1 units).
+        //
+        // Wild food comes back slowly: a hedge of berries feeds a few people
+        // and no more, which is what a settlement of a dozen lives on and what
+        // a settlement of forty starves against. Ground that has been broken
+        // and sown is a different matter - see `cultivated_multiplier`.
         let base_rate = match self.resource_type {
             // Renewable resources
             ResourceType::Wood => 0.01,       // Trees grow slowly
-            ResourceType::Food => 0.05,       // Berries/fruits regenerate faster
-            ResourceType::Grain => 0.03,      // Crops regenerate moderately
+            ResourceType::Food => 0.025,      // Berries and fruit, in their own time
+            ResourceType::Grain => 0.015,     // Wild grain is thin stuff
             ResourceType::Herbs => 0.04,      // Herbs grow quickly
             ResourceType::Flax => 0.03,
             ResourceType::Cotton => 0.03,
@@ -365,6 +674,11 @@ impl ResourceNode {
 
             // Slow renewable
             ResourceType::Fish => 0.02,       // Fish populations regenerate
+
+            // Water is fed by what carries it, which is worked out from the
+            // ground it sits on rather than from a flat rate - see
+            // `water_inflow`.
+            ResourceType::Water => 0.0,
 
             // Non-renewable (mineral resources don't regenerate)
             ResourceType::Stone |
@@ -451,13 +765,43 @@ impl ResourceNode {
             _ => 1.0,
         };
 
-        // Calculate total regeneration
-        let regen_amount = base_rate * temp_modifier * precip_modifier * season_modifier;
-        let regen_units = (regen_amount * 100.0).round() as u32; // Convert to whole units
+        // What the ground can give, and how well this plant can get at it.
+        // Capped at one: uptake helps a crop reach the best pace its kind is
+        // capable of, it does not carry it past that.
+        let nutrient_factor =
+            (soil.fertility() * Self::uptake_multiplier(cultivated)).clamp(0.0, 1.0);
 
-        // Add regenerated amount, capped at max
-        let actual_regen = regen_units.min(self.max_amount - self.amount);
+        if nutrient_factor <= 0.0 {
+            return 0;
+        }
+
+        // Calculate total regeneration
+        let regen_amount =
+            base_rate * temp_modifier * precip_modifier * season_modifier * nutrient_factor;
+
+        // Carry the fraction over rather than rounding it away: wild food
+        // regrows slowly enough that rounding to whole units each pass loses most
+        // of it
+        self.inflow_carried += regen_amount * 100.0;
+        let regen_units = self.inflow_carried.floor();
+        self.inflow_carried -= regen_units;
+
+        // Add regenerated amount, capped at what this ground will carry
+        let capacity = self.standing_capacity(soil.fertility());
+        let headroom = capacity.saturating_sub(self.amount);
+        let actual_regen = (regen_units as u32).min(headroom);
         self.amount += actual_regen;
+
+        // What grew, came out of the ground - and most of the plant stays in
+        // the ground it grew in. Roots, stalk and leaf go back into this same
+        // tile; only the part somebody carries away is gone from it.
+        //
+        // What grew in the water is a different matter: it takes nothing from
+        // the bank and leaves nothing on it.
+        if actual_regen > 0 && !self.resource_type.grows_in_water() {
+            soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
+            soil.add_leaf_litter(actual_regen as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
+        }
 
         actual_regen
     }

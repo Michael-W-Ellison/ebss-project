@@ -1,5 +1,13 @@
 // src/agents/tests/gossip_spreading_tests.rs
-//! Integration tests for gossip spreading mechanism
+//! Integration tests for gossip spreading
+//!
+//! Every agent here is wiped back to a blank personality straight after
+//! spawning. These tests measure the gossip machinery, and founders are now
+//! drawn with three to five traits, a good many of which bear directly on it:
+//! Mute cannot use word of mouth at all, Gossip and Charismatic raise the
+//! chance of sharing, Introvert lowers it, Imaginative and Dishonest distort
+//! what is passed on, Trusting and Skeptic decide what is believed. Left as
+//! they came, a test of the mechanism would be a test of the draw. mechanism
 
 use crate::agents::{Agent, AgentConfig, Population, Trait};
 use crate::agents::gossip::{Information, InformationType};
@@ -13,6 +21,9 @@ fn test_gossip_spreads_between_nearby_agents() {
     config.random_weights = false;
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
 
     // Put them at the same position (within gossip range)
     pop.agents[0].state.position = (10, 10, 0);
@@ -68,6 +79,9 @@ fn test_gossip_trait_increases_sharing_probability() {
     config.random_weights = false;
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
 
     // Add Gossip trait to agent 0
     pop.agents[0].traits.add_trait(Trait::Gossip);
@@ -121,6 +135,9 @@ fn test_information_distortion_during_gossip() {
     config.random_weights = false;
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
 
     // Add Imaginative trait to agent 0
     pop.agents[0].traits.add_trait(Trait::Imaginative);
@@ -182,6 +199,9 @@ fn test_distant_agents_dont_gossip() {
     config.random_weights = false;
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
 
     // Put them far apart (beyond gossip range of 6 tiles)
     pop.agents[0].state.position = (10, 10, 0);
@@ -230,6 +250,9 @@ fn test_hungry_agents_dont_gossip() {
     config.random_weights = false;
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
 
     // Put them together
     pop.agents[0].state.position = (10, 10, 0);
@@ -278,6 +301,9 @@ fn test_introvert_gossips_less() {
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
 
     pop.agents[0].traits.add_trait(Trait::Introvert);
     pop.agents[1].traits.add_trait(Trait::Extrovert);
@@ -309,6 +335,9 @@ fn test_trust_affects_belief_confidence() {
     config.random_weights = false;
     pop.spawn_agent(config.clone());
     pop.spawn_agent(config.clone());
+    for agent in &mut pop.agents {
+        agent.traits = crate::core::traits::TraitSet::new();
+    }
 
     let agent0_id = pop.agents[0].id;
     let agent1_id = pop.agents[1].id;

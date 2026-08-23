@@ -157,6 +157,38 @@ impl ItemType {
         )
     }
 
+    /// What happens if this is put over a fire.
+    ///
+    /// Cooking is not a blanket improvement. It is what turns raw flesh and
+    /// hard grain into something a body can actually use; it is also what
+    /// destroys a handful of berries, scorches honey and burns bread that was
+    /// baked once already. Deciding this per item is the point: an agent that
+    /// cooks indiscriminately should lose its dinner.
+    pub fn cooking_outcome(&self) -> super::nutrition::CookingOutcome {
+        use super::nutrition::CookingOutcome;
+
+        match self {
+            // Fire is what makes these worth eating: it kills what is in raw
+            // flesh and breaks down grain a stomach cannot otherwise open.
+            ItemType::Meat | ItemType::Fish | ItemType::Grain => CookingOutcome::Improves,
+
+            // Food, but nothing a fire improves. Berries collapse to nothing,
+            // milk scorches, honey caramelises to bitterness, and bread and
+            // cheese were finished before they got near the flames.
+            ItemType::Food
+            | ItemType::Milk
+            | ItemType::Honey
+            | ItemType::Bread
+            | ItemType::Cheese
+            | ItemType::Ale
+            | ItemType::Herbs
+            | ItemType::Flour => CookingOutcome::Ruins,
+
+            // You cannot cook a rock.
+            _ => CookingOutcome::NotFood,
+        }
+    }
+
     /// Get tool efficiency multiplier (1.0 = base)
     pub fn efficiency(&self) -> f32 {
         match self {

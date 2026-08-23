@@ -11,6 +11,28 @@
 use serde::{Deserialize, Serialize};
 use crate::agents::temperature::Temperature;
 
+/// How many ticks a day lasts.
+///
+/// A tick is two hours of world time. That is coarse enough that a life of
+/// ten thousand ticks covers years rather than the four days it used to, and
+/// fine enough that dawn, noon and midnight are still separate moments an
+/// agent can be cold or blind in.
+pub const TICKS_PER_DAY: u32 = 12;
+
+/// How many days a season lasts.
+///
+/// A season is deliberately short. The point of a calendar in a simulation
+/// nobody watches for a million ticks is that the people in it have to live
+/// through a winter, and a ninety-day season at any tick rate that keeps
+/// day and night apart would never arrive.
+pub const DAYS_PER_SEASON: u32 = 24;
+
+/// How many days a year lasts.
+pub const DAYS_PER_YEAR: u32 = DAYS_PER_SEASON * 4;
+
+/// How many ticks a year lasts.
+pub const TICKS_PER_YEAR: u32 = TICKS_PER_DAY * DAYS_PER_YEAR;
+
 /// Season of the year
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Season {
@@ -21,14 +43,26 @@ pub enum Season {
 }
 
 impl Season {
-    /// Get season from day of year (0-365)
+    /// Get season from day of year.
+    ///
+    /// The year opens in spring: a world starts in the growing season rather
+    /// than in the middle of its hardest one.
     pub fn from_day_of_year(day: u32) -> Self {
-        match day % 365 {
-            0..=89 => Season::Winter,
-            90..=179 => Season::Spring,
-            180..=269 => Season::Summer,
-            270..=364 => Season::Fall,
+        match (day % DAYS_PER_YEAR) / DAYS_PER_SEASON {
+            0 => Season::Spring,
+            1 => Season::Summer,
+            2 => Season::Fall,
             _ => Season::Winter,
+        }
+    }
+
+    /// The day of the year this season starts on.
+    pub fn first_day(&self) -> u32 {
+        match self {
+            Season::Spring => 0,
+            Season::Summer => DAYS_PER_SEASON,
+            Season::Fall => DAYS_PER_SEASON * 2,
+            Season::Winter => DAYS_PER_SEASON * 3,
         }
     }
 
@@ -99,8 +133,8 @@ impl Season {
 
     /// Get progress through season (0.0 to 1.0)
     pub fn progress(day_of_year: u32) -> f32 {
-        let day_in_season = (day_of_year % 365) % 90;
-        day_in_season as f32 / 90.0
+        let day_in_season = (day_of_year % DAYS_PER_YEAR) % DAYS_PER_SEASON;
+        day_in_season as f32 / DAYS_PER_SEASON as f32
     }
 
     /// Get season name
@@ -126,23 +160,45 @@ pub struct SeasonalCalendar {
     /// Years elapsed
     pub year: u32,
 
-    /// Ticks per hour
-    ticks_per_hour: u32,
+    /// Ticks per day
+    #[serde(default = "default_ticks_per_day")]
+    ticks_per_day: u32,
+}
 
-    /// Current tick counter
-    tick_counter: u32,
+/// What a calendar saved before the day had a length in it runs at.
+fn default_ticks_per_day() -> u32 {
+    TICKS_PER_DAY
 }
 
 impl SeasonalCalendar {
-    /// Create a new calendar
-    pub fn new(ticks_per_hour: u32) -> Self {
+    /// Create a new calendar running at the given number of ticks per day.
+    pub fn new(ticks_per_day: u32) -> Self {
         Self {
             day_of_year: 0,
             time_of_day: 6.0, // Start at dawn
             year: 0,
-            ticks_per_hour,
-            tick_counter: 0,
+            ticks_per_day: ticks_per_day.max(1),
         }
+    }
+
+    /// How many hours of world time one tick covers.
+    pub fn hours_per_tick(&self) -> f32 {
+        24.0 / self.ticks_per_day as f32
+    }
+
+    /// How many ticks a day lasts on this calendar.
+    pub fn ticks_per_day(&self) -> u32 {
+        self.ticks_per_day
+    }
+
+    /// How many ticks a year lasts on this calendar.
+    pub fn ticks_per_year(&self) -> u32 {
+        self.ticks_per_day * DAYS_PER_YEAR
+    }
+
+    /// How many whole days have passed since the world began.
+    pub fn days_elapsed(&self) -> u32 {
+        self.year * DAYS_PER_YEAR + self.day_of_year
     }
 
     /// Get current season
@@ -150,22 +206,17 @@ impl SeasonalCalendar {
         Season::from_day_of_year(self.day_of_year)
     }
 
-    /// Advance time
+    /// Advance time by one tick.
     pub fn tick(&mut self) {
-        self.tick_counter += 1;
+        self.time_of_day += self.hours_per_tick();
 
-        if self.tick_counter >= self.ticks_per_hour {
-            self.tick_counter = 0;
-            self.time_of_day += 1.0;
+        while self.time_of_day >= 24.0 {
+            self.time_of_day -= 24.0;
+            self.day_of_year += 1;
 
-            if self.time_of_day >= 24.0 {
-                self.time_of_day = 0.0;
-                self.day_of_year += 1;
-
-                if self.day_of_year >= 365 {
-                    self.day_of_year = 0;
-                    self.year += 1;
-                }
+            if self.day_of_year >= DAYS_PER_YEAR {
+                self.day_of_year = 0;
+                self.year += 1;
             }
         }
     }
@@ -239,7 +290,7 @@ impl SeasonalCalendar {
 
 impl Default for SeasonalCalendar {
     fn default() -> Self {
-        Self::new(100) // 100 ticks per hour by default
+        Self::new(TICKS_PER_DAY)
     }
 }
 
@@ -249,11 +300,12 @@ mod tests {
 
     #[test]
     fn test_season_from_day() {
-        assert_eq!(Season::from_day_of_year(0), Season::Winter);
-        assert_eq!(Season::from_day_of_year(90), Season::Spring);
-        assert_eq!(Season::from_day_of_year(180), Season::Summer);
-        assert_eq!(Season::from_day_of_year(270), Season::Fall);
-        assert_eq!(Season::from_day_of_year(364), Season::Fall);
+        assert_eq!(Season::from_day_of_year(0), Season::Spring);
+        assert_eq!(Season::from_day_of_year(DAYS_PER_SEASON), Season::Summer);
+        assert_eq!(Season::from_day_of_year(DAYS_PER_SEASON * 2), Season::Fall);
+        assert_eq!(Season::from_day_of_year(DAYS_PER_SEASON * 3), Season::Winter);
+        assert_eq!(Season::from_day_of_year(DAYS_PER_YEAR - 1), Season::Winter);
+        assert_eq!(Season::from_day_of_year(DAYS_PER_YEAR), Season::Spring);
     }
 
     #[test]
@@ -284,49 +336,42 @@ mod tests {
 
     #[test]
     fn test_calendar_creation() {
-        let calendar = SeasonalCalendar::new(100);
+        let calendar = SeasonalCalendar::default();
         assert_eq!(calendar.day_of_year, 0);
         assert_eq!(calendar.year, 0);
-        assert_eq!(calendar.current_season(), Season::Winter);
+        assert_eq!(calendar.current_season(), Season::Spring);
     }
 
     #[test]
     fn test_calendar_tick() {
-        let mut calendar = SeasonalCalendar::new(100);
+        let mut calendar = SeasonalCalendar::new(12);
 
-        // Advance one hour (100 ticks)
-        for _ in 0..100 {
-            calendar.tick();
-        }
+        // One tick is two hours on a twelve-tick day
+        calendar.tick();
 
-        assert_eq!(calendar.time_of_day, 7.0);
+        assert_eq!(calendar.time_of_day, 8.0);
         assert_eq!(calendar.day_of_year, 0);
     }
 
     #[test]
     fn test_calendar_day_advance() {
-        let mut calendar = SeasonalCalendar::new(100);
-        calendar.time_of_day = 23.0;
+        let mut calendar = SeasonalCalendar::new(12);
 
-        // Advance one hour to next day
-        for _ in 0..100 {
+        for _ in 0..12 {
             calendar.tick();
         }
 
-        assert_eq!(calendar.time_of_day, 0.0);
+        assert_eq!(calendar.time_of_day, 6.0);
         assert_eq!(calendar.day_of_year, 1);
     }
 
     #[test]
     fn test_calendar_year_advance() {
-        let mut calendar = SeasonalCalendar::new(100);
-        calendar.day_of_year = 364;
-        calendar.time_of_day = 23.0;
+        let mut calendar = SeasonalCalendar::new(12);
+        calendar.day_of_year = DAYS_PER_YEAR - 1;
+        calendar.time_of_day = 22.0;
 
-        // Advance one hour to next year
-        for _ in 0..100 {
-            calendar.tick();
-        }
+        calendar.tick();
 
         assert_eq!(calendar.day_of_year, 0);
         assert_eq!(calendar.year, 1);
@@ -334,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_is_daytime() {
-        let mut calendar = SeasonalCalendar::new(100);
+        let mut calendar = SeasonalCalendar::default();
         calendar.time_of_day = 12.0; // Noon
         assert!(calendar.is_daytime());
 
@@ -344,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_sun_intensity() {
-        let mut calendar = SeasonalCalendar::new(100);
+        let mut calendar = SeasonalCalendar::default();
 
         // Night time
         calendar.time_of_day = 2.0;
@@ -357,22 +402,22 @@ mod tests {
 
     #[test]
     fn test_season_progress() {
-        let mut calendar = SeasonalCalendar::new(100);
+        let mut calendar = SeasonalCalendar::default();
         calendar.day_of_year = 0;
         assert_eq!(calendar.season_progress(), 0.0);
 
-        calendar.day_of_year = 45; // Mid-winter
+        calendar.day_of_year = DAYS_PER_SEASON / 2; // Mid-spring
         assert!(calendar.season_progress() > 0.4);
         assert!(calendar.season_progress() < 0.6);
 
-        calendar.day_of_year = 89; // End of winter
+        calendar.day_of_year = DAYS_PER_SEASON - 1; // End of spring
         assert!(calendar.season_progress() > 0.9);
     }
 
     #[test]
     fn test_temperature_application() {
-        let mut calendar = SeasonalCalendar::new(100);
-        calendar.day_of_year = 180; // Summer
+        let mut calendar = SeasonalCalendar::default();
+        calendar.day_of_year = Season::Summer.first_day();
         calendar.time_of_day = 12.0; // Noon
 
         let base_temp = 20.0;
@@ -398,14 +443,14 @@ mod tests {
 
     #[test]
     fn test_date_string() {
-        let mut calendar = SeasonalCalendar::new(100);
+        let mut calendar = SeasonalCalendar::default();
         calendar.year = 1;
-        calendar.day_of_year = 180;
+        calendar.day_of_year = Season::Summer.first_day();
         calendar.time_of_day = 14.5;
 
         let date_str = calendar.date_string();
         assert!(date_str.contains("Year 1"));
-        assert!(date_str.contains("Day 181"));
+        assert!(date_str.contains(&format!("Day {}", Season::Summer.first_day() + 1)));
         assert!(date_str.contains("Summer"));
     }
 

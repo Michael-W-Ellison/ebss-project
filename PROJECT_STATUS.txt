@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Generated: November 4, 2025
+Last verified: August 2026 (against commit 0d11751 and the work since)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -9,129 +9,329 @@ PROJECT OVERVIEW
 A general-purpose AI platform for simulating societies of autonomous agents
 that learn and adapt through behavioral evolution.
 
-GIT REPOSITORY STATUS
---------------------
 
-PROJECT STRUCTURE
+WHERE THE PROJECT STANDS
+------------------------
+The engine is built, not sketched. All four originally planned phases have
+been implemented, and a default simulation now runs a society that feeds
+itself, waters itself, shelters from the weather, and reproduces over tens of
+thousands of ticks without intervention.
+
+What remains is not "write the systems" but "connect what exists": several
+analytics components are libraries nobody calls, and agents still cannot see
+one another or hear anything. The behaviours that had code but no driver -
+cooking, and clothing - now have one.
+
+
+SIZE AND ACTIVITY
 -----------------
-.
-./CONTRIBUTING.md
-./Cargo.toml
-./LICENSE
-./PROJECT_STATUS.txt
-./README.md
-./SETUP.md
-./config
-./docs
-./examples
-./examples/basic_survival.rs
-./src
-./src/agents
-./src/agents/agent.rs
-./src/agents/mod.rs
-./src/agents/population.rs
-./src/analytics
-./src/analytics/mod.rs
-./src/core
-./src/core/behavior_tree.rs
-./src/core/drives.rs
-./src/core/learning.rs
-./src/core/memory.rs
-./src/core/mod.rs
-./src/environment
-./src/environment/mod.rs
-./src/lib.rs
-./src/world
-./src/world/mod.rs
-./src/{core,environment,agents,world,analytics}
-./tests
+  Rust source files (src/)      183
+  Lines in src/                 ~95,900
+  Lines including tests,
+    examples and plugins        ~103,200
+  Commits                       276 (November 2025 - August 2026)
+  Examples                      21
+  Binaries                      3 (test_simulation, ebss_gui, ebss_bevy)
 
-IMPLEMENTED FEATURES
--------------------
-✅ Behavior Tree System
-   - Node types (Sequence, Selector, Action, Condition)
-   - Weight-based learning
-   - Automatic pruning
-   - Genetic inheritance support
+  Lines by module:
+    agents/           27,609     analytics/        13,495
+    world/            14,679     bevy_gui/          8,892
+    environment/      12,643     core/              8,128
+    gui/               7,638     visualization/     1,442
+    bin/               1,279
 
-✅ Drive System (13 drives)
-   - Hunger, Rest, Shelter, Safety
-   - Preparedness, Industry, Sustenance
-   - Curiosity, Social, Reproduction
-   - Luxury, Utility, Construction
 
-✅ Agent System
-   - Agent state management
-   - Population management
-   - Configurable creation
+BUILD STATUS
+------------
+  Every configuration builds.
 
-✅ Build Infrastructure
-   - Cargo build system
-   - GitHub Actions CI/CD
-   - Comprehensive testing
-   - Documentation
+  cargo build                          WORKS (15 warnings, all unused
+                                       variables and imports)
+  cargo build --features gui           WORKS (egui front end)
+  cargo build --features bevy_gui      WORKS (Bevy front end)
+  cargo check --workspace              WORKS (includes the plugin crate)
+  cargo test --workspace               WORKS (see TEST STATUS)
 
-CORE STATISTICS
---------------
-Total Rust Source Files: 12
-Total Lines of Code: ~1,000+
-Test Coverage: Core modules 100%
-Documentation: Complete API docs
 
-KEY FILES
----------
-Documentation:
-  - Software_Design_Document.docx (18 pages)
-  - README.md
-  - SETUP.md
-  - CONTRIBUTING.md
-  - PROJECT_SUMMARY.md
+TEST STATUS
+-----------
+  1,236 tests across the workspace:
+  1,199 library tests
+     15 integration tests (tests/environment_plugin_tests.rs)
+     21 plugin tests (plugins/minecraft_survival)
+      1 doc test
 
-Core Implementation:
-  - src/core/behavior_tree.rs (200+ lines)
-  - src/core/drives.rs (280+ lines)
-  - src/agents/agent.rs
-  - src/agents/population.rs
+  All pass, with six known flaky tests that fail intermittently:
+    world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
+    world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_...
+    analytics::tests::agent_building_integration_tests::
+      test_production_building_placed_near_resources
+    analytics::tests::agent_building_integration_tests::
+      test_production_chain_buildings_cluster
+    analytics::tests::agent_building_integration_tests::
+      test_different_building_types_use_appropriate_strategies
+    analytics::tests::longevity_tests::water_is_not_used_up
 
-Examples:
-  - examples/basic_survival.rs
+  All six seed World::new from thread_rng and assert on properties that a
+  randomly generated world does not always satisfy. Measured failure rates of
+  roughly 1-in-10 to 1-in-20 per run for the first two, 4-in-120 for the third
+  and 1-in-40 for the fourth, all present before any recent work and all
+  measured against the commit before it. Fixing them means giving world
+  generation a seed.
 
-NEXT STEPS
-----------
-Phase 1 Completion (1-2 months):
-1. Implement world grid system
-2. Add agent actions (move, gather, store)
-3. Connect drives to behavior tree selection
-4. Implement learning loop
-5. Create ASCII visualization
+  One test is marked ignored and left out of the count above:
+  analytics::tests::longevity_tests::a_settlement_lasts_thirty_thousand_ticks
+  runs thirty thousand ticks - twenty-six years now that the calendar turns -
+  and eleven of twelve worlds are still inhabited at the end, holding 77.7
+  people on average. The rest die of their own accord, having first grown past
+  what the land will carry.
+  Run it by hand: cargo test --release -- --ignored a_settlement_lasts
 
-Phase 2 Start (2-3 months):
-1. Environment plugin interface
-2. Material property system
-3. Template-based crafting
-4. Minecraft-style environment
 
-TO BUILD AND RUN
----------------
-Prerequisites:
-  - Rust 1.70+
-  - Cargo
+WHAT RUNS IN A LIVE SIMULATION
+------------------------------
+Verified as reached by Simulation::tick():
 
-Commands:
-  cargo build              # Build debug version
-  cargo build --release    # Build optimized version
-  cargo test               # Run tests
-  cargo run --example basic_survival
+  Survival        hunger, thirst, energy, nutrition (energy, protein,
+                  micronutrients), food spoilage, fatigue, body temperature,
+                  exposure and shelter, injury and healing, death
+  Calendar        a tick is two hours, a day twelve ticks, a season
+                  twenty-four days and a year 1,152 ticks. A world opens in
+                  spring; eight thousand ticks cover seven years and all four
+                  seasons, where every run before this one ended on Year 0,
+                  Day 4, having never left winter. The season decides regrowth,
+                  daylight and the weather - winter snows a tenth of the time
+                  and no other season snows at all. It does NOT decide the
+                  temperature a tile reports: that is frozen at first touch, so
+                  a clear day reads 18.667 C in every season alike. See
+                  ISSUES_FOUND.md #4
+  Lifecycle       aging, life stages, reproduction, pregnancy, birth,
+                  nursing, inheritance of traits and behaviour, over a life of
+                  eight or nine calendar years and thirty-odd seasons
+  Behaviour       15 drives (the design document specifies 13; Thirst and
+                  Protection came later), behaviour trees with weight learning,
+                  goals,
+                  plans, foraging, drinking, sheltering, exploration, cooking,
+                  farming. Drives that look past this afternoon run five times
+                  faster in an agent that is fed, watered, rested and warm and
+                  a quarter as fast in one that is not
+  Drives          nine of the fifteen read the conditions the design document
+                  specifies - threat, darkness, weather, what is in the pack,
+                  what the ground round about is bearing, whether a child has
+                  strayed - and settle where the situation puts them rather
+                  than climbing a clock. Six of the nine were pinned at their
+                  ceiling for whole runs before this; the three still high ask
+                  for tools, stores and finery, which nothing in the world
+                  makes. Hunger, thirst and tiredness still run on time
+  Pressure        a denied drive presses harder the longer it waits, up to
+                  fourfold, on both how fast it builds and how loudly it argues
+                  - so a settlement that cannot feed somebody loses them to it.
+                  Breeding waits on a surplus or a long settled stretch;
+                  children have a quarter to a half of an adult's reserves
+                  against a famine; ten days of unanswered hunger sends an
+                  agent out of the country it is in
+  Learning        every action's outcome is recorded against the kind of
+                  undertaking it was and shifts what the agent will try next.
+                  Failures count for more than successes, nothing is dropped
+                  before five attempts, and a hunter who never catches
+                  anything stops hunting
+  Land            every tile carries soil: nutrients, and two pools of dead
+                  matter waiting to become more of it. What rots and how fast
+                  depends on how dense it was alive and how wet the ground is
+  Personality     a founder is drawn with three to five compatible traits out
+                  of sixty-odd, and everybody born afterwards takes after their
+                  two parents with a chance of mutation. Blindness, deafness
+                  and muteness arise by birth rather than by founding. Forty
+                  founders are forty different people. What the traits reach so
+                  far is how somebody feels about what happened, who they get
+                  on with, what they pass on in gossip, and how long a plan
+                  they will countenance - not yet what they choose to do
+  Fishing         fish come up the river on the season rather than growing back
+                  out of what is left of them, so a reach fished out fills
+                  again from the catchment. Agents go to the water when they
+                  want food, learn for themselves whether it pays, and what is
+                  left of a fish is worth forty times a unit of crop to a
+                  field - it was grown at sea, not on the settlement's ground
+  Nutrient return four paths put matter back where growing took it out: what a
+                  body passes after a meal, what spoils in a pack, what a body
+                  is when it stops, and the roots, stalk and leaf a plant
+                  leaves in the tile it grew in. Rot loses two fifths of what
+                  it works on, so the loop turns and loses on every turn
+  Flora           about two hundred plants stand in a new world, each growing
+                  on whichever of water, light and nutrient it has least of;
+                  standing foliage shades what is under it and sheds leaf fall
+                  that in time becomes soil
+  Farming         agents break open grass into fields and sow them. A field
+                  gets at two and a half times as much of what the soil holds
+                  and carries a heavier crop; it does not grow anything faster
+                  than that plant's kind can grow
+  Practices       agents work muck-spreading out for themselves - tried out of
+                  curiosity, judged by whether the ground visibly improves,
+                  dropped if it never does, and picked up by whoever watches
+  Family          parents keep their children close, going to one that has
+                  strayed and running to one that something is stalking;
+                  children pick up skill experience watching the adults around
+                  them, and three times as much watching their own parents
+  Fire            agents gather wood, build and light campfires, and cook at
+                  them; only meat, fish and grain are improved by a fire, and
+                  anything else put over one is ruined - worthless, unsafe to
+                  eat and smelling of it. How often a cook burns a batch falls
+                  with practice, from one in five to none
+  Clothing        agents gather flax, cotton and bark, make garments and wear
+                  them. What a garment is worth follows its material - fur and
+                  wool best, plant fibre next, bark last - and the hand that
+                  made it. Wood is kept back for fires before it goes into
+                  clothes
+  Hunting         agents go after animals for the skins, and eat what comes
+                  with them. A hunter has to be within a spear's throw, an
+                  unarmed one leaves the dangerous animals alone, and what is
+                  killed is butchered into meat, hides, leather and wool
+  Ecology         herds are held down by the predators that live off them, and
+                  by the ground they graze; predators that cannot find prey
+                  starve, widen what they will take, and turn on the people
+                  living beside them; a species wiped out here or
+                  hunted down to a quarter of its peak is slowly replaced by
+                  animals wandering in from off the map
+  Perception      agents see one another, which observational learning is
+                  gated on and had never had; sight of terrain, resources and
+                  buildings within 25 tiles,
+                  refreshed every tick and negated by the Blind trait; smell
+                  scaled to what a thing actually gives off - a berry about
+                  2 tiles, water 3, flesh 6, rot 9-20, cooking the full 25;
+                  sharing of known resource locations between agents. Food
+                  over a lit fire is the loudest smell there is, and now
+                  something an agent can actually meet
+  Social          proximity relationships, social interactions, gossip,
+                  observational learning, shared knowledge, technology
+                  discovery and spread
+  World           terrain, climate, weather, seasons, resources and their
+                  regeneration, buildings, crafting, fauna, flora, combat,
+                  obstacle-aware pathfinding
+  Persistence     save, load, autosave with checkpoint rotation
+  Display         ASCII renderer, egui GUI (src/bin/gui.rs)
 
-REPOSITORY READY
----------------
-✅ Initial commit created
-✅ All files tracked
-✅ .gitignore configured
-✅ CI/CD configured
-✅ Ready to push to GitHub
 
-Suggested GitHub repository name: ebss-project or emergent-behavior-simulator
+BUILT BUT NOT CONNECTED
+-----------------------
+These modules are implemented and tested in isolation, but nothing in the
+simulation loop drives them. They are libraries awaiting a caller, not
+missing features:
+
+  analytics::web_api        ApiServer has zero call sites anywhere
+  analytics::events         EventBus used only by its own tests
+  analytics::replay         SessionRecorder used only by its own tests
+  analytics::storage        StorageManager used only by its own tests
+  analytics::metrics        \  work when a caller drives them; two examples
+  analytics::emergence       > (ascii_simulation, phase4_analytics) show how,
+  analytics::performance    /  but Simulation::tick does not feed them
+
+  Zoning and territory      Building placement reads zone and territory
+                            bonuses, but nothing outside tests ever creates a
+                            zone or claims territory, so both are always empty
+
+  Hearing                   Nothing feeds sounds from the world, so every
+                            sound-derived percept is a dead path.
+
+
+KNOWN GAPS IN BEHAVIOUR
+-----------------------
+  - Clothing costs about as much as it returns in this climate. Over forty
+    worlds it halves how often agents are cold (28% to 16%) and warms them
+    half a degree, at three points of the fed population and three percent of
+    the population itself. The material is scarce and the weather is mild.
+  - Hunting is worth it for a minority. Over forty worlds it puts 44 agents
+    of 862 into fur, hide or leather - which nothing else can - at two points
+    of the fed population and about eight percent of the population itself.
+    There are only a handful of animals in a world, so most agents never get
+    a skin.
+  - Fauna is stable in most worlds but not all. Over forty worlds, predators
+    are still alive at the end in thirty-six and herds stay bounded in
+    thirty-three; the rest lose their predators and run to the population cap.
+  - A settlement lasts, and now settles rather than slides. Four of four were
+    still there at thirty thousand ticks, running to a peak of 226 and holding
+    154 of it, on ground worked from about 0.55 fertility down to 0.27. Before
+    the ground had a way back they peaked at 212 and ended at 53 on 0.058. The
+    soil still runs down - rot loses two fifths of everything it works on, so
+    fertility is falling in three of the four worlds at the end - but slowly
+    enough that the settlement outlives the run.
+  - Agent fear is computed from unmet hunger, thirst and rest, so it sits
+    high whenever an agent is between meals. Fleeing is gated on fear, which
+    makes flight a common state rather than a response to danger.
+  - Populations grow but have not been studied over very long runs. Nobody
+    has characterised what happens past a few tens of thousands of ticks.
+
+
+SUGGESTED NEXT STEPS
+--------------------
+  1. Let drives decide more than a thirteenth of what an agent does, and give
+     the three pegged drives something the world can answer. Personality now
+     reaches the drives - a trait scales how loudly a drive argues and moves
+     the point at which an agent acts on it - and it still changes almost
+     nothing, because generate_non_emotional_action is thirteen fixed
+     priorities with drives consulted last. Seventy-nine percent of everything
+     a settlement does is foraging off that ladder. And when the thirteenth
+     priority is reached, Luxury (above its threshold 98.9% of the time),
+     Preparedness (98.2%) and Utility (84.6%) take it every time, because
+     nothing answers them - so Action::Build and Action::Socialize are chosen
+     zero times in 777 agent-lives. See ISSUES_FOUND.md #12 and #5.
+  2. Make being near somebody worth less than liking them. Proximity adds up to
+     0.10 to a bond every tick while a clash of traits subtracts 0.01 to 0.03,
+     so every relationship saturates at close and nobody in any settlement is
+     ever hostile to anybody. Now that traits vary this is the thing standing
+     between the model and a social life. See ISSUES_FOUND.md #12.
+  3. Seed world generation so the six flaky tests become deterministic and
+     runs become reproducible.
+  4. Decide the fate of the unconnected analytics: wire metrics, emergence
+     detection and performance monitoring into Simulation::tick behind a
+     config flag, or move them out of the crate.
+  5. Give agents a way to make and keep tools, stores and anything decorative.
+     Now that the drives read their specified conditions, the three that ask
+     for those things sit high because nothing in the world answers them:
+     thirty agents at eight thousand ticks held no tools and nothing fine
+     between them. See ISSUES_FOUND.md #5.
+  6. Let a settlement break new ground. The nutrient return has taken the
+     overshoot-and-slide off the table, but two of the three things that
+     sharpened it are untouched. A spent field still counts as a field:
+     fields_within counts cultivated tiles rather than producing ones, and a
+     tile carrying a resource node cannot be tilled again, so exhausted fields
+     inside the walking radius stop a settlement opening new ones for good
+     while the map around it is still fertile. And nobody has ever died of
+     hunger - is_starving needs 1,440 ticks without food and death 10,080,
+     which is most of a life. See ISSUES_FOUND.md #3.
+  7. Decide whether plugins/minecraft_survival should exist at all: it now
+     compiles and its tests pass, but it duplicates
+     src/environment/minecraft_survival.rs. Either merge what is unique to it
+     (Perlin world generation, water structures) into the in-tree module, or
+     keep it as the worked example of writing a plugin.
+  8. Clean up the build warnings and the committed
+     src/analytics/mod.rs.backup.
+  9. Characterise long-run behaviour: population dynamics, technology
+     spread, and settlement patterns over 100k+ ticks.
+
+
+HOW TO BUILD AND RUN
+--------------------
+  Prerequisites: Rust 1.70+, Cargo
+
+  cargo build --release                 Build
+  cargo test                            Run the test suite
+  cargo run --bin test_simulation       Headless run with a status report
+  cargo run --features gui --bin ebss_gui
+                                        Interactive egui front end
+  cargo run --example basic_survival    Smallest example
+  cargo run --example ascii_simulation  Example that also drives the
+                                        analytics modules
+
+  cargo run --features bevy_gui --bin ebss_bevy
+                                        Bevy front end
+
+
+A NOTE ON THIS DOCUMENT
+-----------------------
+Every figure here was measured against the commit named at the top, not
+estimated. If you are reading this well after that date, re-measure before
+trusting it: the previous version of this file described a 12-file, 1,000
+line project and was wrong by two orders of magnitude.
 
 ================================================================================
 END OF STATUS REPORT

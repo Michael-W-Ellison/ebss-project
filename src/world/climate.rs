@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::environment::{
-    Biome, BiomeType, Weather, WeatherGenerator, WeatherType, Season, SeasonalCalendar,
+    seasons, Biome, BiomeType, Weather, WeatherGenerator, WeatherType, Season, SeasonalCalendar,
 };
 use crate::agents::temperature::{Climate, Temperature};
 use crate::world::{Position, TerrainType};
@@ -24,6 +24,8 @@ pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
         TerrainType::Hills => BiomeType::Grassland,
         TerrainType::Beach => BiomeType::Coast,
         TerrainType::Riverbank => BiomeType::Wetland,
+        // A field is grassland that somebody has taken in hand
+        TerrainType::Farmland => BiomeType::Grassland,
     }
 }
 
@@ -160,7 +162,7 @@ impl ClimateManager {
         let weather = weather_gen.generate_weather();
 
         Self {
-            calendar: SeasonalCalendar::new(100), // 100 ticks per hour
+            calendar: SeasonalCalendar::new(seasons::TICKS_PER_DAY),
             weather,
             weather_gen,
             base_climate: Climate::temperate(), // Default temperate
@@ -187,7 +189,7 @@ impl ClimateManager {
         let weather = weather_gen.generate_weather();
 
         Self {
-            calendar: SeasonalCalendar::new(100),
+            calendar: SeasonalCalendar::new(seasons::TICKS_PER_DAY),
             weather,
             weather_gen,
             base_climate: Climate::temperate(),
@@ -316,7 +318,7 @@ impl ClimateManager {
 
             // Update biome with current time and season
             biome.time_of_day = self.calendar.time_of_day;
-            biome.season = self.calendar.day_of_year as f32 / 365.0;
+            biome.season = self.calendar.day_of_year as f32 / seasons::DAYS_PER_YEAR as f32;
             biome.update_climate(0.0); // Initial update
 
             // Apply climate modifiers AFTER update_climate (which overwrites temperature)

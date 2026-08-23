@@ -119,6 +119,11 @@ pub fn receive_snapshots_system(
                 let point = HistoryPoint {
                     tick,
                     population: stats.total_agents,
+                    infants: stats.infants,
+                    children: stats.children,
+                    adolescents: stats.adolescents,
+                    adults: stats.adults,
+                    elderly: stats.elderly,
                     average_health: stats.average_health,
                     average_energy: stats.average_energy,
                     average_happiness: stats.average_happiness,
@@ -127,6 +132,9 @@ pub fn receive_snapshots_system(
                         .sum(),
                     buildings_completed: new_snapshot.world.buildings.iter()
                         .filter(|b| b.progress >= 1.0)
+                        .count(),
+                    buildings_construction: new_snapshot.world.buildings.iter()
+                        .filter(|b| b.progress < 1.0)
                         .count(),
                     births: stats.total_births,
                     deaths: stats.total_deaths,

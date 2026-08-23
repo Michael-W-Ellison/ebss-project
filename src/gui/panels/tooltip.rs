@@ -47,6 +47,7 @@ pub fn drive_color(drive: DriveType) -> Color32 {
         DriveType::Luxury => Color32::from_rgb(220, 200, 100),
         DriveType::Utility => Color32::from_rgb(180, 180, 180),
         DriveType::Construction => Color32::from_rgb(180, 140, 100),
+        DriveType::Protection => Color32::from_rgb(255, 220, 130),
     }
 }
 
@@ -63,6 +64,7 @@ pub fn terrain_name(terrain: TerrainType) -> &'static str {
         TerrainType::Hills => "Hills",
         TerrainType::Beach => "Beach",
         TerrainType::Riverbank => "Riverbank",
+        TerrainType::Farmland => "Farmland",
     }
 }
 

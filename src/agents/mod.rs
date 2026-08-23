@@ -17,6 +17,7 @@ pub mod gender;
 pub mod pregnancy;
 pub mod childcare;
 pub mod fatigue;
+pub mod practices;
 
 pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};

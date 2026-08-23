@@ -72,6 +72,16 @@ pub struct ExposureStatus {
 }
 
 impl ExposureStatus {
+    /// Ceiling on accumulated exposure damage - the point at which severity
+    /// is already total, so counting higher means nothing
+    pub const MAX_EXPOSURE_DAMAGE: f32 = 10.0;
+
+    /// Exposure damage shed per tick while sheltered and out of danger
+    const SHELTERED_RECOVERY: f32 = 0.05;
+
+    /// Exposure damage shed per tick in the open once conditions are safe
+    const OPEN_AIR_RECOVERY: f32 = 0.02;
+
     pub fn new() -> Self {
         Self {
             wetness: 0.0,
@@ -155,6 +165,29 @@ impl ExposureStatus {
         }
 
         self.exposure_damage += damage_this_tick;
+
+        // Recover once nothing is harming the agent any more. Shelter speeds
+        // it up, but an agent that has simply warmed up in the open is no
+        // longer suffering and must be able to shed what it took: recovery
+        // used to happen only inside the SeekShelter action, and only under
+        // cover, so an agent that could not reach shelter kept accumulating
+        // damage until it read as critically exposed for the rest of its life.
+        if self.active_exposures.is_empty() {
+            let recovery = if has_shelter {
+                Self::SHELTERED_RECOVERY
+            } else {
+                Self::OPEN_AIR_RECOVERY
+            };
+
+            self.exposure_damage = (self.exposure_damage - recovery).max(0.0);
+        }
+
+        // Cap the accumulated total. Damage is a measure of how bad the
+        // agent's condition is, and severity already saturates here; letting
+        // it run to arbitrary values leaves an agent that has since warmed up
+        // still reading as critically exposed hundreds of ticks later.
+        self.exposure_damage = self.exposure_damage.min(Self::MAX_EXPOSURE_DAMAGE);
+
         damage_this_tick
     }
 

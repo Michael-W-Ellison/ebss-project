@@ -11,7 +11,7 @@ LAYER 1: AGENT STATE
 │  │   ├─ position: (i32, i32, i32)             [3D coordinates]         │
 │  │   └─ health: f32                           [0.0 to 100.0]           │
 │  ├─ drives: DriveState                        [Motivation system]      │
-│  │   └─ drives: Vec<Drive> (13 total)         [13 core drives]         │
+│  │   └─ drives: Vec<Drive> (15 total)         [15 core drives]         │
 │  ├─ behavior_trees: Vec<BehaviorTree>         [Learned strategies]     │
 │  └─ memory: Memory                            [Knowledge store]        │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -44,7 +44,7 @@ LAYER 2: DRIVE SYSTEM (Motivation)
                               ▼
                     DECISION POINT ◄─── THIS IS WHERE LEARNING LOOP STARTS
 
-Drives (13 total):
+Drives (15 total):
   1. Hunger (0.7 thresh)  - consume food
   2. Rest (0.6 thresh)    - sleep
   3. Shelter (0.5 thresh) - protective structure

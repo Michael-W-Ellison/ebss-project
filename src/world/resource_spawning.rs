@@ -61,7 +61,12 @@ impl Default for NaturalisticResourceConfig {
 
             // Gatherable
             honey_locations: 4,
-            fish_areas: 5,
+            // A river is a river along its length, not in five places. At five
+            // areas the generator put six or seven reaches of fish on three
+            // hundred and seventy-odd water tiles, which is too thin for
+            // anybody to build a living on, and two of every three nodes were
+            // lost anyway to offsets landing on dry ground.
+            fish_areas: 14,
 
             // Clustering
             nodes_per_cluster: 3,

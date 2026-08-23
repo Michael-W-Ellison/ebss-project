@@ -119,8 +119,11 @@ pub fn attempt_impregnation(
         return None;
     }
 
-    // Calculate conception probability based on fertility
-    let conception_chance = male.fertility() * female.fertility();
+    // Calculate conception probability based on fertility.
+    //
+    // Clamped because this is handed straight to the sampler, which panics on
+    // anything outside 0.0 to 1.0 rather than saturating.
+    let conception_chance = (male.fertility() * female.fertility()).clamp(0.0, 1.0);
 
     if rng.gen_bool(conception_chance as f64) {
         Some(PregnancyState::new(current_tick, male.id))
@@ -187,8 +190,33 @@ fn give_birth_internal(
     // Inherit behavior trees from parents with pruning and mutation
     offspring.behavior_trees = inherit_behavior_trees(&parent1.behavior_trees, &parent2.behavior_trees);
 
-    // Inherit traits from parents (mix of both with mutation)
+    // Inherit traits from parents (mix of both with mutation).
+    //
+    // What the child was born with rather than born to survives this: the
+    // congenital rolls happen in `with_parents`, before we get here, and
+    // assigning straight over the top used to throw them away - so congenital
+    // infertility, the one trait anything ever assigned, never once survived a
+    // live birth.
+    let born_with: Vec<crate::core::traits::Trait> =
+        offspring.traits.get_traits().iter().copied()
+            .filter(|t| matches!(t, crate::core::traits::Trait::Infertile))
+            .collect();
+
     offspring.traits = inherit_traits(&parent1.traits, &parent2.traits);
+
+    for born_with in born_with {
+        offspring.traits.add_trait(born_with);
+    }
+
+    // A child's own personality bends its own drives. This has to come after
+    // both the drives and the traits are settled - the weights are inherited
+    // above and the traits just now - and it is written to be safe to repeat,
+    // so ordering here is a matter of correctness rather than luck.
+    offspring.drives.lean_towards(&offspring.traits);
+
+    // Traits are assigned after construction, so let the inherited ones reach
+    // the senses: a child born blind or deaf must actually be so
+    offspring.apply_trait_sensory_modifications();
 
     // Inherit reproduction drive modifier from parents with mutation
     offspring.reproduction_drive_modifier = inherit_reproduction_modifier(
@@ -313,7 +341,7 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
         Trait::Peaceful, Trait::Trusting, Trait::Honest, Trait::Dishonest,
         Trait::Callous, Trait::Diligent, Trait::Manipulator, Trait::Imaginative,
         Trait::Paranoid, Trait::Archivist, Trait::Masochist, Trait::Copycat,
-        Trait::Repressed, Trait::Mute, Trait::Deaf, Trait::Ignorant,
+        Trait::Repressed, Trait::Mute, Trait::Deaf, Trait::Blind, Trait::Ignorant,
     ];
 
     // Collect all parent traits
@@ -408,17 +436,123 @@ mod tests {
             if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
                 thirst.value = 0.2;
             }
+
+            // Traits and the personal reproduction modifier are rolled at
+            // random on creation, and an infertile or low-drive pair cannot
+            // mate whatever else the test sets up. Pin both so these tests
+            // assert on the behaviour they name instead of on the dice.
+            agent
+                .traits
+                .traits
+                .retain(|t| *t != crate::core::traits::Trait::Infertile);
+            agent.reproduction_drive_modifier = 1.0;
+            if let Some(reproduction) = agent.drives.get_mut(DriveType::Reproduction) {
+                reproduction.value = 0.5;
+            }
         }
 
         (male, female)
     }
 
+    /// Fertility is handed to the sampler as a probability, so it has to keep
+    /// to its documented range.
+    ///
+    /// The personal reproduction modifier goes as high as 1.8 and the
+    /// developmental one to 1.1, so an unclamped agent in its prime multiplied
+    /// out to nearly 2.0.
+
+    /// Give an agent food in hand, which reproduction now requires: being
+    /// un-hungry for a moment says nothing about whether the next meal exists.
+    fn give_food(agent: &mut Agent, quantity: u32) {
+        use crate::agents::InventoryItem;
+        use crate::world::nutrition::FoodDatabase;
+        use crate::world::ItemType;
+
+        let database = FoodDatabase::new();
+        let mut item = InventoryItem::new_with_weight("food".to_string(), quantity, 0.1);
+        item.food_data = database.create_food_data(&ItemType::Food, 0);
+        agent.inventory.add_item(item);
+    }
+
+    #[test]
+    fn test_fertility_stays_within_probability_range() {
+        let mut agent = Agent::new(AgentConfig::default());
+
+        agent.state.age = 3000;
+        agent.state.life_stage = crate::agents::LifeStage::Adult;
+        agent.state.health = 100.0;
+        agent
+            .traits
+            .traits
+            .retain(|t| *t != crate::core::traits::Trait::Infertile);
+
+        // Every multiplier at its most generous
+        agent.reproduction_drive_modifier = 1.8;
+        agent.developmental_nutrition.finalized = true;
+        agent.developmental_nutrition.stat_modifiers.fertility = 1.1;
+        if let Some(drive) = agent.drives.get_mut(DriveType::Reproduction) {
+            drive.value = 1.0;
+        }
+
+        let fertility = agent.fertility();
+
+        assert!(
+            (0.0..=1.0).contains(&fertility),
+            "fertility should stay a probability, got {fertility}"
+        );
+    }
+
+    /// Two unusually fertile agents must not crash the conception roll.
+    ///
+    /// Their fertilities multiplied to roughly 4.0, and the sampler panics on
+    /// anything outside 0.0 to 1.0 rather than saturating. Reproduction only
+    /// started running once agents could keep themselves fed and watered, so
+    /// this surfaced as a rare crash a few thousand ticks into a run.
+    #[test]
+    fn test_impregnation_survives_maximum_fertility() {
+        let (mut male, mut female) = create_mating_pair();
+
+        for agent in [&mut male, &mut female] {
+            agent.state.health = 100.0;
+            agent.reproduction_drive_modifier = 1.8;
+            agent.developmental_nutrition.finalized = true;
+            agent.developmental_nutrition.stat_modifiers.fertility = 1.1;
+            if let Some(drive) = agent.drives.get_mut(DriveType::Reproduction) {
+                drive.value = 1.0;
+            }
+        }
+
+        assert!(
+            male.fertility() * female.fertility() <= 1.0,
+            "the conception roll needs a probability, got {}",
+            male.fertility() * female.fertility()
+        );
+
+        // Would panic outright before the clamp
+        let _ = attempt_impregnation(&male, &female, 100);
+    }
+
     #[test]
     fn test_can_mate_basic() {
-        let (male, female) = create_mating_pair();
+        let (mut male, mut female) = create_mating_pair();
+        give_food(&mut male, 12);
+        give_food(&mut female, 12);
 
         let criteria = MateSelectionCriteria::default();
         assert!(can_mate(&male, &female, &criteria));
+    }
+
+    /// A pair with nothing put by will not have a child, however full they are
+    /// at this moment.
+    #[test]
+    fn a_pair_with_nothing_put_by_do_not_have_a_child() {
+        let (male, female) = create_mating_pair();
+
+        let criteria = MateSelectionCriteria::default();
+        assert!(
+            !can_mate(&male, &female, &criteria),
+            "an empty pack is not a plan for feeding a child"
+        );
     }
 
     #[test]
@@ -561,8 +695,11 @@ mod tests {
             thirst.value = 0.2;
         }
 
+        give_food(&mut male, 12);
+        give_food(&mut female, 12);
+
         let criteria = MateSelectionCriteria::default();
-        // Should be able to mate - both are well-fed
+        // Should be able to mate - both are well-fed and have food in hand
         assert!(can_mate(&male, &female, &criteria));
     }
 
@@ -590,8 +727,9 @@ mod tests {
         let mut agent = Agent::new(AgentConfig::default());
         agent.state.age = 3000;
         agent.state.life_stage = crate::agents::LifeStage::Adult;
+        give_food(&mut agent, 12);
 
-        // Well-fed agent should attempt reproduction
+        // Fed, watered, and carrying enough for two: should attempt reproduction
         assert!(agent.should_attempt_reproduction());
 
         // Hungry agent should NOT attempt reproduction

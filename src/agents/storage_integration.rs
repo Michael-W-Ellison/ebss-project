@@ -13,9 +13,45 @@ pub fn item_type_to_id(item_type: ItemType) -> String {
     format!("{:?}", item_type).to_lowercase()
 }
 
+/// What a kill turns into once it is butchered.
+///
+/// Every species drops its own named cut - mutton, beef, deer_meat, blubber -
+/// and its own kind of skin. Nothing downstream knows those names: the
+/// nutrition database, the garment table and the cooking rules all speak in
+/// meat, fish, hides, leather and wool. Without this a hunter came home with
+/// twelve deer_meat it could neither eat nor cook.
+///
+/// Trophies - antlers, tusks, feathers, claws - pass through unchanged. They
+/// have no use yet, and inventing one here would be worse than carrying them.
+pub fn butchered_item_id(material_id: &str) -> &str {
+    match material_id {
+        "fish_meat" => "fish",
+
+        // Every skin is a skin
+        "fur" | "thick_hide" | "hide" | "snake_skin" | "pelt" => "hides",
+
+        // Named cuts and the odd rendered fat
+        "mutton" | "beef" | "pork" | "blubber" => "meat",
+        other if other.ends_with("_meat") => "meat",
+
+        other => other,
+    }
+}
+
+/// Strip the preparation prefix from an item id.
+///
+/// Food that has been over a fire is carried under its own id - `cooked_fish`,
+/// `burnt_meat` - because one inventory stack can hold only one preparation
+/// state. Underneath it is still fish and still meat.
+pub fn base_item_id(id: &str) -> &str {
+    id.strip_prefix("cooked_")
+        .or_else(|| id.strip_prefix("burnt_"))
+        .unwrap_or(id)
+}
+
 /// Convert string ID to ItemType (best effort)
 pub fn id_to_item_type(id: &str) -> Option<ItemType> {
-    match id.to_lowercase().as_str() {
+    match base_item_id(&id.to_lowercase()) {
         // Basic Resources
         "wood" => Some(ItemType::Wood),
         "stone" => Some(ItemType::Stone),

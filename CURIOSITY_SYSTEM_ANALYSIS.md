@@ -12,7 +12,7 @@ This analysis examines the curiosity system implementation in the EBSS (Evolutio
 
 **Location**: `src/core/drives.rs`, line 33-118
 
-- **Type**: `DriveType::Curiosity` (one of 14 core drives)
+- **Type**: `DriveType::Curiosity` (one of 15 core drives)
 - **Threshold**: 0.2 (activates easily - lowest among survival drives at 0.6-0.8)
 - **Accumulation Rate**: 0.004 per tick (0.4% - slow compared to hunger at 1%)
 - **Weight**: 0.5-1.5 (variable per agent - lower than survival drives at 1.5-2.5)

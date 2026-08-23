@@ -422,6 +422,11 @@ impl HeatSourceRegistry {
         self.heat_sources.values().collect()
     }
 
+    /// Get all heat sources, mutably
+    pub fn all_mut(&mut self) -> impl Iterator<Item = &mut HeatSource> {
+        self.heat_sources.values_mut()
+    }
+
     /// Get all lit heat sources
     pub fn all_lit(&self) -> Vec<&HeatSource> {
         self.heat_sources

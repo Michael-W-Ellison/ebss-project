@@ -80,12 +80,10 @@ fn test_drive_satisfaction_resets_value() {
 fn test_partial_drive_satisfaction() {
     let mut drive = Drive::new(DriveType::Hunger);
 
-    // Accumulate to 0.8
-    for _ in 0..80 {
-        drive.tick();
-    }
-
-    assert!((drive.value - 0.8).abs() < EPSILON, "Expected ~0.8, got {}", drive.value);
+    // Set directly: this test is about what a partial meal does, not about
+    // the shape of the accumulation curve (which is no longer flat once a
+    // drive is over its threshold and being ignored)
+    drive.value = 0.8;
 
     // Partially satisfy (e.g., small snack reduces by 0.3)
     drive.partial_satisfy(0.3);
@@ -110,7 +108,20 @@ fn test_multiple_drives_accumulate_independently() {
     // Each should accumulate at its own rate
     assert!((hunger.value - 1.0).abs() < EPSILON, "Hunger expected ~1.0, got {}", hunger.value);  // Capped at 1.0
     assert!((thirst.value - 1.0).abs() < 0.01, "Thirst expected ~1.0, got {}", thirst.value); // Should be at cap
-    assert!((rest.value - 0.8).abs() < EPSILON, "Rest expected ~0.8, got {}", rest.value);    // 100 * 0.008
+
+    // Rest passes its threshold of 0.6 around tick 75 and builds faster from
+    // there, because a drive that is asking and not being answered presses
+    // harder the longer it waits. So it ends above the 0.8 a flat rate would
+    // give, but nowhere near the cap the two faster drives reach.
+    assert!(
+        rest.value > 0.8 && rest.value < 1.0,
+        "Rest expected between the flat 0.8 and the cap, got {}",
+        rest.value
+    );
+    assert!(
+        rest.value < hunger.value && rest.value < thirst.value,
+        "Rest should still be the slowest of the three"
+    );
 }
 
 #[test]
@@ -142,7 +153,7 @@ fn test_drive_state_initialization() {
     let drive_state = DriveState::new();
 
     // Should have all 14 drives
-    assert_eq!(drive_state.drives.len(), 14);
+    assert_eq!(drive_state.drives.len(), 15);
 
     // All should start at zero
     for drive in &drive_state.drives {

@@ -356,6 +356,15 @@ impl Inventory {
     }
 
     /// Fill containers from a water source
+    /// Total water currently carried in containers, in litres
+    pub fn available_water(&self) -> f32 {
+        self.items
+            .values()
+            .filter(|item| item.is_container())
+            .filter_map(|item| item.fill_level)
+            .sum()
+    }
+
     pub fn fill_containers(&mut self, available_water: f32) -> f32 {
         let mut remaining = available_water;
 
@@ -450,6 +459,11 @@ impl Default for Inventory {
 }
 
 /// Life stages of an agent
+///
+/// A year is [`crate::environment::TICKS_PER_YEAR`] ticks, so the boundaries
+/// below are roughly: infancy to five months, childhood to a year and a
+/// quarter, adolescence to two years, adulthood to seven, old age after that.
+/// An agent lives eight or nine years and sees thirty-odd seasons turn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifeStage {
     /// 0-500 ticks, cannot reproduce, learns from parents
@@ -501,6 +515,45 @@ impl LifeStage {
             LifeStage::Elderly => 0.3,
         }
     }
+
+    /// What a body of this size leaves on the ground when it stops.
+    ///
+    /// Soft matter and bone, as a share of what a grown adult leaves. Measured
+    /// against a meal: a person is worth some tens of meals of matter, and
+    /// most of what a settlement grows passes through people, so this is a
+    /// smaller return than eating but not a negligible one.
+    pub fn body_left_behind(&self) -> (f32, f32) {
+        let share = match self {
+            LifeStage::Infant => 0.15,
+            LifeStage::Child => 0.4,
+            LifeStage::Adolescent => 0.75,
+            LifeStage::Adult => 1.0,
+            LifeStage::Elderly => 0.85,
+        };
+
+        // Forty meals' worth of soft matter and half as much again in bone
+        let soft = 40.0 * crate::world::Soil::WASTE_PER_SPOILED * share;
+        (soft, soft * 0.5)
+    }
+
+    /// How long this body can go on what it has stored, as a share of what a
+    /// grown adult can manage.
+    ///
+    /// A famine does not take a settlement evenly. A grown adult carries fat
+    /// and muscle worth weeks; a small child carries days of it, and burns
+    /// through what there is faster for its size. The old and the very young
+    /// go first, and they go long before anybody in their prime, which is why
+    /// a hungry year shows up as a missing generation rather than as a smaller
+    /// one.
+    pub fn hunger_reserve(&self) -> f32 {
+        match self {
+            LifeStage::Infant => 0.25,
+            LifeStage::Child => 0.45,
+            LifeStage::Adolescent => 0.75,
+            LifeStage::Adult => 1.0,
+            LifeStage::Elderly => 0.6,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -516,6 +569,13 @@ pub struct AgentState {
     pub ticks_without_food: u32, // Count starvation duration
     pub last_drank_tick: u32, // Track when agent last drank water
     pub ticks_without_water: u32, // Count dehydration duration
+    /// What this body has to pass, waiting to be left on the ground.
+    ///
+    /// Everything eaten used to leave the world for good, so a settlement was
+    /// a one-way pump from the soil into nothing. What a body takes in, most
+    /// of it comes out again somewhere.
+    #[serde(default)]
+    pub waste_carried: f32,
 }
 
 impl AgentState {
@@ -537,6 +597,7 @@ impl AgentState {
             ticks_without_food: 0,
             last_drank_tick: 0,
             ticks_without_water: 0,
+            waste_carried: 0.0,
         }
     }
 
@@ -561,24 +622,31 @@ impl AgentState {
         // Track dehydration (faster than starvation - 3 days vs 7 days)
         self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
+        // What this body has stored to go on. A grown adult carries fat and
+        // muscle worth weeks of it; a small child carries days. Every
+        // threshold below is measured against that, so a famine takes the
+        // young and the old first and the people in their prime last.
+        let reserve = self.life_stage.hunger_reserve().max(0.05);
+
         // Energy depletion (normal metabolism)
         let base_energy_loss = 0.05 * energy_multiplier; // Apply pregnancy/other multiplier
         let mut energy_loss = base_energy_loss;
 
-        // After 24 hours (1440 ticks) without food: energy depletes faster
-        if self.ticks_without_food > 1440 {
-            energy_loss *= 2.0; // 2x faster energy depletion
+        // After a day without food: energy depletes faster, and a small body
+        // with little put by depletes faster still
+        if self.ticks_without_food as f32 > 1440.0 * reserve {
+            energy_loss *= 1.0 + 1.0 / reserve;
         }
 
-        // After 3 days (4320 ticks) without food: health starts decreasing
-        if self.ticks_without_food > 4320 {
-            let health_loss = 0.1; // Slow health degradation
+        // Three days on an adult's reserves; sooner on a child's
+        if self.ticks_without_food as f32 > 4320.0 * reserve {
+            let health_loss = 0.1 / reserve;
             self.health = (self.health - health_loss).max(0.0);
         }
 
-        // After 7 days (10080 ticks) without food: rapid health loss (death imminent)
-        if self.ticks_without_food > 10080 {
-            let severe_health_loss = 1.0; // Rapid health loss
+        // A week on an adult's reserves, and death is close
+        if self.ticks_without_food as f32 > 10080.0 * reserve {
+            let severe_health_loss = 1.0 / reserve;
             self.health = (self.health - severe_health_loss).max(0.0);
         }
 
@@ -635,8 +703,25 @@ impl AgentState {
     /// Eat food and restore energy
     pub fn eat(&mut self, current_tick: u32, energy_restored: f32) {
         self.energy = (self.energy + energy_restored).min(100.0);
+        self.took_a_meal(current_tick, crate::world::Soil::WASTE_PER_MEAL);
+    }
+
+    /// Record a meal: the clocks reset, and the body has something to pass.
+    ///
+    /// What it has to pass depends on what went in. A turnip gives the ground
+    /// back some part of what growing that turnip took out of it, so a meal of
+    /// turnips is at best a slow loss. A fish was grown at sea, so a meal of
+    /// fish is the ground gaining something it never had - which is the whole
+    /// reason a people beside a river can farm the same fields for ever.
+    pub fn took_a_meal(&mut self, current_tick: u32, waste: f32) {
         self.last_ate_tick = current_tick;
         self.ticks_without_food = 0;
+        self.waste_carried += waste;
+    }
+
+    /// Leave what the body has to leave, and report how much.
+    pub fn void_waste(&mut self) -> f32 {
+        std::mem::take(&mut self.waste_carried)
     }
 
     /// Drink water and reset dehydration
@@ -687,6 +772,24 @@ pub struct Agent {
     pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
+
+    /// Ways of working the agent has picked up rather than been born knowing.
+    /// Nothing tells an agent to spread muck on a field: it tries it, sees what
+    /// happens, and watches its neighbours.
+    #[serde(default)]
+    pub practices: super::practices::Practices,
+    /// What the agent has found out about the kinds of thing it does. Every
+    /// attempt is counted and what came of it shifts what the agent will try
+    /// next, which is what makes a hunter who never catches anything stop
+    /// hunting.
+    #[serde(default)]
+    pub lessons: super::practices::Lessons,
+    /// What the world around this agent is doing, as far as its drives care.
+    /// Filled in by the simulation once a tick; empty for an agent ticked
+    /// without a world, which is the right answer for a world that is not
+    /// there.
+    #[serde(default)]
+    pub surroundings: crate::core::Surroundings,
     pub goals: GoalManager,
     pub preferences: Preferences,
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
@@ -748,6 +851,9 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
+            practices: super::practices::Practices::new(),
+            lessons: super::practices::Lessons::new(),
+            surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
@@ -769,6 +875,18 @@ impl Agent {
 
         // Initialize default behavior trees for each drive type
         agent.initialize_behavior_trees();
+
+        // No personality here. `Agent::new` builds a body; who that body turns
+        // out to be is settled when somebody enters a world, by
+        // `Population::spawn_agent` for the founding generation and by
+        // inheritance for everybody born afterwards. Keeping the draw out of
+        // the constructor means a bare `Agent::new` is the same agent every
+        // time, which is what several dozen tests of other machinery rely on.
+
+        // Let the traits reach the senses. Without this a Deaf agent hears
+        // normally and a Blind one sees normally, because nothing else calls
+        // this - it had no callers at all.
+        agent.apply_trait_sensory_modifications();
 
         agent
     }
@@ -795,6 +913,21 @@ impl Agent {
         // Set up infant as newborn
         agent.state.life_stage = LifeStage::Infant;
         agent.state.age = 0;
+
+        // A newborn has just been fed and watered by being born.
+        //
+        // Both clocks are kept as "ticks since", worked out from a tick the
+        // agent last ate or drank on, and both start at zero. For the founding
+        // generation that is correct; for anybody born later it means a
+        // newborn arrives having last drunk at the beginning of the world. An
+        // infant born after about four thousand ticks was therefore two days
+        // past the point where dehydration takes health, lost 1.65 a tick from
+        // its first breath, and was dead at sixty-one - which is what a
+        // settlement's whole second generation was quietly doing.
+        agent.state.last_ate_tick = current_tick;
+        agent.state.last_drank_tick = current_tick;
+        agent.state.ticks_without_food = 0;
+        agent.state.ticks_without_water = 0;
 
         // Rare chance of congenital infertility (~1.5% chance)
         let mut rng = rand::thread_rng();
@@ -828,6 +961,140 @@ impl Agent {
         agent
     }
 
+    /// Whether the agent has nothing pressing on it right now.
+    ///
+    /// Fed, watered, rested and warm. This is what separates an agent that can
+    /// afford to think about next winter from one that cannot.
+    pub fn immediate_needs_met(&self) -> bool {
+        use crate::core::DriveType;
+
+        let quiet = |drive_type: DriveType| {
+            self.drives
+                .get(drive_type)
+                .map(|drive| !drive.is_active())
+                .unwrap_or(true)
+        };
+
+        quiet(DriveType::Hunger)
+            && quiet(DriveType::Thirst)
+            && quiet(DriveType::Rest)
+            && !self.state.is_starving()
+            && !self.state.is_dehydrated()
+            && !self.body_temperature.is_too_cold()
+            && self.exposure_status.active_exposures.is_empty()
+    }
+
+    /// What the agent's own means and condition are asking of its drives.
+    ///
+    /// The world-side half of the picture - what is prowling about, whether it
+    /// is dark, who else is building - is filled in by the simulation and kept
+    /// on `surroundings`; this folds in the half the agent knows for itself.
+    pub fn what_the_situation_asks(&self) -> crate::core::DriveContext {
+        use crate::core::DriveContext;
+
+        let mut materials = 0u32;
+        let mut tools = 0u32;
+        let mut broken = 0u32;
+        let mut finery = 0u32;
+
+        for item in self.inventory.get_all_items().values() {
+            if item.quantity == 0 {
+                continue;
+            }
+
+            let name = item.item_id.as_str();
+
+            if Self::MATERIALS.iter().any(|kind| name.contains(kind)) {
+                materials += item.quantity;
+            }
+
+            if Self::TOOLS.iter().any(|kind| name.contains(kind)) {
+                // A tool worn through is a reason to want a new one, which is
+                // the specification's "broken tools" for Utility
+                let worn_out = item
+                    .current_durability
+                    .map(|left| left <= 0.0)
+                    .unwrap_or(false);
+
+                if worn_out {
+                    broken += item.quantity;
+                } else {
+                    tools += item.quantity;
+                }
+            }
+
+            if Self::FINERY.iter().any(|kind| name.contains(kind)) {
+                finery += item.quantity;
+            }
+        }
+
+        // Anything equipped counts too: a hafted axe in the hand is a tool
+        tools += self
+            .equipment
+            .get_all_equipped()
+            .iter()
+            .filter(|item| item.equipment_type.is_tool())
+            .count() as u32;
+
+        DriveContext {
+            around: self.surroundings.clone(),
+            food_put_by: self.food_put_by(),
+            materials_put_by: materials,
+            tools_to_hand: tools,
+            broken_tools: broken,
+            fine_things: finery,
+            armed: self.equipment.get_weapon().is_some(),
+            exposed: !self.exposure_status.active_exposures.is_empty()
+                || self.body_temperature.is_too_cold(),
+            chilly: self.body_temperature.current
+                < self.body_temperature.ideal - self.body_temperature.tolerance * 0.4,
+            shelter_pressing: 0.0,
+            at_leisure: false,
+        }
+    }
+
+    /// What counts as material to work or build with
+    const MATERIALS: [&'static str; 7] = [
+        "wood", "stone", "iron", "clay", "sand", "coal", "brick",
+    ];
+
+    /// What counts as a tool
+    const TOOLS: [&'static str; 8] = [
+        "axe", "pick", "hoe", "shovel", "spade", "knife", "hammer", "tool",
+    ];
+
+    /// What counts as a fine or decorative thing
+    const FINERY: [&'static str; 5] = ["jewel", "gold", "gem", "pottery", "ornament"];
+
+    /// How far the agent can make out detail on the ground, in tiles.
+    ///
+    /// This is shorter than `Vision::detection_range`, which is about spotting
+    /// movement at a distance: recognising a berry bush or a seam of ore is
+    /// nearer work. Acuity scales it, so a blind agent gets zero and sees
+    /// nothing of the world around it.
+    ///
+    /// It is set to outrange every smell food gives off where it lies - a
+    /// berry carries two tiles, flesh six - because looking, not sniffing, is
+    /// how a person finds dinner. The one thing that beats an eye is a cooking
+    /// fire, which reaches just as far. See `ResourceType::raw_scent_strength`.
+    pub fn sight_range(&self) -> u32 {
+        /// How far an unimpaired agent recognises what it is looking at
+        const BASE_SIGHT_RANGE: f32 = 25.0;
+
+        if self.traits.has(crate::core::traits::Trait::Blind)
+            || self.senses.vision.impaired
+        {
+            return 0;
+        }
+
+        (BASE_SIGHT_RANGE * self.senses.vision.acuity.clamp(0.0, 1.0)).round() as u32
+    }
+
+    /// Whether the agent can see at all
+    pub fn can_see(&self) -> bool {
+        self.sight_range() > 0
+    }
+
     /// Apply trait-based sensory and physical modifications
     /// Should be called after traits are set/modified
     pub fn apply_trait_sensory_modifications(&mut self) {
@@ -837,6 +1104,12 @@ impl Agent {
         if self.traits.has(Trait::Deaf) {
             self.senses.hearing.sensitivity = 0.0;
             self.senses.hearing.set_impaired(true);
+        }
+
+        // Blind trait: no sight at all
+        if self.traits.has(Trait::Blind) {
+            self.senses.vision.acuity = 0.0;
+            self.senses.vision.set_impaired(true);
         }
 
         // Suspicious trait: Increase noise curiosity rate (already handled in emotion_modifiers)
@@ -1123,7 +1396,11 @@ impl Agent {
 
         // Update emotions based on drive states (every tick)
         self.update_emotions_from_drives();
-        self.drives.tick();
+        // Drives rise differently depending on whether the agent has anything
+        // more pressing on. See `DriveType::is_long_term`.
+        let secure = self.immediate_needs_met();
+        let situation = self.what_the_situation_asks();
+        self.drives.tick_in(&situation, secure);
 
         // Process sensory input into percepts and store them
         let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);
@@ -1167,8 +1444,15 @@ impl Agent {
         // Trim old percepts (keep only last 20 ticks worth)
         self.recent_percepts.retain(|(tick, _)| current_tick.saturating_sub(*tick) <= 20);
 
-        // Sync body health to agent state
-        self.state.health = self.body.overall_health() * 100.0;
+        // Body condition caps overall health rather than setting it.
+        //
+        // Starvation, dehydration and exposure damage the same field, and
+        // overwriting it from the body every tick threw all of that away: an
+        // agent could go six thousand ticks without water and still read as
+        // near perfect health, because the only harm that survived the tick
+        // was a broken bone.
+        let body_condition = self.body.overall_health() * 100.0;
+        self.state.health = self.state.health.min(body_condition);
 
         // Update energy (basic metabolism)
         self.state.energy = (self.state.energy - 0.1).max(0.0);
@@ -1179,6 +1463,15 @@ impl Agent {
         // First do the regular tick
         self.tick();
 
+        self.process_survival_tick(current_tick);
+    }
+
+    /// Run one tick of survival mechanics: aging, metabolism, food spoilage and fatigue.
+    ///
+    /// Split out of `tick_with_time` so that callers which drive agents through
+    /// `tick_with_percepts` instead (notably `Population::tick`) run the same
+    /// survival mechanics rather than aging alone.
+    pub fn process_survival_tick(&mut self, current_tick: u32) {
         // Calculate pregnancy energy multiplier (if pregnant)
         let energy_multiplier = self.pregnancy.as_ref()
             .map(|p| p.energy_multiplier(current_tick))
@@ -1192,6 +1485,20 @@ impl Agent {
 
         // Process food spoilage in inventory
         self.tick_food_spoilage(current_tick);
+
+        // Recover condition when nothing is wrong. `regenerate_health` had no
+        // callers at all, so agents only ever lost health over a lifetime.
+        let suffering = self.state.is_starving()
+            || self.state.is_dehydrated()
+            || !self.exposure_status.active_exposures.is_empty();
+
+        if !suffering {
+            let resting = self.fatigue.is_sleeping;
+            let body_condition = self.body.overall_health() * 100.0;
+
+            self.regenerate_health(resting);
+            self.state.health = self.state.health.min(body_condition);
+        }
 
         // Process fatigue (awake state)
         if !self.fatigue.is_sleeping {
@@ -1257,10 +1564,17 @@ impl Agent {
             self.state.health = (self.state.health - penalty).max(0.0);
         }
 
-        // Sync nutritional energy with agent state energy
-        // This connects the old energy system with the new nutrition system
-        let energy_sync = self.nutrition.energy_reserves * 0.5; // Scale 0-100 to 0-50 contribution
-        self.state.energy = ((self.state.energy * 0.5) + energy_sync).min(100.0);
+        // Couple state energy to nutritional reserves.
+        //
+        // Reserves are the long-term store; `state.energy` is short-term felt
+        // energy that eating and sleeping move directly. Drifting gradually
+        // toward reserves keeps the two systems consistent without erasing the
+        // effect of a meal or a rest on the very next tick, which is what a
+        // straight average between the two used to do.
+        const ENERGY_SYNC_RATE: f32 = 0.02;
+        let reserve_delta = self.nutrition.energy_reserves - self.state.energy;
+        self.state.energy =
+            (self.state.energy + reserve_delta * ENERGY_SYNC_RATE).clamp(0.0, 100.0);
     }
 
     /// Update food freshness in inventory and remove spoiled items
@@ -1281,7 +1595,14 @@ impl Agent {
             .collect();
 
         for item_id in spoiled_items {
-            self.inventory.items.remove(&item_id);
+            // What has gone off is still matter. Deleting it outright made a
+            // pack the one place in the world where things could rot to
+            // nothing, which is half of why the ground never got anything
+            // back.
+            if let Some(item) = self.inventory.items.remove(&item_id) {
+                self.state.waste_carried += item.quantity as f32
+                    * crate::world::Soil::waste_from_spoilage(&item_id);
+            }
         }
     }
 
@@ -1290,9 +1611,23 @@ impl Agent {
     /// # Arguments
     /// * `climate` - Environmental climate conditions
     pub fn update_temperature(&mut self, climate: &super::Climate) {
+        self.update_temperature_with_shelter(climate, false);
+    }
+
+    /// Update body temperature, accounting for whether the agent is under cover
+    ///
+    /// Shelter has to reach the body to be worth seeking: without this an
+    /// agent inside a building cools exactly as fast as one standing in the
+    /// open, so sheltering never resolves the exposure that sent it indoors.
+    pub fn update_temperature_with_shelter(&mut self, climate: &super::Climate, has_shelter: bool) {
         let cold_insulation = self.body.total_cold_insulation();
         let heat_resistance = self.body.total_heat_resistance();
-        let effective_temp = climate.effective_temperature();
+
+        let effective_temp = if has_shelter {
+            climate.sheltered_effective_temperature()
+        } else {
+            climate.effective_temperature()
+        };
 
         self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
     }
@@ -1643,7 +1978,7 @@ impl Agent {
             // Survival drives don't map to happiness-influenced jobs
             DriveType::Hunger | DriveType::Thirst | DriveType::Rest |
             DriveType::Safety | DriveType::Shelter | DriveType::Reproduction |
-            DriveType::Luxury => None,
+            DriveType::Protection | DriveType::Luxury => None,
         }
     }
 
@@ -1665,7 +2000,10 @@ impl Agent {
         for drive_type in DriveType::all() {
             if let Some(drive) = self.drives.get(drive_type) {
                 if drive.is_active() {
-                    let base_urgency = drive.value * drive.weight;
+                    // Through `bare_urgency` rather than by hand, so that
+                    // what the agent's personality makes of this drive counts
+                    // here as it does everywhere else
+                    let base_urgency = drive.bare_urgency();
 
                     // For work-related drives, factor in happiness
                     let effective_priority = if let Some(job) = Self::drive_to_job_category(drive_type) {
@@ -2013,29 +2351,107 @@ impl Agent {
         self.pregnancy.is_some()
     }
 
+    /// How much food an agent has to be carrying, over and above its own
+    /// needs, before it will consider a child.
+    ///
+    /// A few days' eating for two. Not a stockpile - just enough that the
+    /// answer to "could this child be fed next week" is something other than
+    /// "I had a meal this morning".
+    pub const FOOD_TO_RAISE_A_CHILD: u32 = 4;
+
+    /// How long hunger has to have been a non-issue before an agent treats
+    /// the future as settled.
+    ///
+    /// Twenty days of never once going short. Long enough that a good week
+    /// does not count, short enough that a settlement living well can grow.
+    pub const SETTLED_ENOUGH_TO_GROW: u32 = 240;
+
+    /// How much of a stretch of going short counts against it.
+    ///
+    /// Not zero: hunger crossing its threshold is the ordinary signal that
+    /// sends an agent to eat, so every well-fed agent trips it regularly. What
+    /// matters is whether the asking went unanswered for any length of time.
+    pub const GOING_SHORT: u32 = 12;
+
+    /// Whether this agent has been going hungry rather than merely getting
+    /// hungry.
+    pub fn has_not_been_going_short(&self) -> bool {
+        self.drives
+            .get(DriveType::Hunger)
+            .map(|drive| drive.denied_ticks() < Self::GOING_SHORT)
+            .unwrap_or(true)
+    }
+
+    /// How long hunger has not had to ask at all
+    pub fn how_long_food_has_been_easy(&self) -> u32 {
+        self.drives
+            .get(DriveType::Hunger)
+            .map(|drive| drive.answered_ticks())
+            .unwrap_or(0)
+    }
+
+    /// What the agent is carrying that it or a child could eat.
+    ///
+    /// Counts untracked stacks as well as ones with nutrition data on them:
+    /// most of what an agent picks up off the land arrives as a plain "food"
+    /// stack with no freshness attached, and a count that ignored those would
+    /// report an empty pack for an agent carrying a fortnight's eating.
+    pub fn food_put_by(&self) -> u32 {
+        self.inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0)
+            .filter(|item| match &item.food_data {
+                Some(food) => !food.is_spoiled() && !food.is_harmful(),
+                None => Self::LOOKS_EDIBLE
+                    .iter()
+                    .any(|edible| item.item_id.contains(edible)),
+            })
+            .map(|item| item.quantity)
+            .sum()
+    }
+
+    /// Item names that mean food when there is no nutrition data to go on
+    const LOOKS_EDIBLE: [&'static str; 6] = ["food", "grain", "meat", "fish", "berr", "bread"];
+
+    /// Whether this agent has any reason to think a child could be fed.
+    ///
+    /// Not "am I hungry this minute". That is answered by the last meal and
+    /// says nothing about the next one, and a model that asks only that
+    /// produces settlements which double in size while the crop halves - which
+    /// is what thirty thousand ticks of tracing showed. A person who ate today
+    /// but has nothing put by, on ground that has stopped giving, is in no
+    /// position to raise a child.
+    ///
+    /// So: fed, watered and warm right now, no stretch of going short behind
+    /// them, and food actually in hand for two.
+    pub fn expects_to_be_able_to_feed_a_child(&self) -> bool {
+        if !self.immediate_needs_met() || !self.has_not_been_going_short() {
+            return false;
+        }
+
+        // Either there is food in hand for two, or feeding themselves has
+        // simply not been a problem for a long stretch. The second matters as
+        // much as the first: an agent living beside a full field eats as it
+        // goes and carries nothing, and it is in a far better position to
+        // raise a child than one with a full pack on ground that has stopped
+        // giving.
+        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD
+            || self.how_long_food_has_been_easy() >= Self::SETTLED_ENOUGH_TO_GROW
+    }
+
     /// Check if agent should attempt reproduction given current survival state
     ///
-    /// Returns false if critical survival drives (hunger, thirst) are active,
-    /// as the agent should prioritize immediate survival over reproduction.
-    /// Agents will not reproduce when starving - they must be well-fed first.
+    /// Returns false unless the agent is fed, watered and warm now, has not
+    /// been going short, and is carrying enough food to feed a child as well
+    /// as itself. Being un-hungry for a moment is not enough: it says nothing
+    /// about whether the next meal exists.
     pub fn should_attempt_reproduction(&self) -> bool {
         if !self.can_reproduce() {
             return false;
         }
 
-        // Check if critical survival drives are threatening the agent
-        // If any of these are active (above threshold), reproduction is suppressed
-        let hunger_active = self.drives.get(DriveType::Hunger)
-            .map(|d| d.is_active())
-            .unwrap_or(false);
-
-        let thirst_active = self.drives.get(DriveType::Thirst)
-            .map(|d| d.is_active())
-            .unwrap_or(false);
-
-        // Agent must not be hungry or thirsty to reproduce
-        // This ensures offspring are only created when resources are sufficient
-        !hunger_active && !thirst_active
+        self.expects_to_be_able_to_feed_a_child()
     }
 
     /// Get fertility level (0.0 to 1.0)
@@ -2070,7 +2486,19 @@ impl Agent {
             super::fatigue::FatigueSeverity::Severe => 0.2,
         };
 
-        base_fertility * health_factor * (0.5 + reproduction_drive * 0.5) * self.reproduction_drive_modifier * dev_modifier * fatigue_factor
+        // Clamped to keep the documented 0.0 to 1.0 contract. The personal
+        // modifier reaches 1.8 and the developmental one 1.1, so an agent in
+        // its prime can multiply out to nearly 2.0 - and callers treat this as
+        // a probability. Multiplying two such values gave conception odds near
+        // 4.0, which panics the sampler.
+        let fertility = base_fertility
+            * health_factor
+            * (0.5 + reproduction_drive * 0.5)
+            * self.reproduction_drive_modifier
+            * dev_modifier
+            * fatigue_factor;
+
+        fertility.clamp(0.0, 1.0)
     }
 
     /// Get effective reproduction drive (base drive * personal modifier)
@@ -2114,6 +2542,12 @@ impl Agent {
                 sequence.add_child(BehaviorNode::new(NodeType::Condition("has_materials".to_string())));
                 sequence.add_child(BehaviorNode::new(NodeType::Action("build_structure".to_string())));
                 sequence
+            }
+            DriveType::Protection => {
+                let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("go_to_child".to_string())));
+                selector.add_child(BehaviorNode::new(NodeType::Action("seek_shelter".to_string())));
+                selector
             }
             DriveType::Industry => {
                 let mut selector = BehaviorNode::new(NodeType::Selector);
@@ -2203,6 +2637,44 @@ impl Agent {
             "reproduce" => Action::Wait, // Special handling needed
             "seek_luxury" | "decorate" => Action::Gather { resource_type: "luxury".to_string() },
             _ => Action::Wait,
+        }
+    }
+
+    /// Note how an attempt turned out, so the agent can stop doing what does
+    /// not work and do more of what does.
+    ///
+    /// Called for every action an agent takes. Most actions teach it nothing
+    /// worth remembering - walking somewhere either works or the ground was in
+    /// the way - so only the undertakings an agent could sensibly form an
+    /// opinion about are recorded.
+    pub fn learn_from(&mut self, action: &Action, worked: bool) {
+        use super::practices::Undertaking;
+
+        let undertaking = match action {
+            Action::Hunt { .. } => Undertaking::Hunting,
+            Action::Fish => Undertaking::Fishing,
+            Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
+            Action::TillSoil | Action::SpreadMuck => Undertaking::Farming,
+            Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
+            Action::Gather { .. } => Undertaking::Foraging,
+            Action::Build { .. } => Undertaking::Building,
+            Action::Craft { .. } => Undertaking::Crafting,
+            Action::Socialize { .. } | Action::ShareInformation { .. } => Undertaking::Dealing,
+            _ => return,
+        };
+
+        self.lessons.record(undertaking, worked);
+
+        // And drive the behaviour-tree weights from the same outcome. Those
+        // weights were built to be the record of what works and never had a
+        // caller, so nothing an agent did had ever changed what it did next.
+        let action_name = format!("{:?}", undertaking).to_lowercase();
+        for tree in &mut self.behavior_trees {
+            if worked {
+                tree.reinforce_action(&action_name, 0.05);
+            } else {
+                tree.penalize_action(&action_name, 0.05);
+            }
         }
     }
 
@@ -3014,63 +3486,80 @@ impl Agent {
     /// Returns true if food was consumed
     /// Note: Use eat_food_item for nutrition-aware eating
     pub fn eat_food(&mut self, amount: u32) -> bool {
-        // Try to get food from inventory
-        if let Some(food_item) = self.inventory.get_item_mut("food") {
-            if food_item.quantity >= amount {
-                food_item.quantity -= amount;
+        // Read the food data before consuming, so the item can go through
+        // `remove_item` - that drops emptied stacks and keeps carried weight
+        // correct, where decrementing in place leaves a zero-quantity entry
+        // that still reads as "carrying food"
+        let carried = match self.inventory.get_item("food") {
+            Some(item) if item.quantity >= amount => Some(item.food_data.clone()),
+            _ => None,
+        };
 
-                // If food has nutrition data, use it
-                if let Some(ref food_data) = food_item.food_data {
-                    let nutrition = food_data.effective_nutrition();
-                    self.nutrition.consume(&nutrition.scale(amount as f32));
+        let Some(food_data) = carried else {
+            return false;
+        };
 
-                    // Also satisfy thirst from water content
-                    if nutrition.water_content > 0.3 {
-                        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-                            thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
-                        }
-                    }
-                } else {
-                    // Legacy: no food data, use old flat rate
-                    let energy_restored = (amount as f32) * 20.0;
-                    self.state.energy = (self.state.energy + energy_restored).min(100.0);
+        self.inventory.remove_item("food", amount);
+
+        // If food has nutrition data, use it
+        if let Some(food_data) = food_data {
+            let nutrition = food_data.effective_nutrition();
+            self.nutrition.consume(&nutrition.scale(amount as f32));
+
+            // Also satisfy thirst from water content
+            if nutrition.water_content > 0.3 {
+                if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                    thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
                 }
-
-                // Reset starvation (use current age as approximation of tick)
-                self.state.last_ate_tick = self.state.age;
-                self.state.ticks_without_food = 0;
-
-                // Satisfy hunger drive
-                let hunger_reduction = (amount as f32) * 0.2; // Each food reduces hunger by 0.2
-                if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
-                    hunger.decrease(hunger_reduction);
-                }
-
-                return true;
             }
+        } else {
+            // Legacy: no food data, use old flat rate
+            let energy_restored = (amount as f32) * 20.0;
+            self.state.energy = (self.state.energy + energy_restored).min(100.0);
         }
-        false
+
+        // Reset starvation (use current age as approximation of tick)
+        self.state.last_ate_tick = self.state.age;
+        self.state.ticks_without_food = 0;
+
+        // Satisfy hunger drive
+        let hunger_reduction = (amount as f32) * 0.2; // Each food reduces hunger by 0.2
+        if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
+            hunger.decrease(hunger_reduction);
+        }
+
+        true
     }
 
     /// Eat a specific food item from inventory with full nutrition tracking
     /// Returns the result of eating including nutrition gained or problems
     pub fn eat_food_item(&mut self, item_id: &str, current_tick: u32) -> EatResult {
-        // Get food item from inventory
-        let food_item = match self.inventory.get_item_mut(item_id) {
-            Some(item) if item.quantity > 0 => item,
-            _ => return EatResult::NoFood,
+        // Read what we need up front so the item can be consumed through
+        // `remove_item`, which drops emptied stacks and keeps carried weight
+        // correct. Decrementing the quantity in place leaves a zero-quantity
+        // entry behind, and an agent holding one reads as "still carrying
+        // food" forever - so it keeps trying to eat nothing instead of going
+        // to look for a meal.
+        let (has_food, food_data) = match self.inventory.get_item(item_id) {
+            Some(item) if item.quantity > 0 => (true, item.food_data.clone()),
+            _ => (false, None),
         };
 
-        // Check if item has food data
-        let food_data = match &food_item.food_data {
-            Some(data) => data.clone(),
+        if !has_food {
+            return EatResult::NoFood;
+        }
+
+        let food_data = match food_data {
+            Some(data) => data,
             None => {
                 // Not a tracked food item - consume 1 with flat nutrition
-                food_item.quantity -= 1;
+                self.inventory.remove_item(item_id, 1);
                 let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
                 self.nutrition.consume(&flat_nutrition);
-                self.state.last_ate_tick = current_tick;
-                self.state.ticks_without_food = 0;
+                self.state.took_a_meal(
+                    current_tick,
+                    crate::world::Soil::waste_from_eating(item_id),
+                );
                 if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
                     hunger.decrease(0.2);
                 }
@@ -3080,7 +3569,7 @@ impl Agent {
 
         // Check if food is harmful (severely spoiled)
         if food_data.is_harmful() {
-            food_item.quantity -= 1;
+            self.inventory.remove_item(item_id, 1);
             let damage = 10.0;
             self.state.health = (self.state.health - damage).max(0.0);
             return EatResult::MadeSick(damage);
@@ -3092,7 +3581,7 @@ impl Agent {
         }
 
         // Consume the food
-        food_item.quantity -= 1;
+        self.inventory.remove_item(item_id, 1);
 
         // Get effective nutrition (preparation + freshness factors applied)
         let nutrition = food_data.effective_nutrition();
@@ -3107,9 +3596,11 @@ impl Agent {
             }
         }
 
-        // Reset starvation timer
-        self.state.last_ate_tick = current_tick;
-        self.state.ticks_without_food = 0;
+        // Reset starvation timer, and note what the body will have to pass
+        self.state.took_a_meal(
+            current_tick,
+            crate::world::Soil::waste_from_eating(item_id),
+        );
 
         // Satisfy hunger based on total nutrition
         let hunger_reduction = nutrition.total() / 100.0 * 0.3;
@@ -3120,6 +3611,19 @@ impl Agent {
         EatResult::Success(nutrition)
     }
 
+    /// Whether the agent is carrying anything it can safely eat
+    pub fn has_edible_food(&self) -> bool {
+        if self.find_best_food_to_eat().is_some() {
+            return true;
+        }
+
+        // Untracked stacks have no freshness to judge, so they are always safe
+        self.inventory
+            .get_item("food")
+            .map(|item| item.quantity > 0 && item.food_data.is_none())
+            .unwrap_or(false)
+    }
+
     /// Find the best food item to eat based on nutritional needs and freshness
     pub fn find_best_food_to_eat(&self) -> Option<String> {
         let needed = self.nutrition.most_needed_nutrient();
@@ -3127,9 +3631,18 @@ impl Agent {
         let mut best_item: Option<(String, f32)> = None;
 
         for (item_id, item) in &self.inventory.items {
+            // Skip emptied stacks - an exhausted entry lingering in the
+            // inventory would otherwise read as "still carrying food"
+            if item.quantity == 0 {
+                continue;
+            }
+
             if let Some(ref food_data) = item.food_data {
-                // Skip spoiled food
-                if food_data.is_spoiled() {
+                // Skip anything that would make the agent sick. Raw food turns
+                // harmful before it counts as spoiled, so checking spoilage
+                // alone leaves agents eating rot: ten health a bite, one bite
+                // a tick, until the stack or the agent runs out.
+                if food_data.is_spoiled() || food_data.is_harmful() {
                     continue;
                 }
 
@@ -3351,6 +3864,16 @@ impl Agent {
                 self.state.is_alive = false;
             }
         }
+    }
+
+    /// How old this agent is in calendar years.
+    pub fn age_in_years(&self) -> f32 {
+        self.state.age as f32 / crate::environment::TICKS_PER_YEAR as f32
+    }
+
+    /// How long this agent will live, in calendar years, if nothing kills it.
+    pub fn lifespan_in_years(&self) -> f32 {
+        self.state.max_age as f32 / crate::environment::TICKS_PER_YEAR as f32
     }
 
     /// Update life stage based on age

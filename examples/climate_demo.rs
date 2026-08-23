@@ -12,6 +12,7 @@
 use ebss::environment::{
     BiomeType, Biome, Weather, WeatherType, WeatherGenerator,
     Season, SeasonalCalendar, ExposureStatus, ExposureProtection, ExposureType,
+    DAYS_PER_SEASON, DAYS_PER_YEAR,
 };
 use ebss::agents::temperature::BodyTemperature;
 use ebss::world::{ClimateManager, Position, TerrainType, terrain_to_biome};
@@ -22,7 +23,7 @@ fn main() {
     // ===== Part 1: Seasonal Calendar =====
     println!("--- Part 1: Seasonal Calendar and Time ---");
 
-    let mut calendar = SeasonalCalendar::new(100); // 100 ticks per hour
+    let mut calendar = SeasonalCalendar::default();
 
     println!("Starting conditions:");
     println!("  {}", calendar.date_string());
@@ -31,9 +32,9 @@ fn main() {
     println!("  Sun intensity: {:.2}", calendar.sun_intensity());
     println!();
 
-    // Simulate 24 hours (2400 ticks)
-    println!("Simulating 24 hours...");
-    for _ in 0..2400 {
+    // Simulate one day
+    println!("Simulating one day...");
+    for _ in 0..calendar.ticks_per_day() {
         calendar.tick();
     }
 
@@ -234,14 +235,13 @@ fn main() {
     // ===== Part 8: Seasonal Progression =====
     println!("--- Part 8: Full Year Simulation ---");
 
-    let mut year_calendar = SeasonalCalendar::new(100);
+    let mut year_calendar = SeasonalCalendar::default();
     let mut season_days = vec![0, 0, 0, 0]; // Count days in each season
 
-    println!("Simulating one full year (365 days)...");
+    println!("Simulating one full year ({} days)...", DAYS_PER_YEAR);
 
-    for day in 0..365 {
-        // Advance one day (24 hours = 2400 ticks)
-        for _ in 0..2400 {
+    for day in 0..DAYS_PER_YEAR {
+        for _ in 0..year_calendar.ticks_per_day() {
             year_calendar.tick();
         }
 
@@ -254,7 +254,7 @@ fn main() {
         season_days[season_idx] += 1;
 
         // Print milestone days
-        if day == 89 || day == 179 || day == 269 || day == 364 {
+        if (day + 1) % DAYS_PER_SEASON == 0 {
             println!("  Day {}: {} ({} progress: {:.0}%)",
                 day + 1,
                 year_calendar.current_season().name(),

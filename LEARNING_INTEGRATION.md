@@ -200,7 +200,7 @@ pub fn clone_with_pruning(&self, min_weight: f32) -> Self {
 pub struct Agent {
     pub id: Uuid,                        // Track individual
     pub state: AgentState,               // Position, health
-    pub drives: DriveState,              // 13 drives with values
+    pub drives: DriveState,              // 15 drives with values
     pub behavior_trees: Vec<BehaviorTree>, // Multiple strategies
     pub memory: Memory,                  // (Stub - for future use)
 }

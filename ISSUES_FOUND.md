@@ -1,207 +1,703 @@
-# Simulation Issues Analysis
+# Known Issues
 
-## Critical Issues Found
+**Last verified:** August 2026, against commit `0d11751` and the work since.
 
-### 1. ⚠️ **CRITICAL: Death Mechanics Not Integrated in Simulation Loop**
+Each entry below was reproduced before being written down, and each carries
+the evidence. Entries are ordered by how much they block someone picking the
+project up.
 
-**Status**: CRITICAL - Prevents all death mechanics from functioning
-**Location**: `src/analytics/mod.rs:87-149` (Simulation::tick())
-
-**Problem**:
-The `Simulation::tick()` method directly calls `agent.tick()` on each agent, but this does NOT trigger the aging and starvation death mechanics. The death mechanics are only triggered when `Population::tick()` is called, which calls `agent.tick_with_time(current_tick)` → `state.age_tick(current_tick)`.
-
-**Current Code Flow**:
-```
-Simulation::tick()
-  └─> agent.tick()  ❌ Does NOT include aging/starvation
-```
-
-**Required Code Flow**:
-```
-Simulation::tick()
-  └─> Population::tick()
-      ├─> agent.tick_with_time(current_tick)
-      │   ├─> agent.tick()
-      │   └─> agent.state.age_tick(current_tick)  ✓ Aging & starvation
-      ├─> process_deaths()  ✓ Remove dead agents
-      ├─> process_reproduction()
-      └─> process_abandonments()
-```
-
-**Impact**:
-- ❌ Agents never age
-- ❌ Agents never die from starvation
-- ❌ Agents never die from old age
-- ❌ Life stages never progress (always stay at default)
-- ❌ Death processing never runs
-- ❌ Reproduction never happens
-- ❌ Population statistics never update
-
-**Evidence**:
-- `src/agents/agent.rs:616-622`: `tick_with_time()` calls `age_tick()`
-- `src/agents/agent.rs:468-518`: `age_tick()` contains all aging and starvation logic
-- `src/agents/population.rs:96-121`: `Population::tick()` orchestrates full lifecycle
-- `src/analytics/mod.rs:87-149`: `Simulation::tick()` bypasses Population::tick()
-
-**Solution Required**:
-Modify `Simulation::tick()` to call `self.population.tick()` in addition to (or instead of) manually iterating agents.
+Every build configuration compiles today — default, `--features gui`,
+`--features bevy_gui` and `--workspace` — so nothing here stops you building
+and running the project.
 
 ---
 
-## Medium Issues
+## Correctness
 
-### 2. ⚠️ **Duplicate Agent Processing in Simulation**
+### 1. Six tests fail intermittently
 
-**Status**: MEDIUM - Inefficiency and potential conflicts
-**Location**: `src/analytics/mod.rs:92-143`
+    world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
+    world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
+    analytics::tests::agent_building_integration_tests::test_production_building_placed_near_resources
+    analytics::tests::agent_building_integration_tests::test_production_chain_buildings_cluster
+    analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
+    analytics::tests::longevity_tests::water_is_not_used_up
 
-**Problem**:
-If `Population::tick()` is added to `Simulation::tick()`, agents would be processed twice:
-1. Once in `Population::tick()` via `agent.tick_with_time()`
-2. Again in `Simulation::tick()` via manual iteration
+Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
+4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
+before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
+1/30). The last was seen to fail once and then pass six times running; it
+asserts that a world holds 95% of its water after six thousand ticks, and
+across twelve worlds the worst case sits at 98.4% — on the commit before the
+calendar was fixed it sat at 95.6%, so the margin got wider rather than
+narrower, and the tail is simply thin. All six build a world through
+`World::new`, which draws from `thread_rng`, and
+then assert on a property a random world does not always have — for example
+that clay deposits happen to be clustered, or that a forge finds somewhere near
+the iron to stand.
 
-**Impact**:
-- Drives would accumulate twice as fast
-- Behavior trees would execute twice per tick
-- Actions would be generated and executed redundantly
+The fix is to give world generation a seed, which the project wants anyway for
+reproducible runs. Until then, a red build is not necessarily a real failure,
+which is corrosive: check whether the failing test is one of these six before
+assuming a regression.
 
-**Solution Required**:
-Restructure `Simulation::tick()` to either:
-- **Option A**: Call `Population::tick()` and remove manual agent iteration
-- **Option B**: Call `Population::tick()` but skip the behavior tree execution loop if it's already handled
+### 2. No error recovery around a tick
 
----
-
-### 3. ⚠️ **Missing Population Tick Counter Synchronization**
-
-**Status**: MEDIUM - Timing desynchronization
-**Location**: `src/analytics/mod.rs:88` and `src/agents/population.rs:96`
-
-**Problem**:
-Both `Simulation` and `Population` maintain separate tick counters:
-- `Simulation.current_tick` (u32)
-- `Population.current_tick` (u32)
-
-These could drift out of sync, causing issues with:
-- Age calculations
-- Starvation timing
-- Reproduction cooldowns
-- Any time-dependent logic
-
-**Solution Required**:
-- Ensure Population uses the same tick counter as Simulation
-- Pass tick number to Population::tick() rather than letting it maintain its own
+One panicking agent ends the whole run and loses everything since the last
+autosave. There is no isolation of per-agent failure and no attempt to
+continue after an error. This mattered concretely: a probability bug in
+conception crashed roughly one run in twenty-five until it was fixed, and each
+crash took the entire simulation with it.
 
 ---
 
-## Minor Issues
+## Design gaps that show up as odd behaviour
 
-### 4. ⚠️ **Population Size Calculation Inconsistency**
+### 3. A settlement that overshoots slides instead of settling back
 
-**Status**: MINOR - Potential confusion
-**Location**: `src/agents/population.rs:90-92`
+Traced over six worlds to thirty thousand ticks. A settlement grows, strips the
+ground it farms, and then slides — it does not find a smaller level and hold
+there. One world went 12 → 219 people and was down to 81 and still falling at
+thirty thousand ticks, on a standing crop of twenty-four units.
 
-**Problem**:
-```rust
-pub fn size(&self) -> usize {
-    self.agents.iter().filter(|a| a.state.is_alive).count()
-}
-```
+Three things make it a slide rather than a correction.
 
-The `size()` method filters for alive agents, but `self.agents.len()` includes all agents (alive and dead).
+**Growing food takes nutrient out of the tile, and regrowth is proportional to
+what is left.** `ResourceNode::regenerate_in_ground` draws `0.0015` nutrients
+per unit grown and scales the rate by `soil.fertility()`. Every unit eaten
+makes the next one slower to arrive, so production decays with cumulative
+harvest towards zero. The only equilibrium is the one where almost nobody
+lives there. Measured on the ground a settlement actually farms:
 
-**Impact**:
-- Different parts of code may report different population sizes
-- Dead agents remain in the vector until `process_deaths()` is called
+| tick | people | standing crop | fertility of the farmed ground |
+| --- | --- | --- | --- |
+| 0 | 12 | 1,414 | 0.529 |
+| 10,000 | 50 | 6,138 | 0.509 |
+| 20,000 | 111 | 3,875 | 0.304 |
+| 24,500 | 219 | 1,367 | 0.106 |
+| 30,000 | 81 | 24 | 0.025 |
 
-**Note**: This is actually correct behavior (dead agents should be removed by `process_deaths()`), but could cause confusion if death processing isn't running.
+**The ground does not come back on any timescale the simulation reaches.**
+Twenty-two thousand ticks of settlement took farmed ground from 0.528 to 0.362.
+Thirty thousand further ticks with every agent removed from the world returned
+0.017 of it — a tenth, over a span longer than the run that did the damage, and
+slowing as it went, because the litter that feeds the recovery is running out
+too. Depletion under a hundred people runs about sixty-five times faster than
+recovery under nobody.
+
+**Nothing brakes the population until the standing crop is gone.**
+`should_attempt_reproduction` suppresses breeding only while the Hunger or
+Thirst drive is above threshold. Hunger's threshold is 0.7 and the measured
+value sits at 0.5-0.6 for the whole run: a shrinking stock that still yields a
+meal today reads as "not hungry". The population went 111 → 219 while the crop
+fell from 3,875 to 1,367, and peaked about nine calendar years after the ground
+had already lost eighty per cent of its fertility.
+
+Two things make it worse.
+
+**A spent field still counts as a field.** `fields_within` counts cultivated
+tiles, not producing ones, and `farming_action` stops at `FIELDS_WANTED` within
+`FIELD_WALK_RADIUS`. A tile that already carries a resource node cannot be
+tilled again. So six exhausted fields inside twelve tiles stop a settlement
+breaking new ground for ever. The farmed tiles in the run above ended at 0.025
+fertility while the map around them averaged 0.358 — one fourteenth of the
+ground they were standing on. The world is not short of nutrient; the four per
+cent of it that anybody farms is.
+
+**Nutrient only ever leaves.** Food eaten is gone from the world. Food that
+spoils in a pack is deleted outright by `tick_food_spoilage` rather than
+falling to the ground as litter. The single return path is muck-spreading,
+which needs an agent to be carrying rotting food, standing on a field, and to
+have learned the practice. **Since fixed** — see the four return paths below.
+
+Worth knowing: **nobody has ever died of hunger.** `is_starving()` needs 1,440
+ticks without food, health loss 4,320 and death 10,080 — most of a lifetime.
+Attributing every death in four worlds over thirty thousand ticks by what was
+actually true of the agent the tick before it died:
+
+| Cause | Deaths |
+| --- | --- |
+| Old age | 407 |
+| Health gone, nothing else wrong | 374 |
+| Thirst (over 4,320 ticks without water) | 235 |
+| Cold (core under 33 °C) | 229 |
+| Energy exhaustion | 1 |
+| **Hunger (over 4,320 ticks without food)** | **0** |
+| Heat | 0 |
+
+In a simulation whose central drama is food, going without it has never killed
+anybody. What kills them in a collapse is old age, cold, accumulated damage
+that never heals off, and — once the near ground is bare and they range further
+to forage — thirst.
+
+A second thing this turned up: mean health across a settled population sat at
+65-70 and never recovered, and neither exposure nor attacks accounted for it.
+**Since found and fixed** - it was newborns. Both survival clocks are kept as a
+tick the agent last ate or drank on, and both start at zero; that is right for
+the twelve people a world begins with and wrong for everybody born afterwards,
+who arrived having last drunk at the beginning of the world. An infant born
+after about four thousand ticks was two days past the point where dehydration
+takes health, lost 1.65 a tick from its first breath, and died at sixty-one -
+at full energy, unhurt, beside its mother, being nursed. Every second-generation
+agent that survived at all did so carrying the damage, which is what the
+population-wide deficit was. Newborns now start both clocks at their birth
+tick; mean health across a settlement runs at 90-96 instead of 65-70.
+
+**Since measured.** Six things were put in against this: worked-out ground now
+carries a proportionally smaller crop rather than flooring at four tenths; a
+denied drive presses harder the longer it waits, up to fourfold; breeding waits
+on a surplus or a long settled stretch rather than on a full stomach; children
+have a quarter to a half of an adult's reserves against a famine; ten days of
+unanswered hunger sends an agent out of the country it is in; and agents record
+how their attempts turn out and drop what does not pay.
+
+Six worlds to thirty thousand ticks afterwards: peaks fell from a mean of 141
+to 93, five of six worlds ended within a tenth of their own peak rather than a
+third below it, and the farmed ground ended at 0.179 fertility rather than
+0.025. Four settled outright. Two still worked their ground out, and in both
+the migration pressure was firing on a quarter to a half of the population by
+the end.
+
+**Then it stopped holding.** That measurement was taken while every settlement
+was losing its second generation to the newborn dehydration bug described above.
+Fixing that roughly doubled how many people a world grows, and the brakes turn
+out to be calibrated for the smaller number. The same six worlds, all three
+states of the code:
+
+| Measure | Before any of it | With the survival pressure | With healthy newborns |
+| --- | --- | --- | --- |
+| Worlds still inhabited | 11 of 12 | 6 of 6 | 6 of 6 |
+| People at the end | 77.7 | 76.0 | 78.2 |
+| Highest reached | 141.3 | 93.2 | 211.5 |
+| End over peak | 0.55 | 0.82 | 0.37 |
+| Fertility of the farmed ground | 0.025 | 0.179 | 0.055 |
+
+Every world is still inhabited at thirty thousand ticks, which no version of
+this held before. But the overshoot-and-slide is back and steeper than it
+started. The soil economics are untouched and were always the binding
+constraint; breeding-on-a-surplus and migration bought a settlement of ninety a
+soft landing and buy a settlement of two hundred nothing.
+
+**And then the ground got a way back.** Four return paths went in against this:
+what a body passes after a meal, what spoils in somebody's pack falling to the
+ground rather than being deleted, what a body is when it stops, and the roots,
+stalk and leaf a plant leaves in the tile it grew in.
+
+The first three did essentially nothing. Three worlds to thirty thousand ticks
+with all of them in came out at mean farmed fertility 0.058, against 0.055 with
+no return path at all. The reason is spatial and obvious in hindsight: what
+goes through a person comes out where the person is standing, and agents range
+over the whole map. That is not a fault to correct. It is the fact that makes
+carting muck onto a field worth an agent's time, and it is why the one return
+path that already existed had to be a learned practice.
+
+The fourth was decisive, and was the one missing longest. The model had been
+treating every plant as though the whole of it were carried off. Most of a
+plant never leaves the field: only the grain does. Four worlds to thirty
+thousand ticks with crop residue staying put:
+
+| Measure | Before any of it | Survival pressure | Healthy newborns | Agent-side returns | Crop residue too |
+| --- | --- | --- | --- | --- | --- |
+| Worlds run | 12 | 6 | 6 | 3 | 4 |
+| Still inhabited | 11 | 6 | 6 | 3 | 4 |
+| People at the end | 77.7 | 76.0 | 78.2 | 53.0 | **154.0** |
+| Highest reached | 141.3 | 93.2 | 211.5 | 212.3 | 226.2 |
+| End over peak | 0.55 | 0.82 | 0.37 | 0.25 | **0.69** |
+| Fertility of the farmed ground | 0.025 | 0.179 | 0.055 | 0.058 | **0.268** |
+
+The two runs do not overlap on either measure. Every world with residue ended
+between 140 and 176 people on ground between 0.175 and 0.457 fertility; every
+world without ended between 25 and 107 on ground between 0.031 and 0.103. Map
+litter now holds near 430 rather than draining from 1,035 to 368.
+
+What matters about the last column is the peak. Every earlier measure that
+improved end-over-peak did it by holding the population down — the survival
+pressure took the peak from 141 to 93 to buy its 0.82. This one leaves the peak
+where it was, at 226 against 211, and the settlement holds two thirds of it
+instead of a third. The population is not being braked; the ground under it is
+no longer collapsing.
+
+It is not a closed loop and cannot be. Rot keeps three fifths of what it works
+on and loses the rest, so every turn of the cycle is smaller than the last, and
+farmed fertility is still falling at thirty thousand ticks in three of the four
+worlds. What changed is the slope. A settlement that overshoots now settles
+back onto ground that can still carry it, rather than sliding to the level
+where hardly anybody lives there.
+
+**And then a fishery, which reverses it.** Everything above is a return: the
+ground gets back some part of what it already paid out, minus what rot loses,
+so the best a farming people can do is run down slowly. A fish is not grown on
+the land. It is grown at sea, fed on a whole catchment, and it comes up the
+river under its own power whatever last year's fishing left behind — so what is
+left of one, put on a field, makes the country richer than it was.
+
+Four worlds to thirty thousand ticks with a fishery in the model:
+
+| Measure | No return path | Crop residue | Residue and a fishery |
+| --- | --- | --- | --- |
+| Worlds run | 6 | 4 | 4 |
+| Still inhabited | 6 | 4 | 4 |
+| People at the end | 78.2 | 154.0 | 150.5 |
+| Highest reached | 211.5 | 226.2 | 220.8 |
+| End over peak | 0.37 | 0.69 | 0.69 |
+| Fertility of the farmed ground | 0.055 | 0.268 | **0.607** |
+
+**All four worlds ended with better ground than they started on** — a mean of
+0.545 at tick zero against 0.607 at thirty thousand, and every world
+individually up, from 0.539→0.594 at worst to 0.544→0.641 at best. Map
+nutrients rose from about 800 to between 1,049 and 1,103 rather than sitting
+flat. Standing crop ended between 4,900 and 6,000 units.
+
+The peak and the end-over-peak are the part to read twice. They did not move:
+226 and 0.69 without the fishery, 221 and 0.69 with it. The settlement still
+overshoots and still settles back onto what the ground will carry. What changed
+is that the ground it settles back onto is no longer poorer each time. Nothing
+was made easier for the people; something was added to the country.
+
+Twelve to thirty-four people in a settlement of a hundred and fifty had settled
+into fishing as a matter of course by the end, having each worked it out from
+their own record of whether it paid.
+
+What remains: a spent field still counts as a field, so a settlement still will
+not break new ground while exhausted ones sit inside its radius, and nobody has
+still ever died of hunger.
+
+### 4. Winter is not cold: the tile temperature is frozen at first touch
+
+`ClimateManager::get_biome` builds a `Biome` for a position the first time
+anybody asks about it, stamps the current season and hour into it, and caches
+it for the rest of the run. `clear_biome_cache()` exists and is called only
+from a test. So `get_temperature` — the temperature agents actually feel, via
+exposure and body temperature — is that first-touch value plus whatever the
+weather is doing now, and the season never reaches it again.
+
+Measured over 160,000 ticks, holding the weather constant so that only the
+season varies — the temperature `get_temperature` reports for a plains tile
+under a clear sky:
+
+| Season | Clear-sky temperature |
+| --- | --- |
+| Spring | 18.667 °C |
+| Summer | 18.667 °C |
+| Fall | 18.667 °C |
+| Winter | 18.667 °C |
+
+Identical to three decimal places, on about fourteen thousand samples each. The
+season contributes nothing at all; every degree of variation in the number an
+agent feels comes from the weather type sitting over it.
+
+Two correct seasonal-temperature paths are computed and thrown away.
+`ClimateManager::tick` sets `base_climate.temperature = base_temp * season_mod
+* time_mod` every tick and nothing reads it. `SeasonalCalendar::apply_modifiers`
+does the same job and has no caller outside its own test. The live path is the
+frozen one.
+
+The seasons do reach the world by three other routes, all working: the growth
+modifier on regrowth, the length of the day that plants feel, and the
+`WeatherGenerator`, which turns winter into snow, sleet and blizzards. That
+last one carries the only cold there is — a winter runs about half a degree
+below the other seasons because it snows, not because winter is cold. What
+never arrives is the baseline swing, and with it most of the reason a
+settlement would store food, put on a coat or get indoors at one time of year
+rather than another.
+
+Mortality says the same thing. Deaths per ten thousand agent-ticks, six worlds
+run to twenty-four thousand ticks each, with snow correctly confined to winter:
+
+| Season | Deaths per 10k agent-ticks |
+| --- | --- |
+| Spring | 1.57 |
+| Summer | 1.42 |
+| Fall | 1.42 |
+| Winter | 1.57 |
+
+Winter kills about a tenth more than a summer — and so does spring, to the
+second decimal. On roughly 290 deaths a season that is inside the noise. There
+is no winter in these worlds, only a slightly snowier stretch of the same
+weather.
+
+Fixing it is not just a cache invalidation: making winter genuinely cold is a
+real change to the balance and would need measuring before and after.
+
+### 5. Three drives ask for things the world cannot give
+
+The design document's Appendix A gives each drive a list of **increase
+conditions** — Safety on "hostile entity proximity, recent injury, darkness",
+Construction on "buildable templates seen, others building, drive synergy",
+Sustenance on "low food stockpile, crop depletion". None of them existed:
+`base_accumulation_rate` returned one flat number per drive per tick and that
+was the whole of it, including for the line `DriveType::Safety => 0.02, //
+Spikes with threats`, whose comment described the specification and whose code
+was a constant.
+
+Because those drives' satisfying actions are chosen rarely, they climbed to
+their ceiling and stayed there: nine of fifteen at 1.00 and active every tick
+after eight thousand ticks, which left the per-agent weight as the only thing
+telling them apart.
+
+**Since fixed.** The nine now read the conditions the document gives them, and
+move towards what the situation calls for rather than up a clock. Six of the
+nine came unpinned:
+
+| Drive | Before | After |
+| --- | --- | --- |
+| Shelter | 1.00, active 100% | 0.25, active 0% |
+| Safety | 0.99, active 100% | 0.26, active 13% |
+| Construction | 1.00, active 100% | 0.15, active 9% |
+| Protection | 0.93, active 100% | 0.09, active 9% |
+| Industry | 0.96, active 96% | 0.29, active 65% |
+| Sustenance | 1.00, active 100% | 0.52, active 87% |
+| Preparedness | 1.00, active 100% | 0.88, active 100% |
+| Utility | 1.00, active 100% | 0.60, active 100% |
+| Luxury | 1.00, active 100% | 0.98, active 100% |
+
+**The three that stayed high are the finding.** Preparedness asks for stockpiled
+food, materials and tools; Utility for tools in working order; Luxury for
+something fine. Counting what thirty agents were carrying at eight thousand
+ticks: 102 wood, 21 food, 17 leather, 14 horn, 12 flax, 11 cotton, 8 wool, and
+**no tools and nothing decorative at all** — zero equipped items across the
+whole settlement. Those three drives are now reading the world correctly and
+the world has no path to satisfy them. That is a gap in crafting and
+tool-making, not in the drive system, and it was invisible while every drive
+sat at its ceiling for reasons of its own.
+
+### 6. The ecology settles in most worlds, not all
+
+Over forty worlds, predators are still alive at the end in thirty-six and
+herds stay bounded in thirty-three. In the seven that run away the predators
+died out first, and although animals do wander back in from off the map, the
+trickle is slow enough — by design — that a world can spend thousands of ticks
+with its herds climbing unopposed before a replacement pack arrives.
+
+### 7. Clothing and hunting cost about what they return
+
+Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
+warms cores by half a degree, at three points of the fed population and three
+percent of the population itself. The material is scarce and the climate is
+mild, so the time spent gathering flax is close to break-even against the time
+it would have spent on food. Nothing in the model weighs the two: the ordering
+in `generate_non_emotional_action` is fixed, and an agent picks material by
+warmth against distance rather than by what its stores can afford.
+
+An inventory stack also carries one quality for the whole stack, which is why
+making and wearing had to become a single act: a better second coat merged
+into the first and was recorded as no better than it.
+
+Hunting is the same shape. Over forty worlds it puts 44 agents of 862 into
+fur, hide or leather — which nothing else can — at two points of the fed
+population and about eight percent of the population itself. A world starts
+with under a dozen animals, so most agents never find one.
+
+### 8. Fear is a hunger signal, and now it is no signal at all
+
+`calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
+rest. When that was written hunger saturated between meals, so fear sat around
+0.8 most of the time and `should_flee`, which triggers above 0.6, read as
+firing in ordinary circumstances rather than in response to a threat.
+
+**The wiring is unchanged and the symptom has inverted.** Fear is still
+computed from the survival drives, but the survival drives are answered now, so
+they rarely pass the 0.7 the fear calculation starts at. Measured over three
+worlds of twenty-five agents to six thousand ticks: mean fear 0.01 to 0.06,
+**two of a hundred and seventy agents above 0.5**, and not one at any sample
+above the 0.6 that `should_flee` wants. Mean anger is 0.00.
+
+So the emotional override in `generate_action` — the branch that lets an agent
+run or fight instead of doing what its drives say — never fires. An emotional
+model that reported the wrong thing has become one that reports nothing. The
+fix is the same either way: fear should come from what is in front of the
+agent, and hunger should press through the hunger drive, which is what that
+drive is for.
+
+### 9. Agents still cannot hear anything
+
+Sight discovers terrain, resources and buildings, and agents now see one
+another — `vision.visible_agents` is populated each tick, which is what
+observational learning is gated on. Hearing is unfed entirely, so every
+sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
+
+### 10. Zoning and territory are never established
+
+Building placement scoring reads zone and territory bonuses from
+`World::zone_manager` and `World::territory_manager`, but nothing outside the
+tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
+always empty in a live run and every bonus they contribute is zero, so
+settlements have no planned structure and agents claim no ground.
+
+### 11. Agents carry food they will never eat
+
+Food that has turned is correctly refused, but stays in the inventory until
+its freshness decays to zero and spoilage removes it — or until the agent takes
+it onto a field and tips it out, which some of them work out for themselves. The same is true of food
+an agent burns: a novice cook ruins about one batch in five, and the ruins ride
+along in the pack. Both announce themselves as a decay scent to anyone nearby,
+which is realistic and mildly useful, but nothing makes the carrier drop them:
+carried weight still includes rot and cinders.
+
+### 12. Personality exists and reaches the drives, and still decides nothing
+
+The project's stated purpose is emergent social behaviour out of drives and
+personality. Both halves are now live: everybody has a personality and it bends
+what their drives argue for. What is still missing is anywhere for that to show,
+because the action-selection ladder decides nearly everything before a drive is
+consulted. The history below is worth keeping, because each layer only became
+visible once the one under it was fixed.
+
+**No agent held a trait.** `Agent::new` set `traits: TraitSet::default()`,
+which is empty, and the only `add_trait` on any live path was the 1.5 per cent
+congenital infertility roll in `with_parents`. Inheritance in `reproduction.rs`
+worked, but it inherited from founders who had none, so it propagated nothing.
+Measured over three worlds: **zero traits held across a hundred and
+twenty-one surviving agents**, out of sixty-odd defined. **Since fixed** — see
+point 1 below.
+
+Worse, that one roll never survived either: `give_birth_internal` assigned
+`offspring.traits = inherit_traits(..)` straight over the top of it, so
+congenital infertility was thrown away on every live birth. The one trait
+anything in the running simulation ever assigned, and it never once reached a
+living agent. Also since fixed: what a child is born *with* now survives what
+it is born *to*.
+
+Everything downstream of traits is therefore dormant: the trait-to-job
+affinities in `job_happiness.rs`, the gossip distortion in `gossip.rs`, the
+`update_relationship_from_traits` affinity model, the emotional modifiers
+(`add_fear_with_traits` and its siblings), and the religious effects. All of it
+compiles, all of it is tested, none of it has an input that varies.
+
+**And the traits would not change behaviour even if they were assigned.** Read
+the enum: `Lazy` is "constant happiness decrease when working", `Builder` is
+"happiness from building structures", `Glutton` is "increases happiness from
+favorite food". Nearly every one of the sixty is defined as a modifier on how
+an agent *feels* about what happened, not on what it *does*. `src/core/drives.rs`
+contains no reference to traits at all, and `analytics/mod.rs` — where actions
+are chosen — reads `.traits` ten times, all of them for gossip distortion,
+infertility, religion, or passing the set to somebody else. Not once in the
+priority chain. A lazy agent and a diligent one pick the same action; the lazy
+one is only sadder about it.
+
+**So the relationship graph carries no information.** Bonds are updated from
+traits, and everybody's traits are identical (empty), so everybody converges on
+the same footing. Measured in settlements of 45 to 68 people:
+
+| | per agent |
+| --- | --- |
+| Relationships held | 32 to 44 |
+| Of those, close (bond above 0.5) | 29 to 39 |
+| Hostile | **0.0** |
+| Attempts at `Undertaking::Dealing` | **0 in the whole run** |
+
+Every agent is on close terms with two thirds of the settlement, nobody
+dislikes anybody, and no agent ever undertakes a social act as such. There is
+nothing for a personal interaction to be *about*.
+
+The three things that would fix it, in order of what they buy:
+
+1. ~~**Assign traits at spawn**~~ — **done.** `Population::spawn_agent` now
+   draws three to five compatible traits for a founder; everybody born
+   afterwards inherits, which the existing code already did. Forty founders
+   between them hold sixty-odd distinct traits and no two are the same person.
+   The draw is in `spawn_agent` rather than `Agent::new` deliberately: a bare
+   `Agent::new` stays the same agent every time, which several dozen tests of
+   other machinery rely on, and a personality is something somebody has on
+   entering a world rather than a property of a body.
+2. ~~**Let traits reach the drives**~~ — **done, and it was not enough.**
+   `Trait::leanings()` now says which drives a trait argues for and against, as
+   a multiplier on how loudly the drive argues and on how much of the need it
+   takes before the agent acts. `DriveState::lean_towards` applies it, and
+   every path that picks a drive honours it. A Lazy person needs more pushing
+   before starting work and drops it sooner; a Coward starts running at a
+   smaller wolf; an Extrovert at six tenths of loneliness is already looking
+   for company where an Introvert is content.
+
+   **It changed almost nothing about what anybody does.** Fourteen worlds to
+   six thousand ticks, 777 surviving agents, comparing holders of a trait
+   against everybody else on the matching undertaking:
+
+   | | holders | others | ratio | |
+   | --- | --- | --- | --- | --- |
+   | Lazy, foraging | 206.3 | 269.4 | 0.77× | 1.4 se |
+   | Diligent, foraging | 247.1 | 267.4 | 0.92× | 0.4 se |
+   | Curious, foraging | 222.8 | 269.2 | 0.83× | 0.8 se |
+   | Glutton, fishing | 21.1 | 18.9 | 1.11× | 0.4 se |
+   | Builder, **building** | **0.0** | **0.0** | — | |
+   | Extrovert, **dealing** | **0.0** | **0.0** | — | |
+
+   Nothing above 1.4 standard errors. (A six-world run had Lazy foraging at
+   2.04× the rest; at fourteen worlds it is 0.77×, having crossed over. Six
+   worlds is not enough to say anything here either.)
+
+   I said this was "one hook in `DriveState`, and it is what turns sixty labels
+   into sixty people". That was wrong, and the reason is worth writing down.
+
+   **What blocks it is the action-selection ladder, not the drives.**
+   `generate_non_emotional_action` is thirteen fixed priorities, and drives are
+   consulted only at the thirteenth, after survival, protection, clothing,
+   cooking, muck, farming, fishing, hunting, percepts, plans and goals have all
+   had their turn. Seventy-nine per cent of everything a settlement does is
+   `Foraging`, and almost all of it comes off that ladder rather than out of a
+   drive — so leaning on the Industry drive barely moves it.
+
+   And when the thirteenth priority *is* reached, three drives take it every
+   time. Measured over four thousand agent-samples, Luxury stands above its
+   threshold **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** —
+   because nothing in the world can answer them (issue #5). Construction is
+   above its threshold 12.7% of the time and Social 38.1%, so they are not
+   quiet; they simply never win, and `Action::Build` and `Action::Socialize`
+   are chosen **zero** times in 777 agent-lives.
+
+   So the order of work is the other way round from what I assumed: the pegged
+   drives have to be answerable and the ladder has to let drives decide more
+   than a thirteenth of the time, and only then does a personality have room to
+   show. The hook is in and correct; it is waiting on both.
+
+3. **Give agents a reason to need each other.** Everyone still does
+   everything, so no agent is ever the one who has what another wants. The
+   fishery is the first thing in the model that is *place-bound* — you must be
+   at the water — which is the raw material for a real division of labour.
+
+**And a fourth, which assigning traits revealed.** The relationship graph is
+still undifferentiated: 33 to 43 relationships each, of which 31 to 37 are
+close, and **none hostile**, in settlements of 43 to 69. That is no longer
+because traits do not vary. It is arithmetic.
+`Relationship::update_from_trait_interaction` subtracts 0.01 to 0.03 for each
+clashing pair of traits, while `Population::update_relationships` adds up to
+0.10 in proximity bonus to every nearby pair on every tick. Being near somebody
+outweighs disliking them by three to ten times, and applies always rather than
+only when there is a clash, so every relationship saturates at close regardless
+of who the two people are. Nobody ever undertakes a social act either:
+`Undertaking::Dealing` is attempted zero times in a whole run.
 
 ---
 
-### 5. ⚠️ **Default Life Stage State**
+## Housekeeping
 
-**Status**: MINOR - Initialization issue
-**Location**: `src/agents/agent.rs:434-465` (AgentState::new())
+### 13. Committed backup file
 
-**Problem**:
-New agents start with `age: 0` but the `life_stage` might not be properly initialized to `Infant`.
+`src/analytics/mod.rs.backup` is checked into the repository.
 
-**Impact**:
-- New agents might have undefined life stage
-- Statistics might not properly categorize newborns
+### 14. Build warnings
 
-**Verification Needed**:
-Check if `LifeStage::from_age(0)` correctly returns `LifeStage::Infant`.
+15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
+handles most.
 
+### 15. Placeholder package metadata
+
+`Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
+and `repository = "https://github.com/yourusername/ebss-project"`.
 ---
 
-## Working Components
+## Recently fixed
 
-### ✅ **Correctly Implemented**
+Listed so nobody re-investigates them. Each has regression tests in
+`src/analytics/tests/`.
 
-1. **World Initialization**
-   - `World::new(WorldConfig::default())` ✓ Works
-   - Default configuration available ✓ Works
-
-2. **Population Initialization**
-   - `Population::with_config(PopulationConfig::default())` ✓ Works
-   - `population.spawn_agent()` ✓ Works
-   - Agent creation and field initialization ✓ Works
-
-3. **Death Mechanics Code** (not integrated, but code is correct)
-   - `age_tick()` implementation ✓ Correct
-   - `process_deaths()` implementation ✓ Correct
-   - Starvation progression ✓ Correct
-   - Old age checking ✓ Correct
-
-4. **Agent Subsystems**
-   - `agent.tick()` subsystem updates ✓ Works
-   - Body damage processing ✓ Works
-   - Emotion processing ✓ Works
-   - Drive accumulation ✓ Works
-
-5. **Type Exports**
-   - Prelude exports all necessary types ✓ Works
-   - Import paths are correct ✓ Works
-
----
-
-## Recommended Action Plan
-
-### Priority 1: Fix Critical Issue #1
-1. Modify `Simulation::tick()` to integrate `Population::tick()`
-2. Remove or refactor duplicate agent processing
-3. Ensure tick counters are synchronized
-
-### Priority 2: Test Integration
-1. Run test_simulation executable
-2. Verify agents age over time
-3. Verify deaths occur from old age and starvation
-4. Verify life stages progress correctly
-5. Verify population statistics update
-
-### Priority 3: Address Medium Issues
-1. Resolve duplicate processing
-2. Synchronize tick counters
-3. Document expected behavior
-
-### Priority 4: Cleanup
-1. Remove redundant code
-2. Add integration tests
-3. Update documentation
-
----
-
-## Testing Checklist
-
-After fixing Issue #1, verify:
-
-- [ ] Agents age each tick (check `agent.state.age` increases)
-- [ ] Life stages progress (Infant → Child → Adolescent → Adult → Elderly)
-- [ ] Agents die when `age >= max_age`
-- [ ] Agents die from starvation if not eating
-- [ ] `process_deaths()` removes dead agents
-- [ ] Population statistics update correctly
-- [ ] Reproduction occurs (when implemented)
-- [ ] Death watch warnings appear in test executable
-- [ ] Final statistics show deaths occurred
+- **Death mechanics not integrated.** `Simulation::tick` bypassed
+  `Population::tick`, so aging, starvation and death never ran. This was the
+  critical issue in the previous version of this document. Fixed.
+- **Survival subsystems never invoked.** `Population::tick` reached past
+  `tick_with_time`, so nutrition metabolism, food spoilage and awake fatigue
+  had no effect on a live run despite full unit-test coverage.
+- **Agents starved holding food.** Eating ignored inventory, goals outranked
+  hunger indefinitely, and action selection was gated on having a matching
+  behaviour tree.
+- **Agents were permanently hypothermic.** Thermoregulation was weaker than
+  environmental heat transfer, so core temperature settled near ambient;
+  shelter did not affect body temperature; exposure damage never decreased.
+- **Agents never drank.** Thirst was reachable only through the drive fallback
+  that hunger monopolised. Agents went thousands of ticks without water beside
+  a river.
+- **Survival damage was erased.** Health was overwritten from body condition
+  every tick, discarding starvation, dehydration and exposure damage.
+- **The Bevy front end did not compile.** A statistics CSV exporter read
+  life-stage and construction fields that a refactor had dropped from
+  `HistoryPoint`. The fields are back, populated from the snapshot data that
+  was already available at the sampling site.
+- **The bundled plugin crate did not compile.** It was written against an
+  `Action` descriptor struct that no longer exists; `Action` is now an enum
+  with no cost data. The plugin now registers enum actions keyed by id and
+  keeps their costs and requirements in an `ActionProfile` beside them, which
+  also gives `ActionType`, `ActionEffects` and `ActionRequirements` a user
+  again — they were orphaned.
+- **Sight did nothing.** `process_exploration_with_world`, the only path that
+  discovers the world by line of sight, had no callers, so agents found food by
+  smell alone. It now runs each tick from `Simulation::tick`, scaled by the
+  agent's visual acuity, and what an agent sees of food and water reaches the
+  spatial memory that foraging reads. A new `Blind` trait sets sight range to
+  zero.
+- **Sensory traits never reached the senses.**
+  `apply_trait_sensory_modifications` had no callers, so a `Deaf` agent heard
+  perfectly well. It now runs at creation and when a newborn inherits traits.
+- **Nothing grew out of the ground.** Growth was a number per species times the
+  weather, with nothing taken out of the soil and nothing put back, so a patch
+  picked bare regrew as fast on bare rock as in river silt. And the flora system
+  — species, growth stages, regrowth timers, biome lists, a cultivation flag —
+  had never held a single plant: its spawners had no callers outside the world's
+  own pass-through wrappers.
+- **Every plant in the world was in drought whenever it was not raining.**
+  Growth took the hour's rainfall as its water term rather than what the ground
+  holds, which cut it to a fifth on any clear day and made a marsh no wetter
+  than a dune.
+- **Nobody could see anybody.** Nothing populated `vision.visible_agents`, and
+  observation is gated on it, so the whole observational learning system —
+  broadcast, record, adopt, teach — ran every twenty ticks over an empty list.
+  No agent had ever recorded seeing another do anything, in any run, ever.
+- **Wild food could not feed a settlement.** It regrows about four times slower
+  than a grown population eats it, and nothing else produced food at all.
+  Agents break ground into fields now; crops on them grow eight times faster
+  than the same thing wild.
+- **Children froze to death.** A child has no clothing of its own — it cannot
+  gather flax, has no skill to sew and nobody makes anything for it — so it ran
+  two or three degrees colder than the adults beside it. One traced child had a
+  perfect body, no injuries, full energy and a core temperature of 32.9. Nearly
+  half of everyone ever born died before growing up, which no birth rate can
+  carry. The young are now kept warm by whoever is looking after them.
+- **Water was consumed and never came back.** It had no regeneration rate and
+  did not count as renewable, so every drink took a unit out of the world for
+  good and a lake drunk dry was deleted outright. A world lost more than half
+  its water in fifteen thousand ticks. Together with the above, this is what
+  emptied every settlement by thirty thousand ticks.
+- **Herbivores had nothing holding them down.** The world was ticked twice per
+  simulation tick; predation sat behind one roll for the whole world per tick;
+  a predator only hunted when half starved; predators were stocked without
+  regard to whether anything they ate lived there; the default world got two
+  herds in total; and nothing but the hard population cap limited a herd. All
+  six are fixed, and predators now survive in thirty worlds of forty rather
+  than seven. A starving predator also widens what it will take and will turn
+  on a settlement — nothing in the model let an animal touch an agent before.
+- **Nothing ever hunted.** `Action::Hunt` and the fauna model worked, and the
+  one place the action appeared passed a nil animal id the executor could not
+  resolve, so meat, hides and wool never reached an inventory. Three things
+  had to be fixed with it: kills dropped names nothing downstream knew
+  (mutton, deer_meat, thick_hide) and are butchered now; the odds read the
+  MeleeCombat skill with no floor, so an untrained agent's chance was exactly
+  zero and the first kill it made locked it out of hunting for life; and a
+  hunter could kill an animal on the far side of the map without moving.
+- **Insulation was always zero.** Clothing recipes, equipment slots and cold
+  insulation all existed and worked when a garment was put on an agent by
+  hand; nothing drove an agent to make or wear anything, so cold was endured
+  rather than solved. Agents now gather flax, cotton and bark, make garments
+  and wear them, and just over half the population ends a run dressed. Four
+  things had to be fixed before it worked at all: wood being burned on boots
+  instead of fires, garments piling up unworn because a stack carries one
+  quality, coats being replaced for ordinary wear, and cast-offs being carried
+  around at two kilos each.
+- **Nothing ever cooked.** Heat sources, fuel, lighting and the whole
+  preparation model existed, and nothing in a run had ever lit a fire, so every
+  meal was eaten raw at about a third of its value and the strongest smell in
+  the model was unreachable. Agents now gather wood, light campfires and cook
+  at them, which is what moved the fraction of fed agents from 96.0% to 99.7%.
+  Cooking is restricted to food a fire improves — meat, fish, grain — and
+  anything else put over one is ruined, as is anything cooked twice.
+- **Smell found everything, and sight found nothing twice.** Every resource
+  emitted the same full-strength scent, so an agent smelled a berry patch from
+  twenty-five tiles and sight was decoration. Scent strength now depends on
+  what the thing is and what has been done to it — a berry carries about two
+  tiles, water three, flesh six, rot nine to twenty, cooking the full range —
+  and sight reaches twenty-five so that looking is what finds food. Sight also
+  stopped being a one-off: exploration reports a tile only the first time it is
+  looked at, so an agent used to stop noticing a patch once it had walked past
+  it, and nothing brought the memory back when it faded.
+- **Conception crashed the simulation.** Fertility could exceed 1.0 and was
+  used as a probability; 44.7% of adult pairs produced odds above 1.0, which
+  panics the sampler. Only reachable once agents could feed and water
+  themselves well enough to reproduce.

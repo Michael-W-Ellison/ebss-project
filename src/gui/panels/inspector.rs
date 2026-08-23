@@ -649,6 +649,7 @@ fn terrain_description(terrain: crate::world::TerrainType) -> &'static str {
         TerrainType::Wetland => "Marshy area with water and vegetation.",
         TerrainType::Beach => "Sandy shoreline between land and water.",
         TerrainType::Riverbank => "The edge of a river, good for fishing.",
+        TerrainType::Farmland => "Ground broken and sown; crops grow here far faster than anything wild.",
     }
 }
 
