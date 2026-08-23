@@ -918,6 +918,27 @@ badly against a predator do not survive to draw the lesson: of 229 survivors,
 Both directions are therefore demonstrated deterministically in
 `src/agents/tests/appraisal_tests.rs` rather than left to the sample.
 
+**It does not yet change what a settlement is worth.** Eight worlds a side at
+fifteen thousand ticks, against the commit before the appraisal:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| End population | 86.8 ± 9.5 | 94.1 ± 6.3 | 0.65 se |
+| Peak population | 100.9 ± 6.6 | 108.5 ± 6.3 | 0.83 se |
+| Births | 149.6 ± 14.9 | 162.1 ± 12.4 | 0.64 se |
+| Deaths | 87.9 ± 6.5 | 93.0 ± 8.2 | 0.49 se |
+| Soil fertility | 0.39 | 0.39 | −0.07 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+Every measure drifts upward and not one of them is above a single standard
+error, which at eight worlds a side means nothing has been shown. That is the
+expected result rather than a disappointment: fleeing is rare (1.94% of
+samples) and anger, while common, has almost nothing downstream of it — an
+angry agent is one that *would* attack, and `should_attack` gates a branch
+that has only just become reachable. The appraisal is the prerequisite for
+agents that fight, hold ground, or avoid each other; those behaviours are what
+would move a settlement, and they are not built yet.
+
 ## Test coverage
 
 1,230 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus

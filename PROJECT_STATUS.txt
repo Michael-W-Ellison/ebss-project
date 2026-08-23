@@ -285,7 +285,10 @@ KNOWN GAPS IN BEHAVIOUR
     happened in past fights scales the estimate. Over three worlds and 41,556
     agent-samples, mean fear ran 0.044 and mean anger 0.298, with 1.94% of
     samples wanting to flee and 22.8% wanting to fight, against a previous
-    state of 0.01-0.06 fear, zero anger and nobody ever doing either.
+    state of 0.01-0.06 fear, zero anger and nobody ever doing either. At eight
+    worlds a side it does not yet change what a settlement is worth - every
+    measure drifts up and none by as much as one standard error - because
+    almost nothing is built downstream of an angry agent.
   - Populations grow but have not been studied over very long runs. Nobody
     has characterised what happens past a few tens of thousands of ticks.
 
