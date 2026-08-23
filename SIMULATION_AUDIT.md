@@ -143,6 +143,13 @@ Verified reachable from `Simulation::tick()`.
 - Around two hundred plants standing in a new world, each growing on whichever
   of water, light and nutrient it has least of. Foliage shades what is under it
   and sheds leaf fall onto the ground beneath, so a wood feeds itself
+- A fishery, which is the only food in the model the land does not pay for. Fish
+  are not grown in the tile they are caught from and do not regrow out of what
+  is left of them: they come up the river on the season, heaviest in spring and
+  autumn, thinnest in a frozen winter, so a reach fished down to nothing fills
+  again from the catchment inside a year. What is left of one, put on a field,
+  is worth forty times a unit of crop, because the crop is giving back what the
+  ground already paid out and the fish is bringing in what the sea grew it with
 - Growth draws the ground down, and four things put matter back: what a body
   passes after a meal, what spoils in somebody's pack, what a body is when it
   stops, and — much the largest — the roots, stalk and leaf a plant leaves in
@@ -738,8 +745,9 @@ settlement now runs at 90-96.
 
 ## Test coverage
 
-1,175 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
-one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
+1,183 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
+`a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
 `test_production_building_placed_near_resources`, and now

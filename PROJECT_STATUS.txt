@@ -55,8 +55,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,212 tests across the workspace:
-  1,175 library tests
+  1,220 tests across the workspace:
+  1,183 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -138,6 +138,12 @@ Verified as reached by Simulation::tick():
   Land            every tile carries soil: nutrients, and two pools of dead
                   matter waiting to become more of it. What rots and how fast
                   depends on how dense it was alive and how wet the ground is
+  Fishing         fish come up the river on the season rather than growing back
+                  out of what is left of them, so a reach fished out fills
+                  again from the catchment. Agents go to the water when they
+                  want food, learn for themselves whether it pays, and what is
+                  left of a fish is worth forty times a unit of crop to a
+                  field - it was grown at sea, not on the settlement's ground
   Nutrient return four paths put matter back where growing took it out: what a
                   body passes after a meal, what spoils in a pack, what a body
                   is when it stops, and the roots, stalk and leaf a plant

@@ -356,16 +356,26 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 8. Fear is a hunger signal, not a danger signal
+### 8. Fear is a hunger signal, and now it is no signal at all
 
 `calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
-rest. Since hunger saturates between meals, fear sits at around 0.8 much of
-the time. `should_flee` triggers above 0.6, so agents read as fleeing in
-ordinary circumstances rather than in response to a threat.
+rest. When that was written hunger saturated between meals, so fear sat around
+0.8 most of the time and `should_flee`, which triggers above 0.6, read as
+firing in ordinary circumstances rather than in response to a threat.
 
-Survival actions now outrank fleeing, so this no longer strands agents, but
-the emotional model is still reporting something misleading, and anything
-built on `should_flee` inherits that.
+**The wiring is unchanged and the symptom has inverted.** Fear is still
+computed from the survival drives, but the survival drives are answered now, so
+they rarely pass the 0.7 the fear calculation starts at. Measured over three
+worlds of twenty-five agents to six thousand ticks: mean fear 0.01 to 0.06,
+**two of a hundred and seventy agents above 0.5**, and not one at any sample
+above the 0.6 that `should_flee` wants. Mean anger is 0.00.
+
+So the emotional override in `generate_action` — the branch that lets an agent
+run or fight instead of doing what its drives say — never fires. An emotional
+model that reported the wrong thing has become one that reports nothing. The
+fix is the same either way: fear should come from what is in front of the
+agent, and hunger should press through the hunger drive, which is what that
+drive is for.
 
 ### 9. Agents still cannot hear anything
 
@@ -392,24 +402,84 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
+### 12. Nobody has a personality, and everybody is everybody's friend
+
+The project's stated purpose is emergent social behaviour out of drives and
+personality. The drives are live and now read the world. The personality half
+is not running at all.
+
+**No agent holds a trait.** `Agent::new` sets `traits: TraitSet::default()`,
+which is empty, and the only `add_trait` on any live path is the 1.5 per cent
+congenital infertility roll in `with_parents`. Inheritance in `reproduction.rs`
+works, but it inherits from founders who have none, so it propagates nothing.
+Measured over three worlds: **zero traits held across a hundred and
+twenty-one surviving agents**, out of sixty-odd defined.
+
+Everything downstream of traits is therefore dormant: the trait-to-job
+affinities in `job_happiness.rs`, the gossip distortion in `gossip.rs`, the
+`update_relationship_from_traits` affinity model, the emotional modifiers
+(`add_fear_with_traits` and its siblings), and the religious effects. All of it
+compiles, all of it is tested, none of it has an input that varies.
+
+**And the traits would not change behaviour even if they were assigned.** Read
+the enum: `Lazy` is "constant happiness decrease when working", `Builder` is
+"happiness from building structures", `Glutton` is "increases happiness from
+favorite food". Nearly every one of the sixty is defined as a modifier on how
+an agent *feels* about what happened, not on what it *does*. `src/core/drives.rs`
+contains no reference to traits at all, and `analytics/mod.rs` — where actions
+are chosen — reads `.traits` ten times, all of them for gossip distortion,
+infertility, religion, or passing the set to somebody else. Not once in the
+priority chain. A lazy agent and a diligent one pick the same action; the lazy
+one is only sadder about it.
+
+**So the relationship graph carries no information.** Bonds are updated from
+traits, and everybody's traits are identical (empty), so everybody converges on
+the same footing. Measured in settlements of 45 to 68 people:
+
+| | per agent |
+| --- | --- |
+| Relationships held | 32 to 44 |
+| Of those, close (bond above 0.5) | 29 to 39 |
+| Hostile | **0.0** |
+| Attempts at `Undertaking::Dealing` | **0 in the whole run** |
+
+Every agent is on close terms with two thirds of the settlement, nobody
+dislikes anybody, and no agent ever undertakes a social act as such. There is
+nothing for a personal interaction to be *about*.
+
+The three things that would fix it, in order of what they buy:
+
+1. **Assign traits at spawn**, and let `with_parents` inherit them — the
+   inheritance code is already written and waiting.
+2. **Let traits reach the drives.** A trait should scale a drive's weight or
+   move an action threshold, not only a happiness delta. `Lazy` lowering the
+   Industry weight, `Greedy` raising Preparedness, `Extrovert` raising Social,
+   `Altruist` letting an agent give food away while its own store is thin.
+   That is one hook in `DriveState` and it is what turns sixty decorative
+   labels into sixty different people.
+3. **Give agents a reason to need each other.** Everyone currently does
+   everything, so no agent is ever the person who has what another wants. A
+   fishery is the first thing in the model that is *place-bound* — you must be
+   at the water — which is the raw material for the first real division of
+   labour.
+
 ---
 
 ## Housekeeping
 
-### 12. Committed backup file
+### 13. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 13. Build warnings
+### 14. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 14. Placeholder package metadata
+### 15. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
-
 ---
 
 ## Recently fixed
