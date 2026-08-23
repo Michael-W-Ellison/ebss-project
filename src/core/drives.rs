@@ -608,11 +608,22 @@ impl Drive {
         self.value * self.weight * self.lean
     }
 
-    /// How fast a need out of reach stops being felt.
+    /// How fast a need out of reach stops being felt, against how fast it
+    /// would have built if it had been free to.
     ///
-    /// Slower than it builds, so a chain that opens and shuts on the edge of
-    /// its condition does not make the drive flicker.
-    const FADES_AT: f32 = 0.004;
+    /// It has to be reckoned against the drive's own rate rather than set as
+    /// one number for all of them. A flat rate is a different thing to each
+    /// drive: at 0.004 a tick it was four times what Reproduction, Luxury and
+    /// Protection build at and half what Safety builds at, so the slow drives
+    /// were quietly halved. Reproduction is shut out about a tenth of the
+    /// time, which under a flat fade left it climbing at 50.5% of its proper
+    /// rate - and since conception needs that drive over its threshold in both
+    /// parents, that halved the birth rate and with it the population.
+    ///
+    /// At one, a need fades at the pace it would have grown: a drive shut out
+    /// a tenth of the time still climbs at four fifths of its rate, and one
+    /// shut out half the time hovers where it is.
+    const FADES_AS_FAST_AS_IT_BUILDS: f32 = 1.0;
 
     /// Let this need go, because nothing before it in the chain is answered.
     ///
@@ -620,7 +631,10 @@ impl Drive {
     /// wish for a finer coat, ready to spend it the moment they eat. The wish
     /// goes while the hunger lasts, and has to build again afterwards.
     pub fn fall_quiet(&mut self) {
-        self.value = (self.value - Self::FADES_AT).max(0.0);
+        let fades = self.drive_type.base_accumulation_rate()
+            * Self::FADES_AS_FAST_AS_IT_BUILDS;
+
+        self.value = (self.value - fades).max(0.0);
 
         // And it is not being denied while nobody could have answered it: the
         // pressure of going without is for needs an agent could have met

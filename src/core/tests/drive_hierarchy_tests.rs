@@ -283,18 +283,51 @@ fn a_need_that_is_shut_out_fades_rather_than_waiting() {
         hunger.denied_ticks = 500;
     }
 
+    // Long enough for a drive of this pace to have gone. A shut-out need fades
+    // at the rate it would have built, so how long that takes is the drive's
+    // own business: Luxury builds at a thousandth a tick, so nine hundred
+    // ticks is the whole of it.
     let ctx = crate::core::DriveContext::default();
-    for _ in 0..400 {
+    let span = (0.9 / DriveType::Luxury.base_accumulation_rate()).ceil() as usize;
+
+    for _ in 0..span {
         drives.tick_in(&ctx, false);
     }
 
     assert!(
-        drives.get(DriveType::Luxury).unwrap().value < 0.5,
-        "somebody who has gone hungry for a week is not sitting on a banked-up \
+        drives.get(DriveType::Luxury).unwrap().value < 0.05,
+        "somebody who has gone hungry that long is not sitting on a banked-up \
          wish for a finer coat, ready to spend it the moment they eat; it \
          stood at {:.2}",
         drives.get(DriveType::Luxury).unwrap().value
     );
+}
+
+/// But it fades at its own pace, not at one rate for everybody.
+///
+/// A flat rate is a different thing to each drive. At the four thousandths a
+/// tick this used to use, Reproduction, Luxury and Protection - which build at
+/// a thousandth - fell four times faster than they rose, so a drive shut out
+/// even a tenth of the time climbed at half its proper rate. Conception needs
+/// the Reproduction drive over its threshold in both parents, so that halved
+/// the birth rate, and with it the population of every settlement.
+#[test]
+fn a_slow_need_does_not_fade_faster_than_it_grows() {
+    for drive_type in DriveType::all() {
+        let mut drives = DriveState::new();
+        drives.get_mut(drive_type).unwrap().value = 0.5;
+        drives.get_mut(drive_type).unwrap().fall_quiet();
+
+        let lost = 0.5 - drives.get(drive_type).unwrap().value;
+        let builds_at = drive_type.base_accumulation_rate();
+
+        assert!(
+            lost <= builds_at + f32::EPSILON,
+            "{drive_type:?} loses {lost:.4} a tick when shut out and builds at \
+             only {builds_at:.4}, so any time at all shut out leaves it going \
+             backwards"
+        );
+    }
 }
 
 /// Nobody has children while something is still trying to kill them.
