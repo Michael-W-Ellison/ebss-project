@@ -501,7 +501,18 @@ The three things that would fix it, in order of what they buy:
    hypothetical. With personalities assigned, the action mix is *identical*
    across them — over three worlds of six thousand ticks, agents holding
    `Handy` spent 83% of their attempts foraging, `Builder` 81%, `Greedy` 84%,
-   `Introvert` 81%. A Builder does not build more. The one exception is
+   `Introvert` 81%. A Builder does not build more.
+
+   The clearest evidence is that **giving everybody a personality changed
+   nothing about how a world runs.** Eight worlds a side to fifteen thousand
+   ticks, the same code but for the draw: 81.1 people on 0.571 farmed fertility
+   without personalities, 100.5 on 0.561 with them — 1.10 and 0.66 standard
+   errors apart, which is nothing on either measure. Sixty traits arrived and
+   not one settlement noticed. (An earlier four-a-side run showed fertility 1.5
+   se lower with personalities, which looked like it might be `max_steps`
+   clipping the plans of a Lazy or Anxious draw; at eight a side it is gone, and
+   the two four-world samples of identical code differing by more than the
+   effect being chased is a fair measure of how noisy an unseeded world is.) The one exception is
    `core/planning.rs`, which reads traits to size how long a plan somebody will
    countenance — so the path exists, it is just used once. A trait should scale
    a drive's weight or move an action threshold, not only a happiness delta:
