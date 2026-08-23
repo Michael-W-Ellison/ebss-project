@@ -9,6 +9,16 @@ Cargo.lock
 **/*.rs.bk
 *.pdb
 
+# Throwaway measurement harnesses.
+#
+# Nearly every change in this project is measured before and after by running
+# a few worlds for tens of thousands of ticks and reading numbers off them.
+# Those harnesses have to live in examples/ for cargo to build them, they are
+# rewritten for each question, and none of them is worth keeping: the numbers
+# go into SIMULATION_AUDIT.md and ISSUES_FOUND.md, and the harness goes in the
+# bin.
+examples/_debug_*.rs
+
 # IDE and editor files
 .idea/
 .vscode/
