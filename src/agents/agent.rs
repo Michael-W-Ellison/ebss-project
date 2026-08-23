@@ -1882,39 +1882,118 @@ impl Agent {
     /// * `source` - Source of the threat
     ///
     /// Returns the emotional response triggered
-    pub fn respond_to_threat(&mut self, threat_strength: f32, source: super::EmotionSource) -> super::EmotionType {
-        use super::ThreatAssessment;
-
-        // Calculate comprehensive agent strength:
-        // 1. Health factor (0.0 to 1.0)
+    /// What this agent is worth in a fight, as it reckons itself.
+    ///
+    /// Health, what the body can still do, armour, a weapon in the hand, a
+    /// practised arm - and what happened the last few times it stood its
+    /// ground. That last is the part the specification asks for: an agent that
+    /// has fought and won finds fighting a more attractive option, and one
+    /// that has fought and lost finds running one.
+    ///
+    /// It is what the agent *believes*, not what is true. Two agents of
+    /// identical build appraise the same wolf differently if one of them has
+    /// beaten a wolf before, and that is the point.
+    pub fn own_strength(&self) -> f32 {
         let health_factor = self.state.health / 100.0;
-
-        // 2. Body functionality (movement ability)
         let body_factor = self.body.movement_speed_multiplier();
 
-        // 3. Equipment bonuses (armor and weapons)
-        let armor_bonus = self.equipment.total_armor() / 100.0; // Normalize to 0-1 range
+        let armor_bonus = self.equipment.total_armor() / 100.0;
         let weapon_bonus = if self.equipment.get_weapon().is_some() { 0.3 } else { 0.0 };
 
-        // 4. Skill bonuses (melee combat skill)
-        let combat_skill = self.skills.get_skill(crate::agents::SkillType::MeleeCombat);
-        let skill_bonus = (combat_skill.level as f32 + 10.0) / 20.0; // Normalize -10..10 to 0..1
+        let combat_skill = self
+            .skills
+            .get_skill_if_exists(crate::agents::SkillType::MeleeCombat)
+            .map(|skill| skill.level)
+            .unwrap_or(-10);
+        let skill_bonus = (combat_skill as f32 + 10.0) / 20.0;
 
-        // 5. Trait modifiers
         let bravery_modifier = if self.traits.has(crate::core::Trait::Brave) {
-            1.3 // Brave agents feel 30% stronger
+            1.3
         } else if self.traits.has(crate::core::Trait::Anxious) {
-            0.7 // Anxious agents feel 30% weaker
+            0.7
         } else {
             1.0
         };
 
-        // Combined strength calculation
         let base_strength = health_factor * body_factor;
         let equipment_bonus = armor_bonus * 0.3 + weapon_bonus;
-        let agent_strength = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
+        let built = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
 
-        let assessment = ThreatAssessment::assess(agent_strength, threat_strength, source.clone());
+        built * self.what_fighting_has_taught_me()
+    }
+
+    /// How much what happened last time is worth, at the widest and narrowest.
+    ///
+    /// Somebody who has never fought reckons themselves at face value; a
+    /// proven fighter half again; somebody beaten every time they tried, half.
+    /// Wide enough to turn a fight an agent would have run from into one it
+    /// stands for, and narrow enough that a coward with an axe is still worth
+    /// more than a hero without one.
+    const BEATEN_EVERY_TIME: f32 = 0.6;
+    const NEVER_YET_LOST: f32 = 1.5;
+
+    /// What this agent's own record tells it about standing its ground.
+    ///
+    /// `Lessons` already keeps a running belief per undertaking, moved by
+    /// every outcome and weighted so failures count for more than successes.
+    /// Fighting is one more of those.
+    pub fn what_fighting_has_taught_me(&self) -> f32 {
+        use super::practices::{Lessons, Undertaking};
+
+        // Nobody learns anything from one scrap
+        if self.lessons.attempts(Undertaking::Fighting) == 0 {
+            return 1.0;
+        }
+
+        let believes = self.lessons.belief(Undertaking::Fighting);
+        let from_nothing = (believes - Lessons::UNTRIED) / Lessons::UNTRIED;
+
+        (1.0 + from_nothing * (Self::NEVER_YET_LOST - 1.0))
+            .clamp(Self::BEATEN_EVERY_TIME, Self::NEVER_YET_LOST)
+    }
+
+    /// Feel about something that is simply *there*, rather than something that
+    /// has just happened.
+    ///
+    /// The same appraisal as [`Self::respond_to_threat`] - can I fight this,
+    /// and so is it anger or is it fear - but it *sets* the feeling rather than
+    /// adding to it. A wolf standing ten paces off is one wolf however many
+    /// ticks it stands there; adding a fresh helping of anger every tick it
+    /// remained in sight ran every agent in the world up to the ceiling, and
+    /// left three in five of them ready to attack something at any moment.
+    pub fn appraise_what_is_there(
+        &mut self,
+        threat_strength: f32,
+        source: super::EmotionSource,
+    ) -> super::EmotionType {
+        use super::ThreatAssessment;
+
+        let assessment =
+            ThreatAssessment::assess(self.own_strength(), threat_strength, source.clone());
+
+        let emotion_type = assessment.emotion_type();
+        let emotion_amount = assessment.emotion_amount();
+
+        match emotion_type {
+            super::EmotionType::Anger => {
+                self.emotions.set_anger(source.clone(), emotion_amount);
+                self.emotions.set_fear(source, 0.0);
+            }
+            super::EmotionType::Fear => {
+                self.emotions.set_fear(source.clone(), emotion_amount);
+                self.emotions.set_anger(source, 0.0);
+            }
+            _ => {}
+        }
+
+        emotion_type
+    }
+
+    pub fn respond_to_threat(&mut self, threat_strength: f32, source: super::EmotionSource) -> super::EmotionType {
+        use super::ThreatAssessment;
+
+        let assessment =
+            ThreatAssessment::assess(self.own_strength(), threat_strength, source.clone());
 
         let emotion_type = assessment.emotion_type();
         let emotion_amount = assessment.emotion_amount();
@@ -4159,49 +4238,53 @@ impl Agent {
         self.emotions.set_happiness(EmotionSource::Event("needs satisfied".to_string()), contentment);
     }
 
-    /// Calculate fear from survival drive deprivation
-    /// Multiple survival threats compound (with diminishing returns)
+    /// How long a need has to have gone unanswered before it starts to
+    /// frighten somebody.
+    ///
+    /// A missed meal is not frightening. Days of missed meals are.
+    const LONG_ENOUGH_TO_FRIGHTEN: f32 = 48.0;
+
+    /// Fear from a need that something has been preventing this agent from
+    /// answering.
+    ///
+    /// The second half of the specification, and the half with no adversary in
+    /// it. A worked-out field, a river the run has left, a winter: these
+    /// prevent an agent satisfying its drives exactly as a wolf does, and the
+    /// difference is that there is nothing to round on. Nothing to fight
+    /// means fear rather than anger, every time.
+    ///
+    /// It is keyed on how long the need has actually been denied rather than
+    /// on how high it stands, because those are different things. A drive can
+    /// sit near its threshold all day while being met every time it asks; that
+    /// is not being prevented from anything. `denied_ticks` counts only the
+    /// ticks it asked and got nothing.
     fn calculate_survival_drive_emotion(&self) -> f32 {
-        let mut total_fear = 0.0f32;
-        let mut count = 0;
+        let mut worst: f32 = 0.0;
 
-        // Check hunger
-        if let Some(hunger) = self.drives.get(DriveType::Hunger) {
-            if hunger.value > 0.7 {
-                // Fear scales with severity above threshold
-                let fear = (hunger.value - 0.7) / 0.3 * 0.7; // 0.0 to 0.7 (increased from 0.6)
-                total_fear += fear;
-                count += 1;
+        for drive_type in crate::core::DriveType::all() {
+            let Some(drive) = self.drives.get(drive_type) else {
+                continue;
+            };
+
+            if drive.denied_ticks() == 0 {
+                continue;
             }
+
+            // How badly this one going unanswered would end. A need that
+            // cannot kill is a disappointment; one that can is a danger, and
+            // the nearer it is the worse.
+            let stakes = match self.state.ticks_before_this_kills_me(drive_type) {
+                Some(left) => (Self::A_LONG_WAY_OFF / left.max(1.0)).clamp(0.0, 1.0),
+                None => continue,
+            };
+
+            let how_long = (drive.denied_ticks() as f32 / Self::LONG_ENOUGH_TO_FRIGHTEN)
+                .clamp(0.0, 1.0);
+
+            worst = worst.max(stakes * how_long);
         }
 
-        // Check thirst (even more urgent)
-        if let Some(thirst) = self.drives.get(DriveType::Thirst) {
-            if thirst.value > 0.7 {
-                let fear = (thirst.value - 0.7) / 0.3 * 0.8; // 0.0 to 0.8 (increased from 0.7)
-                total_fear += fear;
-                count += 1;
-            }
-        }
-
-        // Check rest
-        if let Some(rest) = self.drives.get(DriveType::Rest) {
-            if rest.value >= 0.75 {
-                let fear = (rest.value - 0.75) / 0.25 * 0.5; // 0.0 to 0.5 (increased from 0.4)
-                total_fear += fear;
-                count += 1;
-            }
-        }
-
-        // If multiple drives, they compound but with diminishing returns
-        // Use average with bonus for multiple
-        if count > 1 {
-            let avg = total_fear / count as f32;
-            let compound_bonus = (count - 1) as f32 * 0.2; // +0.2 per additional drive (increased from 0.15)
-            (avg + compound_bonus).min(1.0)
-        } else {
-            total_fear.min(1.0)
-        }
+        worst.min(1.0)
     }
 
     /// Calculate sadness from social drive deprivation

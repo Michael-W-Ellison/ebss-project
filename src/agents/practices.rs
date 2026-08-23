@@ -128,6 +128,8 @@ pub enum Undertaking {
     Hunting,
     /// Standing in a river after fish
     Fishing,
+    /// Standing your ground against something
+    Fighting,
     /// Putting food over a fire
     Cooking,
     /// Breaking ground, sowing, spreading muck
@@ -168,7 +170,7 @@ pub struct Lessons {
 impl Lessons {
     /// What an agent assumes about something it has never tried: enough to be
     /// worth one attempt, not enough to build a life around
-    const UNTRIED: f32 = 0.5;
+    pub const UNTRIED: f32 = 0.5;
 
     /// How far one good outcome moves the belief
     const LEARNED_FROM_SUCCESS: f32 = 0.06;

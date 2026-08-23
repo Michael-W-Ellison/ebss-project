@@ -87,6 +87,16 @@ impl EmotionState {
         self.update_totals();
     }
 
+    /// Set anger level for a source (replaces existing value)
+    pub fn set_anger(&mut self, source: EmotionSource, amount: f32) {
+        if amount > 0.0 {
+            self.anger_sources.insert(source, amount.min(1.0));
+        } else {
+            self.anger_sources.remove(&source);
+        }
+        self.update_totals();
+    }
+
     /// Add sadness toward a source
     pub fn add_sadness(&mut self, source: EmotionSource, amount: f32) {
         let new_amount = self.sadness_sources.get(&source).unwrap_or(&0.0) + amount;
@@ -145,6 +155,38 @@ impl EmotionState {
         } else {
             self.curiosity_sources.remove(&source);
         }
+        self.update_totals();
+    }
+
+    /// The thing that was stalking this agent has gone.
+    ///
+    /// Fear of a creature is kept as its own source, so it can be let go of
+    /// without touching whatever else the agent is afraid of. Without this an
+    /// agent that outran a wolf stayed frightened of it for as long as the
+    /// general decay took, and went on running from nothing.
+    pub fn nothing_is_stalking_me(&mut self) {
+        let of_creatures: Vec<EmotionSource> = self
+            .fear_sources
+            .keys()
+            .filter(|source| matches!(source, EmotionSource::Creature(_)))
+            .cloned()
+            .collect();
+
+        for source in of_creatures {
+            self.fear_sources.remove(&source);
+        }
+
+        let at_creatures: Vec<EmotionSource> = self
+            .anger_sources
+            .keys()
+            .filter(|source| matches!(source, EmotionSource::Creature(_)))
+            .cloned()
+            .collect();
+
+        for source in at_creatures {
+            self.anger_sources.remove(&source);
+        }
+
         self.update_totals();
     }
 

@@ -30,18 +30,43 @@ fn test_high_social_drive_causes_sadness() {
 fn test_high_hunger_causes_fear() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Manually set hunger to critically high
+    // Somebody who has been asking for food for days and not getting it. It is
+    // the going without that frightens, not the wanting: a drive can sit near
+    // its threshold all day while being answered every time it asks, and that
+    // is not being prevented from anything.
     if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
-        hunger_drive.value = 0.95; // Starving
+        hunger_drive.value = 0.95;
+        hunger_drive.denied_ticks = 400;
     }
+    agent.state.ticks_without_food = 4_000;
 
-    // Update emotions based on drives
     agent.update_emotions_from_drives();
 
-    // Should feel fear from survival threat
     let fear = agent.emotions.fear;
-    assert!(fear > 0.0, "Critical hunger should cause fear");
-    assert!(fear > 0.4, "Near-starvation should cause significant fear");
+    assert!(fear > 0.0, "Being kept from food should cause fear");
+    assert!(fear > 0.4, "Days of it should cause a good deal");
+}
+
+/// And wanting a thing that keeps arriving is not frightening.
+#[test]
+fn a_need_that_keeps_being_met_does_not_frighten_anybody() {
+    let mut agent = Agent::new(AgentConfig::default());
+
+    // High, but answered every time it asks, and the body in no trouble
+    if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
+        hunger_drive.value = 0.95;
+        hunger_drive.denied_ticks = 0;
+    }
+    agent.state.ticks_without_food = 0;
+
+    agent.update_emotions_from_drives();
+
+    assert!(
+        agent.emotions.fear < 0.1,
+        "somebody about to sit down to dinner is not afraid of anything; \
+         fear stood at {:.2}",
+        agent.emotions.fear
+    );
 }
 
 #[test]
@@ -221,13 +246,20 @@ fn test_no_anger_at_natural_death() {
 fn test_survival_drives_cause_fear_not_sadness() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Set survival drives critically high
+    // Kept from both, for days. It is the going without that frightens, not
+    // the wanting: a drive can sit near its threshold all day while being
+    // answered every time it asks, and that is not being prevented from
+    // anything.
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
+        hunger.denied_ticks = 400;
     }
     if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
         thirst.value = 0.9;
+        thirst.denied_ticks = 400;
     }
+    agent.state.ticks_without_food = 4_000;
+    agent.state.ticks_without_water = 3_000;
 
     agent.update_emotions_from_drives();
 
@@ -324,16 +356,21 @@ fn test_functional_grief_message() {
 fn test_multiple_drive_frustration_compounds() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Multiple high drives
+    // Several needs going unanswered at once
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.85;
+        hunger.denied_ticks = 400;
     }
     if let Some(social) = agent.drives.get_mut(DriveType::Social) {
         social.value = 0.8;
+        social.denied_ticks = 400;
     }
     if let Some(rest) = agent.drives.get_mut(DriveType::Rest) {
         rest.value = 0.75;
+        rest.denied_ticks = 400;
     }
+    agent.state.ticks_without_food = 4_000;
+    agent.state.energy = 10.0;
 
     agent.update_emotions_from_drives();
 

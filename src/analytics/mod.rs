@@ -322,6 +322,9 @@ impl Simulation {
         // Put back on the ground what came off it
         self.return_what_the_living_and_the_dead_leave();
 
+        // And feel about whatever is standing in the way
+        self.feel_about_what_stands_in_the_way();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -2495,6 +2498,100 @@ impl Simulation {
         }
     }
 
+    /// How far off something has to be before it stops being this agent's
+    /// problem
+    const CLOSE_ENOUGH_TO_WORRY_ABOUT: i32 = 10;
+
+    /// What share of what an agent has left counts as having got off lightly
+    const A_SCRATCH: f32 = 0.25;
+
+    /// Feel about whatever is standing between an agent and what it needs.
+    ///
+    /// The specification, in two questions. Does a thing threaten my ability
+    /// to satisfy my drives - and if so, can I fight it? Did a thing prevent
+    /// it - and if so, can I fight *that*? Where the answer is yes it comes
+    /// out as anger and the agent stands its ground; where it is no it comes
+    /// out as fear and the agent goes.
+    ///
+    /// `ThreatAssessment` has always turned coping potential into one or the
+    /// other, and `respond_to_threat` has always called it. What was missing
+    /// was anything to call `respond_to_threat` except the resolution of a
+    /// blow that had already landed: a wolf ten paces off and closing
+    /// produced no feeling at all until it bit somebody. Measured over three
+    /// worlds, mean fear ran at 0.01 to 0.06 and mean anger at exactly zero,
+    /// and not one agent in a hundred and seventy ever reached the 0.6 that
+    /// `should_flee` wants - so the branch of `generate_action` that lets an
+    /// agent run or fight never once fired.
+    fn feel_about_what_stands_in_the_way(&mut self) {
+        // What is out there, and how much of a match each one is
+        let hunters: Vec<((i32, i32), f32, String)> = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated)
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                if species.attack_damage <= 0.0 {
+                    return None;
+                }
+
+                // What it is worth in a fight, on the same scale an agent
+                // reckons itself on: a healthy body, and what it can do with it
+                let condition = (animal.current_health / species.health.max(1.0)).clamp(0.0, 1.0);
+                let menace = (species.attack_damage / 20.0).clamp(0.1, 2.0);
+
+                Some((
+                    (animal.position.0, animal.position.1),
+                    condition * menace,
+                    species.name.clone(),
+                ))
+            })
+            .collect();
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let (x, y, _) = agent.state.position;
+
+            // The worst thing within sight of this agent, if anything
+            let worst = hunters
+                .iter()
+                .filter_map(|((hx, hy), strength, what)| {
+                    let paces = (hx - x).abs().max((hy - y).abs());
+                    if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                        return None;
+                    }
+
+                    // A wolf across the field is not the wolf at your elbow.
+                    // Without this an agent felt the full weight of anything
+                    // within ten paces, and spent a third of its life angry at
+                    // something it could barely see.
+                    let nearness = 1.0
+                        - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
+
+                    Some((strength * nearness, what))
+                })
+                .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+            match worst {
+                Some((strength, what)) => {
+                    agent.appraise_what_is_there(
+                        strength,
+                        crate::agents::EmotionSource::Creature(what.clone()),
+                    );
+                }
+                None => {
+                    // Nothing is stalking this one, so whatever it was
+                    // frightened of has gone
+                    agent.emotions.nothing_is_stalking_me();
+                }
+            }
+        }
+    }
+
     /// How close something that would eat you counts as close
     const A_THREAT_NEARBY: i32 = 8;
 
@@ -4181,6 +4278,46 @@ impl Simulation {
                 // Check if target died from the attack
                 let target_alive = self.population.agents[target_index].body.is_alive()
                     && self.population.agents[target_index].state.health > 0.0;
+
+                // What each of them takes away from it.
+                //
+                // "If an agent has fought back and won, then fighting becomes
+                // a more attractive option. If an agent has fought back and
+                // lost, then running away becomes a more attractive option."
+                // The record is kept in the same place every other lesson is,
+                // and it moves what the agent reckons itself worth the next
+                // time something comes at it - see `Agent::own_strength`.
+                {
+                    use crate::agents::practices::Undertaking;
+
+                    let attacker_standing = self.population.agents[agent_index]
+                        .state
+                        .health;
+                    let target_standing = self.population.agents[target_index]
+                        .state
+                        .health;
+
+                    // The attacker has won if the other one is down, and is
+                    // losing if it is the worse off of the two
+                    let attacker_won = !target_alive || attacker_standing > target_standing;
+
+                    self.population.agents[agent_index]
+                        .lessons
+                        .record(Undertaking::Fighting, attacker_won);
+
+                    // And the one being set upon learns from standing there
+                    // just as much. Being alive at the end of it is the whole
+                    // of winning, from that side.
+                    if target_alive {
+                        self.population.agents[target_index]
+                            .lessons
+                            .record(Undertaking::Fighting, !attacker_won);
+                    } else {
+                        self.population.agents[target_index]
+                            .lessons
+                            .record(Undertaking::Fighting, false);
+                    }
+                }
 
                 let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
 
@@ -7316,6 +7453,23 @@ impl Simulation {
         }
 
         for (animal_id, agent_index, damage, fed) in strikes {
+            // Standing there while something bites you is a fight, and how it
+            // goes is what the agent takes away from it. This is where the
+            // record mostly comes from: agents seldom set upon one another,
+            // but the country is full of things that will try them.
+            {
+                use crate::agents::practices::Undertaking;
+
+                // Winning is driving the thing off with a scratch; losing is
+                // being mauled and living. Reckoning it as "did the blow kill
+                // me" made every survivor a winner, which is half a lesson:
+                // nobody ever learned that running was the better idea,
+                // because everyone who learned it was dead.
+                let agent = &mut self.population.agents[agent_index];
+                let came_off_well = damage < agent.state.health * Self::A_SCRATCH;
+                agent.lessons.record(Undertaking::Fighting, came_off_well);
+            }
+
             {
                 let agent = &mut self.population.agents[agent_index];
                 agent.take_damage(damage);
