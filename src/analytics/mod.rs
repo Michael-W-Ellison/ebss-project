@@ -913,6 +913,7 @@ impl Simulation {
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::SpreadMuck => Some(ActionType::Farming),
+            Action::Fish => Some(ActionType::Mining), // Taking something off the world
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)
@@ -1628,7 +1629,19 @@ impl Simulation {
             return (action, false);
         }
 
-        // PRIORITY 8: Go after an animal, for the meat or for the skin.
+        // PRIORITY 8: Stand in the river.
+        //
+        // Above hunting because a river in the run is a surer thing than a
+        // deer, and below farming because a field feeds the settlement every
+        // year and a catch feeds one person once. What makes it worth its own
+        // slot rather than folding into foraging is what comes off it: the
+        // guts of a fish are the only muck in the world that was not grown on
+        // the settlement's own ground.
+        if let Some(action) = self.fishing_action(agent, agent_position) {
+            return (action, false);
+        }
+
+        // PRIORITY 9: Go after an animal, for the meat or for the skin.
         //
         // Below cooking for the same reason gathering flax is: what an agent
         // already has in its pack is worth more than what it might catch.
@@ -1697,6 +1710,15 @@ impl Simulation {
 
     /// How much soft litter one unit of spoiled food amounts to
     const MUCK_PER_UNIT: f32 = 0.12;
+
+    /// And what a spoiled fish is worth, tipped on the same field.
+    ///
+    /// Several times a turnip, and the difference is not in the size of it.
+    /// Everything else in the pack was grown on the settlement's own ground
+    /// and is at best going back where it came from. The fish was grown at
+    /// sea. It is the only muck a farming people ever get that leaves the
+    /// country better off than it found it.
+    const MUCK_PER_FISH: f32 = 0.9;
 
     /// How much a field holds when it is full.
     ///
@@ -2195,6 +2217,130 @@ impl Simulation {
 
     /// How far a parent lets a child of its own get before going after it
     const CHILD_LEASH: i32 = 8;
+
+    /// How far an agent can work a reach from where it stands
+    const CAST: i32 = 1;
+
+    /// How far an agent will walk to get to water
+    const WORTH_WALKING_TO_WATER: i32 = 14;
+
+    /// A reach carrying this many fish is as good as fishing gets
+    const A_GOOD_REACH: f32 = 60.0;
+
+    /// What comes out of the water on a cast that works
+    const FISH_PER_CAST: u32 = 3;
+
+    /// What share of a fish is guts, heads and bone rather than meat.
+    ///
+    /// It goes to waste in the pack the moment the fish is caught, which is
+    /// what puts a fishing agent in the way of doing a field good without ever
+    /// meaning to.
+    const OFFAL_SHARE: f32 = 0.35;
+
+    /// The reach an agent standing here can work, if there is one.
+    fn reach_within_cast(
+        &self,
+        agent_position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| resource.resource_type.grows_in_water())
+            .filter(|resource| resource.amount > 0)
+            .map(|resource| resource.position)
+            .find(|position| {
+                (position.x - agent_position.0).abs() <= Self::CAST
+                    && (position.y - agent_position.1).abs() <= Self::CAST
+            })
+    }
+
+    /// Standing in a river after fish, and walking to a river worth standing in.
+    ///
+    /// A fishery is not another way of getting a meal. It is the only food a
+    /// settlement can take that the land does not pay for, because a fish is
+    /// grown at sea and comes up the river under its own power - so what is
+    /// left of it, put on a field, makes the country richer rather than
+    /// slower to run down. Everything else a settlement does with the ground
+    /// is at best a return of what it already took.
+    ///
+    /// Nobody is told this. An agent fishes because it is hungry and there is
+    /// water; the guts go into its pack as waste like anything else; and if it
+    /// has learned that tipping the pack on a field does the ground good, the
+    /// two habits meet on their own. What the agent keeps of that meeting is
+    /// its own record of whether fishing pays - a person who stood in an empty
+    /// winter river a dozen times stops going.
+    fn fishing_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+
+        // Somebody who has stood in the water a dozen times and come out with
+        // nothing stops going to the water.
+        if !agent.lessons.worth_trying(Undertaking::Fishing) {
+            return None;
+        }
+
+        // Fishing is what an agent does when it wants food or wants a store of
+        // it. Both, in a settlement beside a river, most of the year.
+        let hunger = agent
+            .drives
+            .get(DriveType::Hunger)
+            .map(|drive| drive.urgency())
+            .unwrap_or(0.0);
+        let sustenance = agent
+            .drives
+            .get(DriveType::Sustenance)
+            .map(|drive| drive.urgency())
+            .unwrap_or(0.0);
+
+        if hunger.max(sustenance) < Self::WORTH_GETTING_WET {
+            return None;
+        }
+
+        if self.reach_within_cast(agent_position).is_some() {
+            return Some(Action::Fish);
+        }
+
+        // Otherwise walk to the best water within reason: the thickest reach,
+        // discounted by how far it is. A river in the run is worth crossing a
+        // settlement for and an empty pool next door is not.
+        let (best, _) = self
+            .world
+            .resources
+            .iter()
+            .filter(|resource| resource.resource_type.grows_in_water())
+            .filter(|resource| resource.amount > 0)
+            .filter_map(|resource| {
+                let reach = (resource.position.x - agent_position.0)
+                    .abs()
+                    .max((resource.position.y - agent_position.1).abs());
+
+                if reach > Self::WORTH_WALKING_TO_WATER {
+                    return None;
+                }
+
+                let worth = resource.amount as f32 / (1.0 + reach as f32);
+                Some((resource.position, worth))
+            })
+            .fold(
+                None,
+                |best: Option<(crate::world::Position, f32)>, (position, worth)| {
+                    match best {
+                        Some((_, best_worth)) if best_worth >= worth => best,
+                        _ => Some((position, worth)),
+                    }
+                },
+            )?;
+
+        Some(Action::Move {
+            target: (best.x, best.y, agent_position.2),
+        })
+    }
+
+    /// How much an agent has to want food before it will go and stand in a river
+    const WORTH_GETTING_WET: f32 = 0.35;
 
     /// Leave on the ground what bodies have to leave.
     ///
@@ -6091,18 +6237,30 @@ impl Simulation {
                     .unwrap_or(0.0);
 
                 let mut tipped = 0;
+                let mut worth = 0.0;
                 {
                     let agent = &mut self.population.agents[agent_index];
                     for (item_id, quantity) in &refuse {
                         agent.inventory.remove_item(item_id, *quantity);
                         tipped += quantity;
+
+                        // A rotten fish is not a rotten turnip. The turnip is
+                        // giving back what this ground grew it with; the fish
+                        // is bringing in what the sea grew it with, and is
+                        // worth many times as much to a field on that account
+                        // alone.
+                        worth += *quantity as f32
+                            * if crate::world::Soil::came_out_of_the_water(item_id) {
+                                Self::MUCK_PER_FISH
+                            } else {
+                                Self::MUCK_PER_UNIT
+                            };
                     }
                 }
 
                 // Spoiled food is soft matter and goes quickly, given wet ground
                 if let Some(tile) = self.world.grid.get_tile_mut(&tile_position) {
-                    tile.soil
-                        .add_leaf_litter(tipped as f32 * Self::MUCK_PER_UNIT);
+                    tile.soil.add_leaf_litter(worth);
                 }
 
                 let after = self
@@ -6132,6 +6290,105 @@ impl Simulation {
                 ActionResult::success()
                     .with_energy_cost(3.0)
                     .with_message(format!("Spread {} of muck on the ground", tipped))
+            },
+
+            Action::Fish => {
+                // Whether it worked is recorded by `Agent::learn_from`, off
+                // this arm's own success, along with every other undertaking.
+                let agent_position = self.population.agents[agent_index].state.position;
+
+                let Some(reach) = self.reach_within_cast(agent_position) else {
+                    return ActionResult::failure("No water in reach".to_string());
+                };
+
+                // What the agent brings to it. A rod is worth having and a
+                // practised hand is worth more, but a river in the run will
+                // feed somebody who has neither.
+                let skill = self.population.agents[agent_index]
+                    .skills
+                    .get_skill_if_exists(crate::agents::SkillType::Fishing)
+                    .map(|skill| skill.level)
+                    .unwrap_or(-10) as f32;
+                let rod = self.population.agents[agent_index]
+                    .inventory
+                    .get_all_items()
+                    .values()
+                    .any(|item| {
+                        item.quantity > 0 && item.item_id.to_lowercase().contains("rod")
+                    });
+
+                let standing = self
+                    .world
+                    .resources
+                    .iter()
+                    .find(|resource| resource.position == reach)
+                    .map(|resource| resource.amount)
+                    .unwrap_or(0);
+
+                if standing == 0 {
+                    return ActionResult::failure("The reach is empty".to_string());
+                }
+
+                // How thick the water is decides most of it. A run is a run:
+                // anybody standing in it comes out with something, which is
+                // exactly why a fishery is worth building a life beside and a
+                // deer is not.
+                let thickness = (standing as f32 / Self::A_GOOD_REACH).clamp(0.0, 1.0);
+                let hand = (skill / 10.0).clamp(0.0, 0.5) + if rod { 0.2 } else { 0.0 };
+                let odds = (0.35 + 0.4 * thickness + hand).clamp(0.0, 0.95);
+
+                if rng.gen::<f32>() > odds {
+                    return ActionResult::failure("Nothing took".to_string());
+                }
+
+                let caught = Self::FISH_PER_CAST + if rod { 1 } else { 0 };
+
+                let taken = {
+                    let resource = self
+                        .world
+                        .resources
+                        .iter_mut()
+                        .find(|resource| resource.position == reach);
+                    match resource {
+                        Some(resource) => {
+                            let taken = caught.min(resource.amount);
+                            resource.amount -= taken;
+                            taken
+                        }
+                        None => 0,
+                    }
+                };
+
+                if taken == 0 {
+                    return ActionResult::failure("The reach is empty".to_string());
+                }
+
+                // A fish is not all meat. The guts and heads go straight to
+                // waste, and that waste is the richest thing a farming people
+                // beside a river ever get their hands on - it came out of the
+                // sea rather than out of their own fields.
+                let food_data = self
+                    .food_database
+                    .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_tick);
+
+                let agent = &mut self.population.agents[agent_index];
+                let mut catch =
+                    crate::agents::InventoryItem::new_with_weight("fish".to_string(), taken, 0.8);
+                catch.food_data = food_data;
+                agent.inventory.add_item(catch);
+                agent.state.waste_carried +=
+                    taken as f32 * crate::world::Soil::NUTRIENT_PER_FISH * Self::OFFAL_SHARE;
+                agent
+                    .skills
+                    .gain_experience(crate::agents::SkillType::Fishing, 12);
+
+                debug!("Agent {} took {} fish from {:?}", agent.id, taken, reach);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Hunger, -0.15)
+                    .with_drive_change(DriveType::Sustenance, -0.2)
+                    .with_energy_cost(5.0)
+                    .with_message(format!("Took {} fish out of the water", taken))
             },
 
             Action::Wait => {

@@ -216,6 +216,8 @@ pub enum Action {
     TillSoil,
     /// Tip whatever is spoiling in the pack onto the ground here
     SpreadMuck,
+    /// Take what the run is carrying, from the reach the agent is standing at
+    Fish,
     /// Wait/idle
     Wait,
 }
@@ -239,6 +241,7 @@ impl Action {
             Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
+            Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering

@@ -89,6 +89,61 @@ impl Soil {
     pub const RESIDUE_PER_UNIT_GROWN: f32 =
         Self::NUTRIENT_PER_UNIT_GROWN * 0.5 / Self::KEPT_FROM_ROT;
 
+    /// What one fish is worth to the ground it is buried in.
+    ///
+    /// This is the number that makes a fishery different in kind from every
+    /// other food a settlement has. Everything else on the land is a return:
+    /// a crop meal gives back some part of what growing the crop took out of
+    /// that same country, and rot takes its cut on the way, so the best the
+    /// land can do is lose slowly. A fish was not grown here. It was grown at
+    /// sea and fed on a whole catchment, and it walked into the settlement's
+    /// reach on its own. Burying it in a field is the one way the country a
+    /// settlement farms gets richer than it was.
+    ///
+    /// Set at forty times what a unit of crop returns, which is about what a
+    /// fish is against a turnip and is why people who had rivers buried fish
+    /// with the seed corn long before anybody could say what nitrogen was.
+    pub const NUTRIENT_PER_FISH: f32 = Self::WASTE_PER_SPOILED * 40.0;
+
+    /// What is left of a fish, eaten, for the ground to have.
+    ///
+    /// A third of it went as guts at the waterside before anybody carried it
+    /// home, and a body keeps a quarter of what it eats. This is the rest.
+    pub const WASTE_PER_FISH_EATEN: f32 = Self::NUTRIENT_PER_FISH * 0.4;
+
+    /// And of one that turned before anybody got to it.
+    ///
+    /// Nothing took a share on the way except the guts, so almost all of what
+    /// the sea put into it is still there. A glut of fish nobody could eat or
+    /// dry in time is the single richest thing that ever lands on a field.
+    pub const WASTE_PER_FISH_SPOILED: f32 = Self::NUTRIENT_PER_FISH * 0.65;
+
+    /// Whether a thing in somebody's pack came out of the water.
+    ///
+    /// Matched on the name, because that is all an untracked stack carries.
+    pub fn came_out_of_the_water(item_id: &str) -> bool {
+        let name = item_id.to_lowercase();
+        name.contains("fish") || name.contains("salmon") || name.contains("trout")
+    }
+
+    /// What one unit of this, eaten, leaves for the ground.
+    pub fn waste_from_eating(item_id: &str) -> f32 {
+        if Self::came_out_of_the_water(item_id) {
+            Self::WASTE_PER_FISH_EATEN
+        } else {
+            Self::WASTE_PER_MEAL
+        }
+    }
+
+    /// What one unit of this, spoiled and never eaten, leaves for the ground.
+    pub fn waste_from_spoilage(item_id: &str) -> f32 {
+        if Self::came_out_of_the_water(item_id) {
+            Self::WASTE_PER_FISH_SPOILED
+        } else {
+            Self::WASTE_PER_SPOILED
+        }
+    }
+
     /// The ground as it starts, before anything has lived or died on it.
     ///
     /// River silt and marsh are rich, mountain and sand are all but bare, and

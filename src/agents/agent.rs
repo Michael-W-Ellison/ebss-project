@@ -703,14 +703,20 @@ impl AgentState {
     /// Eat food and restore energy
     pub fn eat(&mut self, current_tick: u32, energy_restored: f32) {
         self.energy = (self.energy + energy_restored).min(100.0);
-        self.took_a_meal(current_tick);
+        self.took_a_meal(current_tick, crate::world::Soil::WASTE_PER_MEAL);
     }
 
     /// Record a meal: the clocks reset, and the body has something to pass.
-    pub fn took_a_meal(&mut self, current_tick: u32) {
+    ///
+    /// What it has to pass depends on what went in. A turnip gives the ground
+    /// back some part of what growing that turnip took out of it, so a meal of
+    /// turnips is at best a slow loss. A fish was grown at sea, so a meal of
+    /// fish is the ground gaining something it never had - which is the whole
+    /// reason a people beside a river can farm the same fields for ever.
+    pub fn took_a_meal(&mut self, current_tick: u32, waste: f32) {
         self.last_ate_tick = current_tick;
         self.ticks_without_food = 0;
-        self.waste_carried += crate::world::Soil::WASTE_PER_MEAL;
+        self.waste_carried += waste;
     }
 
     /// Leave what the body has to leave, and report how much.
@@ -1587,8 +1593,8 @@ impl Agent {
             // nothing, which is half of why the ground never got anything
             // back.
             if let Some(item) = self.inventory.items.remove(&item_id) {
-                self.state.waste_carried +=
-                    item.quantity as f32 * crate::world::Soil::WASTE_PER_SPOILED;
+                self.state.waste_carried += item.quantity as f32
+                    * crate::world::Soil::waste_from_spoilage(&item_id);
             }
         }
     }
@@ -2636,6 +2642,7 @@ impl Agent {
 
         let undertaking = match action {
             Action::Hunt { .. } => Undertaking::Hunting,
+            Action::Fish => Undertaking::Fishing,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil | Action::SpreadMuck => Undertaking::Farming,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
@@ -3539,7 +3546,10 @@ impl Agent {
                 self.inventory.remove_item(item_id, 1);
                 let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
                 self.nutrition.consume(&flat_nutrition);
-                self.state.took_a_meal(current_tick);
+                self.state.took_a_meal(
+                    current_tick,
+                    crate::world::Soil::waste_from_eating(item_id),
+                );
                 if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
                     hunger.decrease(0.2);
                 }
@@ -3577,7 +3587,10 @@ impl Agent {
         }
 
         // Reset starvation timer, and note what the body will have to pass
-        self.state.took_a_meal(current_tick);
+        self.state.took_a_meal(
+            current_tick,
+            crate::world::Soil::waste_from_eating(item_id),
+        );
 
         // Satisfy hunger based on total nutrition
         let hunger_reduction = nutrition.total() / 100.0 * 0.3;

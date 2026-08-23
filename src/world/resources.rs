@@ -2,6 +2,7 @@
 //! Resource nodes and harvestable materials.
 
 use serde::{Deserialize, Serialize};
+use crate::environment::seasons::Season;
 use crate::world::{Position, Soil, TerrainType};
 
 /// Types of resources
@@ -285,6 +286,21 @@ impl ResourceType {
         )
     }
 
+    /// Whether this grows in water rather than out of the ground it sits beside.
+    ///
+    /// A fish is not grown from the bank it is caught on. It is grown in the
+    /// sea and in the whole catchment above, and it swims into a settlement's
+    /// reach under its own power. That makes a fishery the one food a
+    /// settlement can take without the land paying for it - and, once the
+    /// leavings go on a field, the one food that brings the land something
+    /// from outside.
+    ///
+    /// Before this, fish drew nutrient out of the riverbank exactly as a crop
+    /// draws it out of a field, which had the ground feeding the river.
+    pub fn grows_in_water(&self) -> bool {
+        matches!(self, ResourceType::Fish)
+    }
+
     /// Check if this is an animal product (requires animals)
     pub fn is_animal_product(&self) -> bool {
         matches!(
@@ -510,6 +526,69 @@ impl ResourceNode {
         }
     }
 
+    /// What the run brings into a reach of water, per pass of the resource
+    /// tick (one pass every ten ticks, as `water_inflow` is also reckoned).
+    ///
+    /// Fish do not grow back the way a berry patch grows back. A berry patch
+    /// regrows out of what is left of itself, in the ground it stands in, so
+    /// fishing a reach out would end it the way harvesting a field to nothing
+    /// ends the field. Fish arrive: they are spawned upstream and fed at sea,
+    /// and they come back up the rivers under their own power whatever was
+    /// taken out of this particular pool last year.
+    ///
+    /// So the run does not depend on how many are left here. That is what
+    /// makes a fishery worth having and what makes it nearly inexhaustible:
+    /// it is fed from outside the country a settlement can see, by water that
+    /// is not the settlement's to use up. What bounds a catch is the season,
+    /// the reach, and how many hours somebody is willing to stand in a river.
+    ///
+    /// The runs are the point of the year in a fishing people's calendar.
+    /// Spring and autumn are heavy; high summer is thin because the run is
+    /// past; winter is thinnest of all, and a frozen river gives up almost
+    /// nothing.
+    pub fn fish_run(&self, terrain: TerrainType, season: Season, freezing: bool) -> f32 {
+        if !self.resource_type.grows_in_water() {
+            return 0.0;
+        }
+
+        // How much water this reach connects to. A river carries a run; a
+        // beach gets what comes along the shore; a pond gets whatever
+        // wandered in.
+        let reach = match terrain {
+            TerrainType::Water | TerrainType::Riverbank => 1.0,
+            TerrainType::Beach => 0.7,
+            TerrainType::Wetland => 0.4,
+            _ => 0.2,
+        };
+
+        // The run itself
+        let run = match season {
+            Season::Spring => 1.0,
+            Season::Fall => 0.85,
+            Season::Summer => 0.4,
+            Season::Winter => 0.15,
+        };
+
+        let flow = Self::FISH_PER_PASS_AT_FULL_RUN * reach * run;
+
+        if freezing {
+            flow * 0.2
+        } else {
+            flow
+        }
+    }
+
+    /// What a full spring run brings into one reach of river in one pass.
+    ///
+    /// Set so that a reach fished down to nothing is full again inside a year,
+    /// most of it arriving in the two runs: a spring season of twenty-four days
+    /// is twenty-eight or nine passes, which at this rate is a good half of
+    /// what a reach holds. That is the shape of the thing - a river is empty
+    /// enough to be worth nobody's time for most of the year and thick with
+    /// fish twice in it, and a people who live on one arrange the rest of what
+    /// they do around those two stretches.
+    const FISH_PER_PASS_AT_FULL_RUN: f32 = 1.0;
+
     /// Regenerate resources based on climate and weather conditions
     /// Returns the amount regenerated
     pub fn regenerate(&mut self, temperature: f32, precipitation: f32, season_modifier: f32) -> u32 {
@@ -716,7 +795,10 @@ impl ResourceNode {
         // What grew, came out of the ground - and most of the plant stays in
         // the ground it grew in. Roots, stalk and leaf go back into this same
         // tile; only the part somebody carries away is gone from it.
-        if actual_regen > 0 {
+        //
+        // What grew in the water is a different matter: it takes nothing from
+        // the bank and leaves nothing on it.
+        if actual_regen > 0 && !self.resource_type.grows_in_water() {
             soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
             soil.add_leaf_litter(actual_regen as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
         }

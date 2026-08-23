@@ -126,6 +126,8 @@ impl Practices {
 pub enum Undertaking {
     /// Going after an animal
     Hunting,
+    /// Standing in a river after fish
+    Fishing,
     /// Putting food over a fire
     Cooking,
     /// Breaking ground, sowing, spreading muck

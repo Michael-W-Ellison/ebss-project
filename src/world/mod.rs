@@ -189,7 +189,12 @@ impl Default for ResourceConfig {
 
             // Gatherable
             honey_locations: 4,
-            fish_areas: 5,
+            // A river is a river along its length, not in five places. At five
+            // areas the generator put six or seven reaches of fish on three
+            // hundred and seventy-odd water tiles - too thin for anybody to
+            // build a living on, and two of every three nodes were lost anyway
+            // to cluster offsets landing on dry ground.
+            fish_areas: 14,
 
             // Use naturalistic spawning by default
             use_naturalistic_spawning: true,
@@ -1281,6 +1286,17 @@ impl World {
                 let inflow =
                     resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
                 resource.take_inflow(inflow);
+                continue;
+            }
+
+            // Fish come up the river rather than growing back out of what is
+            // left of them. What arrives is what the season is running, not
+            // what last year's fishing left behind, so a reach that was taken
+            // down to nothing fills again - see `fish_run`.
+            if resource.resource_type.grows_in_water() {
+                let run =
+                    resource.fish_run(terrain_type, current_season, temperature < 0.0);
+                resource.take_inflow(run);
                 continue;
             }
 
