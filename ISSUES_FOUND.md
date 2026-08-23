@@ -108,7 +108,7 @@ cent of it that anybody farms is.
 spoils in a pack is deleted outright by `tick_food_spoilage` rather than
 falling to the ground as litter. The single return path is muck-spreading,
 which needs an agent to be carrying rotting food, standing on a field, and to
-have learned the practice.
+have learned the practice. **Since fixed** — see the four return paths below.
 
 Worth knowing: **nobody has ever died of hunger.** `is_starving()` needs 1,440
 ticks without food, health loss 4,320 and death 10,080 — most of a lifetime.
@@ -178,13 +178,57 @@ started. The soil economics are untouched and were always the binding
 constraint; breeding-on-a-surplus and migration bought a settlement of ninety a
 soft landing and buy a settlement of two hundred nothing.
 
-What remains, and it is the whole of it: the ground is still mined and nothing
-puts nutrient back at the rate it is taken. Every measure that helped did so by
-holding the population down, and none of them touched the constraint. A
-settlement of two hundred works its ground out in thirty thousand ticks whatever
-else is true, so the next thing worth doing is a return path for nutrient -
-agents putting waste, bone and bedding back on the fields, or abandoning spent
-ground and letting it lie - rather than another brake on the people.
+**And then the ground got a way back.** Four return paths went in against this:
+what a body passes after a meal, what spoils in somebody's pack falling to the
+ground rather than being deleted, what a body is when it stops, and the roots,
+stalk and leaf a plant leaves in the tile it grew in.
+
+The first three did essentially nothing. Three worlds to thirty thousand ticks
+with all of them in came out at mean farmed fertility 0.058, against 0.055 with
+no return path at all. The reason is spatial and obvious in hindsight: what
+goes through a person comes out where the person is standing, and agents range
+over the whole map. That is not a fault to correct. It is the fact that makes
+carting muck onto a field worth an agent's time, and it is why the one return
+path that already existed had to be a learned practice.
+
+The fourth was decisive, and was the one missing longest. The model had been
+treating every plant as though the whole of it were carried off. Most of a
+plant never leaves the field: only the grain does. Four worlds to thirty
+thousand ticks with crop residue staying put:
+
+| Measure | Before any of it | Survival pressure | Healthy newborns | Agent-side returns | Crop residue too |
+| --- | --- | --- | --- | --- | --- |
+| Worlds run | 12 | 6 | 6 | 3 | 4 |
+| Still inhabited | 11 | 6 | 6 | 3 | 4 |
+| People at the end | 77.7 | 76.0 | 78.2 | 53.0 | **154.0** |
+| Highest reached | 141.3 | 93.2 | 211.5 | 212.3 | 226.2 |
+| End over peak | 0.55 | 0.82 | 0.37 | 0.25 | **0.69** |
+| Fertility of the farmed ground | 0.025 | 0.179 | 0.055 | 0.058 | **0.268** |
+
+The two runs do not overlap on either measure. Every world with residue ended
+between 140 and 176 people on ground between 0.175 and 0.457 fertility; every
+world without ended between 25 and 107 on ground between 0.031 and 0.103. Map
+litter now holds near 430 rather than draining from 1,035 to 368.
+
+What matters about the last column is the peak. Every earlier measure that
+improved end-over-peak did it by holding the population down — the survival
+pressure took the peak from 141 to 93 to buy its 0.82. This one leaves the peak
+where it was, at 226 against 211, and the settlement holds two thirds of it
+instead of a third. The population is not being braked; the ground under it is
+no longer collapsing.
+
+It is not a closed loop and cannot be. Rot keeps three fifths of what it works
+on and loses the rest, so every turn of the cycle is smaller than the last, and
+farmed fertility is still falling at thirty thousand ticks in three of the four
+worlds. What changed is the slope. A settlement that overshoots now settles
+back onto ground that can still carry it, rather than sliding to the level
+where hardly anybody lives there.
+
+What remains: the ground still runs down, only slowly enough that a settlement
+outlives the run rather than the run outliving the settlement. The other two
+sharpeners above are untouched — a spent field still counts as a field, so a
+settlement still will not break new ground while exhausted ones sit inside its
+radius, and nobody has still ever died of hunger.
 
 ### 4. Winter is not cold: the tile temperature is frozen at first touch
 

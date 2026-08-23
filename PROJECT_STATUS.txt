@@ -55,8 +55,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,204 tests across the workspace:
-  1,167 library tests
+  1,212 tests across the workspace:
+  1,175 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -138,6 +138,11 @@ Verified as reached by Simulation::tick():
   Land            every tile carries soil: nutrients, and two pools of dead
                   matter waiting to become more of it. What rots and how fast
                   depends on how dense it was alive and how wet the ground is
+  Nutrient return four paths put matter back where growing took it out: what a
+                  body passes after a meal, what spoils in a pack, what a body
+                  is when it stops, and the roots, stalk and leaf a plant
+                  leaves in the tile it grew in. Rot loses two fifths of what
+                  it works on, so the loop turns and loses on every turn
   Flora           about two hundred plants stand in a new world, each growing
                   on whichever of water, light and nutrient it has least of;
                   standing foliage shades what is under it and sheds leaf fall
@@ -228,11 +233,13 @@ KNOWN GAPS IN BEHAVIOUR
   - Fauna is stable in most worlds but not all. Over forty worlds, predators
     are still alive at the end in thirty-six and herds stay bounded in
     thirty-three; the rest lose their predators and run to the population cap.
-  - A settlement is not certain to last, though five of five were still there
-    at twenty thousand ticks with soil in the model. They run to between ninety
-    and a hundred and ninety people, work the soil from about 0.48 fertility
-    down towards 0.2, and fall back as the crop fails - which is the pressure
-    that makes muck-spreading worth discovering.
+  - A settlement lasts, and now settles rather than slides. Four of four were
+    still there at thirty thousand ticks, running to a peak of 226 and holding
+    154 of it, on ground worked from about 0.55 fertility down to 0.27. Before
+    the ground had a way back they peaked at 212 and ended at 53 on 0.058. The
+    soil still runs down - rot loses two fifths of everything it works on, so
+    fertility is falling in three of the four worlds at the end - but slowly
+    enough that the settlement outlives the run.
   - Agent fear is computed from unmet hunger, thirst and rest, so it sits
     high whenever an agent is between meals. Fleeing is gated on fear, which
     makes flight a common state rather than a response to danger.
@@ -252,14 +259,15 @@ SUGGESTED NEXT STEPS
      for those things sit high because nothing in the world answers them:
      thirty agents at eight thousand ticks held no tools and nothing fine
      between them. See ISSUES_FOUND.md #5.
-  4. Give the ground a way back. Every measure put in against overshoot so far
-     works by holding the population down, and none touches the constraint:
-     growing food takes nutrient out of the ground, regrowth is proportional to
-     what is left, and recovery runs about sixty-five times slower than
-     depletion. Six worlds now reach a mean peak of 211 and end at 78 on ground
-     worked down to 0.055. What is wanted is a return path - waste and bedding
-     going back onto fields, or spent ground being abandoned to lie fallow -
-     rather than another brake on the people. See ISSUES_FOUND.md #3.
+  4. Let a settlement break new ground. The nutrient return has taken the
+     overshoot-and-slide off the table, but two of the three things that
+     sharpened it are untouched. A spent field still counts as a field:
+     fields_within counts cultivated tiles rather than producing ones, and a
+     tile carrying a resource node cannot be tilled again, so exhausted fields
+     inside the walking radius stop a settlement opening new ones for good
+     while the map around it is still fertile. And nobody has ever died of
+     hunger - is_starving needs 1,440 ticks without food and death 10,080,
+     which is most of a life. See ISSUES_FOUND.md #3.
   5. Decide whether plugins/minecraft_survival should exist at all: it now
      compiles and its tests pass, but it duplicates
      src/environment/minecraft_survival.rs. Either merge what is unique to it

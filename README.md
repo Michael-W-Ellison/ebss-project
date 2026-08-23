@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
-across 183 source files, with 1,167 library tests.
+across 197 source files, with 1,175 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,204 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,212 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet see each other
 or hear anything. See
@@ -61,6 +61,15 @@ original specifications.
 - ✅ Learned practices: nobody tells an agent that muck does a field good. It
   tries it, watches what happens, keeps or drops the idea, and the neighbours
   who saw it take something from that too
+- ✅ Nutrient goes back into the ground as well as coming out of it: what a body
+  passes, what spoils in a pack, what a body is when it stops, and the roots
+  and stalk a plant leaves in the tile it grew in. Rot loses two fifths of what
+  it works on, so the loop turns and loses on every turn — but a settlement now
+  holds two thirds of its peak on ground at 0.27 fertility, where before it
+  kept a quarter of it on ground at 0.058. The three that go through people are
+  worth almost nothing on their own, because what goes through a person comes
+  out wherever the person happens to be standing — which is exactly why carting
+  muck onto a field is a thing worth learning
 - ✅ Family: parents keep their children close and go to one that has strayed or
   that something is stalking; children learn skills by watching the adults
   around them, and most from their own parents

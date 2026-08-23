@@ -143,8 +143,12 @@ Verified reachable from `Simulation::tick()`.
 - Around two hundred plants standing in a new world, each growing on whichever
   of water, light and nutrient it has least of. Foliage shades what is under it
   and sheds leaf fall onto the ground beneath, so a wood feeds itself
-- Growth draws the ground down, so a settlement that farms hard works its soil
-  from about 0.48 fertility towards 0.2 over twenty thousand ticks
+- Growth draws the ground down, and four things put matter back: what a body
+  passes after a meal, what spoils in somebody's pack, what a body is when it
+  stops, and — much the largest — the roots, stalk and leaf a plant leaves in
+  the tile it grew in, since only the part somebody carries away leaves the
+  field. Rot keeps three fifths of what it works on and loses the rest, so the
+  loop turns and loses on every turn
 - Agents break open grass into fields and sow them. A field gets at two and a
   half times as much of what the soil holds and carries a heavier crop; it does
   not grow anything faster than that plant's kind can grow
@@ -539,6 +543,61 @@ sixty-five times slower than depletion, and nothing puts nutrient back. Curing
 the infant mortality removed a brake nobody had intended, and what it revealed
 was that the intended brakes are calibrated for a population half the size.
 
+**Then the ground got a way back, and the shape changed.** Four return paths
+went in: what a body passes after a meal, what spoils in a pack falling to the
+ground instead of being deleted, what a body is when it stops, and the roots,
+stalk and leaf a plant leaves in the tile it grew in.
+
+The three agent-side paths made no measurable difference — three worlds to
+thirty thousand ticks came out at mean farmed fertility 0.058 against the 0.055
+of no return path at all. What goes through a person comes out where the person
+is standing, and agents range over the whole map, so the matter lands
+everywhere except the fields. That is why muck-spreading has to be a practice
+somebody learns rather than something that happens by itself.
+
+The fourth was the one that mattered, and was missing longest: the model had
+been treating every plant as though all of it were carried off, when in fact
+only the grain leaves the field. Four worlds, thirty thousand ticks:
+
+| Measure | Before any of it | Survival pressure | Healthy newborns | Agent-side returns | Crop residue too |
+| --- | --- | --- | --- | --- | --- |
+| Worlds run | 12 | 6 | 6 | 3 | 4 |
+| Still inhabited | 11 | 6 | 6 | 3 | 4 |
+| People at the end | 77.7 | 76.0 | 78.2 | 53.0 | **154.0** |
+| Highest the population reached | 141.3 | 93.2 | 211.5 | 212.3 | 226.2 |
+| End over peak | 0.55 | 0.82 | 0.37 | 0.25 | **0.69** |
+| Fertility of the farmed ground | 0.025 | 0.179 | 0.055 | 0.058 | **0.268** |
+
+The last two columns do not overlap on either measure: every world with residue
+ended between 140 and 176 people on ground between 0.175 and 0.457, every world
+without between 25 and 107 on ground between 0.031 and 0.103.
+
+The peak is the part worth reading. Every earlier measure that improved
+end-over-peak did it by holding the population down — the survival pressure
+bought its 0.82 by taking the peak from 141 to 93. This one leaves the peak
+where it was and changes what happens after it: the settlement keeps two thirds
+of its highest number instead of a third. The best of the four worlds, sampled
+the way the decline table further down is sampled — set the two side by side and
+the difference is the whole of this section:
+
+| tick | people | standing crop | fertility of the farmed ground |
+| --- | --- | --- | --- |
+| 0 | 12 | 1,560 | 0.541 |
+| 10,000 | 32 | 4,601 | 0.559 |
+| 20,000 | 134 | 4,502 | 0.491 |
+| 25,000 | 170 | 4,264 | 0.455 |
+| 30,000 | 140 | 4,306 | 0.457 |
+
+That one barely dips. The worst of the four still ended at 0.175 with 148 people
+on 1,134 units of standing crop, which is a working settlement rather than the
+twenty-four units and eighty-one people the decline table ends on.
+
+It is not a closed loop and is not meant to be. Rot keeps three fifths of what
+it works on, so every turn is smaller than the last, and farmed fertility is
+still falling at thirty thousand ticks in three worlds of the four. What
+changed is the slope, and with it the shape: a settlement that overshoots now
+comes back onto ground that can still carry it.
+
 **Why a settlement that overshoots did not settle back.** Six worlds traced to
 thirty thousand ticks, sampling the ground the settlement actually farms rather
 than the map as a whole.
@@ -576,9 +635,10 @@ Two things sharpen it. A spent field still counts as a field — `fields_within`
 counts cultivated tiles rather than producing ones, and a tile carrying a
 resource node cannot be tilled again — so six exhausted fields stop a
 settlement breaking new ground for good, while the map around it averages 0.358
-fertility against the 0.025 it has left itself. And nutrient only ever leaves:
-food eaten is gone from the world, food that spoils in a pack is deleted rather
-than dropped, and the one return path is muck-spreading.
+fertility against the 0.025 it has left itself. And nutrient only ever left:
+food eaten was gone from the world, food that spoiled in a pack was deleted
+rather than dropped, and the one return path was muck-spreading. That last is
+the one since addressed, in the four return paths described above.
 
 Nobody has ever died of hunger. `is_starving()` needs 1,440 ticks without food,
 health loss 4,320 and death 10,080, which is most of a life. Attributing every
@@ -678,7 +738,7 @@ settlement now runs at 90-96.
 
 ## Test coverage
 
-1,167 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,175 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 one ignored long-run test (`a_settlement_lasts_thirty_thousand_ticks`). All
 pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
