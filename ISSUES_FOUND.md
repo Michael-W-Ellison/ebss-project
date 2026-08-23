@@ -361,6 +361,15 @@ the world has no path to satisfy them. That is a gap in crafting and
 tool-making, not in the drive system, and it was invisible while every drive
 sat at its ceiling for reasons of its own.
 
+**And the pegging is gone, though the gap is not.** The drive hierarchy puts
+each drive behind the one it depends on — Preparedness cannot build until
+Hunger and Thirst are reliably answered, Utility until Construction or
+Industry is — so a drive the world cannot satisfy no longer sits at 1.00
+shouting over everything else. Luxury fell from above its threshold 98.9% of
+the time to 0.5%, Preparedness from 98.2% to 0%, Utility from 84.6% to 0.6%.
+The world still has no tools and nothing decorative in it; what changed is
+that the absence no longer drowns out the drives that *can* be answered.
+
 ### 6. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
@@ -388,35 +397,14 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 8. Fear is a hunger signal, and now it is no signal at all
-
-`calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
-rest. When that was written hunger saturated between meals, so fear sat around
-0.8 most of the time and `should_flee`, which triggers above 0.6, read as
-firing in ordinary circumstances rather than in response to a threat.
-
-**The wiring is unchanged and the symptom has inverted.** Fear is still
-computed from the survival drives, but the survival drives are answered now, so
-they rarely pass the 0.7 the fear calculation starts at. Measured over three
-worlds of twenty-five agents to six thousand ticks: mean fear 0.01 to 0.06,
-**two of a hundred and seventy agents above 0.5**, and not one at any sample
-above the 0.6 that `should_flee` wants. Mean anger is 0.00.
-
-So the emotional override in `generate_action` — the branch that lets an agent
-run or fight instead of doing what its drives say — never fires. An emotional
-model that reported the wrong thing has become one that reports nothing. The
-fix is the same either way: fear should come from what is in front of the
-agent, and hunger should press through the hunger drive, which is what that
-drive is for.
-
-### 9. Agents still cannot hear anything
+### 8. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 10. Zoning and territory are never established
+### 9. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -424,7 +412,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 11. Agents carry food they will never eat
+### 10. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -434,7 +422,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 12. Personality exists and reaches the drives, and still decides nothing
+### 11. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -529,26 +517,34 @@ The three things that would fix it, in order of what they buy:
    I said this was "one hook in `DriveState`, and it is what turns sixty labels
    into sixty people". That was wrong, and the reason is worth writing down.
 
-   **What blocks it is the action-selection ladder, not the drives.**
-   `generate_non_emotional_action` is thirteen fixed priorities, and drives are
-   consulted only at the thirteenth, after survival, protection, clothing,
-   cooking, muck, farming, fishing, hunting, percepts, plans and goals have all
-   had their turn. Seventy-nine per cent of everything a settlement does is
-   `Foraging`, and almost all of it comes off that ladder rather than out of a
-   drive — so leaning on the Industry drive barely moves it.
+   **What blocked it was the action-selection ladder, not the drives, and
+   that has since been rebuilt.** `generate_non_emotional_action` used to be
+   thirteen fixed priorities with drives consulted only at the thirteenth,
+   after survival, protection, clothing, cooking, muck, farming, fishing,
+   hunting, percepts, plans and goals had all had their turn. Seventy-nine per
+   cent of everything a settlement did was `Foraging`, almost all of it off
+   that ladder rather than out of a drive, so leaning on the Industry drive
+   barely moved it.
 
-   And when the thirteenth priority *is* reached, three drives take it every
-   time. Measured over four thousand agent-samples, Luxury stands above its
-   threshold **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** —
-   because nothing in the world can answer them (issue #5). Construction is
-   above its threshold 12.7% of the time and Social 38.1%, so they are not
-   quiet; they simply never win, and `Action::Build` and `Action::Socialize`
-   are chosen **zero** times in 777 agent-lives.
+   And when the thirteenth priority *was* reached, three drives took it every
+   time. Over four thousand agent-samples, Luxury stood above its threshold
+   **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** — because
+   nothing in the world could answer them (issue #5). Construction was above
+   its threshold 12.7% of the time and Social 38.1%, so they were not quiet;
+   they simply never won, and `Action::Build` and `Action::Socialize` were
+   chosen **zero** times in 777 agent-lives.
 
-   So the order of work is the other way round from what I assumed: the pegged
-   drives have to be answerable and the ladder has to let drives decide more
-   than a thirteenth of the time, and only then does a personality have room to
-   show. The hook is in and correct; it is waiting on both.
+   The drive hierarchy inverted that ladder: the drives are now ranked first
+   and the highest-ranked one that this agent can actually answer chooses the
+   action, with the old fixed order kept only as a fallback for the drives
+   that have no answer. Foraging fell from 79% of everything to 25%, Luxury
+   from 98.9% pegged to 0.5%, Preparedness from 98.2% to 0%, Utility from
+   84.6% to 0.6%, and `Action::Build` and `Action::Socialize` became non-zero
+   for the first time.
+
+   So the hook has the room it was waiting for, and whether a personality now
+   tells has not been re-measured since. The fourteen-world reading above was
+   taken against the old ladder and should not be quoted as the current state.
 
 3. **Give agents a reason to need each other.** Everyone still does
    everything, so no agent is ever the one who has what another wants. The
@@ -567,7 +563,7 @@ only when there is a clash, so every relationship saturates at close regardless
 of who the two people are. Nobody ever undertakes a social act either:
 `Undertaking::Dealing` is attempted zero times in a whole run.
 
-### 13. Skill measured how far you had walked, and bought nothing
+### 12. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
 
@@ -623,16 +619,16 @@ matching the eight-world baseline exactly.
 
 ## Housekeeping
 
-### 14. Committed backup file
+### 13. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 15. Build warnings
+### 14. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 16. Placeholder package metadata
+### 15. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
@@ -753,3 +749,37 @@ Listed so nobody re-investigates them. Each has regression tests in
   used as a probability; 44.7% of adult pairs produced odds above 1.0, which
   panics the sampler. Only reachable once agents could feed and water
   themselves well enough to reproduce.
+- **Every drive was equal, and the ladder decided everything.** The nine drives
+  had weights but no order, so nothing said that a man dying of thirst should
+  stop hunting; and `generate_non_emotional_action` consulted them only at the
+  thirteenth of thirteen fixed priorities, so almost nothing a settlement did
+  came out of a drive at all. Drives now carry a rank — primary, secondary,
+  tertiary — and inside the primary band the one that would kill soonest wins,
+  computed live from how long this agent could actually last. Each drive is
+  also gated behind the one it follows in the specification's chains, so
+  Preparedness cannot build while its owner is hungry. Foraging fell from 79%
+  of everything a settlement does to 25%, three permanently pegged drives came
+  off their ceilings, and `Action::Build` and `Action::Socialize` were chosen
+  for the first time in the project's history.
+- **A shut-out drive drained forty times faster than it filled.** Gating a
+  drive behind its predecessor needed a way for the gated drive to fall quiet,
+  and `fall_quiet` used one flat rate for all nine. For Reproduction, which
+  accumulates at 0.001 a tick, that rate was 0.004 — so the 9.9% of ticks an
+  agent spent with its primaries unanswered cost it half its total accumulation
+  and halved the birth rate. Measured at eight worlds a side, this alone was
+  the difference between a settlement of 45 and one of 30. A drive now fades at
+  the pace it would have grown.
+- **Fear was a hunger reading and anger was nothing at all.**
+  `calculate_survival_drive_emotion` derived fear from how high a survival
+  drive's value stood, so it originally sat near 0.8 between meals and — once
+  the survival drives were being answered — inverted to nearly zero. Anger was
+  written only by the resolution of a blow that had already landed, and
+  measured at exactly 0.00 over three worlds. `should_flee` and
+  `should_attack` therefore never fired in a settlement's whole life, so the
+  emotional branch of `generate_action` was dead code. Both are appraisals
+  now: what is in front of the agent is weighed against what the agent can do
+  about it, and the answer comes out as anger where it can be fought and fear
+  where it cannot. `ThreatAssessment` had always been able to make that
+  judgement; nothing had ever asked it about anything but a wound. What
+  happened in past fights scales the estimate, so an agent that has been
+  beaten runs where one that has won stands.

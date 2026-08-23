@@ -18,14 +18,14 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
-weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
-across 202 source files, with 1,219 library tests.
+weather, and reproduces over tens of thousands of ticks. Roughly 108,000 lines
+across 203 source files, with 1,230 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,256 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,267 tests across the workspace.
 The work left is connecting rather than building — several analytics
-components are libraries with no caller, and agents cannot yet see each other
-or hear anything. See
+components are libraries with no caller, and agents cannot yet hear anything.
+See
 [PROJECT_STATUS.txt](PROJECT_STATUS.txt) for measured detail and
 [ISSUES_FOUND.md](ISSUES_FOUND.md) for the current defect list. The
 [Software Design Document](EBSS_Software_Design_Document.docx) holds the
@@ -75,10 +75,26 @@ original specifications.
   parents. Forty founders are forty different people
 - 🚧 Personality reaches the drives — a trait scales how loudly a drive argues
   and moves the point at which somebody acts on it, so a lazy person needs more
-  pushing before starting work and a coward starts running at a smaller wolf —
-  but it still changes almost nothing about what anybody does. Drives are
-  consulted at the thirteenth of thirteen action priorities, and when they are,
-  three drives nothing can answer take every turn. See ISSUES_FOUND.md #12
+  pushing before starting work and a coward starts running at a smaller wolf.
+  Measured against the old action ladder it changed almost nothing; both things
+  that blocked it have since been rebuilt, and whether it now tells has not
+  been re-measured. See ISSUES_FOUND.md #11
+- ✅ Drives that know which of them matters: they are ranked primary, secondary
+  and tertiary, and among the primaries the one that would kill soonest wins —
+  a thirsty man stops hunting. Each drive waits on the one before it in the
+  chain, so nobody puts food by while hungry or wants finery while cold. The
+  ranked drives choose the action now; before this they were consulted at the
+  thirteenth of thirteen fixed priorities and 79% of everything a settlement
+  did was foraging. It is 25% now, and agents build and talk to each other for
+  the first time
+- ✅ Fear and anger that mean something: an agent weighs what is in front of it
+  against what it can do about it — its health, its build, what it is carrying,
+  what it can use, its nerve, and how the last fight went — and what it can
+  fight makes it angry while what it cannot makes it afraid. Somebody who has
+  been beaten runs where somebody who has won stands their ground. Before this,
+  fear was a reading off the hunger drive and anger was written only by a blow
+  that had already landed, so in a whole settlement's life nobody ever ran from
+  anything or turned on anything
 - ✅ A fishery, which is the one food the land does not pay for: fish come up
   the river on the season rather than growing back out of what is left of them,
   so a reach fished out fills again from the catchment. What is left of a fish,
@@ -290,6 +306,37 @@ the situation puts them; the other six build with time, which is what the
 document says of them. See **The drive system against its specification** in
 [SIMULATION_AUDIT.md](SIMULATION_AUDIT.md) for what that changed and for the
 three drives that stay high because nothing in the world can answer them.
+
+They are not equal, and they are not independent. Each has a rank:
+
+- **Primary** (Hunger, Sustenance, Thirst, Rest, Safety) — immediate survival.
+  Among these the one that would kill this agent soonest wins, worked out from
+  what it actually has left rather than from a table, so a hungry man who is
+  also dying of thirst goes to the water.
+- **Secondary** (Curiosity, Social, Reproduction, Shelter, Preparedness) —
+  longer-term survival and mental wellbeing.
+- **Tertiary** (Luxury, Utility, Construction, Industry, Protection) — comfort
+  and standing.
+
+And each waits on the one before it. Hunger and Sustenance must be reliably
+answered before Preparedness builds, and Preparedness before Luxury; Thirst
+before Preparedness; Rest and Safety before Shelter; Safety and Reproduction
+before Protection; Social before Construction and Industry, and those before
+Utility; all four primaries before Reproduction. A hungry agent does not think
+about putting food by, and a drive that is shut out falls quiet at the pace it
+would have grown rather than waiting at its ceiling.
+
+### Emotion
+Fear and anger are appraisals rather than timers. Twice over — for a thing that
+*threatens* an agent's ability to satisfy its drives, and for one that has been
+*preventing* it — the agent asks whether it could fight the thing. Where it
+could, the feeling is anger and it stands; where it could not, the feeling is
+fear and it goes. What it reckons itself worth in a fight is its health, its
+build, what armour and weapon it carries, its combat skill and its nerve,
+scaled by what past fights taught it: an agent that has won before is worth
+half again, one beaten every time is worth two fifths less. So two agents of
+identical build appraise the same wolf differently, and the beaten one runs
+where the winner stands.
 
 ### Memory
 Agents remember:

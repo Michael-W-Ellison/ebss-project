@@ -203,8 +203,20 @@ Verified reachable from `Simulation::tick()`.
   as fast in one that is not
 - Behaviour trees with weight-based learning and pruning
 - Goals and multi-step plans, abandoned when no longer relevant
-- Action selection ordered: starvation, emotional response, shelter,
-  perception, plan, goal, drive
+- Drives are ranked primary, secondary and tertiary, and within the primary
+  band the one that would kill this agent soonest wins, computed live from how
+  much it has left rather than from a fixed table. Each drive is gated behind
+  the one it follows in the specification's chains — hunger before
+  preparedness before luxury, safety before shelter before protection, all
+  four primaries before reproduction — so a drive cannot build while the one
+  it depends on is unanswered
+- Action selection: a child in trouble, then freezing with a roof in reach,
+  then the highest-ranked drive this agent has an answer for. Perception,
+  plan, goal and the old fixed ordering follow, for the drives that have no
+  answer to offer
+- Fear and anger are appraisals, not timers. What is in front of the agent is
+  weighed against what the agent can do about it, and what past fights taught
+  it, so the same wolf angers one person and frightens another
 - Obstacle-aware movement (greedy step, then a bounded breadth-first route
   search), committed search legs when looking for something out of range
 
@@ -277,8 +289,7 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
 
 - **Trading warmth for food.** Clothing halves how often agents are cold and
   costs about three points of the fed population (see **Measured behaviour**).
-  Nothing weighs the two against each other; the ordering in
-  `generate_non_emotional_action` is fixed, and the material an agent will
+  Nothing weighs the two against each other, and the material an agent will
   cross the map for is chosen by warmth over distance, not by what its stores
   can afford.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
@@ -779,9 +790,137 @@ neither exposure nor attacks accounted for it. It was this: every
 second-generation agent that survived at all did so carrying the damage. A
 settlement now runs at 90-96.
 
+## The drive hierarchy
+
+The specification says what the document's flat list did not: that drives are
+ranked, that the one which will kill fastest has the highest priority, and that
+they lead from one to the next. *An agent will not continue hunting if it will
+die from dehydration, even if it resolves its hunger drive.*
+
+Three things were needed and none of them existed.
+
+**A rank.** `DriveType::rank` puts the five that bear on immediate survival
+(Hunger, Sustenance, Thirst, Rest, Safety) in a primary band, the five that
+bear on longer-term survival and wellbeing (Curiosity, Social, Reproduction,
+Shelter, Preparedness) in a secondary band, and the five that bear on comfort
+and standing (Luxury, Utility, Construction, Industry, Protection) in a
+tertiary one. A drive that is asking outranks every drive in a lower band; a
+drive that is quiet does not, or a primary at 0.05 would outrank a secondary
+at 0.95 and nothing but foraging would ever happen — which is exactly what the
+first attempt did.
+
+**A clock.** Within the primary band, precedence is nearness of death and
+nothing else. `AgentState::ticks_before_this_kills_me` works it out from what
+the agent actually has: ticks without water against the dehydration threshold
+and the rate health falls afterwards, ticks without food against the same for
+starvation, energy against the rate it drains. It returns `None` where death
+is not in prospect — an agent above 25 energy is not dying of tiredness, and
+computing Rest's clock from a full tank put every agent in the settlement
+about 2,800 ticks from death and gave Rest 79.9% of every turn.
+
+**A chain.** `DriveType::unlocked_by` encodes the specification's chains, and
+`DriveState::is_unlocked` walks them. A drive cannot build until the drive it
+follows has been *reliably* answered, which is `RELIABLY = 24` ticks — two
+days — of the earlier drive sitting quiet. The recursion has to test the lock
+before the answer or a chain unlocks itself from the far end: a drive that is
+locked is also quiet, and a quiet drive read as answered would unlock the one
+after it.
+
+Then `generate_non_emotional_action` was turned inside out. It used to be
+thirteen fixed priorities with drives consulted last; it now asks the ranked
+drives first and takes the first one this agent has an answer for. The old
+ladder survives as the fallback for drives with nothing to offer, and two
+things still come before everything: a child in trouble, and freezing with a
+roof within reach.
+
+Measured over agent-samples from three worlds a side, the same runs that
+gave the drive-pegging figures above:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Foraging as a share of all actions | 79% | 25% |
+| Luxury above its threshold | 98.9% | 0.5% |
+| Preparedness above its threshold | 98.2% | 0% |
+| Utility above its threshold | 84.6% | 0.6% |
+| `Action::Build` chosen | 0 in 777 lives | non-zero |
+| `Action::Socialize` chosen | 0 in 777 lives | non-zero |
+
+**And what it cost to find out.** Gating a drive means it has to be able to
+fall quiet, and `fall_quiet` drained every drive at one flat 0.004 a tick.
+Reproduction accumulates at 0.001. An agent spends about 9.9% of its ticks
+with a primary unanswered, and at four times the fill rate that 9.9% cost it
+half of everything it had accumulated — so the birth rate halved and with it
+the settlement. Two four-world samples of *identical* code differed by more
+than the effect being chased (end populations 45.2 and 30.2), which is why
+this was found at eight worlds a side and not at four. A drive now fades at
+the rate it would have grown.
+
+## Emotion as appraisal
+
+The specification asks two questions and they are the same question twice:
+
+> Does a thing threaten my ability to satisfy my drives? Can I combat it? If
+> not, increase fear. If so, increase anger. Does a thing prevent my ability
+> to satisfy my drives? Can I combat it? If not, fear. If so, anger.
+
+`ThreatAssessment` has been able to answer that since it was written. Nothing
+ever asked it about anything except the resolution of a blow that had already
+landed, so a wolf ten paces off and closing produced no feeling at all until
+it bit somebody. Fear, meanwhile, was `calculate_survival_drive_emotion`
+reading how high a survival drive's value stood — which meant a well-fed agent
+with a full larder and a rising appetite was as frightened as a starving one.
+When that was written the survival drives saturated between meals and fear sat
+near 0.8; once they were being answered it inverted to nearly nothing. Over
+three worlds: mean fear 0.01 to 0.06, mean anger exactly 0.00, and not one
+agent in 170 ever above the 0.6 that `should_flee` wants. The branch of
+`generate_action` that lets an agent run or fight was unreachable code.
+
+**The threat question.** `feel_about_what_stands_in_the_way` runs each tick
+over the creatures in sight, scales each one's strength by how near it is —
+nothing beyond ten tiles registers, and a wolf at ten tiles is worth a tenth
+of a wolf at your elbow — and appraises it against `own_strength`: health,
+build, armour, weapon, combat skill and nerve. Because a wolf that stands
+still is one wolf however long it stands, the appraisal *sets* the feeling
+rather than adding to it, and `nothing_is_stalking_me` clears it when the wolf
+is gone. Without the set, anger accumulated a tick at a time to a mean of
+0.644 and 61% of the settlement wanted to fight something; without the
+distance falloff, 24% of it wanted to fight a wolf ten tiles away.
+
+**The prevention question** goes to the drives.
+`calculate_survival_drive_emotion` reads `denied_ticks` — how long the need has
+actually gone unanswered — against how soon it would kill, so a need that keeps
+being met frightens nobody however loudly it asks, and one that has gone
+unanswered frightens in proportion to how close the end is. Eleven days from
+starving is worrying; one day from it is not.
+
+**History decides the marginal cases.** `what_fighting_has_taught_me` reads the
+`Fighting` record and multiplies `own_strength` by it: down to 0.6 for an agent
+beaten every time, up to 1.5 for one that has never lost, 1.0 for one that has
+never fought. Two agents of identical build appraise the same wolf differently,
+and the one that has been beaten runs where the one that has won stands. A
+fight only counts as won if the agent came out of it having lost less than a
+quarter of its health — on the obvious test, *survived at all*, every survivor
+was a winner and the record taught nothing.
+
+Measured over three worlds of eight thousand ticks, 41,556 agent-samples:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Mean fear | 0.01–0.06 | 0.044 |
+| Mean anger | 0.00 | 0.298 |
+| Samples that would flee | 0% | 1.94% |
+| Samples that would fight | 0% | 22.80% |
+| Fights fought | — | 51 |
+
+The lost-a-fight branch is rare in the wild, because most agents that come off
+badly against a predator do not survive to draw the lesson: of 229 survivors,
+11 reckoned themselves better in a fight for what had happened and none worse.
+Both directions are therefore demonstrated deterministically in
+`src/agents/tests/appraisal_tests.rs` rather than left to the sample.
+
 ## Test coverage
 
-1,219 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,230 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,
@@ -800,6 +939,20 @@ regression tests added for survival, shelter and thirst
 of ticks and assert on the outcome, rather than calling a subsystem directly.
 More tests of that shape would be the single best defence against this class
 of bug.
+
+The suites written against the subsystems this document describes, each of
+which drives a whole `Simulation` or a fully-built `Agent` rather than a
+function in isolation:
+
+| Suite | Covers |
+| --- | --- |
+| `src/analytics/tests/nutrient_loop_tests.rs` | what a body passes, what spoils and what dies going back into the ground |
+| `src/analytics/tests/fishery_tests.rs` | fish running on the season, a fished-out reach filling again, offal on a field |
+| `src/analytics/tests/personality_tests.rs` | founders drawn with compatible traits, newborns taking after both parents |
+| `src/core/tests/drive_leaning_tests.rs` | a trait scaling a drive's weight and moving its threshold |
+| `src/analytics/tests/specialisation_tests.rs` | mastery costing more the higher it goes, unused skills rusting, a practised hand producing more |
+| `src/core/tests/drive_hierarchy_tests.rs` | rank, nearness of death deciding among the primaries, a drive gated behind the one before it |
+| `src/agents/tests/appraisal_tests.rs` | the same wolf angering one agent and frightening another, and what past fights change about that |
 
 ---
 

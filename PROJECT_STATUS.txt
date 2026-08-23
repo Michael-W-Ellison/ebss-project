@@ -1,7 +1,7 @@
 ================================================================================
 EMERGENT BEHAVIOR SOCIETY SIMULATOR (EBSS)
 Project Status Report
-Last verified: August 2026 (against commit 0d11751 and the work since)
+Last verified: August 2026 (against commit 04ac509)
 ================================================================================
 
 PROJECT OVERVIEW
@@ -18,26 +18,27 @@ itself, waters itself, shelters from the weather, and reproduces over tens of
 thousands of ticks without intervention.
 
 What remains is not "write the systems" but "connect what exists": several
-analytics components are libraries nobody calls, and agents still cannot see
-one another or hear anything. The behaviours that had code but no driver -
-cooking, and clothing - now have one.
+analytics components are libraries nobody calls, and agents still cannot hear
+anything. The behaviours that had code but no driver - cooking, clothing,
+hunting, fishing, seeing one another, personality, skill, and both emotions -
+now have one.
 
 
 SIZE AND ACTIVITY
 -----------------
-  Rust source files (src/)      183
-  Lines in src/                 ~95,900
-  Lines including tests,
-    examples and plugins        ~103,200
-  Commits                       276 (November 2025 - August 2026)
+  Rust source files (src/)      203
+  Lines in src/                 ~108,400
+  Lines including examples
+    and plugins                 ~115,500
+  Commits                       314 (November 2025 - August 2026)
   Examples                      21
   Binaries                      3 (test_simulation, ebss_gui, ebss_bevy)
 
   Lines by module:
-    agents/           27,609     analytics/        13,495
-    world/            14,679     bevy_gui/          8,892
-    environment/      12,643     core/              8,128
-    gui/               7,638     visualization/     1,442
+    agents/           29,524     analytics/        20,591
+    world/            15,464     bevy_gui/          8,903
+    environment/      13,342     core/             10,137
+    gui/               7,643     visualization/     1,442
     bin/               1,279
 
 
@@ -55,8 +56,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,256 tests across the workspace:
-  1,219 library tests
+  1,267 tests across the workspace:
+  1,230 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -120,9 +121,25 @@ Verified as reached by Simulation::tick():
                   what the ground round about is bearing, whether a child has
                   strayed - and settle where the situation puts them rather
                   than climbing a clock. Six of the nine were pinned at their
-                  ceiling for whole runs before this; the three still high ask
-                  for tools, stores and finery, which nothing in the world
-                  makes. Hunger, thirst and tiredness still run on time
+                  ceiling for whole runs before this. Hunger, thirst and
+                  tiredness still run on time
+  Hierarchy       drives are ranked primary, secondary and tertiary, and
+                  within the primary band the one that would kill soonest
+                  wins, computed live from how long this agent could actually
+                  last on what it has. Each drive is also gated behind the one
+                  it follows - hunger before preparedness before luxury,
+                  safety before shelter before protection, all four primaries
+                  before reproduction - so nobody puts food by while hungry.
+                  The ranked drives choose the action; the old fixed ladder is
+                  kept only for drives that have no answer to offer
+  Emotion         fear and anger are appraisals: the strength of the thing in
+                  front of the agent, scaled by how near it is, weighed
+                  against what the agent can do about it - health, build,
+                  armour, weapon, combat skill, nerve, and how past fights
+                  went. What can be fought comes out as anger and what cannot
+                  as fear, and both clear when the thing goes away. A need
+                  that has gone unanswered frightens in proportion to how soon
+                  it would kill, not to how loudly it asks
   Pressure        a denied drive presses harder the longer it waits, up to
                   fourfold, on both how fast it builds and how loudly it argues
                   - so a settlement that cannot feed somebody loses them to it.
@@ -262,31 +279,33 @@ KNOWN GAPS IN BEHAVIOUR
     soil still runs down - rot loses two fifths of everything it works on, so
     fertility is falling in three of the four worlds at the end - but slowly
     enough that the settlement outlives the run.
-  - Agent fear is computed from unmet hunger, thirst and rest, so it sits
-    high whenever an agent is between meals. Fleeing is gated on fear, which
-    makes flight a common state rather than a response to danger.
+  - Agents now feel about what is in front of them. Fear and anger are
+    appraisals - the strength of the thing weighed against what this agent
+    can do about it - rather than readings off the survival drives, and what
+    happened in past fights scales the estimate. Over three worlds and 41,556
+    agent-samples, mean fear ran 0.044 and mean anger 0.298, with 1.94% of
+    samples wanting to flee and 22.8% wanting to fight, against a previous
+    state of 0.01-0.06 fear, zero anger and nobody ever doing either.
   - Populations grow but have not been studied over very long runs. Nobody
     has characterised what happens past a few tens of thousands of ticks.
 
 
 SUGGESTED NEXT STEPS
 --------------------
-  1. Let drives decide more than a thirteenth of what an agent does, and give
-     the three pegged drives something the world can answer. Personality now
-     reaches the drives - a trait scales how loudly a drive argues and moves
-     the point at which an agent acts on it - and it still changes almost
-     nothing, because generate_non_emotional_action is thirteen fixed
-     priorities with drives consulted last. Seventy-nine percent of everything
-     a settlement does is foraging off that ladder. And when the thirteenth
-     priority is reached, Luxury (above its threshold 98.9% of the time),
-     Preparedness (98.2%) and Utility (84.6%) take it every time, because
-     nothing answers them - so Action::Build and Action::Socialize are chosen
-     zero times in 777 agent-lives. See ISSUES_FOUND.md #12 and #5.
+  1. Re-measure whether personality now tells. The two things that blocked it
+     are both gone: drives are ranked and choose the action first rather than
+     being consulted at the thirteenth of thirteen fixed priorities, and the
+     three permanently pegged drives have come off their ceilings. Foraging
+     fell from 79 percent of everything a settlement does to 25, and
+     Action::Build and Action::Socialize are chosen for the first time. The
+     fourteen-world reading that found nothing above 1.4 standard errors was
+     taken against the old ladder and no longer describes the model. See
+     ISSUES_FOUND.md #11.
   2. Make being near somebody worth less than liking them. Proximity adds up to
      0.10 to a bond every tick while a clash of traits subtracts 0.01 to 0.03,
      so every relationship saturates at close and nobody in any settlement is
      ever hostile to anybody. Now that traits vary this is the thing standing
-     between the model and a social life. See ISSUES_FOUND.md #12.
+     between the model and a social life. See ISSUES_FOUND.md #11.
   3. Seed world generation so the six flaky tests become deterministic and
      runs become reproducible.
   4. Decide the fate of the unconnected analytics: wire metrics, emergence
