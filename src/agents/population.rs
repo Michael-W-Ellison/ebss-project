@@ -241,6 +241,11 @@ impl Population {
         agent.traits = crate::core::traits::TraitSet::a_person();
         agent.apply_trait_sensory_modifications();
 
+        // And let it reach what they want, not only what they can see. Without
+        // this a personality decides how somebody feels about their life and
+        // nothing about how they spend it.
+        agent.drives.lean_towards(&agent.traits);
+
         // Give new agents basic starting knowledge
         
         agent.technology_knowledge.add_initial_technology(

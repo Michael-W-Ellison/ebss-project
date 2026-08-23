@@ -299,6 +299,98 @@ impl Trait {
         }
     }
 
+    /// What this trait argues for, and what it argues against.
+    ///
+    /// Each entry is a drive, what this trait does to how loudly that drive
+    /// argues for the agent's attention, and what it does to how much of the
+    /// need it takes before the agent will act on it at all. Both are
+    /// multipliers on the drive's ordinary values, so 1.0 is no opinion.
+    ///
+    /// The two do different work and a trait usually wants both. Weight is how
+    /// much somebody cares once they have noticed; threshold is how long they
+    /// go before noticing. A lazy person and a diligent one both eventually
+    /// get up and work - the lazy one needs more pushing to start (higher
+    /// threshold) and drops it sooner for anything else (lower weight). A
+    /// coward is not more frightened of a given wolf than a brave person; the
+    /// coward starts running at a smaller wolf.
+    ///
+    /// This is the table that was missing. Sixty traits were defined almost
+    /// entirely as modifiers on how an agent *feels* about what happened -
+    /// "Lazy: constant happiness decrease when working", "Builder: happiness
+    /// from building structures" - and `core/drives.rs` did not mention traits
+    /// at all. With personalities assigned but nothing reading them, agents
+    /// holding Handy spent 83% of their attempts foraging, Builder 81% and
+    /// Greedy 84%: a Builder did not build. Feeling differently about the same
+    /// life is not having a different one.
+    ///
+    /// Traits absent from this table have no view on what to do, which is
+    /// right for most of them - Goth, Clown, Melancholic and the rest are
+    /// about mood, and mood is somewhere else's business.
+    pub fn leanings(&self) -> &'static [(crate::core::DriveType, f32, f32)] {
+        use crate::core::DriveType as D;
+
+        match self {
+            // Work, and what somebody will put their hands to
+            Trait::Lazy => &[(D::Industry, 0.5, 1.4), (D::Construction, 0.6, 1.3)],
+            Trait::Diligent => &[(D::Industry, 1.4, 0.75), (D::Sustenance, 1.15, 1.0)],
+            Trait::Handy => &[(D::Industry, 1.25, 0.9), (D::Utility, 1.3, 0.85)],
+            Trait::Builder => &[(D::Construction, 1.7, 0.7)],
+            Trait::CraftObsessed => &[(D::Utility, 1.6, 0.7), (D::Industry, 1.2, 0.9)],
+            Trait::Ambitious => &[(D::Construction, 1.25, 0.9), (D::Industry, 1.2, 0.9)],
+            Trait::Proud => &[(D::Construction, 1.15, 0.95), (D::Luxury, 1.2, 0.9)],
+
+            // What somebody keeps, and how much of it they want about them
+            Trait::Greedy => &[(D::Preparedness, 1.5, 0.7), (D::Luxury, 1.4, 0.8)],
+            Trait::Frugal => &[(D::Preparedness, 1.45, 0.75), (D::Luxury, 0.6, 1.3)],
+            Trait::Survivalist => &[(D::Preparedness, 1.4, 0.65), (D::Sustenance, 1.3, 0.8)],
+            Trait::Ascetic => &[(D::Luxury, 0.3, 1.9), (D::Preparedness, 0.8, 1.15)],
+            Trait::Envious => &[(D::Luxury, 1.45, 0.75)],
+
+            // Other people
+            Trait::Extrovert | Trait::Sociable => &[(D::Social, 1.7, 0.65)],
+            Trait::Introvert | Trait::Introverted => &[(D::Social, 0.45, 1.5)],
+            Trait::Charismatic => &[(D::Social, 1.3, 0.85)],
+            Trait::Gossip => &[(D::Social, 1.4, 0.8)],
+            Trait::Romantic => &[(D::Reproduction, 1.35, 0.8), (D::Social, 1.2, 0.9)],
+            Trait::Mute => &[(D::Social, 0.6, 1.3)],
+
+            // Looking after people who are not oneself
+            Trait::Caretaker => &[(D::Protection, 1.5, 0.65)],
+            Trait::Altruist => &[(D::Protection, 1.4, 0.7), (D::Social, 1.2, 0.9)],
+            Trait::KindHearted => &[(D::Protection, 1.3, 0.8)],
+            Trait::Protector => &[(D::Protection, 1.4, 0.7), (D::Safety, 1.2, 0.9)],
+            Trait::Callous => &[(D::Protection, 0.55, 1.4), (D::Social, 0.8, 1.15)],
+            Trait::Cruel => &[(D::Protection, 0.5, 1.5)],
+
+            // Danger, and how big a thing has to be before it is one
+            Trait::Coward => &[(D::Safety, 1.6, 0.6)],
+            Trait::Brave => &[(D::Safety, 0.6, 1.45)],
+            Trait::Anxious => &[(D::Safety, 1.4, 0.7), (D::Preparedness, 1.2, 0.85)],
+            Trait::Paranoid => &[(D::Safety, 1.5, 0.65), (D::Preparedness, 1.15, 0.9)],
+            Trait::Suspicious => &[(D::Safety, 1.2, 0.85)],
+            Trait::Aggressive => &[(D::Safety, 0.7, 1.3)],
+            Trait::Peaceful | Trait::Pacifist => &[(D::Safety, 1.15, 0.9)],
+
+            // Wanting to know
+            Trait::Curious => &[(D::Curiosity, 1.6, 0.65)],
+            Trait::Explorer => &[(D::Curiosity, 1.5, 0.7)],
+            Trait::Bookworm => &[(D::Curiosity, 1.4, 0.75)],
+            Trait::Imaginative => &[(D::Curiosity, 1.25, 0.85)],
+            Trait::Stubborn => &[(D::Curiosity, 0.7, 1.3)],
+            Trait::Traditionalist => &[(D::Curiosity, 0.75, 1.25), (D::Utility, 1.15, 0.9)],
+
+            // The body
+            Trait::Glutton => &[(D::Hunger, 1.3, 0.8), (D::Sustenance, 1.3, 0.8)],
+            Trait::Narcoleptic => &[(D::Rest, 1.3, 0.8)],
+            Trait::SoundSleeper => &[(D::Rest, 0.75, 1.25)],
+            Trait::Resilient => &[(D::Rest, 0.85, 1.15), (D::Shelter, 0.85, 1.15)],
+
+            // Everything else is about how a life feels rather than what is
+            // done with it, which is somewhere else's business
+            _ => &[],
+        }
+    }
+
     /// Check if two traits are incompatible (alias for is_incompatible_with)
     pub fn incompatible_with(&self, other: &Trait) -> bool {
         self.is_incompatible_with(other)

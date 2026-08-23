@@ -389,6 +389,22 @@ pub struct Drive {
     /// And how long it has gone without needing to ask at all
     #[serde(default)]
     pub answered_ticks: u32,
+    /// How much this particular person cares about this particular drive,
+    /// over and above what anybody would.
+    ///
+    /// Kept apart from `weight` because the two come from different places and
+    /// are inherited differently: `weight` is the individual variation a
+    /// person is born with and passes to their children, and this is what
+    /// their personality does to it. Holding them separately means a
+    /// personality can be applied and re-applied without compounding, which
+    /// matters because a child's traits are settled after its drives are.
+    #[serde(default = "no_leaning")]
+    pub lean: f32,
+}
+
+/// A drive nobody has an opinion about
+fn no_leaning() -> f32 {
+    1.0
 }
 
 impl Drive {
@@ -423,6 +439,7 @@ impl Drive {
             weight: 1.0,
             denied_ticks: 0,
             answered_ticks: 0,
+            lean: 1.0,
         }
     }
 
@@ -435,6 +452,7 @@ impl Drive {
             weight,
             denied_ticks: 0,
             answered_ticks: 0,
+            lean: 1.0,
         }
     }
 
@@ -488,16 +506,17 @@ impl Drive {
         self.value >= self.threshold
     }
 
-    /// Get the effective urgency (value * weight, magnified by how long the
-    /// drive has been denied)
+    /// Get the effective urgency: how high the drive stands, how much this
+    /// person cares about that sort of thing, what their personality makes of
+    /// it, and how long they have been ignoring it.
     pub fn urgency(&self) -> f32 {
-        self.value * self.weight * self.pressure()
+        self.bare_urgency() * self.pressure()
     }
 
     /// What this drive would argue for on its face, before the weight of
     /// having been ignored is added
     pub fn bare_urgency(&self) -> f32 {
-        self.value * self.weight
+        self.value * self.weight * self.lean
     }
 
     /// Update the drive for one tick
@@ -662,6 +681,72 @@ impl DriveState {
                     Drive::with_weight(dt, weight)
                 })
                 .collect(),
+        }
+    }
+
+    /// The narrowest a personality will let a drive get, and the widest.
+    ///
+    /// Somebody who cares little about a thing still eventually cares; nobody
+    /// is so keen on shelter that they will not eat. Traits compound - a
+    /// person can be Lazy and nothing else that touches Industry, or Handy and
+    /// Diligent and Ambitious together - so without a floor and a ceiling an
+    /// unlucky draw could quiet a drive to nothing or drown out every other.
+    pub const LEAST_ANYBODY_CARES: f32 = 0.35;
+    pub const MOST_ANYBODY_CARES: f32 = 2.5;
+
+    /// And how far a personality can move the point at which somebody acts.
+    ///
+    /// The ceiling has to be above 1.0 or every trait that raises a threshold -
+    /// Lazy needing more pushing before it starts work, Ascetic barely
+    /// registering a want for anything fine - would have its whole effect
+    /// clamped away. The absolute cap below keeps a drive from becoming one
+    /// that never fires at all.
+    pub const SOONEST_ANYBODY_ACTS: f32 = 0.4;
+    pub const LATEST_ANYBODY_ACTS: f32 = 1.7;
+
+    /// No personality makes a need invisible: past this a drive would sit
+    /// under its threshold for a whole life.
+    pub const ALWAYS_EVENTUALLY: f32 = 0.95;
+
+    /// Bend these drives to a personality.
+    ///
+    /// Both what it changes are recomputed from the drive type's own defaults
+    /// rather than from whatever they hold now, so this can be applied as many
+    /// times as you like and the answer is the same. That matters: a founder's
+    /// personality is drawn after its drives exist, and a child's traits are
+    /// settled after it has inherited its parents' drive weights, so this gets
+    /// called at two different points in two different lives.
+    ///
+    /// What it does not touch is `weight`, which is the individual variation
+    /// somebody is born with and hands on. Two equally lazy people can still
+    /// differ in how much work matters to them; being lazy is a thing on top
+    /// of that, not instead of it.
+    pub fn lean_towards(&mut self, traits: &crate::core::traits::TraitSet) {
+        for drive in &mut self.drives {
+            drive.lean = 1.0;
+            drive.threshold = drive.drive_type.default_threshold();
+        }
+
+        for held in traits.get_traits() {
+            for &(drive_type, cares, acts) in held.leanings() {
+                let Some(drive) = self.get_mut(drive_type) else {
+                    continue;
+                };
+                drive.lean *= cares;
+                drive.threshold *= acts;
+            }
+        }
+
+        for drive in &mut self.drives {
+            drive.lean = drive
+                .lean
+                .clamp(Self::LEAST_ANYBODY_CARES, Self::MOST_ANYBODY_CARES);
+
+            let ordinary = drive.drive_type.default_threshold();
+            drive.threshold = drive.threshold.clamp(
+                ordinary * Self::SOONEST_ANYBODY_ACTS,
+                (ordinary * Self::LATEST_ANYBODY_ACTS).min(Self::ALWAYS_EVENTUALLY),
+            );
         }
     }
 

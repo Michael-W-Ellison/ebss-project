@@ -208,6 +208,12 @@ fn give_birth_internal(
         offspring.traits.add_trait(born_with);
     }
 
+    // A child's own personality bends its own drives. This has to come after
+    // both the drives and the traits are settled - the weights are inherited
+    // above and the traits just now - and it is written to be safe to repeat,
+    // so ordering here is a matter of correctness rather than luck.
+    offspring.drives.lean_towards(&offspring.traits);
+
     // Traits are assigned after construction, so let the inherited ones reach
     // the senses: a child born blind or deaf must actually be so
     offspring.apply_trait_sensory_modifications();

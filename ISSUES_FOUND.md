@@ -434,11 +434,14 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 12. Nobody has a personality, and everybody is everybody's friend
+### 12. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
-personality. The drives are live and now read the world. The personality half
-is not running at all.
+personality. Both halves are now live: everybody has a personality and it bends
+what their drives argue for. What is still missing is anywhere for that to show,
+because the action-selection ladder decides nearly everything before a drive is
+consulted. The history below is worth keeping, because each layer only became
+visible once the one under it was fixed.
 
 **No agent held a trait.** `Agent::new` set `traits: TraitSet::default()`,
 which is empty, and the only `add_trait` on any live path was the 1.5 per cent
@@ -497,28 +500,56 @@ The three things that would fix it, in order of what they buy:
    `Agent::new` stays the same agent every time, which several dozen tests of
    other machinery rely on, and a personality is something somebody has on
    entering a world rather than a property of a body.
-2. **Let traits reach the drives.** Still open, and now measurable rather than
-   hypothetical. With personalities assigned, the action mix is *identical*
-   across them — over three worlds of six thousand ticks, agents holding
-   `Handy` spent 83% of their attempts foraging, `Builder` 81%, `Greedy` 84%,
-   `Introvert` 81%. A Builder does not build more.
+2. ~~**Let traits reach the drives**~~ — **done, and it was not enough.**
+   `Trait::leanings()` now says which drives a trait argues for and against, as
+   a multiplier on how loudly the drive argues and on how much of the need it
+   takes before the agent acts. `DriveState::lean_towards` applies it, and
+   every path that picks a drive honours it. A Lazy person needs more pushing
+   before starting work and drops it sooner; a Coward starts running at a
+   smaller wolf; an Extrovert at six tenths of loneliness is already looking
+   for company where an Introvert is content.
 
-   The clearest evidence is that **giving everybody a personality changed
-   nothing about how a world runs.** Eight worlds a side to fifteen thousand
-   ticks, the same code but for the draw: 81.1 people on 0.571 farmed fertility
-   without personalities, 100.5 on 0.561 with them — 1.10 and 0.66 standard
-   errors apart, which is nothing on either measure. Sixty traits arrived and
-   not one settlement noticed. (An earlier four-a-side run showed fertility 1.5
-   se lower with personalities, which looked like it might be `max_steps`
-   clipping the plans of a Lazy or Anxious draw; at eight a side it is gone, and
-   the two four-world samples of identical code differing by more than the
-   effect being chased is a fair measure of how noisy an unseeded world is.) The one exception is
-   `core/planning.rs`, which reads traits to size how long a plan somebody will
-   countenance — so the path exists, it is just used once. A trait should scale
-   a drive's weight or move an action threshold, not only a happiness delta:
-   `Lazy` lowering Industry, `Greedy` raising Preparedness, `Extrovert` raising
-   Social, `Altruist` giving food away while its own store is thin. That is one
-   hook in `DriveState`, and it is what turns sixty labels into sixty people.
+   **It changed almost nothing about what anybody does.** Fourteen worlds to
+   six thousand ticks, 777 surviving agents, comparing holders of a trait
+   against everybody else on the matching undertaking:
+
+   | | holders | others | ratio | |
+   | --- | --- | --- | --- | --- |
+   | Lazy, foraging | 206.3 | 269.4 | 0.77× | 1.4 se |
+   | Diligent, foraging | 247.1 | 267.4 | 0.92× | 0.4 se |
+   | Curious, foraging | 222.8 | 269.2 | 0.83× | 0.8 se |
+   | Glutton, fishing | 21.1 | 18.9 | 1.11× | 0.4 se |
+   | Builder, **building** | **0.0** | **0.0** | — | |
+   | Extrovert, **dealing** | **0.0** | **0.0** | — | |
+
+   Nothing above 1.4 standard errors. (A six-world run had Lazy foraging at
+   2.04× the rest; at fourteen worlds it is 0.77×, having crossed over. Six
+   worlds is not enough to say anything here either.)
+
+   I said this was "one hook in `DriveState`, and it is what turns sixty labels
+   into sixty people". That was wrong, and the reason is worth writing down.
+
+   **What blocks it is the action-selection ladder, not the drives.**
+   `generate_non_emotional_action` is thirteen fixed priorities, and drives are
+   consulted only at the thirteenth, after survival, protection, clothing,
+   cooking, muck, farming, fishing, hunting, percepts, plans and goals have all
+   had their turn. Seventy-nine per cent of everything a settlement does is
+   `Foraging`, and almost all of it comes off that ladder rather than out of a
+   drive — so leaning on the Industry drive barely moves it.
+
+   And when the thirteenth priority *is* reached, three drives take it every
+   time. Measured over four thousand agent-samples, Luxury stands above its
+   threshold **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** —
+   because nothing in the world can answer them (issue #5). Construction is
+   above its threshold 12.7% of the time and Social 38.1%, so they are not
+   quiet; they simply never win, and `Action::Build` and `Action::Socialize`
+   are chosen **zero** times in 777 agent-lives.
+
+   So the order of work is the other way round from what I assumed: the pegged
+   drives have to be answerable and the ladder has to let drives decide more
+   than a thirteenth of the time, and only then does a personality have room to
+   show. The hook is in and correct; it is waiting on both.
+
 3. **Give agents a reason to need each other.** Everyone still does
    everything, so no agent is ever the one who has what another wants. The
    fishery is the first thing in the model that is *place-bound* — you must be

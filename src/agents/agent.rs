@@ -2000,7 +2000,10 @@ impl Agent {
         for drive_type in DriveType::all() {
             if let Some(drive) = self.drives.get(drive_type) {
                 if drive.is_active() {
-                    let base_urgency = drive.value * drive.weight;
+                    // Through `bare_urgency` rather than by hand, so that
+                    // what the agent's personality makes of this drive counts
+                    // here as it does everywhere else
+                    let base_urgency = drive.bare_urgency();
 
                     // For work-related drives, factor in happiness
                     let effective_priority = if let Some(job) = Self::drive_to_job_category(drive_type) {

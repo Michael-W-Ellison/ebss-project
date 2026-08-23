@@ -781,7 +781,7 @@ settlement now runs at 90-96.
 
 ## Test coverage
 
-1,191 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,199 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,

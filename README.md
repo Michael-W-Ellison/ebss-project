@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
-across 199 source files, with 1,191 library tests.
+across 200 source files, with 1,199 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,228 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,236 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet see each other
 or hear anything. See
@@ -63,11 +63,13 @@ original specifications.
   who saw it take something from that too
 - ✅ Everybody is somebody: a founder is drawn with three to five compatible
   traits out of sixty-odd, and everybody born afterwards takes after their two
-  parents. Forty founders are forty different people. What personality reaches
-  so far is how somebody feels about what happens to them, who they get on
-  with, what they distort in passing a rumour on, and how long a plan they will
-  countenance — not yet what they choose to do with their day. See
-  ISSUES_FOUND.md #12
+  parents. Forty founders are forty different people
+- 🚧 Personality reaches the drives — a trait scales how loudly a drive argues
+  and moves the point at which somebody acts on it, so a lazy person needs more
+  pushing before starting work and a coward starts running at a smaller wolf —
+  but it still changes almost nothing about what anybody does. Drives are
+  consulted at the thirteenth of thirteen action priorities, and when they are,
+  three drives nothing can answer take every turn. See ISSUES_FOUND.md #12
 - ✅ A fishery, which is the one food the land does not pay for: fish come up
   the river on the season rather than growing back out of what is left of them,
   so a reach fished out fills again from the catchment. What is left of a fish,
