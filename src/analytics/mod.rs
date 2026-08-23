@@ -1554,115 +1554,62 @@ impl Simulation {
     /// 8. carry on with a plan
     /// 9. work towards a goal
     /// 10. whatever its most pressing drive suggests
+    /// What an agent does, when nothing has frightened or angered it.
+    ///
+    /// This used to be thirteen fixed priorities with the drives consulted at
+    /// the thirteenth, which meant the drives decided almost nothing: seventy-
+    /// nine per cent of everything a settlement did was foraging chosen off
+    /// the ladder before a drive was ever asked, and `Action::Build` and
+    /// `Action::Socialize` were chosen zero times in seven hundred and
+    /// seventy-seven agent-lives. Giving every agent a personality changed
+    /// nothing measurable for the same reason: personality reaches the drives,
+    /// and the drives reached nothing.
+    ///
+    /// It is the other way round now. Two things pre-empt, because they are
+    /// emergencies rather than wants; after that the needs are ranked by how
+    /// hard each is pressing - see `Agent::how_hard_it_presses` - and the
+    /// first that can actually be answered here and now takes the turn.
     fn generate_non_emotional_action(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> (Action, bool) {
-        // PRIORITY 1: Survival needs override perception, plans and goals
-        if let Some(action) = self.survival_action(agent, agent_position, false) {
-            return (action, false);
-        }
-
-        // PRIORITY 2: Go to a child of one's own that has strayed, or that
-        // something is stalking.
-        //
-        // Above the agent's own coat and its own roof: a parent sees to the
-        // children first. Below PRIORITY 1 because an agent starving to death
-        // is no use to anybody.
+        // A child of one's own in trouble. Not a want: a parent goes, and the
+        // Protection *drive* underneath is a tertiary disposition that waits
+        // its turn like anything else.
         if let Some(action) = self.protective_action(agent, agent_position) {
             return (action, false);
         }
 
-        // PRIORITY 3: Put on or make clothing, if that can be done on the spot.
-        //
-        // This comes before sheltering because a coat is the durable answer to
-        // cold and a roof is the temporary one: an agent that walks to shelter
-        // every time it feels the wind never gets around to dressing itself,
-        // which is why insulation used to sit at zero for whole lifetimes.
-        // Only what can be done where it stands outranks shelter; going off to
-        // cut flax waits until PRIORITY 3.
-        if let Some(action) = self.clothing_action(agent, agent_position, true) {
-            return (action, false);
-        }
-
-        // PRIORITY 4: Check if agent needs shelter due to exposure
-        //
-        // Triggered on what the agent is suffering right now, not on the
-        // running total of damage taken: that total only ever rises, so once
-        // it passed the threshold an agent sought shelter forever, whatever
-        // the weather had done since.
+        // And freezing, where there is a roof within reach. Exposure is
+        // already doing damage by the time this fires, so it is not a matter
+        // of how much the agent wants to be warm.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }
 
-        // PRIORITY 5: Cook the raw food the agent is carrying.
-        //
-        // Anything reaching this point is fed, watered and warm - survival
-        // answered first - so this is an agent with raw meat and time on its
-        // hands, which is when cooking happens. It sits above goals and
-        // percepts because it does not otherwise happen at all: a plan or a
-        // steady stream of percepts wins every tie, and cooking placed below
-        // them was reached in four decisions in a thousand.
-        //
-        // It ends by itself. Cooking the food takes it off the list, so the
-        // agent goes back to whatever it was doing until it catches something
-        // else.
-        if let Some(action) = self.cooking_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 6: Tip the spoiled contents of the pack onto a field, if
-        // this agent has come to believe in that, or is curious enough to find
-        // out. Sits with the other things an agent does when nothing presses.
-        if let Some(action) = self.muck_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 7: Break ground for a field.
-        //
-        // Sits with cooking and hunting, among the things an agent does when
-        // nothing is pressing on it, and above them in the sense that it
-        // outlasts them: a meal feeds one person once and a field feeds the
-        // settlement every year after.
-        if let Some(action) = self.farming_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 8: Stand in the river.
-        //
-        // Above hunting because a river in the run is a surer thing than a
-        // deer, and below farming because a field feeds the settlement every
-        // year and a catch feeds one person once. What makes it worth its own
-        // slot rather than folding into foraging is what comes off it: the
-        // guts of a fish are the only muck in the world that was not grown on
-        // the settlement's own ground.
-        if let Some(action) = self.fishing_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 9: Go after an animal, for the meat or for the skin.
-        //
-        // Below cooking for the same reason gathering flax is: what an agent
-        // already has in its pack is worth more than what it might catch.
-        if let Some(action) = self.hunting_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 9: Go and get what the agent needs to clothe itself.
-        //
-        // Below cooking, because a meal is worth more than a coat: cooking
-        // nearly trebles what a piece of food is worth, and an agent that went
-        // for flax first ate worse for it.
-        if let Some(action) = self.clothing_action(agent, agent_position, false) {
-            return (action, false);
-        }
-
-        // PRIORITY 10: Check for high-salience percepts (danger, resources, social opportunities)
-        let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
-            .iter()
-            .cloned()
+        // Everything else the agent wants, in the order it wants it
+        let mut ranked: Vec<(DriveType, f32)> = DriveType::all()
+            .into_iter()
+            .map(|drive_type| (drive_type, agent.how_hard_it_presses(drive_type)))
+            .filter(|(_, pressing)| *pressing > 0.0)
             .collect();
+
+        ranked.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for (drive_type, _) in ranked {
+            if let Some(action) = self.how_this_agent_answers(drive_type, agent, agent_position) {
+                return (action, false);
+            }
+        }
+
+        // Nothing is pressing and nothing is wanted, which is when an agent
+        // gets to follow its own nose: what it has just noticed, then what it
+        // had planned, then what it was working towards.
+        let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> =
+            agent.recent_percepts.iter().cloned().collect();
 
         if let Some(percept_action) = Self::generate_action_from_percepts(
             &recent_percepts,
@@ -1672,32 +1619,168 @@ impl Simulation {
             return (percept_action, false);
         }
 
-        // PRIORITY 11: Execute current plan step (if agent has an active plan)
         if agent.should_execute_plan() {
             if let Some(plan_action) = agent.get_plan_action() {
                 return (plan_action, true);
             }
         }
 
-        // PRIORITY 12: Check active goals and generate goal-directed action
         if let Some(goal) = agent.goals.highest_priority_goal() {
-            // Get most urgent drive for fallback
-            let fallback_drive = agent.drives.most_urgent()
-                .map(|d| d.drive_type)
+            let fallback_drive = agent
+                .what_presses_hardest()
                 .unwrap_or(DriveType::Curiosity);
 
-            if let Some(goal_action) = Self::generate_action_for_goal(&goal, agent_position, fallback_drive) {
+            if let Some(goal_action) =
+                Self::generate_action_for_goal(&goal, agent_position, fallback_drive)
+            {
                 return (goal_action, false);
             }
         }
 
-        // PRIORITY 13: Use drive-based action as fallback
-        let drive_type = agent.select_drive_with_happiness()
-            .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
-            .unwrap_or(DriveType::Curiosity);
-
-        (Self::generate_action_for_drive(drive_type, agent_position), false)
+        (Action::Wait, false)
     }
+
+    /// How this agent would go about answering that need, if it can at all.
+    ///
+    /// `None` means this particular need has no answer available here and now -
+    /// a wish to build with nowhere to build, a wish for company with nobody
+    /// about - and the turn passes to whatever is pressing next. That is the
+    /// part the old ladder could not do: it had one fixed order for everybody
+    /// and no way for a need to stand aside.
+    fn how_this_agent_answers(
+        &self,
+        drive_type: DriveType,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        match drive_type {
+            // Water first of the two, always, because it runs out first - but
+            // that is now decided by the clocks in `how_hard_it_presses`
+            // rather than written down here
+            DriveType::Thirst => {
+                self.water_action(agent, agent_position, agent.state.is_dehydrated())
+            }
+
+            // Eat what is carried, go and get what is not, and failing both
+            // stand in a river or go after an animal
+            DriveType::Hunger => {
+                let starving = agent.state.is_starving() || agent.nutrition.is_starving();
+                self.food_action(agent, agent_position, starving)
+                    .or_else(|| self.fishing_action(agent, agent_position))
+                    .or_else(|| self.hunting_action(agent, agent_position))
+            }
+
+            DriveType::Rest => {
+                if agent.fatigue.is_sleeping {
+                    None
+                } else {
+                    Some(Action::Sleep { duration: 10 })
+                }
+            }
+
+            // Being out of harm's way, and only while there is harm about
+            DriveType::Safety => {
+                let threatened = agent.surroundings.predator_near
+                    || agent.surroundings.recently_hurt;
+
+                if threatened && self.nearest_shelter_from(agent_position).is_some() {
+                    Some(Action::SeekShelter)
+                } else {
+                    None
+                }
+            }
+
+            // Everything that puts food on next year's table
+            DriveType::Sustenance => self
+                .cooking_action(agent, agent_position)
+                .or_else(|| self.muck_action(agent, agent_position))
+                .or_else(|| self.farming_action(agent, agent_position))
+                .or_else(|| self.fishing_action(agent, agent_position)),
+
+            // A coat is shelter you carry, and it comes before walking to a
+            // roof: an agent that goes indoors every time it feels the wind
+            // never gets around to dressing itself. Walking to a roof is worth
+            // a turn only when the weather is actually doing something.
+            DriveType::Shelter => self
+                .clothing_action(agent, agent_position, true)
+                .or_else(|| {
+                    let worth_going_in = agent.needs_shelter()
+                        || agent.body_temperature.is_too_cold()
+                        || agent.surroundings.foul_weather;
+
+                    if worth_going_in && !agent.surroundings.under_shelter {
+                        self.nearest_shelter_from(agent_position)
+                            .map(|_| Action::SeekShelter)
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| self.clothing_action(agent, agent_position, false)),
+
+            // Looking after somebody of your own
+            DriveType::Protection => self.protective_action(agent, agent_position),
+
+            // Children, and only when this agent could actually have one and
+            // expects to be able to feed it. Without this an agent proposes to
+            // the empty air a third of every life - it was the single
+            // commonest thing anybody did.
+            DriveType::Reproduction => {
+                if agent.should_attempt_reproduction() {
+                    Some(Action::Mate {
+                        target_agent_id: uuid::Uuid::nil(),
+                    })
+                } else {
+                    None
+                }
+            }
+
+            // Making a thing needs something to make it out of
+            DriveType::Utility => {
+                if agent.inventory.get_all_items().values().any(|item| {
+                    item.quantity > 0 && crate::agents::Agent::MATERIALS
+                        .iter()
+                        .any(|kind| item.item_id.contains(kind))
+                }) {
+                    Some(Action::Craft {
+                        item_type: "woodenaxe".to_string(),
+                    })
+                } else {
+                    None
+                }
+            }
+
+            // Putting something by needs something to put by
+            DriveType::Preparedness => {
+                if agent.inventory.get_all_items().values().any(|item| item.quantity > 0) {
+                    Some(Action::Store {
+                        item_type: "resource".to_string(),
+                        amount: 1,
+                    })
+                } else {
+                    None
+                }
+            }
+
+            // Nothing in the world is fine enough to want yet - see
+            // ISSUES_FOUND.md #5. Until something is, this need has no answer
+            // and stands aside rather than spending the turn walking after a
+            // resource that does not exist.
+            DriveType::Luxury => None,
+
+            // Company needs somebody to keep it
+            DriveType::Social => {
+                if agent.surroundings.company {
+                    Some(Self::generate_action_for_drive(drive_type, agent_position))
+                } else {
+                    None
+                }
+            }
+
+            // The rest keep the simple mapping they had
+            other => Some(Self::generate_action_for_drive(other, agent_position)),
+        }
+    }
+
 
     /// Execute an action in the environment and return the result
     /// Which trade a thing taken off the land belongs to.

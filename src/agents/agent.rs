@@ -730,6 +730,87 @@ impl AgentState {
         self.ticks_without_water = 0;
     }
 
+    /// How much of the life is left, if nothing answers this need.
+    ///
+    /// The number the whole hierarchy turns on. "The drive which will result
+    /// in death the fastest has the highest priority" is not a ladder somebody
+    /// wrote down - it falls out of the clocks each need actually runs on, so
+    /// a child with a quarter of an adult's reserves orders its needs
+    /// differently from its mother without anybody having decided that.
+    ///
+    /// Reckoned in ticks, from what is true of this body now. `None` means
+    /// this need does not kill: it may make a life shorter or poorer, but not
+    /// end it, and it takes its place by tier instead.
+    pub fn ticks_before_this_kills_me(&self, drive_type: DriveType) -> Option<f32> {
+        // What is left to lose, at the rate it is being lost
+        fn once_health_goes(health: f32, per_tick: f32) -> f32 {
+            if per_tick <= 0.0 {
+                f32::INFINITY
+            } else {
+                health / per_tick
+            }
+        }
+
+        let reserve = self.life_stage.hunger_reserve().max(0.05);
+        let health = self.health.max(0.0);
+
+        match drive_type {
+            // Thirst is the fast one. Health starts going at a day and a half
+            // and goes fifteen times faster after three days, which is why a
+            // thirsty agent should stop whatever it is doing even if that
+            // thing is fetching food.
+            DriveType::Thirst => {
+                let dry = self.ticks_without_water as f32;
+                let until_it_bites = (2_160.0 - dry).max(0.0);
+                let until_it_races = (4_320.0 - dry).max(0.0);
+
+                // Slow loss while between the two, then rapid
+                let slow_span = (until_it_races - until_it_bites).max(0.0);
+                let lost_slowly = slow_span * 0.15;
+                let left_for_the_race = (health - lost_slowly).max(0.0);
+
+                Some(until_it_races + once_health_goes(left_for_the_race, 1.5))
+            }
+
+            // Starvation is slower and scales with what the body has put by
+            DriveType::Hunger => {
+                let empty = self.ticks_without_food as f32;
+                let until_it_bites = (4_320.0 * reserve - empty).max(0.0);
+                let until_it_races = (10_080.0 * reserve - empty).max(0.0);
+
+                let slow_span = (until_it_races - until_it_bites).max(0.0);
+                let lost_slowly = slow_span * (0.1 / reserve);
+                let left_for_the_race = (health - lost_slowly).max(0.0);
+
+                Some(until_it_races + once_health_goes(left_for_the_race, 1.0 / reserve))
+            }
+
+            // Exhaustion is only a death clock once the energy is nearly
+            // gone. Reckoning it from a full tank the way thirst is reckoned
+            // from a full skin says every agent alive is a couple of thousand
+            // ticks from dying of tiredness, which had Rest winning four turns
+            // in five and a settlement doing nothing but sleep and forage.
+            // Energy is topped up by every meal; it is not a clock that only
+            // runs down.
+            DriveType::Rest => {
+                const NEARLY_SPENT: f32 = 25.0;
+
+                if self.energy > NEARLY_SPENT {
+                    return None;
+                }
+
+                let until_spent = once_health_goes(self.energy.max(0.0), 0.05);
+                Some(until_spent + once_health_goes(health, 0.05))
+            }
+
+            // Whatever is trying to kill you is measured in minutes rather
+            // than days, and only while it is actually there
+            DriveType::Safety => None,
+
+            _ => None,
+        }
+    }
+
     /// Check if agent is starving (critical survival state)
     pub fn is_starving(&self) -> bool {
         self.ticks_without_food > 1440 || self.energy < 20.0
@@ -1054,7 +1135,7 @@ impl Agent {
     }
 
     /// What counts as material to work or build with
-    const MATERIALS: [&'static str; 7] = [
+    pub const MATERIALS: [&'static str; 7] = [
         "wood", "stone", "iron", "clay", "sand", "coal", "brick",
     ];
 
@@ -1471,6 +1552,101 @@ impl Agent {
     /// Split out of `tick_with_time` so that callers which drive agents through
     /// `tick_with_percepts` instead (notably `Population::tick`) run the same
     /// survival mechanics rather than aging alone.
+    /// How near a need has to be to killing somebody before it starts to
+    /// shout over everything else.
+    ///
+    /// Half a day. It has to be well inside the shortest of the clocks or a
+    /// need that is entirely answered still reads as urgent: thirst kills at
+    /// about 4,380 ticks from a full skin, so at a three-day horizon a
+    /// perfectly watered agent scored 0.99 and was one sip from outranking a
+    /// settlement's whole want of a harvest. At half a day a satisfied need
+    /// scores about a seventh, a need a day out scores a half, and one twelve
+    /// hours off starts taking the agent over.
+    const A_LONG_WAY_OFF: f32 = 720.0;
+
+    /// How hard this need is pressing on this agent, right now.
+    ///
+    /// Two things decide it. The tier says how much a need of this kind is
+    /// allowed to interrupt - no amount of wanting a fine coat outweighs being
+    /// thirsty. Within that, a need that kills presses in proportion to how
+    /// soon it would: that is what makes an agent break off hunting to drink,
+    /// having resolved nothing about its hunger, because the water runs out
+    /// first.
+    ///
+    /// Nothing here is a written-down ladder. Thirst outranks hunger because
+    /// dehydration takes health at 2,160 ticks and starvation at 4,320 times
+    /// whatever the body has put by, and a child with a quarter of an adult's
+    /// reserves reorders its own needs without anybody having decided that.
+    pub fn how_hard_it_presses(&self, drive_type: crate::core::DriveType) -> f32 {
+        let Some(drive) = self.drives.get(drive_type) else {
+            return 0.0;
+        };
+
+        // A chain that has not opened yet is not pressing at all
+        if !self.drives.is_unlocked(drive_type) {
+            return 0.0;
+        }
+
+        let wanting = drive.urgency();
+
+        let deadly = self
+            .state
+            .ticks_before_this_kills_me(drive_type)
+            .map(|left| Self::A_LONG_WAY_OFF / left.max(1.0))
+            .unwrap_or(0.0);
+
+        // The rank says what a need of this kind may interrupt - but only once
+        // it is actually asking for something. A drive still under its own
+        // threshold, on a body in no danger, is a preference rather than a
+        // need, and gets no precedence for the band it belongs to.
+        //
+        // Without this a primary drive at any value at all outranked every
+        // secondary one: an agent four tenths of the way to hungry, days from
+        // any harm, beat a settlement's whole want of a harvest, and the only
+        // thing anybody ever did was forage.
+        let asking = drive.is_active() || deadly >= 1.0;
+
+        if !asking {
+            return wanting;
+        }
+
+        // Among the needs that kill, nearness of death decides and the drive's
+        // own value does not. That is the whole of "an agent will not continue
+        // hunting if it will die from dehydration, even if it resolves its
+        // hunger drive": taking the larger of the two let a big appetite
+        // outrank a nearer death, because how much somebody wants a thing and
+        // how soon the want of it kills them are different questions.
+        let pressing = if self.state.ticks_before_this_kills_me(drive_type).is_some() {
+            1.0 + deadly * Self::SOONER_IS_WORSE
+        } else {
+            wanting
+        };
+
+        drive_type.rank().precedence() * pressing
+    }
+
+    /// How much worse a death that is twice as near counts as being.
+    ///
+    /// Enough that the ordering inside the primary band is settled by the
+    /// clocks rather than by how much anybody happens to want the thing.
+    const SOONER_IS_WORSE: f32 = 10.0;
+
+    /// What this agent most needs to do something about.
+    ///
+    /// `DriveState::most_urgent` compares drives against each other as though
+    /// they were all the same kind of thing. They are not: a need that kills
+    /// in a day and a wish for a better axe are not on one scale, and reading
+    /// them off one was why an agent would go on hunting while it died of
+    /// thirst.
+    pub fn what_presses_hardest(&self) -> Option<crate::core::DriveType> {
+        crate::core::DriveType::all()
+            .into_iter()
+            .map(|drive_type| (drive_type, self.how_hard_it_presses(drive_type)))
+            .filter(|(_, pressing)| *pressing > 0.0)
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(drive_type, _)| drive_type)
+    }
+
     /// How often a hand is tested against what it has not been doing.
     ///
     /// A season. Rust is reckoned in years, so checking more often buys
