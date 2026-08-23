@@ -309,6 +309,14 @@ fn skins_become_the_warm_clothing() {
         "the hides should be what it reaches for"
     );
 
+    // A raw beginner spoils half of what they attempt, and this test is about
+    // what fur is worth rather than about whose hands it is in, so give the
+    // work to somebody who can be relied on to finish it
+    simulation.population.agents[0]
+        .skills
+        .get_skill_mut(crate::agents::skills::SkillType::Leatherworking)
+        .level = 9;
+
     simulation.execute_action(&making, 0);
 
     let agent = &simulation.population.agents[0];

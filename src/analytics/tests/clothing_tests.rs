@@ -100,7 +100,7 @@ fn a_cold_agent_makes_a_cloak_and_wears_it() {
         agent.inventory.max_weight = 500.0;
         agent
             .inventory
-            .add_item(InventoryItem::new_with_weight("flax".to_string(), 20, 1.0));
+            .add_item(InventoryItem::new_with_weight("flax".to_string(), 200, 1.0));
         agent.body_temperature.current = 34.0;
     }
 
@@ -122,7 +122,24 @@ fn a_cold_agent_makes_a_cloak_and_wears_it() {
         matches!(&making, Action::MakeClothing { garment } if garment == "linen_cloak"),
         "expected a linen cloak, got {making:?}"
     );
-    simulation.execute_action(&making, 0);
+    // A raw beginner spoils about half of what they attempt, and a cold agent
+    // keeps trying. This is what a first winter actually looks like: several
+    // bundles of flax ruined in the learning, and then a cloak.
+    let flax_to_start_with = simulation.population.agents[0]
+        .inventory
+        .get_item("flax")
+        .map(|flax| flax.quantity)
+        .unwrap_or(0);
+
+    let mut made_one = false;
+    for _ in 0..20 {
+        if simulation.execute_action(&making, 0).success {
+            made_one = true;
+            break;
+        }
+    }
+
+    assert!(made_one, "twenty attempts should land at least one cloak");
 
     let agent = &simulation.population.agents[0];
     assert!(
@@ -134,8 +151,9 @@ fn a_cold_agent_makes_a_cloak_and_wears_it() {
         "the cloak is worn, not carried"
     );
     assert!(
-        agent.inventory.get_item("flax").map(|f| f.quantity).unwrap_or(0) < 20,
-        "the flax should have gone into it"
+        agent.inventory.get_item("flax").map(|f| f.quantity).unwrap_or(0)
+            < flax_to_start_with,
+        "the flax should have gone into it, and into what was spoiled on the way"
     );
 }
 
@@ -250,10 +268,12 @@ fn a_cold_agent_ends_up_dressed() {
     // Flax both in the pack and growing next door. A random world does not
     // always let an agent reach the patch it can see - it may be across water
     // - and this test is about what an agent does with material, not about
-    // whether it can get to it.
+    // whether it can get to it. Enough of it to survive a beginner's spoilage
+    // too: about half of a raw hand's attempts are ruined in the making, so
+    // one bundle would test the dice rather than the behaviour.
     simulation.population.agents[0]
         .inventory
-        .add_item(InventoryItem::new_with_weight("flax".to_string(), 20, 1.0));
+        .add_item(InventoryItem::new_with_weight("flax".to_string(), 200, 1.0));
 
     // An agent that wants to be warmer than this weather will ever make it.
     // Forcing the current temperature instead would not survive the tick,

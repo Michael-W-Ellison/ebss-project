@@ -1700,6 +1700,29 @@ impl Simulation {
     }
 
     /// Execute an action in the environment and return the result
+    /// Which trade a thing taken off the land belongs to.
+    ///
+    /// The same split the experience grants already used, in one place, so
+    /// that what a hand is worth at a job and what the job teaches it are
+    /// never allowed to drift apart.
+    fn trade_for_gathering(
+        resource_type: crate::world::ResourceType,
+    ) -> crate::agents::skills::SkillType {
+        use crate::agents::skills::SkillType;
+        use crate::world::ResourceType;
+
+        match resource_type {
+            ResourceType::Wood => SkillType::Woodcutting,
+            ResourceType::Stone | ResourceType::Iron | ResourceType::Coal
+            | ResourceType::Clay | ResourceType::Sand => SkillType::Mining,
+            ResourceType::Grain => SkillType::Farming,
+            ResourceType::Food | ResourceType::Herbs => SkillType::Herbalism,
+            ResourceType::Flax | ResourceType::Cotton => SkillType::Farming,
+            ResourceType::Fish => SkillType::Fishing,
+            _ => SkillType::Herbalism,
+        }
+    }
+
     /// How far an agent will walk to reach a resource while foraging, in
     /// walking (Manhattan) distance
     const FORAGE_RADIUS: u32 = 25;
@@ -3418,6 +3441,10 @@ impl Simulation {
 
         let mut rng = rand::thread_rng();
 
+        // Doing the work is what keeps a hand in it - see
+        // `Skills::let_unused_skills_rust`
+        let tick_now = self.current_tick;
+
         match action {
             Action::Eat { food_type } => {
                 // PRIORITY 1: eat food the agent is already carrying.
@@ -3637,8 +3664,8 @@ impl Simulation {
                     // generic food request, so classify by what was found
                     let resource_type_enum = self.world.resources[resource_index].resource_type;
 
-                    // Determine harvest amount based on resource type and skill
-                    let harvest_amount = match resource_type_enum {
+                    // What an ordinary pair of hands brings back in a trip
+                    let ordinary = match resource_type_enum {
                         ResourceType::Wood => rng.gen_range(1..=3),
                         // An armful at a time, like wood: a garment's worth of
                         // flax one stem per trip is a week's work
@@ -3648,6 +3675,27 @@ impl Simulation {
                         ResourceType::Food => 1,
                         _ => 1,
                     };
+
+                    // And what these particular hands make of it. The comment
+                    // here used to say "based on resource type and skill" and
+                    // the skill was not consulted: a lifetime of farming
+                    // brought back exactly what a first day did. A practised
+                    // hand knows which plants are worth stripping and how to
+                    // take a crop without ruining what is left, and brings
+                    // back up to twice what a beginner does.
+                    let hand = self.population.agents[agent_index]
+                        .skills
+                        .hand_for(Self::trade_for_gathering(resource_type_enum));
+
+                    let worth = ordinary as f32 * hand;
+
+                    // Carry the fraction as a chance rather than rounding it
+                    // away, so that a small difference in skill still tells
+                    // over a season of trips
+                    let whole = worth.floor();
+                    let harvest_amount =
+                        (whole as u32) + u32::from(rng.gen::<f32>() < worth - whole);
+                    let harvest_amount = harvest_amount.max(1);
 
                     // Harvest resource
                     let harvested = self.world.resources[resource_index].harvest(harvest_amount);
@@ -3719,13 +3767,11 @@ impl Simulation {
                         let agent = &mut self.population.agents[agent_index];
                         if agent.inventory.add_item(item) {
                             // Grant skill XP based on resource type
-                            let skill_type = match resource_type_enum {
-                                ResourceType::Wood => crate::agents::skills::SkillType::Woodcutting,
-                                ResourceType::Stone | ResourceType::Iron => crate::agents::skills::SkillType::Mining,
-                                ResourceType::Food | ResourceType::Grain => crate::agents::skills::SkillType::Herbalism,
-                                _ => crate::agents::skills::SkillType::Mining,
-                            };
-                            agent.skills.gain_experience(skill_type, 2);
+                            let skill_type = Self::trade_for_gathering(resource_type_enum);
+                            // A trip out is the commonest thing anybody does
+                            // and the whole of some people's trade, so it is
+                            // what the climb is sized against
+                            agent.skills.practise(skill_type, 8, tick_now);
 
                             debug!(
                                 "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
@@ -3894,7 +3940,7 @@ impl Simulation {
                     _ => 5,
                 };
                 let agent = &mut self.population.agents[agent_index];
-                agent.skills.gain_experience(crate::agents::skills::SkillType::Construction, construction_xp);
+                agent.skills.practise(crate::agents::skills::SkillType::Construction, construction_xp, tick_now);
 
                 debug!(
                     "Agent {} started construction of {:?} at ({}, {})",
@@ -4088,7 +4134,7 @@ impl Simulation {
                 let attacker = &mut self.population.agents[agent_index];
                 let combat_xp = if !target_alive { 5 } else { 2 };
                 // TODO: Check weapon type for Archery vs MeleeCombat
-                attacker.skills.gain_experience(crate::agents::skills::SkillType::MeleeCombat, combat_xp);
+                attacker.skills.practise(crate::agents::skills::SkillType::MeleeCombat, combat_xp, tick_now);
 
                 if !target_alive {
                     ActionResult::success()
@@ -4388,7 +4434,11 @@ impl Simulation {
                     ProductionQuality::Masterwork => 5,
                 };
 
-                agent.skills.get_skill_mut(SkillType::Crafting).gain_experience(experience_gained);
+                {
+                    let skill = agent.skills.get_skill_mut(SkillType::Crafting);
+                    skill.gain_experience(experience_gained);
+                    skill.last_used = tick_now;
+                }
 
                 debug!(
                     "Agent {} crafted {} (quality: {:?}, skill: {}, exp: +{})",
@@ -4834,7 +4884,7 @@ impl Simulation {
                             let agent = &mut self.population.agents[agent_index];
                             agent
                                 .skills
-                                .gain_experience(crate::agents::skills::SkillType::Hunting, 30);
+                                .practise(crate::agents::skills::SkillType::Hunting, 30, tick_now);
 
                             let mut result = ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.4)
@@ -4851,7 +4901,7 @@ impl Simulation {
                             let agent = &mut self.population.agents[agent_index];
                             agent
                                 .skills
-                                .gain_experience(crate::agents::skills::SkillType::Hunting, 10);
+                                .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
 
                             ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.1)
@@ -4862,7 +4912,7 @@ impl Simulation {
                         // You learn something from the ones that get away
                         self.population.agents[agent_index]
                             .skills
-                            .gain_experience(crate::agents::skills::SkillType::Hunting, 10);
+                            .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
 
                         // A rabbit runs. A boar turns round.
                         let fights_back = matches!(
@@ -4943,7 +4993,7 @@ impl Simulation {
 
                         // Increase social skill
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
+                        agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
 
                         // Add transport to agent's inventory if applicable
                         if let Some(t_type) = transport_type {
@@ -5029,7 +5079,7 @@ impl Simulation {
 
                         // Practice animal husbandry (Farming skill)
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
+                        agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
 
                         let products_str = collected_products.iter()
                             .map(|p| format!("{} {}", p.quantity, p.material_id))
@@ -5108,9 +5158,9 @@ impl Simulation {
                         // Practice farming skill if cultivated, gathering otherwise
                         let agent = &mut self.population.agents[agent_index];
                         if plant.is_cultivated {
-                            agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
+                            agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
                         } else {
-                            agent.skills.gain_experience(crate::agents::skills::SkillType::Mining, 2);
+                            agent.skills.practise(crate::agents::skills::SkillType::Mining, 2, tick_now);
                         }
 
                         let items_str = items_gained.iter()
@@ -5430,7 +5480,7 @@ impl Simulation {
                 if success {
                     // Grant Social skill XP
                     let initiator = &mut self.population.agents[agent_index];
-                    initiator.skills.gain_experience(crate::agents::skills::SkillType::Social, 1);
+                    initiator.skills.practise(crate::agents::skills::SkillType::Social, 1, tick_now);
 
                     // Record that this agent satisfied our social drive
                     let tick = self.current_tick;
@@ -6023,6 +6073,44 @@ impl Simulation {
                 // different hands comes out as something that keeps the cold
                 // off or as something that falls apart in a week. Quality
                 // carries into both warmth and durability.
+                //
+                // And a beginner does not merely make a worse coat - a good
+                // many of their attempts come to nothing at all, with the
+                // material spoiled in the trying. `Skill::perform_check` had
+                // been built to say exactly this and had no callers anywhere,
+                // so every attempt succeeded and a first-day tailor turned out
+                // garments as fast as a master. Half of a raw beginner's
+                // attempts fail; a master's never do. That is what makes a
+                // dedicated tailor quicker as well as better, without anything
+                // in the model needing a notion of how long a job takes.
+                let attempt = agent
+                    .skills
+                    .get_skill_mut(SkillType::Leatherworking)
+                    .perform_check(None);
+
+                // Cuts and needle-stabs, which are a beginner's other tax
+                if let Some(hurt) = attempt.injury {
+                    let harm = match hurt {
+                        crate::agents::skills::InjuryType::Small => 2.0,
+                        crate::agents::skills::InjuryType::Large => 8.0,
+                    };
+                    agent.state.health = (agent.state.health - harm).max(1.0);
+                }
+
+                if !attempt.success {
+                    // The material is spoiled in the trying, and something is
+                    // learned from having spoiled it
+                    agent
+                        .inventory
+                        .remove_item(recipe.material_item, recipe.material_amount);
+                    agent.skills.practise(SkillType::Leatherworking, 8, tick_now);
+
+                    return ActionResult::failure(format!(
+                        "Spoiled the {} in the making",
+                        recipe.name
+                    ));
+                }
+
                 let quality = Self::expected_garment_quality(agent);
 
                 let made = match crate::agents::equipment::ClothingTemplate::from_id(
@@ -6038,7 +6126,7 @@ impl Simulation {
                     .inventory
                     .remove_item(recipe.material_item, recipe.material_amount);
 
-                agent.skills.gain_experience(SkillType::Leatherworking, 25);
+                agent.skills.practise(SkillType::Leatherworking, 25, tick_now);
 
                 // Making a coat and putting it on is one act.
                 //
@@ -6190,7 +6278,7 @@ impl Simulation {
                 let agent = &mut self.population.agents[agent_index];
                 agent
                     .skills
-                    .gain_experience(crate::agents::SkillType::Farming, 25);
+                    .practise(crate::agents::SkillType::Farming, 25, tick_now);
 
                 debug!("Agent {} broke ground at {:?}", agent.id, tile_position);
 
@@ -6280,7 +6368,7 @@ impl Simulation {
                 agent.practices.record_outcome(Practice::SpreadingMuck, worked);
                 agent
                     .skills
-                    .gain_experience(crate::agents::SkillType::Farming, 10);
+                    .practise(crate::agents::SkillType::Farming, 10, tick_now);
 
                 debug!(
                     "Agent {} tipped {} spoiled units onto {:?} (ground {:.2} -> {:.2})",
@@ -6380,7 +6468,7 @@ impl Simulation {
                     taken as f32 * crate::world::Soil::NUTRIENT_PER_FISH * Self::OFFAL_SHARE;
                 agent
                     .skills
-                    .gain_experience(crate::agents::SkillType::Fishing, 12);
+                    .practise(crate::agents::SkillType::Fishing, 12, tick_now);
 
                 debug!("Agent {} took {} fish from {:?}", agent.id, taken, reach);
 
@@ -6485,7 +6573,7 @@ impl Simulation {
                 // Grant Navigation XP for exploration (more for new discoveries)
                 let agent = &mut self.population.agents[agent_index];
                 let nav_xp = if newly_explored_count > 0 { 2 } else { 1 };
-                agent.skills.gain_experience(crate::agents::skills::SkillType::Navigation, nav_xp);
+                agent.skills.practise(crate::agents::skills::SkillType::Navigation, nav_xp, tick_now);
 
                 // Exploration is rewarding
                 let curiosity_satisfaction = if newly_explored_count > 0 { 0.3 } else { 0.1 };

@@ -567,20 +567,72 @@ only when there is a clash, so every relationship saturates at close regardless
 of who the two people are. Nobody ever undertakes a social act either:
 `Undertaking::Dealing` is attempted zero times in a whole run.
 
+### 13. Skill measured how far you had walked, and bought nothing
+
+**Since fixed**, and recorded because the shape of it recurs.
+
+Experience was granted for *looking*. The resource-discovery pass filtered on
+the tick a thing was found and ran every tick, so a thing seen once paid out on
+ten consecutive ticks — fifty Farming experience for walking past a grain
+field, half a level, in a settled world holding ninety of them. A level cost a
+flat hundred wherever you stood, so the last step from journeyman to master was
+as cheap as the first away from knowing nothing. Nothing ever took a skill
+back.
+
+Between them, skill level measured how much of the map somebody had wandered
+over. Across 298 agents at eight thousand ticks:
+
+| trade | mean level (−10 to 10) | at journeyman or better |
+| --- | --- | --- |
+| Farming | **9.9** | 297 of 298 |
+| Herbalism | 1.0 | 293 |
+| Woodcutting | 0.5 | 265 |
+| Leatherworking | **−9.2** | 0 |
+| Hunting | **−9.9** | 0 |
+
+Everybody was a master farmer and nobody had farmed. The trades nothing could
+be *discovered* for stayed on the floor however much of them was done. And
+none of it mattered anyway: `Skill::speed_multiplier`, `Skill::perform_check`
+and `Skill::determine_quality` were all built and had no callers anywhere, and
+the harvest site carried the comment "determine harvest amount based on
+resource type and skill" above code that did not consult the skill. A lifetime
+at a trade brought back exactly what a first day did.
+
+Four things went in. Finding a thing pays once and pays a pittance; a level
+costs more the higher it goes, sized against the roughly two hundred and fifty
+goes at anything an agent gets in a working life; a trade not practised for a
+year begins to go, and keeps going, though never below apprentice; and what a
+hand is worth — half at the bottom, double at the top — now decides what comes
+off a field per trip and whether a garment is finished or spoiled in the
+making.
+
+The spread that came out, same measurement:
+
+| | before | after |
+| --- | --- | --- |
+| Best trade per agent | 9.9 | −2.4 |
+| Trades off the floor per agent | 5.8 of 8 | 4.6 of 8 |
+| Reached journeyman in anything | 297 of 298 | 92 of 284 |
+
+Most people are now mediocre at several things and a minority are genuinely
+good at one, which is the point. A settlement is unaffected: six worlds to
+fifteen thousand ticks came out at 100.5 people on 0.561 farmed fertility,
+matching the eight-world baseline exactly.
+
 ---
 
 ## Housekeeping
 
-### 13. Committed backup file
+### 14. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 14. Build warnings
+### 15. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 15. Placeholder package metadata
+### 16. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

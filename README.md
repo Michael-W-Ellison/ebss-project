@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
-across 200 source files, with 1,199 library tests.
+across 201 source files, with 1,207 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,236 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,244 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet see each other
 or hear anything. See
@@ -61,6 +61,15 @@ original specifications.
 - ✅ Learned practices: nobody tells an agent that muck does a field good. It
   tries it, watches what happens, keeps or drops the idea, and the neighbours
   who saw it take something from that too
+- ✅ A trade is worth having: experience comes from doing the work rather than
+  from walking past it, a level costs more the higher it goes, and a trade left
+  unpractised for a year starts to go. What a practised hand is worth runs from
+  half to double, and it decides what comes off a field per trip and whether a
+  garment is finished or spoiled in the making — so a dedicated farmer brings
+  back more than a casual one, and a dedicated tailor makes better coats and
+  wastes fewer. Skill used to measure how much of the map somebody had walked
+  over: everybody was a master farmer, nobody had farmed, and none of it did
+  anything. See ISSUES_FOUND.md #13
 - ✅ Everybody is somebody: a founder is drawn with three to five compatible
   traits out of sixty-odd, and everybody born afterwards takes after their two
   parents. Forty founders are forty different people

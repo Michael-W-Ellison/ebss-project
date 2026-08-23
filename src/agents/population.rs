@@ -1562,11 +1562,24 @@ impl Population {
                 }
 
                 // Award Navigation skill XP for exploration
-                agent.skills.gain_experience(super::SkillType::Navigation, new_discoveries as u32 * 2);
+                agent.skills.practise(super::SkillType::Navigation, new_discoveries as u32 * 2, current_tick);
             }
 
-            // Learn skills from newly discovered resources.
-            let newly_seen: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
+            // Learn what there is to learn from a thing on first seeing it,
+            // which is not much.
+            //
+            // This used to pay for looking rather than for doing. The filter
+            // is on the tick a resource was discovered, and this runs every
+            // tick, so a thing seen once paid out on ten consecutive ticks -
+            // fifty Farming experience for walking past a grain field, half a
+            // level, in a settled world holding ninety of them. Skill measured
+            // how much of the map somebody had wandered over: Farming sat at
+            // 9.9 out of 10 across nearly three hundred agents while
+            // Leatherworking, which nothing could be discovered for, sat at
+            // -9.2. Nobody had earned any of it.
+            //
+            // Recognising a plant is worth something and it is worth it once.
+            let just_found: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
                 .exploration_knowledge
                 .known_resources
                 .iter()
@@ -1575,13 +1588,13 @@ impl Population {
                         .exploration_knowledge
                         .resource_discovery_ticks
                         .get(pos)
-                        .map(|&tick| current_tick.saturating_sub(tick) < 10)
+                        .map(|&tick| tick == current_tick)
                         .unwrap_or(false)
                 })
                 .map(|(pos, resource_type)| (*pos, *resource_type))
                 .collect();
 
-            for (_, resource_type) in &newly_seen {
+            for (_, resource_type) in &just_found {
                 for (skill_type, xp) in Self::get_skill_for_resource_discovery(resource_type) {
                     agent.skills.gain_experience(skill_type, xp);
                 }
@@ -1625,11 +1638,11 @@ impl Population {
                     .remember_location(memory_type, (pos.x, pos.y, 0));
             }
 
-            // Learn skills from discovered buildings
+            // Learn skills from discovered buildings, on the tick of finding
+            // them and not on the nine after it - see above
             for (pos, building_type) in &agent.exploration_knowledge.known_buildings {
-                // Only give XP for recently discovered buildings (within last 10 ticks)
                 if let Some(&discover_tick) = agent.exploration_knowledge.building_discovery_ticks.get(pos) {
-                    if current_tick.saturating_sub(discover_tick) < 10 {
+                    if discover_tick == current_tick {
                         let skill_xp = Self::get_skill_for_building_discovery(building_type);
                         for (skill_type, xp) in skill_xp {
                             agent.skills.gain_experience(skill_type, xp);
@@ -1645,27 +1658,31 @@ impl Population {
         use crate::world::ResourceType;
         use super::SkillType;
 
+        // Knowing a thing when you see it is worth a little and no more. What
+        // makes a farmer is a life of farming, not a life of noticing fields:
+        // these are a fraction of what doing the work pays, and they are paid
+        // once.
         match resource_type {
             // Mining resources teach Mining skill
             ResourceType::Stone | ResourceType::Iron | ResourceType::Coal
             | ResourceType::Clay | ResourceType::Sand => {
-                vec![(SkillType::Mining, 5)]
+                vec![(SkillType::Mining, 1)]
             }
             // Wood resources teach Woodcutting
-            ResourceType::Wood => vec![(SkillType::Woodcutting, 5)],
+            ResourceType::Wood => vec![(SkillType::Woodcutting, 1)],
             // Agricultural resources teach Farming/Herbalism
             ResourceType::Grain | ResourceType::Flax | ResourceType::Cotton => {
-                vec![(SkillType::Farming, 5)]
+                vec![(SkillType::Farming, 1)]
             }
-            ResourceType::Herbs => vec![(SkillType::Herbalism, 5)],
+            ResourceType::Herbs => vec![(SkillType::Herbalism, 1)],
             // Animal resources teach Hunting
-            ResourceType::Meat | ResourceType::Hides => vec![(SkillType::Hunting, 5)],
+            ResourceType::Meat | ResourceType::Hides => vec![(SkillType::Hunting, 1)],
             // Fish teaches Fishing
-            ResourceType::Fish => vec![(SkillType::Fishing, 5)],
+            ResourceType::Fish => vec![(SkillType::Fishing, 1)],
             // Food and foraging
-            ResourceType::Food => vec![(SkillType::Herbalism, 3)],
+            ResourceType::Food => vec![(SkillType::Herbalism, 1)],
             // Other resources
-            _ => vec![(SkillType::Navigation, 2)],
+            _ => vec![(SkillType::Navigation, 1)],
         }
     }
 

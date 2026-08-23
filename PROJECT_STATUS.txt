@@ -55,8 +55,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,236 tests across the workspace:
-  1,199 library tests
+  1,244 tests across the workspace:
+  1,207 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -138,6 +138,14 @@ Verified as reached by Simulation::tick():
   Land            every tile carries soil: nutrients, and two pools of dead
                   matter waiting to become more of it. What rots and how fast
                   depends on how dense it was alive and how wet the ground is
+  Trades          a hand gets better at what it does and worse at what it does
+                  not. Finding a thing pays a pittance once; doing the work
+                  pays properly; a level costs more the higher it goes; a trade
+                  unpractised for a year begins to go, though never below
+                  apprentice. What a hand is worth runs from half to double,
+                  and decides what comes off a field per trip and whether a
+                  garment is finished or spoiled in the making. Most people end
+                  up mediocre at several things and a few genuinely good at one
   Personality     a founder is drawn with three to five compatible traits out
                   of sixty-odd, and everybody born afterwards takes after their
                   two parents with a chance of mutation. Blindness, deafness

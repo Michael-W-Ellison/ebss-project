@@ -1471,6 +1471,12 @@ impl Agent {
     /// Split out of `tick_with_time` so that callers which drive agents through
     /// `tick_with_percepts` instead (notably `Population::tick`) run the same
     /// survival mechanics rather than aging alone.
+    /// How often a hand is tested against what it has not been doing.
+    ///
+    /// A season. Rust is reckoned in years, so checking more often buys
+    /// nothing and costs a walk over every skill of every agent.
+    const HOW_OFTEN_A_HAND_IS_TESTED: u32 = 288;
+
     pub fn process_survival_tick(&mut self, current_tick: u32) {
         // Calculate pregnancy energy multiplier (if pregnant)
         let energy_multiplier = self.pregnancy.as_ref()
@@ -1485,6 +1491,14 @@ impl Agent {
 
         // Process food spoilage in inventory
         self.tick_food_spoilage(current_tick);
+
+        // And let go of trades that have not been practised in a long time.
+        // Once a season is often enough for something measured in years, and a
+        // settlement of two hundred is not worth walking every skill of every
+        // agent every tick for.
+        if current_tick % Self::HOW_OFTEN_A_HAND_IS_TESTED == 0 {
+            self.skills.let_unused_skills_rust(current_tick);
+        }
 
         // Recover condition when nothing is wrong. `regenerate_health` had no
         // callers at all, so agents only ever lost health over a lifetime.
