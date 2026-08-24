@@ -165,6 +165,12 @@ pub struct Lessons {
     attempts: HashMap<Undertaking, u32>,
     /// How many of those went well
     successes: HashMap<Undertaking, u32>,
+    /// And the same record kept on each particular thing attempted, which is
+    /// what an agent actually decides on - see `record_particular`
+    #[serde(default)]
+    particular: HashMap<String, f32>,
+    #[serde(default)]
+    particular_attempts: HashMap<String, u32>,
 }
 
 impl Lessons {
@@ -238,6 +244,104 @@ impl Lessons {
         }
 
         self.belief(undertaking) > 0.2
+    }
+
+
+    /// How willing this agent is to try something again.
+    ///
+    /// "When an action fails to satisfy a drive, its odds of repeating should
+    /// decrease. Inversely, when an action satisfies a drive, its odds of
+    /// repeating should increase."
+    ///
+    /// `worth_trying` is the same idea as a cliff: everything is worth trying
+    /// until the belief crosses a line, and then nothing is. That is the right
+    /// shape for "do I set out after a deer" and the wrong one for the general
+    /// case, where an agent should keep half an eye on a thing that mostly
+    /// fails rather than swearing off it for life.
+    ///
+    /// Never quite nought and never quite one: a man who has failed at
+    /// something forty times still tries it now and again, which is what lets
+    /// him find out the world has changed.
+    /// A man who has failed at something forty times still tries it now and
+    /// again, which is what lets him find out the world has changed. Set to
+    /// 0.05 this was not a slackening but a ban: an action whose success needs
+    /// the agent to be somewhere particular - cooking needs a fire, and
+    /// getting to the fire takes a few turns - was written off before it had
+    /// ever had a fair go at working.
+    pub const NEVER_QUITE_GIVES_UP: f32 = 0.2;
+    pub const NEVER_QUITE_CERTAIN: f32 = 0.95;
+
+    /// And how much of a run of them it takes before an agent will hear it.
+    ///
+    /// Five is enough to judge whether you are a hunter, which is what the
+    /// coarse record is for. It is not enough to judge whether a thing works,
+    /// because the first few goes at anything are spent getting into position.
+    const A_FAIR_GO: u32 = 12;
+
+    pub fn how_likely_to_try(&self, undertaking: Undertaking) -> f32 {
+        // The benefit of the doubt, until there is a record worth reading
+        if self.attempts(undertaking) < Self::ENOUGH_TO_JUDGE {
+            return Self::NEVER_QUITE_CERTAIN;
+        }
+
+        self.belief(undertaking)
+            .clamp(Self::NEVER_QUITE_GIVES_UP, Self::NEVER_QUITE_CERTAIN)
+    }
+
+    /// Whether this agent will try it this time.
+    pub fn will_try_again(&self, undertaking: Undertaking) -> bool {
+        use rand::Rng;
+        rand::thread_rng().gen_bool(self.how_likely_to_try(undertaking) as f64)
+    }
+
+
+    /// What an agent has found out about one particular thing it does.
+    ///
+    /// The `Undertaking` record is deliberately coarse - it answers "am I a
+    /// hunter" - and that is too coarse to act on. Going for water and going
+    /// for wood are both `Foraging`, so a settlement whose river had dried up
+    /// would learn that foraging does not work and stop gathering food as
+    /// well.
+    ///
+    /// This is the same arithmetic keyed on the thing actually attempted:
+    /// `gather:water` is one lesson and `gather:wood` another.
+    fn note(&mut self, what: String, worked: bool) {
+        let belief = self.particular.entry(what.clone()).or_insert(Self::UNTRIED);
+        if worked {
+            *belief = (*belief + Self::LEARNED_FROM_SUCCESS).min(1.0);
+        } else {
+            *belief = (*belief - Self::LEARNED_FROM_FAILURE).max(0.0);
+        }
+        *self.particular_attempts.entry(what).or_insert(0) += 1;
+    }
+
+    /// Note how one particular attempt turned out.
+    pub fn record_particular(&mut self, what: &str, worked: bool) {
+        self.note(what.to_string(), worked);
+    }
+
+    /// How willing this agent is to try this particular thing again.
+    pub fn how_likely_to_try_this(&self, what: &str) -> f32 {
+        let tried = self.particular_attempts.get(what).copied().unwrap_or(0);
+        if tried < Self::A_FAIR_GO {
+            return Self::NEVER_QUITE_CERTAIN;
+        }
+        self.particular
+            .get(what)
+            .copied()
+            .unwrap_or(Self::UNTRIED)
+            .clamp(Self::NEVER_QUITE_GIVES_UP, Self::NEVER_QUITE_CERTAIN)
+    }
+
+    /// Whether it will bother this time.
+    pub fn will_try_this_again(&self, what: &str) -> bool {
+        use rand::Rng;
+        rand::thread_rng().gen_bool(self.how_likely_to_try_this(what) as f64)
+    }
+
+    /// How many times this particular thing has been tried.
+    pub fn tried_this(&self, what: &str) -> u32 {
+        self.particular_attempts.get(what).copied().unwrap_or(0)
     }
 
     /// The thing this agent has found works best for it, of those it has tried

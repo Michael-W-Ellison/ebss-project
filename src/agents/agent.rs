@@ -1135,6 +1135,105 @@ impl Agent {
     }
 
     /// What counts as material to work or build with
+
+
+    /// How much of a thing an agent keeps on its person before the rest is
+    /// spare.
+    pub const ENOUGH_TO_HAND: u32 = 6;
+
+    /// The thing this agent has most of beyond what it needs about it, if any.
+    ///
+    /// The Preparedness drive named `item_type: "resource"` - a placeholder
+    /// string the storehouse does not recognise - so putting something by
+    /// could not work and never once did. Measured, `Store` was 4.7% of
+    /// everything a settlement did and failed 100.0% of the time, thirteen
+    /// thousand times in four thousand ticks, every one of them
+    /// `Unknown item type: resource`.
+    ///
+    /// Food is left where it is: what is in the pack is what an agent eats
+    /// from, and putting the last of it in a storehouse across the settlement
+    /// is not thrift.
+    pub fn what_i_can_spare(&self) -> Option<(String, u32)> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(name, item)| {
+                item.quantity > Self::ENOUGH_TO_HAND
+                    && item.food_data.is_none()
+                    && !name.contains("food")
+            })
+            .max_by_key(|(_, item)| item.quantity)
+            .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
+    }
+
+    /// What a grown person already knows how to do when a world opens.
+    ///
+    /// Every skill started at -10, the floor, for everybody. That is not a
+    /// people arriving somewhere; it is a people who have never done anything.
+    /// And it deadlocks: the one thing the Utility drive reaches for is a
+    /// wooden axe needing Crafting at -5, skill rises only by doing, so nobody
+    /// could make their first axe and the settlement never held a single tool.
+    /// Measured, Craft failed 99.3% of the time on that one gate.
+    ///
+    /// These are the hands of people who lived somewhere before they came
+    /// here: enough to feed themselves, put up a tent, work a hide and knap a
+    /// stone, and no more. It is a floor to build on rather than a gift - the
+    /// climb from here to mastery is untouched, and a founder is still nearer
+    /// the bottom of it than the top.
+    const WHAT_A_GROWN_PERSON_ARRIVES_KNOWING: [(super::SkillType, i32); 8] = [
+        (super::SkillType::Herbalism, -4),
+        (super::SkillType::Hunting, -5),
+        (super::SkillType::Fishing, -6),
+        (super::SkillType::Cooking, -5),
+        (super::SkillType::Crafting, -4),
+        (super::SkillType::Construction, -5),
+        (super::SkillType::Leatherworking, -5),
+        (super::SkillType::Woodcutting, -4),
+    ];
+
+    /// And what they carry: what you can knap, cut and stitch with.
+    ///
+    /// Tools and nothing else. Giving founders the hides and poles for a tent
+    /// as well seemed obviously right and was measurably ruinous: twenty-five
+    /// people who can all raise a tent on the first tick all try to, crowd the
+    /// same ground - `No suitable building location found (all positions
+    /// occupied)` - and spend the rest of their lives walking about looking
+    /// for somewhere to put one instead of feeding themselves. Measured
+    /// against the same commit, two worlds a side: 136 alive at the baseline,
+    /// 134 with the skills alone, and 36 with the materials in the pack.
+    ///
+    /// So they arrive knowing how to raise a tent and having to gather the
+    /// hides for it, which is a stone-age start rather than a stone-age
+    /// stockpile.
+    const WHAT_THEY_CARRY: [(&'static str, u32, f32); 2] =
+        [("stoneaxe", 1, 2.0), ("stoneknife", 1, 0.5)];
+
+    /// Set a founder up as somebody who has lived a life before this one.
+    pub fn give_them_a_stone_age_start(&mut self) {
+        use super::InventoryItem;
+
+        for (trade, hand) in Self::WHAT_A_GROWN_PERSON_ARRIVES_KNOWING {
+            // Never take a skill *down*: an agent that has somehow already
+            // learned better keeps what it has
+            let already = self
+                .skills
+                .get_skill_if_exists(trade)
+                .map(|s| s.level)
+                .unwrap_or(i32::MIN);
+            if already < hand {
+                self.skills.set_skill_level(trade, hand);
+            }
+        }
+
+        for (what, how_many, each) in Self::WHAT_THEY_CARRY {
+            self.inventory.add_item(InventoryItem::new_with_weight(
+                what.to_string(),
+                how_many,
+                each,
+            ));
+        }
+    }
+
     pub const MATERIALS: [&'static str; 7] = [
         "wood", "stone", "iron", "clay", "sand", "coal", "brick",
     ];
@@ -2916,8 +3015,41 @@ impl Agent {
     /// worth remembering - walking somewhere either works or the ground was in
     /// the way - so only the undertakings an agent could sensibly form an
     /// opinion about are recorded.
+    /// The particular thing an action attempts, named finely enough to learn
+    /// about: `gather:water` rather than `foraging`.
+    pub fn what_was_tried(action: &Action) -> String {
+        match action {
+            Action::Gather { resource_type } => format!("gather:{resource_type}"),
+            Action::Craft { item_type } => format!("craft:{item_type}"),
+            Action::Build { structure_type, .. } => format!("build:{structure_type}"),
+            Action::Store { item_type, .. } => format!("store:{item_type}"),
+            Action::Eat { food_type } => format!("eat:{food_type}"),
+            Action::Mate { .. } => "mate".to_string(),
+            Action::Fish => "fish".to_string(),
+            Action::Hunt { .. } => "hunt".to_string(),
+            Action::MakeClothing { garment } => format!("makeclothing:{garment}"),
+            Action::Cook { .. } => "cook".to_string(),
+            Action::LightFire => "lightfire".to_string(),
+            Action::TillSoil => "tillsoil".to_string(),
+            Action::SpreadMuck => "spreadmuck".to_string(),
+            Action::Socialize { .. } => "socialize".to_string(),
+            Action::ShareInformation { .. } => "shareinformation".to_string(),
+            other => format!("{:?}", other)
+                .split(|c: char| c == ' ' || c == '{' || c == '(')
+                .next()
+                .unwrap_or("")
+                .to_lowercase(),
+        }
+    }
+
     pub fn learn_from(&mut self, action: &Action, worked: bool) {
         use super::practices::Undertaking;
+
+        // The fine record, which is what decides whether this exact thing is
+        // worth trying again. The coarse one below answers a different
+        // question - what sort of person this is - and both are wanted.
+        self.lessons
+            .record_particular(&Self::what_was_tried(action), worked);
 
         let undertaking = match action {
             Action::Hunt { .. } => Undertaking::Hunting,

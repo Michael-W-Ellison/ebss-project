@@ -246,6 +246,10 @@ impl Population {
         // nothing about how they spend it.
         agent.drives.lean_towards(&agent.traits);
 
+        // A founder has lived somewhere before this. They arrive with the
+        // hands of a grown person and what they can carry.
+        agent.give_them_a_stone_age_start();
+
         // Give new agents basic starting knowledge
         
         agent.technology_knowledge.add_initial_technology(
@@ -1820,6 +1824,11 @@ impl Population {
             // Production buildings teach relevant crafting skills
             BuildingType::Forge | BuildingType::Smithy => {
                 vec![(SkillType::Smelting, 10), (SkillType::Metalworking, 5)]
+            }
+            // A tent is the first thing anybody puts up, and putting one up
+            // teaches the hands that will later raise a house
+            BuildingType::SkinTent => {
+                vec![(SkillType::Construction, 5), (SkillType::Leatherworking, 5)]
             }
             BuildingType::Workshop => vec![(SkillType::Crafting, 10)],
             BuildingType::Farm => vec![(SkillType::Farming, 10)],

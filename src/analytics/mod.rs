@@ -1100,14 +1100,11 @@ impl Simulation {
             DriveType::Hunger => Action::Eat { food_type: "generic".to_string() },
             DriveType::Thirst => Action::Gather { resource_type: "water".to_string() },
             DriveType::Rest => Action::Sleep { duration: 10 },
-            DriveType::Shelter => Action::Build {
-                structure_type: "shelter".to_string(),
-                position
-            },
-            DriveType::Construction => Action::Build {
-                structure_type: "structure".to_string(),
-                position
-            },
+            DriveType::Shelter => Action::Gather { resource_type: "hides".to_string() },
+            // Building with nothing to build from is the commonest wasted
+            // turn in the model - the drive path above checks the pack first.
+            // A trip out for timber is what this falls back to.
+            DriveType::Construction => Action::Gather { resource_type: "wood".to_string() },
             DriveType::Industry => Action::Gather { resource_type: "generic".to_string() },
             // Answered by going to the children, which needs to know where
             // they are - see `protective_action`. On its own it comes to
@@ -1128,7 +1125,10 @@ impl Simulation {
                 }
             },
             DriveType::Utility => Action::Craft { item_type: "woodenaxe".to_string() },
-            DriveType::Preparedness => Action::Store { item_type: "resource".to_string(), amount: 1 },
+            // Putting something by needs something to put by, which this
+            // ladder cannot see - the drive path above names a real thing out
+            // of the agent's own pack. A trip out is the honest fallback.
+            DriveType::Preparedness => Action::Gather { resource_type: "wood".to_string() },
             DriveType::Sustenance => Action::Gather { resource_type: "food".to_string() },
             DriveType::Safety => {
                 // Move to a random nearby safe location
@@ -1763,6 +1763,39 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
+        // "When an action fails to satisfy a drive, its odds of repeating
+        // should decrease. Inversely, when an action satisfies a drive, its
+        // odds of repeating should increase."
+        //
+        // Every attempt has been recorded against the particular thing tried
+        // since `Lessons` was written, and nothing but hunting ever read it
+        // back. So a settlement that could not put a roof up went on trying
+        // to for fifteen thousand ticks, and one whose thirsty men were
+        // nowhere near water asked for it a hundred and thirty thousand times.
+        //
+        // A drive that offers something this agent has learned does not work
+        // stands aside and lets the next drive have the turn. It is a
+        // slackening rather than a ban - see `Lessons::NEVER_QUITE_GIVES_UP` -
+        // so a man who has failed at something forty times still tries it now
+        // and again, which is how he finds out the world has changed.
+        let answer = self.what_this_drive_offers(drive_type, agent, agent_position)?;
+
+        if agent
+            .lessons
+            .will_try_this_again(&crate::agents::Agent::what_was_tried(&answer))
+        {
+            Some(answer)
+        } else {
+            None
+        }
+    }
+
+    fn what_this_drive_offers(
+        &self,
+        drive_type: DriveType,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
         match drive_type {
             // Water first of the two, always, because it runs out first - but
             // that is now decided by the clocks in `how_hard_it_presses`
@@ -1827,6 +1860,9 @@ impl Simulation {
                 })
                 .or_else(|| self.clothing_action(agent, agent_position, false)),
 
+            // A roof, when there is anything to make one from
+            DriveType::Construction => self.raising_a_roof(agent, agent_position),
+
             // Looking after somebody of your own
             DriveType::Protection => self.protective_action(agent, agent_position),
 
@@ -1861,16 +1897,15 @@ impl Simulation {
 
             // Putting something by needs something to put by
             DriveType::Preparedness => {
-                if agent.inventory.get_all_items().values().any(|item| item.quantity > 0) {
+                if let Some((what, how_many)) = agent.what_i_can_spare() {
                     Some(Action::Store {
-                        item_type: "resource".to_string(),
-                        amount: 1,
+                        item_type: what,
+                        amount: how_many,
                     })
                 } else {
                     None
                 }
             }
-
             // Nothing in the world is fine enough to want yet - see
             // ISSUES_FOUND.md #5. Until something is, this need has no answer
             // and stands aside rather than spending the turn walking after a
@@ -2282,6 +2317,55 @@ impl Simulation {
     /// How close a hunter has to be to strike: a spear's throw, not a
     /// line of sight across the valley
     const HUNT_REACH: i32 = 2;
+
+
+    /// Putting a roof up, or going to fetch what it needs.
+    ///
+    /// Building was chosen without ever looking at what the agent was
+    /// carrying, so the Construction drive spent an eighth of a settlement's
+    /// life restating that it was short of materials. Measured, `Build` failed
+    /// 100.0% of the time and the commonest single reason was being
+    /// twenty-six wood and all thirty stone short of a house.
+    ///
+    /// An agent that has what a tent takes puts one up. An agent that does not
+    /// goes and gets the thing it is shortest of, which is the same answer a
+    /// person would give and turns a wasted turn into a useful one.
+    fn raising_a_roof(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::BuildingType;
+
+        // A tent is what a stone-age people can raise. Anything grander needs
+        // stone they have no way to quarry.
+        let wanted = BuildingType::SkinTent.requirements();
+
+        let short_of = wanted
+            .iter()
+            .filter_map(|needed| {
+                let name = format!("{:?}", needed.resource_type).to_lowercase();
+                let have = agent
+                    .inventory
+                    .get_item(&name)
+                    .map(|item| item.quantity)
+                    .unwrap_or(0);
+                if have >= needed.amount {
+                    None
+                } else {
+                    Some((name, needed.amount - have))
+                }
+            })
+            .max_by_key(|(_, missing)| *missing);
+
+        match short_of {
+            None => Some(Action::Build {
+                structure_type: "tent".to_string(),
+                position: agent_position,
+            }),
+            Some((what, _)) => Some(Action::Gather { resource_type: what }),
+        }
+    }
 
     /// The bare name of an action, without whatever it is aimed at.
     ///
@@ -4443,14 +4527,21 @@ impl Simulation {
 
                 // Map structure string to BuildingType
                 let building_type = match structure_type.as_str() {
-                    "shelter" | "smallhouse" => BuildingType::SmallHouse,
+                    // What "put up a shelter" means to people who have hides
+                    // and poles and no quarry. Every house in the list needs
+                    // stone, the cheapest of them thirty, and a settlement
+                    // that has never had a single block of it spent an eighth
+                    // of its life saying so.
+                    "tent" | "skintent" => BuildingType::SkinTent,
+                    "shelter" => BuildingType::SkinTent,
+                    "smallhouse" => BuildingType::SmallHouse,
                     "mediumhouse" => BuildingType::MediumHouse,
                     "largehouse" => BuildingType::LargeHouse,
                     "workshop" => BuildingType::Workshop,
                     "storehouse" => BuildingType::Storehouse,
                     "farm" => BuildingType::Farm,
-                    "structure" => BuildingType::SmallHouse, // Default
-                    _ => BuildingType::SmallHouse, // Default fallback
+                    "structure" => BuildingType::SkinTent,
+                    _ => BuildingType::SkinTent,
                 };
 
                 // Get resource requirements for this building

@@ -8,6 +8,16 @@ use crate::world::{Position, Resource, ResourceType};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BuildingType {
     // Shelter progression
+    /// Hides over a frame of poles. The first thing a people who have just
+    /// arrived somewhere can actually put up.
+    ///
+    /// Every other shelter in this list needs stone, and the cheapest of them
+    /// needs thirty of it. Founders start with none, no way to quarry any, and
+    /// no skill to build with it - so the Construction drive spent an eighth of
+    /// a settlement's whole life restating that it was short of wood and had
+    /// no stone at all, and not one building was ever raised. A tent is what
+    /// stands between a stone-age people and the weather.
+    SkinTent,
     Longhouse,         // Basic: Shared housing (10 capacity)
     UpgradedLonghouse, // Improved longhouse (15 capacity)
     SmallHouse,        // Personal 1-2 person home
@@ -60,6 +70,10 @@ impl BuildingType {
     pub fn requirements(&self) -> Vec<Resource> {
         match self {
             // Housing
+            BuildingType::SkinTent => vec![
+                Resource::new(ResourceType::Wood, 8),
+                Resource::new(ResourceType::Hides, 4),
+            ],
             BuildingType::Longhouse => vec![
                 Resource::new(ResourceType::Wood, 100),
                 Resource::new(ResourceType::Stone, 50),
@@ -231,6 +245,7 @@ impl BuildingType {
     pub fn construction_time(&self) -> u32 {
         match self {
             // Housing
+            BuildingType::SkinTent => 40,
             BuildingType::Longhouse => 500,
             BuildingType::UpgradedLonghouse => 700,
             BuildingType::SmallHouse => 300,
@@ -282,6 +297,7 @@ impl BuildingType {
     /// Get building capacity (for housing)
     pub fn capacity(&self) -> usize {
         match self {
+            BuildingType::SkinTent => 2,
             BuildingType::Longhouse => 10,
             BuildingType::UpgradedLonghouse => 15,
             BuildingType::SmallHouse => 2,
@@ -309,6 +325,7 @@ impl BuildingType {
     pub fn ascii_char(&self) -> char {
         match self {
             // Housing
+            BuildingType::SkinTent => 't',
             BuildingType::Longhouse => 'L',
             BuildingType::UpgradedLonghouse => 'Ł',
             BuildingType::SmallHouse => 'h',
@@ -361,6 +378,7 @@ impl BuildingType {
     pub fn color_code(&self) -> &'static str {
         match self {
             // Housing - Magenta
+            BuildingType::SkinTent |
             BuildingType::Longhouse | BuildingType::UpgradedLonghouse |
             BuildingType::SmallHouse | BuildingType::MediumHouse |
             BuildingType::LargeHouse | BuildingType::Manor => "\x1b[35m",
@@ -415,6 +433,7 @@ impl BuildingType {
     /// Get the upgrade path for this building (if any)
     pub fn can_upgrade_to(&self) -> Option<BuildingType> {
         match self {
+            BuildingType::SkinTent => Some(BuildingType::Longhouse),
             BuildingType::Longhouse => Some(BuildingType::UpgradedLonghouse),
             BuildingType::SmallHouse => Some(BuildingType::MediumHouse),
             BuildingType::MediumHouse => Some(BuildingType::LargeHouse),
@@ -498,6 +517,7 @@ impl BuildingType {
     pub fn functionality_description(&self) -> &'static str {
         match self {
             // Housing
+            BuildingType::SkinTent => "Hides stretched over poles. Sleeps two, keeps the weather off, and can be put up by people who have only what they can carry.",
             BuildingType::Longhouse => "Basic shared housing for up to 10 agents. Provides shelter and increases well-being.",
             BuildingType::UpgradedLonghouse => "Improved shared housing for up to 15 agents. Better comfort and amenities.",
             BuildingType::SmallHouse => "Personal dwelling for 1-2 agents. Provides privacy and personal space.",
@@ -550,6 +570,7 @@ impl BuildingType {
     pub fn prerequisites(&self) -> Vec<BuildingType> {
         match self {
             // Basic buildings have no prerequisites
+            BuildingType::SkinTent |
             BuildingType::Longhouse | BuildingType::SmallHouse | BuildingType::Workshop |
             BuildingType::Storehouse | BuildingType::Farm | BuildingType::Shrine => vec![],
 
