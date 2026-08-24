@@ -1250,9 +1250,96 @@ what kept a settlement alive — which is precisely why the channel could go
 ungated and unfalsifiable for the project's whole history without anybody
 noticing.
 
+## News: age, room and shelf life
+
+Three things were missing from the way agents tell each other where things
+are, and each was making the trust work behave badly.
+
+**A claim carried who made it and nothing else.** So a man who honestly
+reported a patch he saw last season was called a liar the moment somebody
+found it picked, and there was no way for him not to be. `Hearsay` now carries
+when the speaker says he saw the thing: a liar says he walked past it this
+morning, an honest man says when he actually did, and a man is answerable for
+two days. Being out of date costs a sixth of what a lie costs and no anger at
+all — the difference between a man whose news keeps badly and a man who
+invented a place.
+
+**Walking past a thing again is seeing it again.** The sighting tick was set
+once, on first discovery, and never touched — so "a patch I just passed" was a
+claim nobody in this model could make. It needed a second map rather than a
+refresh of the first: skill experience is paid on the discovery tick being the
+current one, so writing today's tick there paid an agent Farming experience
+every tick it stood near a field, which is the exact defect that map was
+cleaned up for once already. `last_seen_ticks` answers what an agent can vouch
+for; `resource_discovery_ticks` answers what it learned from.
+
+**Telling was strictly two-handed.** One speaker, one listener, and nobody
+else heard a word of it however many people were standing round.
+`say_it_out_loud` reaches everybody within earshot, and each of them decides
+for themselves whether the speaker is worth believing — so a settlement can
+take one man at his word and disbelieve him in the same breath.
+
+**And a liar counts the people who can hear him.** He picks ground nobody
+present has walked lately, because somebody who was there will contradict him
+on the spot; he weighs the room by whoever in it is worth deceiving; and every
+extra pair of ears is another person who may go and look, so a crowd of five
+is about a third as tempting as a private word.
+
+**What an agent keeps is what it has some use for.** Nothing bounded it
+before, which did not matter while the only way to learn a place was to walk
+past it and matters a great deal now that news travels. Ninety-six places, and
+what goes first is what answers no need this agent has — hearsay before
+first-hand, older before newer at equal interest. A thirsty man holds on to
+every waterhole he has heard of and lets the flax go.
+
+**Two things measured rather than reasoned about**, both of which had the
+previous piece of work wrong in ways that were not guessable:
+
+The periodic sweep over remembered claims is retired. Run with lying switched
+off entirely it still made every agent a proven liar to **twenty-seven**
+others — every one of those accusations false — because `verify_resource_claim`
+reads the agent's own map as ground truth and an agent's map holds what it has
+been told. The sight pass, the honest test, fired **not once** in the same run.
+There is one detection path now and it is the one where somebody is standing on
+the spot.
+
+And the first cut of "count the room" abolished lying outright. Vetoing a lie
+when anybody present had *ever* walked the ground meant **four** lies told in a
+whole world's life, because over fifteen thousand ticks a settlement walks over
+nearly everything. Only a sighting inside the last season lets a man contradict
+you.
+
+Eight worlds before, ten after:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| Places an agent holds in mind | 239.5 ± 1.6 | **96.0 ± 0.0** | −87.86 se |
+| People caught lying, per agent | 1.35 ± 0.35 | 0.16 ± 0.04 | −3.41 se |
+| Mean trust between two agents | 0.70 ± 0.02 | 0.69 ± 0.01 | −0.82 se |
+| Pairs who will not take each other's word | 7.77% ± 2.22 | 7.47% ± 1.68 | −0.11 se |
+| Births | 149.4 ± 7.0 | 130.2 ± 13.6 | −1.26 se |
+| Deaths | 94.6 ± 7.6 | 82.8 ± 5.1 | −1.30 se |
+| End population | 79.8 ± 4.6 | 72.4 ± 10.0 | −0.67 se |
+| Peak population | 100.9 ± 4.7 | 96.7 ± 6.3 | −0.54 se |
+| Soil fertility | 0.40 | 0.40 | 0.75 se |
+| Settlements still inhabited | 8 of 8 | 10 of 10 | — |
+
+Nobody carries the map any more, and accusations fall eightfold — which is the
+point, because nearly all of them were false. What does *not* move is the
+telling detail: mean trust and the share of pairs who will not take each
+other's word are unchanged. Trust was never really being driven by the
+evidence; it was driven by the bond and by disposition, and the accusations
+were noise on top. Now there are eight times fewer of them and they are real.
+
+Births and deaths both fall by about the same amount, neither clearing a
+standard error and neither alone meaning anything, but moving together — a
+slightly smaller, slower settlement rather than a failing one, and every world
+still inhabited. Some of that is the memory cap: an agent that knows ninety-six
+places rather than two hundred and forty walks further to feed itself.
+
 ## Test coverage
 
-1,267 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,279 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,
@@ -1289,6 +1376,7 @@ function in isolation:
 | `src/analytics/tests/fight_or_flight_tests.rs` | running from what you are afraid of, striking at what is in reach, and a grudge deciding between the two |
 | `src/analytics/tests/relationship_graph_tests.rs` | a grudge weighing on a bond, a blow landing on it, and what two people are following what they think of each other |
 | `src/analytics/tests/distrust_tests.rs` | whose word an agent takes, what a lie costs by what it was about, and a lie being found out by walking to it |
+| `src/analytics/tests/news_tests.rs` | a week-old sighting not being a lie, a crowd making a man think twice, and a thirsty man keeping the waterholes |
 
 ---
 

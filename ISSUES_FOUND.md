@@ -815,6 +815,21 @@ Listed so nobody re-investigates them. Each has regression tests in
   and halved the birth rate. Measured at eight worlds a side, this alone was
   the difference between a settlement of 45 and one of 30. A drive now fades at
   the pace it would have grown.
+- **News had no age, no room, and no shelf life.** A claim carried who made it
+  and nothing else, so a man who honestly reported a patch he saw last season
+  was called a liar the moment somebody found it picked. Telling was strictly
+  two-handed - one speaker, one listener, nobody else hearing a word of it
+  however many were standing round - and a liar weighed only the man in front
+  of him. And what an agent remembered was bounded by nothing, so a settlement
+  that talks carried the whole map in every head. A claim now says when the
+  speaker saw the thing and he is answerable for two days; being out of date
+  costs a sixth of a lie and no anger. Speech reaches everybody in earshot,
+  and a liar picks ground nobody present has walked lately. An agent holds
+  ninety-six places and lets go of what answers no need it has. Two things
+  turned up on the way: the periodic sweep over remembered claims was making
+  every accusation in the model, all of them false, and is retired in favour
+  of the sight pass; and the first cut of "count the room" abolished lying
+  outright by letting anybody who had *ever* walked the ground contradict it.
 - **Nobody could be disbelieved, and nobody could lie.** Trust lived in three
   books that never met — a verified track record in the knowledge base, an
   enum on the relationship, and a sum of trait modifiers that mixed "do I

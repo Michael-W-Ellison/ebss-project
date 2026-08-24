@@ -56,8 +56,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,304 tests across the workspace:
-  1,267 library tests
+  1,316 tests across the workspace:
+  1,279 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -163,6 +163,24 @@ Verified as reached by Simulation::tick():
                   somebody out, and the whole price is eight places in two
                   hundred and forty that an agent no longer knows of. Nothing
                   else moves within a standard error
+  News            what a man says he saw travels with when he says he saw it,
+                  so somebody who reported a patch last season is not called a
+                  liar when it turns out to have been picked since - only a
+                  man who says he passed it this morning can be held to what
+                  is there now. Being out of date costs a sixth of what a lie
+                  costs and no anger at all. It is said out loud rather than
+                  whispered, so everybody within earshot hears it and each
+                  decides for themselves whether to believe him; and a liar
+                  picks ground nobody present has walked lately, because a
+                  crowd is more people to fool and more people who may go and
+                  look. What an agent keeps in mind is bounded and sorted by
+                  what it needs: a thirsty man holds every waterhole he has
+                  heard of and forgets where the flax was. Measured over eight
+                  worlds before and ten after: places held in mind 239.5 to
+                  96.0, people caught lying 1.35 per agent to 0.16 - nearly
+                  all of the old ones were false - while mean trust and the
+                  share of pairs who will not take each other's word do not
+                  move at all
   Emotion         fear and anger are appraisals: the strength of the thing in
                   front of the agent, scaled by how near it is, weighed
                   against what the agent can do about it - health, build,

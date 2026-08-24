@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 108,000 lines
-across 206 source files, with 1,267 library tests.
+across 207 source files, with 1,279 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,304 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,316 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -125,6 +125,17 @@ original specifications.
   that is not there. It is found out by walking to it, and what it costs him
   depends on what he lied about — sending a starving man to an empty field is
   not the same as misdescribing a pile of rocks
+- ✅ News with an age, a room and a shelf life. What a man says he saw *and
+  when* both travel with the claim, so somebody who reported a patch last
+  season is not called a liar when it turns out to have been picked since —
+  only a man who says he walked past it this morning can be held to what is
+  there now. It is said out loud rather than whispered, so everybody within
+  earshot hears it and each decides for themselves whether to believe him;
+  and a man thinking of lying picks ground nobody present has walked lately,
+  because a crowd is both more people to fool and more people who may go and
+  look. What an agent keeps in its head is bounded and sorted by what it needs,
+  so a thirsty man holds on to every waterhole he has heard of and forgets
+  where the flax was
 - ✅ A fishery, which is the one food the land does not pay for: fish come up
   the river on the season rather than growing back out of what is left of them,
   so a reach fished out fills again from the catchment. What is left of a fish,
@@ -414,6 +425,21 @@ the moment the agent looks at the spot and sees bare ground — which is also
 what tells hearsay from what an agent saw for itself. Agents pass on only what
 they have been to and looked at, so the man who invented a place is the man
 blamed for it rather than everyone who repeated it in good faith.
+
+A claim also carries its age. "I saw berries there" and "I saw berries there
+this morning" are different claims, and only the second can be held against
+the speaker when somebody finds the patch bare — a place changes, and a man
+who told the truth about last season told the truth. Being out of date costs a
+sixth of what a lie costs and no anger at all.
+
+Talking is public. A speaker reaches everybody within earshot at once, and a
+man weighing a lie weighs the whole room: the ground he names has to be ground
+nobody standing there has walked lately, or he is contradicted before he
+finishes, and every extra pair of ears is another person who may go and look.
+
+And nothing is kept for ever. An agent holds about ninety-six places in mind,
+and what it lets go of first is what answers no need it has — hearsay before
+what it saw itself, and older before newer where it wants them equally.
 
 ### Memory
 Agents remember:
