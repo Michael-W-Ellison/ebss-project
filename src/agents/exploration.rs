@@ -53,6 +53,16 @@ pub struct ExplorationKnowledge {
     pub explored_tiles: HashSet<Position>,
     /// Discovered resource positions (position -> resource type)
     pub known_resources: HashMap<Position, ResourceType>,
+    /// Which of those places this agent was told about rather than saw, and
+    /// by whom.
+    ///
+    /// What an agent has seen and what it has been told went into the same map
+    /// with nothing to tell them apart, so a man who walked to a place he had
+    /// been told about and found bare ground read his own hearsay back off the
+    /// map as confirmation. Keeping the source is what lets the bare ground be
+    /// laid at somebody's door.
+    #[serde(default)]
+    pub who_told_me: HashMap<Position, uuid::Uuid>,
     /// Discovered building positions (position -> building type)
     pub known_buildings: HashMap<Position, BuildingType>,
     /// Discovered storage positions (position -> (storage type, capacity))
@@ -80,6 +90,7 @@ impl ExplorationKnowledge {
         Self {
             explored_tiles: HashSet::new(),
             known_resources: HashMap::new(),
+            who_told_me: HashMap::new(),
             known_buildings: HashMap::new(),
             known_storage: HashMap::new(),
             encountered_terrains: HashSet::new(),
@@ -102,6 +113,72 @@ impl ExplorationKnowledge {
         } else {
             false
         }
+    }
+
+    /// Take somebody's word for it that there is something at a place.
+    ///
+    /// The same as finding it yourself, except that it is remembered as
+    /// hearsay so that being wrong can be laid at the door of whoever said it.
+    pub fn take_their_word_for_it(
+        &mut self,
+        position: Position,
+        resource_type: ResourceType,
+        who_said_so: uuid::Uuid,
+        current_tick: u32,
+    ) -> bool {
+        if self.discover_resource(position, resource_type, current_tick) {
+            self.who_told_me.insert(position, who_said_so);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// The places this agent has seen with its own eyes.
+    ///
+    /// An agent tells people about what it knows, and what it knows is a
+    /// mixture of what it saw and what it was told. Passing on hearsay as
+    /// though it were first hand launders a lie: the man who invented it is
+    /// never blamed, because everybody heard it from somebody honest who
+    /// heard it from somebody honest. Measured with agents repeating what they
+    /// had been told, a hundred and fifty lies produced four thousand
+    /// accusations, nearly all of them against people who had told the truth
+    /// as they understood it.
+    ///
+    /// So an agent passes on only what it has been to and looked at.
+    pub fn seen_for_myself(&self) -> Vec<(Position, ResourceType)> {
+        self.known_resources
+            .iter()
+            .filter(|(where_it_is, _)| !self.who_told_me.contains_key(*where_it_is))
+            .map(|(where_it_is, what)| (*where_it_is, *what))
+            .collect()
+    }
+
+    /// What this agent has been told is here, and by whom, out of everything
+    /// it can see from where it is standing.
+    ///
+    /// Anything on this list that is not really there is a lie somebody told,
+    /// found out at the only moment it can be: with the agent standing on the
+    /// spot.
+    pub fn hearsay_in_view(
+        &self,
+        centre: Position,
+        radius: i32,
+        really_here: &std::collections::HashSet<Position>,
+    ) -> Vec<(Position, uuid::Uuid, ResourceType)> {
+        self.who_told_me
+            .iter()
+            .filter(|(where_it_is, _)| {
+                (where_it_is.x - centre.x).abs() <= radius
+                    && (where_it_is.y - centre.y).abs() <= radius
+            })
+            .filter(|(where_it_is, _)| !really_here.contains(*where_it_is))
+            .filter_map(|(where_it_is, who)| {
+                self.known_resources
+                    .get(where_it_is)
+                    .map(|what| (*where_it_is, *who, *what))
+            })
+            .collect()
     }
 
     /// Discover a resource at a position

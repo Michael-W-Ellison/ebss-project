@@ -1579,6 +1579,56 @@ impl Population {
                 current_tick,
             );
 
+            // Seeing for yourself.
+            //
+            // An agent's map of where things are is fed both by looking and
+            // by being told, and until `who_told_me` existed the two went in
+            // with nothing to tell them apart - so a man walked to the place
+            // he had been told about, found bare ground, and read his own
+            // hearsay back off the map as confirmation. Every lie verified as
+            // true and the whole lie-detection apparatus could not detect
+            // anything.
+            //
+            // This is the moment a lie is found out, and very nearly the only
+            // moment it can be: the agent is looking at the spot and there is
+            // nothing on it.
+            let range = vision_range as i32;
+            // A patch somebody has since picked bare is not a lie - the node
+            // is still standing there and will bear again, which is why
+            // renewable ones are kept when they are emptied. Reading an empty
+            // patch as a lie had agents concluding that four thousand honest
+            // tips were falsehoods and half the settlement liars.
+            let really_here: std::collections::HashSet<crate::world::Position> = world
+                .resources
+                .iter()
+                .map(|resource| resource.position)
+                .filter(|where_it_is| {
+                    (where_it_is.x - agent_pos.x).abs() <= range
+                        && (where_it_is.y - agent_pos.y).abs() <= range
+                })
+                .collect();
+
+            let found_out =
+                agent
+                    .exploration_knowledge
+                    .hearsay_in_view(agent_pos, range, &really_here);
+
+            if !found_out.is_empty() {
+                for (where_it_is, _, _) in found_out.iter() {
+                    agent.exploration_knowledge.known_resources.remove(where_it_is);
+                    agent.exploration_knowledge.who_told_me.remove(where_it_is);
+                }
+
+                let me = agent.id;
+                for (_, who_said_so, what_they_said) in found_out {
+                    if who_said_so == me {
+                        continue;
+                    }
+                    let subject = format!("{:?}", what_they_said).to_lowercase();
+                    agent.found_out_i_was_lied_to(who_said_so, &subject, current_tick);
+                }
+            }
+
             // Satisfy curiosity drive based on discoveries
             if new_discoveries > 0 {
                 if let Some(drive) = agent.drives.get_mut(DriveType::Curiosity) {
@@ -1772,6 +1822,96 @@ impl Population {
         }
     }
 
+
+    /// How far a liar moves the place he names.
+    ///
+    /// Far enough that the man who goes there finds nothing, which is what
+    /// lets him find out he was lied to.
+    const A_LIE_PUTS_IT_WRONG_BY: i32 = 9;
+
+    /// One agent tells another where something is.
+    ///
+    /// The listener decides whether to take his word for it - see
+    /// `Agent::how_far_i_trust` - and the speaker decides whether it is true.
+    /// Before this the channel that actually carries information between
+    /// agents could do neither: a place-name went straight into
+    /// `exploration_knowledge`, which is what foraging reads, from anybody at
+    /// all, and could not be wrong. No lie had ever been told in a running
+    /// settlement, and no agent had ever declined to believe one.
+    ///
+    /// Returns how many places changed hands.
+    fn tell_them_where_it_is(
+        &mut self,
+        speaker: usize,
+        listener: usize,
+        places: &[(crate::world::Position, crate::world::ResourceType)],
+        a_lie: bool,
+        current_tick: u32,
+    ) -> usize {
+        use crate::agents::gossip::{Information, InformationType};
+
+        let speaker_id = self.agents[speaker].id;
+        let listener_id = self.agents[listener].id;
+        let listener_traits = self.agents[listener].traits.clone();
+
+        let mut told = 0;
+        for (where_it_is, what_it_is) in places {
+            if told >= 3 {
+                break;
+            }
+            if self.agents[listener]
+                .exploration_knowledge
+                .known_resources
+                .contains_key(where_it_is)
+            {
+                continue;
+            }
+
+            // A liar names a place a good walk from the real one
+            let named = if a_lie {
+                crate::world::Position::new(
+                    where_it_is.x + Self::A_LIE_PUTS_IT_WRONG_BY,
+                    where_it_is.y + Self::A_LIE_PUTS_IT_WRONG_BY,
+                )
+            } else {
+                *where_it_is
+            };
+
+            let listener_agent = &mut self.agents[listener];
+            listener_agent
+                .exploration_knowledge
+                .take_their_word_for_it(named, *what_it_is, speaker_id, current_tick);
+
+            // And it is remembered as a claim somebody made, so that going
+            // there and finding nothing can be laid at his door. Until now
+            // the two books never met: this channel wrote into exploration
+            // knowledge and the whole lie-detection apparatus read from a
+            // knowledge base nothing was writing to.
+            {
+                let claim = Information::new(
+                    InformationType::ResourceLocation {
+                        resource: format!("{:?}", what_it_is).to_lowercase(),
+                        location: (named.x, named.y, 0),
+                    },
+                    speaker_id,
+                    !a_lie,
+                    current_tick as u64,
+                );
+                listener_agent.knowledge.receive_information(
+                    claim,
+                    speaker_id,
+                    listener_id,
+                    &listener_traits,
+                    current_tick as u64,
+                );
+            }
+
+            told += 1;
+        }
+
+        told
+    }
+
     /// Process exploration without world (for standalone population updates)
     /// This is called from tick() and handles exploration-related drive updates
     /// and knowledge sharing between nearby agents
@@ -1895,38 +2035,64 @@ impl Population {
                         }
                     }
 
-                    // Share resources (important for survival)
+                    // Share resources (important for survival).
+                    //
+                    // Where the food and water are is the one thing agents
+                    // tell each other that changes what they then do, so it is
+                    // the one place trust can matter. Each of them decides
+                    // whether the other is worth believing, and each decides
+                    // whether to tell the truth.
                     if rng.gen_bool((share_probability * 0.8) as f64) {
-                        // Agent i shares resource knowledge with agent j
-                        let resources_i: Vec<_> = self.agents[i].exploration_knowledge
-                            .known_resources.iter()
-                            .map(|(p, t)| (*p, *t))
-                            .collect();
+                        let who_i_is = self.agents[i].id;
+                        let who_j_is = self.agents[j].id;
+                        let traits_i = self.agents[i].traits.clone();
+                        let traits_j = self.agents[j].traits.clone();
 
-                        if !resources_i.is_empty() {
-                            let mut shared = 0;
-                            for (pos, resource_type) in resources_i.choose_multiple(&mut rng, 5) {
-                                if !self.agents[j].exploration_knowledge.known_resources.contains_key(pos) {
-                                    self.agents[j].exploration_knowledge
-                                        .discover_resource(*pos, *resource_type, current_tick);
-                                    shared += 1;
-                                    if shared >= 3 { break; }
-                                }
+                        let j_believes_i =
+                            self.agents[j].would_take_their_word(who_i_is, &traits_i);
+                        let i_believes_j =
+                            self.agents[i].would_take_their_word(who_j_is, &traits_j);
+
+                        let i_lies_to_j = self.agents[i].would_lie_to(who_j_is, current_tick);
+                        let j_lies_to_i = self.agents[j].would_lie_to(who_i_is, current_tick);
+
+                        if j_believes_i {
+                            let resources_i: Vec<_> = self.agents[i]
+                                .exploration_knowledge
+                                .seen_for_myself();
+
+                            if !resources_i.is_empty() {
+                                let offered: Vec<_> = resources_i
+                                    .choose_multiple(&mut rng, 5)
+                                    .copied()
+                                    .collect();
+                                self.tell_them_where_it_is(
+                                    i,
+                                    j,
+                                    &offered,
+                                    i_lies_to_j,
+                                    current_tick,
+                                );
                             }
                         }
 
-                        // Agent j shares with agent i
-                        let resources_j: Vec<_> = self.agents[j].exploration_knowledge
-                            .known_resources.iter()
-                            .map(|(p, t)| (*p, *t))
-                            .collect();
+                        if i_believes_j {
+                            let resources_j: Vec<_> = self.agents[j]
+                                .exploration_knowledge
+                                .seen_for_myself();
 
-                        if !resources_j.is_empty() {
-                            for (pos, resource_type) in resources_j.choose_multiple(&mut rng, 5) {
-                                if !self.agents[i].exploration_knowledge.known_resources.contains_key(pos) {
-                                    self.agents[i].exploration_knowledge
-                                        .discover_resource(*pos, *resource_type, current_tick);
-                                }
+                            if !resources_j.is_empty() {
+                                let offered: Vec<_> = resources_j
+                                    .choose_multiple(&mut rng, 5)
+                                    .copied()
+                                    .collect();
+                                self.tell_them_where_it_is(
+                                    j,
+                                    i,
+                                    &offered,
+                                    j_lies_to_i,
+                                    current_tick,
+                                );
                             }
                         }
                     }

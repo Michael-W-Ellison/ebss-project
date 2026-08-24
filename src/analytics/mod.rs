@@ -7235,9 +7235,7 @@ impl Simulation {
 
             Action::Explore { direction } => {
                 // Exploration action - move and discover new areas
-                let agent = &mut self.population.agents[agent_index];
-                let agent_id = agent.id;
-                let current_pos = agent.state.position;
+                let current_pos = self.population.agents[agent_index].state.position;
 
                 // Calculate target position in exploration direction
                 let target_x = current_pos.0 + direction.0;
@@ -7245,12 +7243,29 @@ impl Simulation {
                 let target_z = current_pos.2 + direction.2;
                 let target_pos = (target_x, target_y, target_z);
 
+                // What is really out here, before anybody's opinion of it
+                let exploration_radius = 3; // Can see 3 tiles in each direction
+                let really_here: std::collections::HashSet<crate::world::Position> = self
+                    .world
+                    .resources
+                    .iter()
+                    .filter(|resource| {
+                        (resource.position.x - target_x).abs() <= exploration_radius
+                            && (resource.position.y - target_y).abs() <= exploration_radius
+                    })
+                    .map(|resource| {
+                        crate::world::Position::new(resource.position.x, resource.position.y)
+                    })
+                    .collect();
+
+                let agent = &mut self.population.agents[agent_index];
+                let agent_id = agent.id;
+
                 // Move agent to new position
                 agent.state.position = target_pos;
 
                 // Mark tiles as explored in a radius around new position
                 let mut newly_explored_count = 0;
-                let exploration_radius = 3; // Can see 3 tiles in each direction
 
                 for dx in -exploration_radius..=exploration_radius {
                     for dy in -exploration_radius..=exploration_radius {
@@ -7263,6 +7278,55 @@ impl Simulation {
                             newly_explored_count += 1;
                         }
                     }
+                }
+
+                // Seeing for yourself.
+                //
+                // An agent's knowledge of where things are is fed both by
+                // looking and by being told, and the two went into the same
+                // map with nothing to tell them apart. So a man walked to the
+                // place he had been told about, found bare ground, and read
+                // his own hearsay back off the map as confirmation - which
+                // made every lie verify as true and left the whole
+                // lie-detection apparatus unable to detect anything.
+                //
+                // This is the moment a lie is found out, and the only moment
+                // it can be: the agent is standing on the spot and there is
+                // nothing there. Sweeping a buffer of remembered claims every
+                // hundred ticks caught almost none of them, because a claim
+                // had to survive the buffer *and* the agent had to happen to
+                // walk to it inside the same window.
+                let centre = crate::world::Position::new(target_x, target_y);
+                let found_out = agent.exploration_knowledge.hearsay_in_view(
+                    centre,
+                    exploration_radius,
+                    &really_here,
+                );
+
+                // What is not there when you are standing on it is not there
+                agent
+                    .exploration_knowledge
+                    .known_resources
+                    .retain(|where_it_is, _| {
+                        let in_view = (where_it_is.x - centre.x).abs() <= exploration_radius
+                            && (where_it_is.y - centre.y).abs() <= exploration_radius;
+                        !in_view || really_here.contains(where_it_is)
+                    });
+                agent
+                    .exploration_knowledge
+                    .who_told_me
+                    .retain(|where_it_is, _| {
+                        let in_view = (where_it_is.x - centre.x).abs() <= exploration_radius
+                            && (where_it_is.y - centre.y).abs() <= exploration_radius;
+                        !in_view || really_here.contains(where_it_is)
+                    });
+
+                for (_, who_said_so, what_they_said) in found_out {
+                    if who_said_so == agent_id {
+                        continue;
+                    }
+                    let subject = format!("{:?}", what_they_said).to_lowercase();
+                    agent.found_out_i_was_lied_to(who_said_so, &subject, self.current_tick);
                 }
 
                 // Discover nearby resources (within exploration radius)

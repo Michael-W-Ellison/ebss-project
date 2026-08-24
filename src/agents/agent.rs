@@ -5723,30 +5723,30 @@ impl Agent {
 
             // Update relationship
             if was_lie {
-                // Lie detected - penalize relationship and trust
-                let rel = self.relationships.get_or_create_relationship(source_id, current_tick);
-                rel.weaken(0.15); // Significant relationship damage
+                // What it was about, so that a lie which sent this agent
+                // somewhere it needed to go costs more than one which did not
+                let about = self
+                    .knowledge
+                    .known_information
+                    .get(&info_id)
+                    .and_then(|info| match &info.info_type {
+                        super::gossip::InformationType::ResourceLocation { resource, .. } => {
+                            Some(resource.clone())
+                        }
+                        _ => None,
+                    });
 
-                // Add negative emotion
-                self.emotions.add_anger(
-                    EmotionSource::Agent(source_id),
-                    0.2 // Anger at being lied to
+                self.found_out_i_was_lied_to(
+                    source_id,
+                    about.as_deref().unwrap_or(""),
+                    current_tick,
                 );
-
-                // Trait-based response to being lied to
-                if self.traits.has(crate::core::traits::Trait::Vengeful) {
-                    // Vengeful agents remember and hold grudges
-                    rel.weaken(0.1); // Extra relationship damage
-                }
-
-                if self.traits.has(crate::core::traits::Trait::Forgiving) {
-                    // Forgiving agents don't hold it against them as much
-                    rel.strengthen(0.05); // Partial forgiveness
-                }
             } else {
                 // Truth verified - strengthen trust and relationship
+                self.found_out_they_were_right(source_id);
                 let rel = self.relationships.get_or_create_relationship(source_id, current_tick);
                 rel.strengthen(0.05); // Small positive reinforcement
+                rel.settle_what_we_are();
 
                 // Small happiness from receiving accurate information
                 self.emotions.add_happiness(
@@ -5870,6 +5870,230 @@ impl Agent {
             EmotionSource::Agent(source),
             0.01
         );
+    }
+
+
+
+    /// Which need a thing in the ground answers, if any.
+    ///
+    /// A lie about where the water is and a lie about where the pretty stones
+    /// are do not weigh the same, and this is what tells them apart.
+    pub fn what_this_answers(subject: &str) -> Option<DriveType> {
+        let subject = subject.to_lowercase();
+        if subject.contains("water") {
+            Some(DriveType::Thirst)
+        } else if subject.contains("food")
+            || subject.contains("fish")
+            || subject.contains("meat")
+            || subject.contains("berry")
+            || subject.contains("berries")
+            || subject.contains("grain")
+        {
+            Some(DriveType::Hunger)
+        } else if subject.contains("wood") || subject.contains("stone") {
+            Some(DriveType::Shelter)
+        } else if subject.contains("flax")
+            || subject.contains("cotton")
+            || subject.contains("wool")
+            || subject.contains("hide")
+        {
+            Some(DriveType::Shelter)
+        } else if subject.contains("iron") || subject.contains("herb") {
+            Some(DriveType::Industry)
+        } else {
+            None
+        }
+    }
+
+    /// What being lied to about this costs the liar.
+    ///
+    /// "If an agent lies to another agent about something they care about or
+    /// something which has a detrimental impact on their ability to satisfy a
+    /// drive, the amount of anger should be higher."
+    ///
+    /// Before this it was a flat 0.2 whatever the lie was about, so sending a
+    /// thirsty man to a dry riverbed and telling him the wrong thing about a
+    /// pile of rocks cost exactly the same.
+    ///
+    /// Three things decide it. What was lied about, weighed by how hard that
+    /// need is pressing on *this* agent right now - which is the same
+    /// `how_hard_it_presses` the drive hierarchy ranks needs by, so a lie
+    /// about food to a man who is not hungry is a small thing and the same
+    /// lie to one who is starving is not. What the two of them were to each
+    /// other, because being deceived by somebody you trusted is worse than
+    /// being deceived by somebody you did not. And what sort of person is
+    /// doing the resenting.
+    pub fn what_a_lie_about_this_costs(&self, subject: Option<&str>, liar: uuid::Uuid) -> f32 {
+        use crate::core::traits::Trait;
+
+        /// A lie is a lie even when it is about nothing that matters
+        const ANY_LIE_AT_ALL: f32 = 0.15;
+
+        /// And this much again on top when it touches something vital
+        const AND_THIS_MUCH_FOR_A_VITAL_ONE: f32 = 0.55;
+
+        let about_something_i_need = subject
+            .and_then(Self::what_this_answers)
+            .map(|need| self.how_hard_it_presses(need))
+            .unwrap_or(0.0)
+            .clamp(0.0, 1.0);
+
+        let mut cost = ANY_LIE_AT_ALL + AND_THIS_MUCH_FOR_A_VITAL_ONE * about_something_i_need;
+
+        // Being deceived by a friend is worse than being deceived by a
+        // stranger, and being deceived by somebody you already had no time for
+        // is barely news
+        if let Some(bond) = self.relationships.get_relationship(&liar) {
+            if bond.bond_strength >= 0.5 {
+                cost *= 1.5;
+            } else if bond.bond_strength < 0.0 {
+                cost *= 0.7;
+            }
+        }
+
+        if self.traits.has(Trait::Vengeful) {
+            cost *= 1.5;
+        }
+        if self.traits.has(Trait::Forgiving) {
+            cost *= 0.5;
+        }
+        if self.traits.has(Trait::Trusting) {
+            // It hurts more when you did not see it coming
+            cost *= 1.25;
+        }
+        if self.traits.has(Trait::Paranoid) || self.traits.has(Trait::Suspicious) {
+            // And less when you always half expected it
+            cost *= 0.75;
+        }
+
+        cost.clamp(0.0, 1.0)
+    }
+
+
+    /// What happens when an agent finds out it was lied to.
+    ///
+    /// One place, because it is reached from two: walking to a place somebody
+    /// named and finding bare ground, and the periodic sweep of remembered
+    /// claims. The first is where nearly all of it happens - a lie is found
+    /// out standing on the spot, not by review.
+    pub fn found_out_i_was_lied_to(
+        &mut self,
+        liar: uuid::Uuid,
+        about: &str,
+        current_tick: u32,
+    ) {
+        use super::EmotionSource;
+
+        let cost = self.what_a_lie_about_this_costs(Some(about), liar);
+
+        // Anger at whoever it was, weighted by what it was about. A grudge
+        // then weighs on the bond every tick it is held - see
+        // `Relationship::let_it_tell` - but finding out is its own moment and
+        // lands on the bond directly as well.
+        self.emotions.add_anger(EmotionSource::Agent(liar), cost);
+
+        let bond = self
+            .relationships
+            .get_or_create_relationship(liar, current_tick);
+        bond.weaken(cost);
+        bond.settle_what_we_are();
+
+        // And it goes on the record, which is what `how_far_i_trust` reads
+        // when this agent is next offered something by the same man
+        self.knowledge
+            .trust_ratings
+            .entry(liar)
+            .or_insert_with(|| super::gossip::TrustRating::new(self.id, liar))
+            .update_on_verification(false);
+    }
+
+    /// And when what it was told turns out to be so.
+    pub fn found_out_they_were_right(&mut self, them: uuid::Uuid) {
+        self.knowledge
+            .trust_ratings
+            .entry(them)
+            .or_insert_with(|| super::gossip::TrustRating::new(self.id, them))
+            .update_on_verification(true);
+    }
+
+    /// Whose word this agent will take, and how readily.
+    ///
+    /// Trust was kept in three unconnected books. `TrustRating` in the
+    /// knowledge base held a verified track record and was read when a belief
+    /// was filed and nowhere else. `Relationship::trust_level` mapped the bond
+    /// onto an enum and was read in one place, to decide whether a gift would
+    /// be accepted. `TraitSet::combined_trust_modifier` summed every
+    /// trust-flavoured trait an agent had, which mixes two different things:
+    /// Paranoid is about whether *this* agent believes people, and Charismatic
+    /// is about whether people believe *them*, and adding them together means
+    /// a paranoid charmer trusts everybody slightly less than average for the
+    /// wrong reason.
+    ///
+    /// Meanwhile the channel that actually carries information between agents
+    /// - resource and building locations passing into `exploration_knowledge`,
+    /// which is what foraging reads - consulted none of the three. An agent
+    /// took a place-name from anybody, including somebody it had just named an
+    /// enemy.
+    ///
+    /// Four things decide it, and the specification names three of them:
+    /// what the two of them are to each other, whether this one has been right
+    /// before, what sort of person is doing the listening, and what sort is
+    /// doing the talking.
+    pub fn how_far_i_trust(&self, them: uuid::Uuid, what_they_are_like: &TraitSet) -> f32 {
+        use crate::core::traits::Trait;
+
+        // A stranger is neither trusted nor distrusted
+        const A_STRANGER: f32 = 0.5;
+
+        // What the two of them are to each other. A bond of -1 to 1 becomes
+        // nothing to everything, and this is the largest single term: you
+        // believe your friends.
+        let by_standing = match self.relationships.get_relationship(&them) {
+            Some(bond) => (bond.bond_strength + 1.0) / 2.0,
+            None => A_STRANGER,
+        };
+
+        // Whether they have been right before. Starts at neutral and moves
+        // only on something the agent went and checked for itself.
+        let by_record = self.knowledge.get_trust(&them);
+
+        // What sort of person is doing the listening
+        let my_disposition = if self.traits.has(Trait::Trusting) {
+            0.2
+        } else if self.traits.has(Trait::Paranoid) {
+            -0.35
+        } else if self.traits.has(Trait::Suspicious) {
+            -0.2
+        } else if self.traits.has(Trait::Skeptic) {
+            -0.15
+        } else {
+            0.0
+        };
+
+        // And what sort is doing the talking. Bearing, not reputation - an
+        // agent cannot read another's traits, but it can be charmed by one and
+        // put off by another.
+        let their_bearing = if what_they_are_like.has(Trait::Charismatic) {
+            0.15
+        } else if what_they_are_like.has(Trait::KindHearted) {
+            0.1
+        } else if what_they_are_like.has(Trait::Cruel) {
+            -0.15
+        } else {
+            0.0
+        };
+
+        (by_standing * 0.6 + by_record * 0.4 + my_disposition + their_bearing).clamp(0.0, 1.0)
+    }
+
+    /// The point at which an agent will act on what it has been told.
+    ///
+    /// Below this it hears the claim and does not go and stand on it.
+    pub const TAKE_SOMEBODY_AT_THEIR_WORD: f32 = 0.5;
+
+    /// Whether this agent will act on something [`them`] has told it.
+    pub fn would_take_their_word(&self, them: uuid::Uuid, what_they_are_like: &TraitSet) -> bool {
+        self.how_far_i_trust(them, what_they_are_like) >= Self::TAKE_SOMEBODY_AT_THEIR_WORD
     }
 
     /// Check if this agent would lie when sharing information
