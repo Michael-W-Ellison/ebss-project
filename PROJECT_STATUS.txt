@@ -56,8 +56,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,267 tests across the workspace:
-  1,230 library tests
+  1,279 tests across the workspace:
+  1,242 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -286,9 +286,20 @@ KNOWN GAPS IN BEHAVIOUR
     agent-samples, mean fear ran 0.044 and mean anger 0.298, with 1.94% of
     samples wanting to flee and 22.8% wanting to fight, against a previous
     state of 0.01-0.06 fear, zero anger and nobody ever doing either. At eight
-    worlds a side it does not yet change what a settlement is worth - every
-    measure drifts up and none by as much as one standard error - because
-    almost nothing is built downstream of an angry agent.
+    worlds a side the appraisal alone did not change what a settlement is
+    worth, because nothing read the feeling.
+  - And the feelings now reach the hands. A frightened agent puts ground
+    between itself and the thing; an angry one strikes at what is within
+    arm's reach. Grudges against people work the same way - whether an agent
+    squares up to somebody it cannot stand or keeps clear of them is the same
+    appraisal - and nearly all the anger in this model turned out to be a
+    grudge: of 22,802 samples ready to fight, anger at people ran to 0.806
+    and anger at creatures to 0.025. Agents come to blows about ten times as
+    often as before, and of 238 survivors 23 now reckon themselves worse in a
+    fight for what happened, where that branch had nobody in it at all.
+    It costs a settlement about fifteen percent of its end population, on a
+    reading that does not clear one standard error at eight worlds a side but
+    moves the same way on every population measure
   - Populations grow but have not been studied over very long runs. Nobody
     has characterised what happens past a few tens of thousands of ticks.
 

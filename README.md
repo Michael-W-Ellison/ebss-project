@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 108,000 lines
-across 203 source files, with 1,230 library tests.
+across 204 source files, with 1,242 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,267 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,279 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -95,6 +95,15 @@ original specifications.
   fear was a reading off the hunger drive and anger was written only by a blow
   that had already landed, so in a whole settlement's life nobody ever ran from
   anything or turned on anything
+- ✅ And those feelings reach the hands. A frightened agent puts ground between
+  itself and the thing; an angry one strikes at what is within arm's reach, and
+  closes the last pace or two, but does not cross the map looking for a fight.
+  It turned out nearly all the anger in the model was a grudge against a
+  *person* — of every agent ready to fight, anger at people ran thirty times
+  anger at creatures — held for life and with nothing downstream of it. So a
+  grudge now decides the same thing: square up to somebody you cannot stand if
+  you reckon you can take them, keep well clear of them if you cannot. Nobody
+  raises a hand to a child, to their own parent, or to their own children
 - ✅ A fishery, which is the one food the land does not pay for: fish come up
   the river on the season rather than growing back out of what is left of them,
   so a reach fished out fills again from the catchment. What is left of a fish,
@@ -337,6 +346,20 @@ scaled by what past fights taught it: an agent that has won before is worth
 half again, one beaten every time is worth two fifths less. So two agents of
 identical build appraise the same wolf differently, and the beaten one runs
 where the winner stands.
+
+Both feelings reach the hands. Fear moves an agent away from what it is afraid
+of, far enough not to arrive back inside the range it started worrying at.
+Anger strikes at what is within arm's reach — `Action::Fight` for a creature,
+`Action::Attack` for a person — and closes the last pace or two, but no
+further: the appraisal already scales a thing by how near it is, so what
+angers an agent past the threshold is close by anyway.
+
+Grudges are the same appraisal applied to people. The grudge itself is what an
+agent feels; whether it comes out as squaring up or keeping clear is decided
+by whether the agent reckons it can take them, re-asked every time they are in
+the same place. It is read per person rather than off total anger, because
+three mild grudges add up to a man who reads as ready to fight and has nobody
+in particular to fight.
 
 ### Memory
 Agents remember:

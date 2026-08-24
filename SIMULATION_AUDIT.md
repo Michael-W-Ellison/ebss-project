@@ -217,6 +217,13 @@ Verified reachable from `Simulation::tick()`.
 - Fear and anger are appraisals, not timers. What is in front of the agent is
   weighed against what the agent can do about it, and what past fights taught
   it, so the same wolf angers one person and frightens another
+- And they reach the agent's hands. A frightened agent puts ground between
+  itself and the thing; an angry one strikes at what is within arm's reach and
+  closes the last pace or two, but does not cross the map looking for a fight.
+  Grudges against people work the same way: whether an agent squares up to
+  somebody it cannot stand or keeps clear of them is the same appraisal, and
+  nobody raises a hand to a child, to their own parent, or to their own
+  children
 - Obstacle-aware movement (greedy step, then a bounded breadth-first route
   search), committed search legs when looking for something out of range
 
@@ -264,6 +271,7 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::metrics` (`SimulationMetrics`) | Works when driven; `examples/ascii_simulation.rs` and `examples/phase4_analytics.rs` show how |
 | `analytics::emergence` (`EmergenceDetector`) | Same — driven by those two examples only |
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
+| `Relationship` against `EmotionState` | Two separate books on what one agent thinks of another. A man who has just been hit still counts the man who hit him a close friend, because a grudge lives in `anger_sources` and never reaches `update_relationships` |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
 | `core::drive_progression` (`DriveProgression`) | Basic → Intermediate → Advanced → Luxury tiers for every drive, with tests, and no caller outside its own module |
 | `agents::drive_satisfaction` (`SatisfactionTracker`) | Fed only from tests, so the grief-on-death code in `Population` that asks which agent was a drive's satisfaction source always gets nothing |
@@ -931,17 +939,101 @@ fifteen thousand ticks, against the commit before the appraisal:
 | Settlements still inhabited | 8 of 8 | 8 of 8 | — |
 
 Every measure drifts upward and not one of them is above a single standard
-error, which at eight worlds a side means nothing has been shown. That is the
-expected result rather than a disappointment: fleeing is rare (1.94% of
-samples) and anger, while common, has almost nothing downstream of it — an
-angry agent is one that *would* attack, and `should_attack` gates a branch
-that has only just become reachable. The appraisal is the prerequisite for
-agents that fight, hold ground, or avoid each other; those behaviours are what
-would move a settlement, and they are not built yet.
+error, which at eight worlds a side means nothing has been shown. That was the
+expected result rather than a disappointment: at that point an angry agent was
+one that *would* attack, and nothing read the feeling. Building what reads it
+is the next section.
+
+## Fight or flight
+
+Both branches of action selection that read fear and anger were keyed on
+`recent_attacker` — another agent who has just landed a blow. An agent
+terrified of a wolf ten paces off fell straight through the flight branch and
+went on foraging; an agent furious at a neighbour fell through the attack
+branch and did the same. The appraisal decided what an agent felt and stopped.
+
+**Building the creature half first turned up the more interesting half.** Of
+22,802 samples that read as ready to fight, anger at creatures came to 0.025
+and anger at people to **0.806**. Nearly all the anger in this model is a
+grudge — somebody lied to you, somebody betrayed you, somebody was the cause
+of a death — held against that person for life, decaying at one per cent a
+tick, with nothing whatever downstream of it. Half the time the person
+resented was within ten tiles, and 6.9% of the time within arm's reach.
+
+**Creatures.** `run_from_what_frightens_me` reads the strongest `Creature`
+fear source, finds the nearest of that kind in sight, and heads the other way
+far enough not to arrive back inside the range it started worrying at.
+`round_on_what_angers_me` strikes at one within arm's reach and walks at one
+within five; anything further off is left alone, because the appraisal already
+scales a creature by how near it is, so a thing that angers an agent past the
+threshold is close by anyway.
+
+**People.** `square_up_to_the_people_i_resent` asks the specification's
+question about a person rather than a wolf: this is somebody you cannot stand
+and they are in front of you — can you take them? If you can, the grudge stays
+anger and it may come to blows. If you cannot, the same grudge comes out as
+fear and the agent keeps clear. The grudge itself is never touched, only which
+feeling it turns into, and it is read per person rather than off the total:
+`should_attack` sums every source, so three mild grudges of 0.2 read as a man
+ready to fight nobody in particular. Nobody raises a hand to a child, to their
+own parent, or to their own children.
+
+`Action::Fight` is new and deliberately not `Hunt`. Hunting is how an agent
+goes after food and skins and reads the Hunting skill; standing your ground
+reads MeleeCombat, teaches `Undertaking::Fighting` rather than Hunting, and is
+worth doing on a full stomach. Whether the blow lands is `own_strength`
+against the creature's, on the same scale the appraisal used to decide to be
+there at all — so the record of past fights, which scales `own_strength`,
+decides both whether an agent stands and whether it wins.
+
+Measured over three worlds of eight thousand ticks:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| `Action::Attack` chosen | 216 | 2,192 |
+| `Action::Fight` chosen | — | 335 |
+| Fleeing | 0 | 8,494 (0.80% of all actions) |
+| Fights on the record | 51 | 1,105 |
+| Survivors who reckon themselves better for a fight | 11 | 28 |
+| Survivors who reckon themselves worse | **0** | **23** |
+
+That last row is the one that matters. The history mechanic has always had two
+directions and only ever one of them populated in the wild, because an agent
+that came off badly against a predator usually died before it could draw the
+lesson. Agents that lose fights to each other survive them, so "having been
+beaten makes running look better" is now something a settlement actually
+learns rather than something only a test demonstrates.
+
+**And it costs the settlement a little.** Eight worlds a side at fifteen
+thousand ticks, against the commit before:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| End population | 97.0 ± 7.9 | 82.1 ± 7.6 | −1.36 se |
+| Peak population | 110.3 ± 4.5 | 101.6 ± 6.3 | −1.12 se |
+| Births | 160.9 ± 8.3 | 150.8 ± 12.8 | −0.66 se |
+| Deaths | 88.9 ± 3.1 | 93.6 ± 8.5 | +0.53 se |
+| Soil fertility | 0.40 | 0.39 | −0.93 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+Nothing here clears the bar this project uses — one standard error at eight
+worlds a side shows nothing — but every population measure moves the same way
+and deaths move the other, which is a coherent direction rather than the
+scatter of a null result. If it is real the cost is about fifteen per cent of
+the end population, and it is the expected cost rather than a defect: a
+settlement whose members hit each other and run from each other spends time
+and health on it, and no settlement was lost.
+
+The thing to watch is that the cost stays a cost and does not become a spiral,
+which is a question about the next piece of work rather than this one. A
+grudge currently never reaches the relationship — `Relationship` and
+`EmotionState` keep separate books, so a man who has just been hit still
+counts the man who hit him a close friend — so there is nothing yet that lets
+one blow lead to the next.
 
 ## Test coverage
 
-1,230 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,242 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,
@@ -974,6 +1066,7 @@ function in isolation:
 | `src/analytics/tests/specialisation_tests.rs` | mastery costing more the higher it goes, unused skills rusting, a practised hand producing more |
 | `src/core/tests/drive_hierarchy_tests.rs` | rank, nearness of death deciding among the primaries, a drive gated behind the one before it |
 | `src/agents/tests/appraisal_tests.rs` | the same wolf angering one agent and frightening another, and what past fights change about that |
+| `src/analytics/tests/fight_or_flight_tests.rs` | running from what you are afraid of, striking at what is in reach, and a grudge deciding between the two |
 
 ---
 

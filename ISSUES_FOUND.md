@@ -563,6 +563,14 @@ only when there is a clash, so every relationship saturates at close regardless
 of who the two people are. Nobody ever undertakes a social act either:
 `Undertaking::Dealing` is attempted zero times in a whole run.
 
+   The *feeling* is no longer the missing part. A grudge against a particular
+   person now decides whether an agent squares up to them or keeps clear of
+   them, and agents come to blows about a hundred and fifty times per world
+   where they used to about ten. What is still missing is the grudge reaching
+   the relationship: `Relationship` and `EmotionState` keep separate books, so
+   a man who has just been hit still counts the man who hit him a close
+   friend. That is the arithmetic above, and it is what to fix next.
+
 ### 12. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
