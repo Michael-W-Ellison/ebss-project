@@ -56,13 +56,13 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,289 tests across the workspace:
-  1,252 library tests
+  1,304 tests across the workspace:
+  1,267 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
 
-  All pass, with six known flaky tests that fail intermittently:
+  All pass, with seven known flaky tests that fail intermittently:
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_...
     analytics::tests::agent_building_integration_tests::
@@ -72,8 +72,9 @@ TEST STATUS
     analytics::tests::agent_building_integration_tests::
       test_different_building_types_use_appropriate_strategies
     analytics::tests::longevity_tests::water_is_not_used_up
+    analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
 
-  All six seed World::new from thread_rng and assert on properties that a
+  All seven seed World::new from thread_rng and assert on properties that a
   randomly generated world does not always satisfy. Measured failure rates of
   roughly 1-in-10 to 1-in-20 per run for the first two, 4-in-120 for the third
   and 1-in-40 for the fourth, all present before any recent work and all
@@ -147,6 +148,21 @@ Verified as reached by Simulation::tick():
                   at 1.81 se, on a settlement with slightly more births and a
                   slightly higher peak - more turnover rather than failure,
                   and eight of eight still inhabited
+  Trust           whose word an agent takes is decided from the bond, from
+                  whether that one has been right before, and from what sort
+                  of people the two of them are. An agent below the line
+                  hears a claim and does not go and stand on it. A man who
+                  would rather lie names a place a good walk from the real
+                  one; it is found out by walking there and seeing bare
+                  ground, and what it costs him depends on what he lied about
+                  - a lie about food to a starving man is not the same as one
+                  about a pile of rocks. Nothing consulted any of this before,
+                  and no lie had ever been told in a running settlement.
+                  Measured over eight worlds a side: 7.4% of pairs will not
+                  take each other's word, nearly every agent has caught
+                  somebody out, and the whole price is eight places in two
+                  hundred and forty that an agent no longer knows of. Nothing
+                  else moves within a standard error
   Emotion         fear and anger are appraisals: the strength of the thing in
                   front of the agent, scaled by how near it is, weighed
                   against what the agent can do about it - health, build,

@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Six tests fail intermittently
+### 1. Seven tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -22,6 +22,7 @@ and running the project.
     analytics::tests::agent_building_integration_tests::test_production_chain_buildings_cluster
     analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
     analytics::tests::longevity_tests::water_is_not_used_up
+    analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -30,7 +31,11 @@ before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
 asserts that a world holds 95% of its water after six thousand ticks, and
 across twelve worlds the worst case sits at 98.4% — on the commit before the
 calendar was fixed it sat at 95.6%, so the margin got wider rather than
-narrower, and the tail is simply thin. All six build a world through
+narrower, and the tail is simply thin. The seventh was found while checking
+whether a change had broken it: it fails about one run in six *and does so on
+the commit before the change too*, so it was an undocumented flake rather than
+a regression — the test itself says a random world does not always let an agent
+reach the flax it can see. All seven build a world through
 `World::new`, which draws from `thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
@@ -38,7 +43,7 @@ the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
-which is corrosive: check whether the failing test is one of these six before
+which is corrosive: check whether the failing test is one of these seven before
 assuming a regression.
 
 ### 2. No error recovery around a tick
@@ -810,6 +815,22 @@ Listed so nobody re-investigates them. Each has regression tests in
   and halved the birth rate. Measured at eight worlds a side, this alone was
   the difference between a settlement of 45 and one of 30. A drive now fades at
   the pace it would have grown.
+- **Nobody could be disbelieved, and nobody could lie.** Trust lived in three
+  books that never met — a verified track record in the knowledge base, an
+  enum on the relationship, and a sum of trait modifiers that mixed "do I
+  believe people" with "do people believe me" — and the channel that actually
+  carries information between agents consulted none of them. Resource and
+  building locations went into `exploration_knowledge`, which is what foraging
+  reads, from anybody at all, and could not be wrong: `would_lie_to` weighs
+  honesty and the relationship, and its only caller was itself never called.
+  Agents now decide whose word to take, a liar can name a place that is not
+  there, and the lie is found out by walking to it. What it costs him depends
+  on what he lied about, weighed by how hard that need is pressing on the man
+  he lied to. Two things had to be fixed first: an agent's map mixed what it
+  had seen with what it had been told, so it read its own hearsay back as
+  confirmation and every lie verified as true; and agents passed hearsay on as
+  first hand, which laundered a lie so thoroughly that a hundred and fifty of
+  them produced four thousand accusations against honest people.
 - **Fear was a hunger reading and anger was nothing at all.**
   `calculate_survival_drive_emotion` derived fear from how high a survival
   drive's value stood, so it originally sat near 0.8 between meals and — once

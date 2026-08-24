@@ -237,7 +237,12 @@ Verified reachable from `Simulation::tick()`.
   blow costs a quarter of the whole scale at once, and the relationship is
   renamed to match — a settlement now contains rivals and enemies, which no
   settlement in this project's history had ever contained
-- Social interactions, gossip and information spread
+- Social interactions, gossip and information spread. Whose word an agent
+  takes depends on what the two of them are to each other, whether that one
+  has been right before, and what sort of people the two of them are — and an
+  agent that would rather lie can name a place that is not there. A lie is
+  found out by walking to it, and what it cost the man who was lied to depends
+  on what it was about
 - Observational learning between agents
 - Shared knowledge, technology discovery and spread
 
@@ -1138,15 +1143,123 @@ everybody is within reach of everybody, that adds up for every pair alike. The
 principle applied to the first two rates has not yet been applied to the
 third.
 
+## Distrust
+
+Trust was kept in three books that never met. `TrustRating` in the knowledge
+base held a verified track record, read when a belief was filed and nowhere
+else. `Relationship::trust_level` mapped the bond onto an enum, read in one
+place, to decide whether a gift would be accepted.
+`TraitSet::combined_trust_modifier` summed every trust-flavoured trait an
+agent had, which mixes two different things — Paranoid is about whether *this*
+agent believes people, Charismatic is about whether people believe *them* — so
+a paranoid charmer trusted everybody slightly less for the wrong reason.
+
+**And the channel that actually carries information consulted none of the
+three.** Resource and building locations pass straight into
+`exploration_knowledge`, which is what foraging reads. They went in from
+anybody at all, including somebody the agent had just named an enemy. And they
+could not be wrong: `would_lie_to` weighs honesty and the relationship, and its
+only caller — `prepare_information_to_share` — was itself never called. **No
+lie had ever been told in a running settlement.** Beside all this sat the
+gossip apparatus, writing into a `known_information` map that changed no
+behaviour whatever.
+
+`Agent::how_far_i_trust` answers it once, from the four things the
+specification names: what the two of them are to each other (weighted
+heaviest — you believe your friends), whether this one has been right before,
+what sort of person is listening, and what sort is talking. The listener
+decides whether to take the word; the speaker decides whether it is true.
+
+**What was lied about decides what the lie costs.**
+`what_a_lie_about_this_costs` reads which need the subject answers and how hard
+that need is pressing on this agent — the same `how_hard_it_presses` the drive
+hierarchy ranks needs by — so a lie about food to a man who is not hungry is a
+small thing and the same lie to one who is starving is not. Then what the two
+of them were to each other, because being deceived by somebody you trusted is
+worse than by somebody you did not; then whether the agent is vengeful,
+forgiving, trusting, or already half expecting it. It had been a flat 0.2
+whatever the lie was about.
+
+**Two things had to be fixed before any of it could work.**
+
+An agent's map of where things are is fed both by looking and by being told,
+and the two went into the same map with nothing to tell them apart. So a man
+walked to the place he had been told about, found bare ground, and read his
+own hearsay back off the map as confirmation: every lie verified as true, and
+the lie-detection apparatus could not detect anything. `who_told_me` keeps the
+source, and a lie is found out at the only moment it can be — the agent
+looking at the spot with nothing on it. Hooking that to `Action::Explore`
+first caught almost nothing, because `Action::Explore` is chosen about never;
+it belongs in the per-tick sight pass, where agents actually look around.
+
+And agents passed on hearsay as though they had seen it, which launders a lie:
+the man who invented a place is never blamed, because everybody heard it from
+somebody honest who heard it from somebody honest. Measured, a hundred and
+fifty lies produced **four thousand** accusations, nearly all against people
+telling the truth as they understood it. An agent now passes on only what it
+has been to and looked at.
+
+**Two more found by measuring rather than reasoning.** Reading an emptied patch
+as a lie had agents calling four thousand honest tips falsehoods — a renewable
+node is kept when picked bare precisely because it will bear again, so an empty
+patch is a stale tip, not a lie. And `known_information` and `beliefs` were
+never pruned, so once agents started telling each other things, a settlement of
+a hundred carried tens of thousands of remembered claims and scanned all of
+them every hundred ticks; it is a rolling window of sixty-four now, which is
+enough to hold a grudge about and not a ledger.
+
+Measured over two worlds of fifteen thousand ticks:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Lies told in a settlement | **0** — impossible | 169–247 |
+| Lies found out | — | 74–113 |
+| A caught-out man's credit with the one he lied to | — | 0.15, from a neutral 0.5 |
+| Pairs who will not take each other's word | **0%** — nothing was consulted | 2.7–6.5% |
+
+Fewer lies are found out than are told, which is right: a lie about a distant
+place stands until somebody walks to it. Switching lying off entirely drops
+detections from four thousand to three, so what is being detected is lies and
+not staleness.
+
+**And at eight worlds a side** it costs a settlement almost nothing:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| Mean trust between any two agents | **0.00** — nothing consulted any | 0.70 ± 0.01 | 49.68 se |
+| Pairs who will not take each other's word | **0.00%** | 7.43% ± 1.75 | 4.24 se |
+| People an agent has caught lying to it | **0.00** | 0.93 ± 0.18 | 5.02 se |
+| Places an agent knows of | 239.9 ± 1.9 | 231.8 ± 3.1 | −2.21 se |
+| End population | 73.5 ± 10.2 | 78.0 ± 9.1 | 0.33 se |
+| Peak population | 97.0 ± 7.2 | 98.6 ± 5.9 | 0.17 se |
+| Births | 137.9 ± 13.8 | 143.9 ± 13.3 | 0.31 se |
+| Deaths | 89.4 ± 5.3 | 90.9 ± 6.2 | 0.18 se |
+| Soil fertility | 0.40 | 0.40 | 0.94 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+The whole price of a settlement that does not believe everything it is told is
+eight places in two hundred and forty — three per cent of what an agent knows
+of the map — some refused because the speaker was not credible, some struck off
+after being walked to and found empty. Nothing else moves at all: population,
+births, deaths and the ground are within a standard error either way. Nearly
+every agent has caught somebody out at least once by fifteen thousand ticks.
+
+That the cost is so small is itself the finding. Sight reaches twenty-five
+tiles and smell finds what is close, so being told where things are was never
+what kept a settlement alive — which is precisely why the channel could go
+ungated and unfalsifiable for the project's whole history without anybody
+noticing.
+
 ## Test coverage
 
-1,252 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,267 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
-`test_production_building_placed_near_resources`, and now
-`water_is_not_used_up`) that assert on properties a randomly generated world
+`test_production_building_placed_near_resources`,
+`water_is_not_used_up` and `a_cold_agent_ends_up_dressed`) that assert on
+properties a randomly generated world
 does not always have. The third was measured at 4 failures in 120 runs on an
 earlier commit, so it is not new; the fourth has a wider margin after the
 calendar change than before it (98.4% of a world's water still there at six
@@ -1175,6 +1288,7 @@ function in isolation:
 | `src/agents/tests/appraisal_tests.rs` | the same wolf angering one agent and frightening another, and what past fights change about that |
 | `src/analytics/tests/fight_or_flight_tests.rs` | running from what you are afraid of, striking at what is in reach, and a grudge deciding between the two |
 | `src/analytics/tests/relationship_graph_tests.rs` | a grudge weighing on a bond, a blow landing on it, and what two people are following what they think of each other |
+| `src/analytics/tests/distrust_tests.rs` | whose word an agent takes, what a lie costs by what it was about, and a lie being found out by walking to it |
 
 ---
 

@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 108,000 lines
-across 205 source files, with 1,252 library tests.
+across 206 source files, with 1,267 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,289 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,304 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -115,6 +115,16 @@ original specifications.
   bond at eight times what keeping company is worth, a blow costs a quarter of
   the scale at once, and the relationship is renamed to match — so settlements
   now contain rivals and enemies as well as friends
+- ✅ Whose word an agent takes. Where the food and water are is the one thing
+  agents tell each other that changes what they then do, and it used to go
+  from anybody to anybody — including somebody just named an enemy — and could
+  not be wrong, because the one function that weighs whether to lie was never
+  called. Agents now decide whether to believe each other, from what the two
+  of them are to each other, whether that one has been right before, and what
+  sort of people they both are; and a man who would rather lie names a place
+  that is not there. It is found out by walking to it, and what it costs him
+  depends on what he lied about — sending a starving man to an empty field is
+  not the same as misdescribing a pile of rocks
 - ✅ A fishery, which is the one food the land does not pay for: fish come up
   the river on the season rather than growing back out of what is left of them,
   so a reach fished out fills again from the catchment. What is left of a fish,
@@ -388,6 +398,22 @@ or a blow struck.
 Before this, proximity alone added up to a tenth of the whole scale every
 tick. Everybody in a settlement loved everybody, and it was arithmetic rather
 than affection.
+
+### Trust
+Trust is not a fourth book. `how_far_i_trust` answers it from what already
+exists: the bond, weighted heaviest, because you believe your friends; whether
+that person has been right before, which moves only on something the agent went
+and checked; what sort of person is doing the listening — a Paranoid one
+believes nobody, a Trusting one believes anybody; and what sort is doing the
+talking, because a charmer gets the benefit of the doubt and somebody who puts
+you off does not.
+
+An agent below the line hears a claim and does not go and stand on it. A lie is
+a real place-name moved a good walk from the real thing, and it is found out
+the moment the agent looks at the spot and sees bare ground — which is also
+what tells hearsay from what an agent saw for itself. Agents pass on only what
+they have been to and looked at, so the man who invented a place is the man
+blamed for it rather than everyone who repeated it in good faith.
 
 ### Memory
 Agents remember:
