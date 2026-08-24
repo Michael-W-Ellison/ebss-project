@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 108,000 lines
-across 204 source files, with 1,242 library tests.
+across 205 source files, with 1,252 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,279 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,289 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -104,6 +104,17 @@ original specifications.
   grudge now decides the same thing: square up to somebody you cannot stand if
   you reckon you can take them, keep well clear of them if you cannot. Nobody
   raises a hand to a child, to their own parent, or to their own children
+- ✅ And what an agent feels about somebody reaches what it thinks of them. A
+  settlement used to have no hostile relationship anywhere in it, ever — every
+  bond saturated at close, because standing near somebody was worth up to a
+  tenth of the whole scale *every tick* and nothing else could be heard over
+  it. Proximity and temperament are dispositions now, with a pace and a
+  ceiling: a season of never leaving somebody's side makes them a familiar
+  face, a season of getting on with them makes them a friend, and anything
+  past that is earned by what the two of you have done. A grudge weighs on the
+  bond at eight times what keeping company is worth, a blow costs a quarter of
+  the scale at once, and the relationship is renamed to match — so settlements
+  now contain rivals and enemies as well as friends
 - ✅ A fishery, which is the one food the land does not pay for: fish come up
   the river on the season rather than growing back out of what is left of them,
   so a reach fished out fills again from the catchment. What is left of a fish,
@@ -360,6 +371,23 @@ by whether the agent reckons it can take them, re-asked every time they are in
 the same place. It is read per person rather than off total anger, because
 three mild grudges add up to a man who reads as ready to fight and has nobody
 in particular to fight.
+
+### Relationships
+A bond runs from −1.0 to 1.0 and a name follows it: Enemy below −0.6, Rival
+below −0.2, Friend above 0.5, Acquaintance between. Family is never renamed —
+a brother you cannot stand is a brother.
+
+What moves it is divided between what people *are* and what they have *done*.
+Being about the same place as somebody, and finding their temperament suits
+yours, are dispositions: they work slowly, over seasons, and they stop — the
+first at a familiar face, the second at a friend. What takes two people past
+that is what has actually happened between them: meals shared, help offered,
+gifts given, children raised — and, in the other direction, a grudge nursed
+or a blow struck.
+
+Before this, proximity alone added up to a tenth of the whole scale every
+tick. Everybody in a settlement loved everybody, and it was arithmetic rather
+than affection.
 
 ### Memory
 Agents remember:

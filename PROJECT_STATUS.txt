@@ -56,8 +56,8 @@ BUILD STATUS
 
 TEST STATUS
 -----------
-  1,279 tests across the workspace:
-  1,242 library tests
+  1,289 tests across the workspace:
+  1,252 library tests
      15 integration tests (tests/environment_plugin_tests.rs)
      21 plugin tests (plugins/minecraft_survival)
       1 doc test
@@ -132,6 +132,21 @@ Verified as reached by Simulation::tick():
                   before reproduction - so nobody puts food by while hungry.
                   The ranked drives choose the action; the old fixed ladder is
                   kept only for drives that have no answer to offer
+  Relationships   a bond runs from -1.0 to 1.0 and the name follows it: enemy,
+                  rival, acquaintance, friend, and family which is never
+                  renamed. Being near somebody and getting on with them are
+                  dispositions that work over seasons and then stop - the
+                  first at a familiar face, the second at a friend. What
+                  takes two people past that is what they have done: a meal
+                  shared, help offered, a grudge nursed, a blow struck. A
+                  settlement contains hostile relationships now, which no
+                  settlement in this project ever did before: measured over
+                  eight worlds a side, relationships named rival or enemy went
+                  from 0.00 per agent to 1.53 at 5.30 standard errors, and the
+                  mean bond from 0.90 to 0.82. It costs fourteen more deaths
+                  at 1.81 se, on a settlement with slightly more births and a
+                  slightly higher peak - more turnover rather than failure,
+                  and eight of eight still inhabited
   Emotion         fear and anger are appraisals: the strength of the thing in
                   front of the agent, scaled by how near it is, weighed
                   against what the agent can do about it - health, build,
@@ -315,11 +330,12 @@ SUGGESTED NEXT STEPS
      fourteen-world reading that found nothing above 1.4 standard errors was
      taken against the old ladder and no longer describes the model. See
      ISSUES_FOUND.md #11.
-  2. Make being near somebody worth less than liking them. Proximity adds up to
-     0.10 to a bond every tick while a clash of traits subtracts 0.01 to 0.03,
-     so every relationship saturates at close and nobody in any settlement is
-     ever hostile to anybody. Now that traits vary this is the thing standing
-     between the model and a social life. See ISSUES_FOUND.md #11.
+  2. Give agents a reason to need each other. Everyone still does everything,
+     so no agent is ever the one who has what another wants. The fishery is
+     the first thing in the model that is place-bound - you have to be at the
+     water - which is the raw material for a division of labour, and a
+     division of labour is what would make the social graph carry weight now
+     that it has hostile edges in it.
   3. Seed world generation so the six flaky tests become deterministic and
      runs become reproducible.
   4. Decide the fate of the unconnected analytics: wire metrics, emergence

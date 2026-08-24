@@ -228,7 +228,15 @@ Verified reachable from `Simulation::tick()`.
   search), committed search legs when looking for something out of range
 
 ### Social
-- Proximity-based relationships and bonds, decay at distance
+- Relationships and bonds. Being about the same place as somebody takes a
+  season to make them a familiar face and stops there; getting on with them
+  takes a season to make them a friend and stops there. Anything past that is
+  earned by what the two of them have done
+- What one agent holds against another reaches what it thinks of them: a
+  grudge weighs on the bond at eight times what keeping company is worth, a
+  blow costs a quarter of the whole scale at once, and the relationship is
+  renamed to match — a settlement now contains rivals and enemies, which no
+  settlement in this project's history had ever contained
 - Social interactions, gossip and information spread
 - Observational learning between agents
 - Shared knowledge, technology discovery and spread
@@ -271,7 +279,6 @@ Each of these is implemented and has tests. None is driven by
 | `analytics::metrics` (`SimulationMetrics`) | Works when driven; `examples/ascii_simulation.rs` and `examples/phase4_analytics.rs` show how |
 | `analytics::emergence` (`EmergenceDetector`) | Same — driven by those two examples only |
 | `analytics::performance` (`PerformanceMonitor`) | Same — driven by those two examples only |
-| `Relationship` against `EmotionState` | Two separate books on what one agent thinks of another. A man who has just been hit still counts the man who hit him a close friend, because a grudge lives in `anger_sources` and never reaches `update_relationships` |
 | Hearing (`senses::Hearing`) | Nothing feeds sounds from the world |
 | `core::drive_progression` (`DriveProgression`) | Basic → Intermediate → Advanced → Luxury tiers for every drive, with tests, and no caller outside its own module |
 | `agents::drive_satisfaction` (`SatisfactionTracker`) | Fed only from tests, so the grief-on-death code in `Population` that asks which agent was a drive's satisfaction source always gets nothing |
@@ -1031,9 +1038,109 @@ grudge currently never reaches the relationship — `Relationship` and
 counts the man who hit him a close friend — so there is nothing yet that lets
 one blow lead to the next.
 
+## The relationship graph
+
+`EmotionState` and `Relationship` kept separate books. A grudge lived in
+`anger_sources`, was read by action selection and by nothing else, and never
+touched the bond; a blow dealt damage, wrote anger, broke a bone and left the
+relationship exactly where it found it. A man who had just been hit went on
+counting the man who hit him a close friend.
+
+And nothing could have shown through if it had. Measured at fifteen thousand
+ticks before any of this: 82 to 105 relationships apiece, nine in ten of them
+at 0.6 or better, mean bond **0.901**, and `RelationshipType::Rival` and
+`Enemy` constructed nowhere outside a test file in the whole project's
+history — so `get_hostile_relationships` and the inspector's hostile count
+read zero in every run there had ever been, including runs in which eighty-six
+bonds in one settlement stood below zero.
+
+**Two rates were being read as amounts.** `Population::update_relationships`
+added up to 0.10 in proximity bonus to every nearby pair every tick, with no
+ceiling, so a bond saturated within a day of standing beside somebody.
+`Relationship::update_from_trait_interaction` ran on the same schedule and
+moved a bond 0.035 a tick for two people who got on and 0.065 for two who
+clashed — inseparable in three days, sworn enemies in a week, both regardless
+of anything that had happened between them.
+
+Both are dispositions rather than events, and both now have a pace and a
+ceiling. A season of never leaving somebody's side makes them a familiar face
+(0.3) and no more. A season of getting on with them makes them a friend (0.5)
+and no more. Friction keeps its floor at the bottom of the scale, because
+friction is friction. What takes two people past friendship is what they have
+actually done: meals shared, help offered, gifts given, children raised.
+
+**On top of that, the feelings land.** `let_grudges_tell_on_the_bond` runs
+each tick over everybody — not over pairs standing near each other, because a
+grudge is an opinion and not a proximity effect, and doing it the other way
+would leave a hole exactly where fear now puts one: an agent that resents a
+man it dare not face keeps away from him, and would therefore have gone on
+counting him a friend. A blow costs `WHAT_A_BLOW_COSTS` — a quarter of the
+whole scale, at once — with a share of that for the one who threw it.
+
+**And the number gets a name.** `settle_what_we_are` maps the bond onto the
+type: Enemy below −0.6, Rival below −0.2, Friend above 0.5, Acquaintance
+between. Blood is not renamed — a brother you cannot stand is a brother.
+
+Measured over three worlds at fifteen thousand ticks:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Mean bond across a settlement | 0.901 | 0.78–0.83 |
+| Named Rival | 0 | 10–14 |
+| Named Enemy | 0 | 40–83 |
+| Named Friend | 0 | 3,646–5,101 |
+| Bonds below zero | 39–86 | 57–112 |
+
+**The interesting negative.** Setting the grudge weight to zero and running
+again leaves the enemy count where it was, inside the scatter. What makes
+enemies in this settlement is being hit, not being lied to: lies and betrayals
+are rare events, blows are not, and a blow is worth thirty ticks of a
+full-blown grudge in one go. The grudge mechanism is wired and correct per
+grudge — a lie costs about a quarter of the scale over the life of the anger
+it creates — and its contribution to the settlement statistics is not
+resolvable at three worlds. Recorded as measured rather than tuned until the
+number moved.
+
+**At eight worlds a side**, against the commit before, this is one of the few
+changes in this project that clears the bar decisively:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| Relationships named rival or enemy, per agent | **0.00 ± 0.00** | **1.53 ± 0.29** | **5.30 se** |
+| Mean bond across a settlement | 0.90 ± 0.01 | 0.82 ± 0.02 | −3.83 se |
+| Bonds below zero, per agent | 1.09 ± 0.21 | 1.96 ± 0.36 | 2.08 se |
+| Deaths | 84.8 ± 3.7 | 99.0 ± 7.0 | 1.81 se |
+| Relationships per agent | 103.6 ± 8.2 | 107.7 ± 9.9 | 0.32 se |
+| Close relationships per agent | 92.9 ± 7.8 | 85.8 ± 8.9 | −0.60 se |
+| Peak population | 95.8 ± 5.6 | 99.9 ± 7.8 | 0.43 se |
+| End population | 85.3 ± 6.2 | 77.5 ± 9.5 | −0.68 se |
+| Births | 145.0 ± 8.3 | 151.5 ± 16.1 | 0.36 se |
+| Soil fertility | 0.40 | 0.40 | 0.15 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+Every agent now has one or two people it has fallen out with, where in eight
+worlds of fifteen thousand ticks apiece there had previously been not one such
+relationship anywhere. The graph is meaningfully less saturated, and the
+number of soured bonds has nearly doubled.
+
+The cost is deaths, up fourteen at 1.81 se — the clearest downward signal
+these measurements have produced, though still short of the bar. Note what
+does *not* move with it: births are up slightly, peak population is up
+slightly, end population is not clearly down, and no settlement was lost. This
+is a settlement with more turnover rather than one that is failing, which is
+what a society whose members occasionally beat each other should look like.
+
+Close relationships are still the large majority — 86 of 108 per agent — and
+that is the next thread. Proximity and temperament are capped now, so what
+carries a bond past friendship is `positive_interaction` from social acts at
+0.01 to 0.05 apiece, and over fifteen thousand ticks in a settlement where
+everybody is within reach of everybody, that adds up for every pair alike. The
+principle applied to the first two rates has not yet been applied to the
+third.
+
 ## Test coverage
 
-1,242 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,252 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,
@@ -1067,6 +1174,7 @@ function in isolation:
 | `src/core/tests/drive_hierarchy_tests.rs` | rank, nearness of death deciding among the primaries, a drive gated behind the one before it |
 | `src/agents/tests/appraisal_tests.rs` | the same wolf angering one agent and frightening another, and what past fights change about that |
 | `src/analytics/tests/fight_or_flight_tests.rs` | running from what you are afraid of, striking at what is in reach, and a grudge deciding between the two |
+| `src/analytics/tests/relationship_graph_tests.rs` | a grudge weighing on a bond, a blow landing on it, and what two people are following what they think of each other |
 
 ---
 

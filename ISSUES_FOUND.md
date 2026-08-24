@@ -551,25 +551,58 @@ The three things that would fix it, in order of what they buy:
    fishery is the first thing in the model that is *place-bound* — you must be
    at the water — which is the raw material for a real division of labour.
 
-**And a fourth, which assigning traits revealed.** The relationship graph is
-still undifferentiated: 33 to 43 relationships each, of which 31 to 37 are
-close, and **none hostile**, in settlements of 43 to 69. That is no longer
-because traits do not vary. It is arithmetic.
-`Relationship::update_from_trait_interaction` subtracts 0.01 to 0.03 for each
-clashing pair of traits, while `Population::update_relationships` adds up to
-0.10 in proximity bonus to every nearby pair on every tick. Being near somebody
-outweighs disliking them by three to ten times, and applies always rather than
-only when there is a clash, so every relationship saturates at close regardless
-of who the two people are. Nobody ever undertakes a social act either:
-`Undertaking::Dealing` is attempted zero times in a whole run.
+**And a fourth, which assigning traits revealed — since fixed.** The
+relationship graph was undifferentiated: every bond saturated at close and
+**none was hostile**, in any settlement, ever. It was arithmetic rather than
+affection. `Population::update_relationships` added up to 0.10 in proximity
+bonus to every nearby pair on every tick with no ceiling, so a bond saturated
+within a day of standing beside somebody;
+`Relationship::update_from_trait_interaction` ran on the same per-tick
+schedule and moved a bond 0.035 a tick for two people who got on. Both were
+rates being read as amounts.
 
-   The *feeling* is no longer the missing part. A grudge against a particular
-   person now decides whether an agent squares up to them or keeps clear of
-   them, and agents come to blows about a hundred and fifty times per world
-   where they used to about ten. What is still missing is the grudge reaching
-   the relationship: `Relationship` and `EmotionState` keep separate books, so
-   a man who has just been hit still counts the man who hit him a close
-   friend. That is the arithmetic above, and it is what to fix next.
+Both are rates now. A season of never leaving somebody's side makes them a
+familiar face and stops; a season of getting on with them makes them a friend
+and stops. Anything past that has to be earned by what the two of them have
+actually done. On top of that, a grudge weighs on the bond at eight times what
+keeping company is worth, and a blow costs a quarter of the whole scale at
+once. `settle_what_we_are` then puts a name to the number, so
+`RelationshipType::Rival` and `Enemy` — which had been constructed nowhere
+outside a test file in the project's history — appear in live settlements.
+
+Measured at fifteen thousand ticks, three worlds:
+
+| | Before | After |
+| --- | --- | --- |
+| Mean bond across a settlement | 0.901 | 0.78–0.83 |
+| Relationships named Rival | 0 | 10–14 |
+| Relationships named Enemy | 0 | 40–83 |
+| Relationships named Friend | 0 | 3,646–5,101 |
+
+The interesting negative: zeroing the grudge weight and running again leaves
+the enemy count where it was. What makes enemies in a settlement is being hit,
+not being lied to — the grudge mechanism is wired and correct per grudge, and
+grudge-generating events are simply rarer than blows.
+
+At eight worlds a side, relationships named rival or enemy went from **0.00
+per agent to 1.53**, at 5.30 standard errors — one of the few results in this
+project that clears the bar decisively — and the mean bond from 0.90 to 0.82.
+It costs fourteen more deaths (1.81 se) on a settlement with slightly more
+births and a slightly higher peak, so more turnover rather than failure, and
+eight of eight settlements were still inhabited.
+
+Nobody undertaking a social act is fixed separately: `Undertaking::Dealing`
+was attempted zero times in a whole run before the drive hierarchy let drives
+choose actions, and `Socialize` now runs at about 0.6% of everything a
+settlement does.
+
+**What is left of it.** Close relationships are still the large majority — 86
+of 108 per agent. Proximity and temperament are capped now, so what carries a
+bond past friendship is `positive_interaction` from social acts, at 0.01 to
+0.05 apiece; over fifteen thousand ticks in a settlement where everybody is
+within reach of everybody, that adds up for every pair alike. It is the same
+shape of defect as the two that were fixed — an unbounded accumulator over a
+long run — and the principle has not yet been applied to it.
 
 ### 12. Skill measured how far you had walked, and bought nothing
 
