@@ -258,6 +258,30 @@ impl Population {
             self.current_tick as u64
         );
 
+        // And how to put a handle on a stone. Crafting checks a technology as
+        // well as a skill, and a people who arrive knowing how to knap but not
+        // that wood can be shaped never make anything: the commonest single
+        // failure left in the model was twenty-five thousand refusals of
+        // `Cannot craft woodenaxe: missing technology 'wooden_tools'`.
+        // Not wooden tools.
+        //
+        // Crafting checks a technology as well as a skill, and granting
+        // `wooden_tools` at the start clears the commonest remaining failure
+        // in the model at a stroke - twenty-five thousand refusals of
+        // `missing technology 'wooden_tools'` in one world. It was also
+        // measurably bad for the land: a people who can put handles on stones
+        // take a great deal more off it, and the nutrient-loop regression,
+        // which asks that farmed ground not lose half its fertility in ten
+        // thousand ticks, went from passing three times in four to once in
+        // five.
+        //
+        // Which is the right behaviour and the wrong starting point. They are
+        // a stone-age people: they arrive carrying a knapped axe and a knife,
+        // and how to make a hafted one is a thing for them to find out. The
+        // Craft failures it leaves behind are handled by the same mechanism as
+        // everything else - an agent that cannot make an axe stops trying to
+        // quite so often.
+
         self.agents.push(agent);
         self.stats.current_population = self.agents.len();
     }

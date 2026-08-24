@@ -46,7 +46,7 @@ reproducible runs. Until then, a red build is not necessarily a real failure,
 which is corrosive: check whether the failing test is one of these seven before
 assuming a regression.
 
-### 2. Three fifths of everything a settlement does fails
+### 2. Three fifths of everything a settlement does fails — mostly fixed
 
 The drive hierarchy made the drives ask for the right things. Almost nothing
 underneath them can deliver. Measured over two worlds of fifteen thousand ticks
@@ -107,7 +107,63 @@ It also corrects something recorded earlier in this document: `Action::Build`
 and `Action::Socialize` becoming non-zero after the hierarchy was reported as
 progress. Build became non-zero and has **never once succeeded**.
 
-### 3. No error recovery around a tick
+**Since largely fixed.** Founders arrive with the hands of grown people and
+stone tools, so crafting is no longer behind a skill only crafting can teach; a
+skin tent is the first shelter, so building no longer needs thirty stone a
+stone-age people cannot quarry; putting something by names a thing out of the
+agent's own pack instead of a placeholder; mating chooses somebody who could
+actually bear a child and whom the agent trusts; building is not attempted with
+an empty pack; and, generally, an action that keeps failing gets chosen less
+often, per particular thing tried rather than per kind of undertaking.
+
+| Measure | Before | After |
+| --- | --- | --- |
+| All actions failing | 58.1% | **6.6%** |
+| Population at 15,000 ticks | 136 | 218 |
+| Move failing | 73% | 0.1% |
+| Mate, share of all actions | 22.5% | below the top twelve |
+| Build, Store | 100% failing | out of the reckoning |
+
+What is left is a thirsty agent nowhere near water, and children born during a
+run who have not yet learned to craft — the second of which is correct and
+self-correcting. The cost of all this is issue #3.
+
+### 3. The nutrient loop does not keep up with a settlement that works
+
+`the_farmed_ground_holds_up_longer` asks that farmed ground keep at least half
+its fertility over ten thousand ticks of a settlement working it. It passed
+three times in three before the work of issue #2 and passes about three times
+in six after.
+
+This is not a flake and it is not a bug in the loop. It is what the loop costs
+when the people on top of it stop wasting their lives. Three fifths of every
+action a settlement took used to come to nothing; it is now under a tenth, and
+the population at fifteen thousand ticks went from 136 to 218 on the same land.
+Twice as many people, each of them twice as effective, take a great deal more
+off the ground.
+
+The mechanism was isolated rather than guessed at. Granting founders the
+`wooden_tools` technology - which clears twenty-five thousand crafting failures
+at a stroke - took the test from three-in-four to one-in-five on its own: a
+people who can put a handle on a stone strip the land far faster. That grant
+was removed for exactly this reason, and it is only half the story; the rest is
+the general rise in effectiveness.
+
+**It wants a decision rather than a patch**, and the decision is not the
+simulation's to make:
+
+- Let the settlement press harder and rely on the brakes the model already has
+  - breeding gated on surplus, and migration when the ground fails - to find
+  the new equilibrium, and move the threshold this test asserts.
+- Or put more back: the fishery is the one input that is not paid for out of
+  the same ground (issue #6 and the audit), and a settlement that fished harder
+  could carry more people on the same soil.
+- Or accept a smaller settlement and slow the birth rate.
+
+Left failing rather than quietly weakened, because the assertion is measuring
+something real and the number it is measuring has genuinely changed.
+
+### 4. No error recovery around a tick
 
 One panicking agent ends the whole run and loses everything since the last
 autosave. There is no isolation of per-agent failure and no attempt to
@@ -119,7 +175,7 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 4. A settlement that overshoots slides instead of settling back
+### 5. A settlement that overshoots slides instead of settling back
 
 Traced over six worlds to thirty thousand ticks. A settlement grows, strips the
 ground it farms, and then slides — it does not find a smaller level and hold
@@ -328,7 +384,7 @@ What remains: a spent field still counts as a field, so a settlement still will
 not break new ground while exhausted ones sit inside its radius, and nobody has
 still ever died of hunger.
 
-### 5. Winter is not cold: the tile temperature is frozen at first touch
+### 6. Winter is not cold: the tile temperature is frozen at first touch
 
 `ClimateManager::get_biome` builds a `Biome` for a position the first time
 anybody asks about it, stamps the current season and hour into it, and caches
@@ -385,7 +441,7 @@ weather.
 Fixing it is not just a cache invalidation: making winter genuinely cold is a
 real change to the balance and would need measuring before and after.
 
-### 6. Three drives ask for things the world cannot give
+### 7. Three drives ask for things the world cannot give
 
 The design document's Appendix A gives each drive a list of **increase
 conditions** — Safety on "hostile entity proximity, recent injury, darkness",
@@ -439,7 +495,7 @@ the time to 0.5%, Preparedness from 98.2% to 0%, Utility from 84.6% to 0.6%.
 The world still has no tools and nothing decorative in it; what changed is
 that the absence no longer drowns out the drives that *can* be answered.
 
-### 7. The ecology settles in most worlds, not all
+### 8. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
 herds stay bounded in thirty-three. In the seven that run away the predators
@@ -447,7 +503,7 @@ died out first, and although animals do wander back in from off the map, the
 trickle is slow enough — by design — that a world can spend thousands of ticks
 with its herds climbing unopposed before a replacement pack arrives.
 
-### 8. Clothing and hunting cost about what they return
+### 9. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -466,14 +522,14 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 9. Agents still cannot hear anything
+### 10. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 10. Zoning and territory are never established
+### 11. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -481,7 +537,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 11. Agents carry food they will never eat
+### 12. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -491,7 +547,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 12. Personality exists and reaches the drives, and still decides nothing
+### 13. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -598,7 +654,7 @@ The three things that would fix it, in order of what they buy:
    And when the thirteenth priority *was* reached, three drives took it every
    time. Over four thousand agent-samples, Luxury stood above its threshold
    **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** — because
-   nothing in the world could answer them (issue #6). Construction was above
+   nothing in the world could answer them (issue #7). Construction was above
    its threshold 12.7% of the time and Social 38.1%, so they were not quiet;
    they simply never won, and `Action::Build` and `Action::Socialize` were
    chosen **zero** times in 777 agent-lives.
@@ -673,7 +729,7 @@ within reach of everybody, that adds up for every pair alike. It is the same
 shape of defect as the two that were fixed — an unbounded accumulator over a
 long run — and the principle has not yet been applied to it.
 
-### 13. Skill measured how far you had walked, and bought nothing
+### 14. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
 
@@ -729,16 +785,16 @@ matching the eight-world baseline exactly.
 
 ## Housekeeping
 
-### 14. Committed backup file
+### 15. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 15. Build warnings
+### 16. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 16. Placeholder package metadata
+### 17. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

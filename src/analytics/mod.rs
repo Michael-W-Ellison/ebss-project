@@ -1136,7 +1136,11 @@ impl Simulation {
                 let target_y = position.1 + rng.gen_range(-5..=5);
                 Action::Move { target: (target_x, target_y, position.2) }
             },
-            DriveType::Reproduction => Action::Mate { target_agent_id: uuid::Uuid::nil() },
+            // Proposing to whoever is nearest is how Mate came to be a fifth
+            // of everything a settlement did and to fail 99.9% of the time.
+            // The drive path above finds somebody who could actually have a
+            // child and whom this agent trusts.
+            DriveType::Reproduction => Action::Wait,
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
         }
     }
@@ -1340,7 +1344,12 @@ impl Simulation {
         // A drink from the waterskin, or from a spring within reach. Both go
         // through the same action: it prefers open water and falls back to
         // whatever the agent is carrying.
-        let carrying_water = agent.inventory.available_water() > 0.0;
+        // Enough for a swallow, not a dribble. `Gather` drinks from a
+        // waterskin when there is no source about, but only in whole units -
+        // so an agent with half a mouthful left kept choosing to drink and
+        // being told there was no water anywhere, which was the largest single
+        // failure in the simulation.
+        let carrying_water = agent.inventory.available_water() >= 1.0;
         let water_in_reach = self
             .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
                 resource.resource_type == ResourceType::Water
@@ -1442,6 +1451,12 @@ impl Simulation {
         // go somewhere else. This is above the local search below because
         // walking twelve tiles and back is what an agent does when it has
         // mislaid its dinner, not when the ground has stopped producing one.
+        // A need that keeps going unanswered is a reason to live somewhere
+        // else, not a reason to walk further today
+        if let Some(action) = self.go_and_live_where_it_is(agent, agent_position) {
+            return Some(action);
+        }
+
         if let Some(action) = self.migration_action(agent, agent_position) {
             return Some(action);
         }
@@ -1549,6 +1564,122 @@ impl Simulation {
     /// that is far enough away to be different country; failing any memory,
     /// it strikes out on a bearing of its own and keeps going, which is what
     /// turns a starving settlement into a scattering one.
+
+    /// How long a need has to keep going unanswered before an agent stops
+    /// walking back and forth to it and goes to live beside it.
+    const ASKED_FOR_IT_ONCE_TOO_OFTEN: u32 = 96;
+
+    /// How near counts as camped on a thing.
+    ///
+    /// Wide enough that a people spread out along a river rather than piling
+    /// onto the one tile of it. At four tiles they concentrated hard enough to
+    /// work the ground out under themselves: the nutrient-loop regression,
+    /// which asks that farmed ground not lose half its fertility in ten
+    /// thousand ticks, started failing about one run in three.
+    const CAMPED_ON_IT: i32 = 4;
+
+    /// The need this agent keeps having and keeps not getting.
+    ///
+    /// `denied_ticks` counts how long a drive has gone unanswered, and until
+    /// now only hunger was ever read for the purpose of moving house. Thirst
+    /// was the largest single failure in the whole simulation - a hundred and
+    /// thirty-one thousand refusals of `Gather: No water sources nearby` in
+    /// one pair of worlds - because an agent that could not find water walked
+    /// to it, drank, wandered off about its business, and was thirsty again
+    /// half a day later in the same dry place.
+    fn what_i_keep_going_short_of(agent: &crate::agents::Agent) -> Option<DriveType> {
+        // Water only, and deliberately.
+        //
+        // Water is a fixed point on the map: it is in one place, it does not
+        // run out, and camping beside it answers the need for good. Food is
+        // not - it is spread about and it is *consumed*, so a people who move
+        // house towards it concentrate their foraging on whatever ground they
+        // land on and work it out from under themselves. Measured, letting
+        // hunger move a settlement took the nutrient-loop regression from
+        // passing three times in three to twice in five: farmed ground losing
+        // more than half its fertility inside ten thousand ticks.
+        //
+        // Ranging for food and settling by water is the division the land
+        // itself makes.
+        [DriveType::Thirst]
+            .into_iter()
+            .filter(|need| {
+                agent
+                    .drives
+                    .get(*need)
+                    .map(|drive| drive.denied_ticks() >= Self::ASKED_FOR_IT_ONCE_TOO_OFTEN)
+                    .unwrap_or(false)
+            })
+            .max_by_key(|need| {
+                agent
+                    .drives
+                    .get(*need)
+                    .map(|drive| drive.denied_ticks())
+                    .unwrap_or(0)
+            })
+    }
+
+    /// Go and live where the thing you keep needing is.
+    ///
+    /// "The agents must anticipate their future drive demands. If they
+    /// consistently need water, they should camp or colonize near water."
+    ///
+    /// Answering a need where you stand is what every other path here does.
+    /// This is the one that reads the *pattern* of a need instead of the need
+    /// itself: a man who has been short of water for eight days does not want
+    /// a drink, he wants to be somewhere else.
+    ///
+    /// It fires only once a need has been going unanswered for days, and stops
+    /// the moment the agent is camped on the answer, so it moves a settlement
+    /// rather than keeping it walking.
+    fn go_and_live_where_it_is(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::ResourceType;
+
+        // Whether to move house is a question worth asking once a day, not
+        // eight times: it walks the whole resource list at sixty tiles, and a
+        // people do not reconsider where they live every two hours.
+        if self.current_tick % crate::environment::seasons::TICKS_PER_DAY != 0 {
+            return None;
+        }
+
+        let short_of = Self::what_i_keep_going_short_of(agent)?;
+
+        let wanted = match short_of {
+            DriveType::Thirst => ResourceType::Water,
+            _ => ResourceType::Food,
+        };
+
+        // The nearest place that answers it, however far off - this is a
+        // decision to move house, so the ordinary foraging radius does not
+        // apply
+        let there = self.nearest_resource_within(agent_position, Self::HOW_FAR_A_PEOPLE_WILL_MOVE, |resource| {
+            resource.resource_type == wanted
+                || (wanted == ResourceType::Food
+                    && Self::edible_item_for(resource.resource_type).is_some())
+        })?;
+
+        let paces = (there.x - agent_position.0)
+            .abs()
+            .max((there.y - agent_position.1).abs());
+
+        // Already living on it: nothing to do, and importantly nothing that
+        // keeps the agent walking in circles round the thing it wanted
+        if paces <= Self::CAMPED_ON_IT {
+            return None;
+        }
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
+    }
+
+    /// How far a people will pick up and move for water they can count on.
+    const HOW_FAR_A_PEOPLE_WILL_MOVE: u32 = 60;
+
     fn migration_action(
         &self,
         agent: &crate::agents::Agent,
@@ -1871,13 +2002,13 @@ impl Simulation {
             // the empty air a third of every life - it was the single
             // commonest thing anybody did.
             DriveType::Reproduction => {
-                if agent.should_attempt_reproduction() {
-                    Some(Action::Mate {
-                        target_agent_id: uuid::Uuid::nil(),
-                    })
-                } else {
-                    None
+                if !agent.should_attempt_reproduction() {
+                    return None;
                 }
+                self.somebody_to_have_a_child_with(agent, agent_position)
+                    .map(|them| Action::Mate {
+                        target_agent_id: them,
+                    })
             }
 
             // Making a thing needs something to make it out of
@@ -2319,6 +2450,58 @@ impl Simulation {
     const HUNT_REACH: i32 = 2;
 
 
+
+    /// How far apart two people can be and still come to anything.
+    const CLOSE_ENOUGH_TO_COURT: i32 = 3;
+
+    /// Somebody worth having a child with.
+    ///
+    /// `resolve_action_target` filled a nil Mate target with whoever happened
+    /// to be nearest, which is neither a courtship nor a plan. Measured, Mate
+    /// was 19.7% of everything a settlement did and failed 99.9% of the time:
+    /// the target could not reproduce, or was too far off, or one of the two
+    /// was barely fertile. One birth per thousand-odd attempts.
+    ///
+    /// Three things decide it, and trust is the first of them. Somebody an
+    /// agent has not built up any confidence in is not somebody it will have a
+    /// child with, however close they are standing - and trust here is the
+    /// whole of what one agent thinks of another: the bond, whether they have
+    /// been straight with it before, and what sort of people they both are.
+    ///
+    /// Then the plain facts of the matter, so the attempt can actually come to
+    /// something: near enough, and a pair who could have a child at all.
+    fn somebody_to_have_a_child_with(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        use crate::agents::reproduction::{can_mate, MateSelectionCriteria};
+
+        let criteria = MateSelectionCriteria::default();
+
+        self.population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| {
+                let paces = (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs());
+                paces <= Self::CLOSE_ENOUGH_TO_COURT
+            })
+            .filter(|them| agent.would_take_their_word(them.id, &them.traits))
+            .filter(|them| can_mate(agent, them, &criteria))
+            .max_by(|a, b| {
+                let trust = |them: &&crate::agents::Agent| {
+                    agent.how_far_i_trust(them.id, &them.traits)
+                };
+                trust(a)
+                    .partial_cmp(&trust(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|them| them.id)
+    }
+
     /// Putting a roof up, or going to fetch what it needs.
     ///
     /// Building was chosen without ever looking at what the agent was
@@ -2363,6 +2546,16 @@ impl Simulation {
                 structure_type: "tent".to_string(),
                 position: agent_position,
             }),
+
+            // Hides do not grow on bushes. Sending an agent to forage for them
+            // is a wild goose chase, and a measured one: eighteen thousand
+            // refusals of `No hides sources nearby` in a single world before
+            // this told the difference between what the ground gives and what
+            // has to be taken off an animal.
+            Some((what, _)) if what.contains("hide") || what.contains("leather") => {
+                self.hunting_action(agent, agent_position)
+            }
+
             Some((what, _)) => Some(Action::Gather { resource_type: what }),
         }
     }
