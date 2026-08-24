@@ -89,6 +89,21 @@ pub struct Simulation {
     /// patching a counter in by hand and throwing it away afterwards. Kept
     /// here so the answer is reproducible and costs one hash lookup a tick.
     pub actions_taken: std::collections::HashMap<String, u64>,
+    /// And how many of those came to nothing.
+    ///
+    /// An action chosen is not an action that worked. Counting only the
+    /// choosing hides the case where a settlement spends a sixth of its life
+    /// attempting something that almost never succeeds, which is exactly what
+    /// it turned out to be doing.
+    pub actions_failed: std::collections::HashMap<String, u64>,
+    /// And what they said when they did.
+    ///
+    /// A count of failures tells you a settlement is wasting its time; the
+    /// reasons tell you what on. Both are one hash lookup on a path that only
+    /// runs when something has already gone wrong, and between them they turn
+    /// "the drives ask for things that do not happen" into a list of named
+    /// defects.
+    pub actions_failed_because: std::collections::HashMap<String, u64>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -251,6 +266,8 @@ impl Simulation {
             last_autosave_tick: 0,
             food_database: FoodDatabase::default(),
             actions_taken: std::collections::HashMap::new(),
+            actions_failed: std::collections::HashMap::new(),
+            actions_failed_because: std::collections::HashMap::new(),
         }
     }
 
@@ -661,6 +678,19 @@ impl Simulation {
 
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
+
+                if !action_result.success {
+                    *self
+                        .actions_failed
+                        .entry(Self::name_of(&action))
+                        .or_insert(0) += 1;
+                    if let Some(why) = action_result.message.as_ref() {
+                        *self
+                            .actions_failed_because
+                            .entry(format!("{}: {}", Self::name_of(&action), why))
+                            .or_insert(0) += 1;
+                    }
+                }
 
                 debug!(
                     "Agent {} - Action result: {} (satisfaction: {:.2})",
@@ -8297,6 +8327,8 @@ impl Simulation {
             food_database: FoodDatabase::default(),
             // A tally of this run, not of the saved one
             actions_taken: std::collections::HashMap::new(),
+            actions_failed: std::collections::HashMap::new(),
+            actions_failed_because: std::collections::HashMap::new(),
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);

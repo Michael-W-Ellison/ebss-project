@@ -46,7 +46,68 @@ reproducible runs. Until then, a red build is not necessarily a real failure,
 which is corrosive: check whether the failing test is one of these seven before
 assuming a regression.
 
-### 2. No error recovery around a tick
+### 2. Three fifths of everything a settlement does fails
+
+The drive hierarchy made the drives ask for the right things. Almost nothing
+underneath them can deliver. Measured over two worlds of fifteen thousand ticks
+(2.1M actions), by share of all actions taken and how often each one failed:
+
+| Action | Share of all actions | Failed |
+| --- | --- | --- |
+| Gather | 21.5% | **85.6%** |
+| Mate | 19.7% | **99.9%** |
+| Build | 12.1% | **100.0%** |
+| Store | 4.7% | **100.0%** |
+| Craft | 4.2% | **99.3%** |
+| Move, Sleep, SeekShelter, Eat | 36.1% | 0% |
+
+That is **about three fifths of every action a settlement takes coming to
+nothing**. Each of the five has a distinct and nameable cause, and none of them
+is subtle:
+
+**Store never works at all.** `generate_action_for_drive` maps Preparedness to
+`Action::Store { item_type: "resource" }` — a placeholder string the executor
+does not recognise. 13,713 failures in four thousand ticks, every one of them
+`Unknown item type: resource`. The drive is answerable; the action is a stub.
+
+**Craft cannot bootstrap.** Utility maps to `Action::Craft { item_type:
+"woodenaxe" }`, which needs Crafting at −5. Skill starts at −10 and rises only
+by *doing*, so no agent can ever make its first axe: `insufficient skill (need
+-5, have -8)`. Some also want a technology nobody has. This is why the world
+has no tools in it, which issue #5 records as a gap in crafting — it is not
+that nothing makes tools, it is that the one recipe agents reach for is behind
+a skill gate they cannot climb.
+
+**Build is attempted with nothing to build from.** `Missing resources for
+SmallHouse: 38 wood (have 12), 30 stone` — and the stone line has no "have"
+at all, because they have none. Nothing checks materials before choosing to
+build and nothing makes an agent gather *towards* a build, so the Construction
+drive spends an eighth of the settlement's life restating that it has not got
+enough wood.
+
+**Mate is aimed at whoever is nearest.** `resolve_action_target` fills a nil
+target with the nearest agent, not a viable mate, so the top reasons are
+`Target cannot reproduce (too young, too old, or pregnant)` and `Agents too far
+apart for mating`. One birth per thousand-odd attempts.
+
+**Gather fails because there is no water.** The single largest failure in the
+whole simulation, 131,436 in one pair of worlds: `Gather: No water sources
+nearby`. Thirst maps to `Action::Gather { resource_type: "water" }` and the
+agent is nowhere near any. Thirst is a primary drive that outranks nearly
+everything, so an agent away from water spends its turns asking for it and
+being told no, rather than walking to it.
+
+The common shape is the same in all five: **a drive is answered by naming an
+action, and nothing checks that the action can succeed from where the agent is
+standing with what it is carrying.** Before the drive hierarchy these drives
+rarely won a turn, so the actions were rarely attempted and the failures were
+invisible. Ranking the drives properly is what exposed it.
+
+It also corrects something recorded earlier in this document: `Action::Build`
+and `Action::Socialize` becoming non-zero after the hierarchy was reported as
+progress. Build became non-zero and has **never once succeeded**.
+
+### 3. No error recovery around a tick
 
 One panicking agent ends the whole run and loses everything since the last
 autosave. There is no isolation of per-agent failure and no attempt to
@@ -58,7 +119,7 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. A settlement that overshoots slides instead of settling back
+### 4. A settlement that overshoots slides instead of settling back
 
 Traced over six worlds to thirty thousand ticks. A settlement grows, strips the
 ground it farms, and then slides — it does not find a smaller level and hold
@@ -267,7 +328,7 @@ What remains: a spent field still counts as a field, so a settlement still will
 not break new ground while exhausted ones sit inside its radius, and nobody has
 still ever died of hunger.
 
-### 4. Winter is not cold: the tile temperature is frozen at first touch
+### 5. Winter is not cold: the tile temperature is frozen at first touch
 
 `ClimateManager::get_biome` builds a `Biome` for a position the first time
 anybody asks about it, stamps the current season and hour into it, and caches
@@ -324,7 +385,7 @@ weather.
 Fixing it is not just a cache invalidation: making winter genuinely cold is a
 real change to the balance and would need measuring before and after.
 
-### 5. Three drives ask for things the world cannot give
+### 6. Three drives ask for things the world cannot give
 
 The design document's Appendix A gives each drive a list of **increase
 conditions** — Safety on "hostile entity proximity, recent injury, darkness",
@@ -356,7 +417,10 @@ nine came unpinned:
 | Utility | 1.00, active 100% | 0.60, active 100% |
 | Luxury | 1.00, active 100% | 0.98, active 100% |
 
-**The three that stayed high are the finding.** Preparedness asks for stockpiled
+**The three that stayed high were the finding at the time, and issue #2 has
+since named the reason.** It is not that the world has no way to answer them:
+Store is a stub that cannot succeed, and the one thing agents try to craft is
+behind a skill gate they cannot climb. Preparedness asks for stockpiled
 food, materials and tools; Utility for tools in working order; Luxury for
 something fine. Counting what thirty agents were carrying at eight thousand
 ticks: 102 wood, 21 food, 17 leather, 14 horn, 12 flax, 11 cotton, 8 wool, and
@@ -375,7 +439,7 @@ the time to 0.5%, Preparedness from 98.2% to 0%, Utility from 84.6% to 0.6%.
 The world still has no tools and nothing decorative in it; what changed is
 that the absence no longer drowns out the drives that *can* be answered.
 
-### 6. The ecology settles in most worlds, not all
+### 7. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
 herds stay bounded in thirty-three. In the seven that run away the predators
@@ -383,7 +447,7 @@ died out first, and although animals do wander back in from off the map, the
 trickle is slow enough — by design — that a world can spend thousands of ticks
 with its herds climbing unopposed before a replacement pack arrives.
 
-### 7. Clothing and hunting cost about what they return
+### 8. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -402,14 +466,14 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 8. Agents still cannot hear anything
+### 9. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 9. Zoning and territory are never established
+### 10. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -417,7 +481,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 10. Agents carry food they will never eat
+### 11. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -427,7 +491,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 11. Personality exists and reaches the drives, and still decides nothing
+### 12. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -534,7 +598,7 @@ The three things that would fix it, in order of what they buy:
    And when the thirteenth priority *was* reached, three drives took it every
    time. Over four thousand agent-samples, Luxury stood above its threshold
    **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** — because
-   nothing in the world could answer them (issue #5). Construction was above
+   nothing in the world could answer them (issue #6). Construction was above
    its threshold 12.7% of the time and Social 38.1%, so they were not quiet;
    they simply never won, and `Action::Build` and `Action::Socialize` were
    chosen **zero** times in 777 agent-lives.
@@ -609,7 +673,7 @@ within reach of everybody, that adds up for every pair alike. It is the same
 shape of defect as the two that were fixed — an unbounded accumulator over a
 long run — and the principle has not yet been applied to it.
 
-### 12. Skill measured how far you had walked, and bought nothing
+### 13. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
 
@@ -665,16 +729,16 @@ matching the eight-world baseline exactly.
 
 ## Housekeeping
 
-### 13. Committed backup file
+### 14. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 14. Build warnings
+### 15. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 15. Placeholder package metadata
+### 16. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

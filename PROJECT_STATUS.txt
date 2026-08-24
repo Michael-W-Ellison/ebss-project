@@ -355,6 +355,16 @@ KNOWN GAPS IN BEHAVIOUR
 
 SUGGESTED NEXT STEPS
 --------------------
+  0. Make the actions the drives ask for capable of succeeding. Three fifths
+     of everything a settlement does fails: Store never works at all (the
+     Preparedness drive names a placeholder item the executor does not
+     recognise), Craft cannot bootstrap (the one recipe agents reach for
+     needs a skill they can only get by crafting), Build is attempted with a
+     third of the wood and none of the stone, Mate is aimed at whoever is
+     nearest rather than at anyone who could bear a child, and the largest
+     single failure in the simulation is a thirsty agent asking for water it
+     is nowhere near. The drives are now asking for the right things and
+     almost nothing underneath them can deliver. See ISSUES_FOUND.md #2.
   1. Re-measure whether personality now tells. The two things that blocked it
      are both gone: drives are ranked and choose the action first rather than
      being consulted at the thirteenth of thirteen fixed priorities, and the
