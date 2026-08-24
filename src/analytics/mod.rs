@@ -311,6 +311,18 @@ impl Simulation {
         // can happen - and until it did, agents found food by smell alone.
         self.population.process_exploration_with_world(&mut self.world);
 
+        // Looking around fills a head faster than talking does, so what
+        // nobody has a use for goes out of it again after the looking rather
+        // than before
+        {
+            let now = self.current_tick;
+            for agent in self.population.agents.iter_mut() {
+                if agent.state.is_alive {
+                    agent.forget_what_does_not_matter(now);
+                }
+            }
+        }
+
         // World systems - climate, fauna, flora - are ticked by World::tick
         // further down this function. Ticking them here as well ran the whole
         // living world at double speed: animals aged, starved, bred and grazed
@@ -847,11 +859,19 @@ impl Simulation {
             self.process_building_maintenance();
         }
 
-        // Process information verification and lie detection (every 100 ticks)
-        // Agents verify information they've received against their knowledge
-        if self.current_tick % 100 == 0 {
-            self.process_information_verification();
-        }
+        // Lies are found out by walking to the place - see the sight pass in
+        // `Population::process_exploration_with_world`.
+        //
+        // There used to be a second path here: a sweep every hundred ticks
+        // over remembered claims, checking each with `verify_resource_claim`.
+        // That reads the agent's own map as though it were ground truth, and
+        // an agent's map holds what it has been told as well as what it has
+        // seen, so the check confirmed hearsay against itself. Measured with
+        // lying switched off entirely, it still accused every agent of being
+        // a proven liar to twenty-seven others - every one of those
+        // accusations false, and none of them from the sight pass, which
+        // fired not once. It is retired rather than repaired: standing on the
+        // spot is the honest test and the sweep cannot be made into one.
         // Process pregnancies and births
         self.process_pregnancies_and_births();
 
@@ -7321,12 +7341,16 @@ impl Simulation {
                         !in_view || really_here.contains(where_it_is)
                     });
 
-                for (_, who_said_so, what_they_said) in found_out {
-                    if who_said_so == agent_id {
+                for (_, said, what_they_said) in found_out {
+                    if said.who == agent_id {
                         continue;
                     }
                     let subject = format!("{:?}", what_they_said).to_lowercase();
-                    agent.found_out_i_was_lied_to(who_said_so, &subject, self.current_tick);
+                    if said.was_he_answerable_for_it(self.current_tick) {
+                        agent.found_out_i_was_lied_to(said.who, &subject, self.current_tick);
+                    } else {
+                        agent.found_out_they_were_out_of_date(said.who);
+                    }
                 }
 
                 // Discover nearby resources (within exploration radius)

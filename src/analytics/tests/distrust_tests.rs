@@ -244,6 +244,7 @@ fn a_lie_is_found_out_by_going_there() {
         ResourceType::Food,
         liar,
         0,
+        0,
     );
 
     // Nothing of the sort is there, and the agent is standing looking at it
@@ -253,7 +254,7 @@ fn a_lie_is_found_out_by_going_there() {
         .hearsay_in_view(nowhere, 3, &really_here);
 
     assert_eq!(found_out.len(), 1, "there should be exactly one thing to find out");
-    assert_eq!(found_out[0].1, liar, "and it should be laid at his door");
+    assert_eq!(found_out[0].1.who, liar, "and it should be laid at his door");
 }
 
 /// What an agent saw for itself is not laid at anybody's door.
@@ -292,7 +293,7 @@ fn nobody_passes_on_hearsay_as_though_they_had_seen_it() {
         .discover_resource(seen, ResourceType::Wood, 0);
     middleman
         .exploration_knowledge
-        .take_their_word_for_it(heard, ResourceType::Food, liar, 0);
+        .take_their_word_for_it(heard, ResourceType::Food, liar, 0, 0);
 
     let would_pass_on = middleman.exploration_knowledge.seen_for_myself();
 

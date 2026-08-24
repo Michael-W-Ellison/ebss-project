@@ -672,6 +672,22 @@ impl TrustRating {
         }
     }
 
+    /// What this man told you was true once and is not any more.
+    ///
+    /// A patch gets picked, a seam is worked out, a herd moves on. Somebody
+    /// who honestly reported what he saw last season told the truth about last
+    /// season, and finding the place bare proves nothing against him except
+    /// that his news keeps badly. It is not a wrong answer, so it does not go
+    /// in the wrong column - it is a sixth of the weight of a lie on the trust
+    /// itself, and it stops there.
+    ///
+    /// Treating this the same as a lie made every agent in a settlement a
+    /// proven liar to two dozen others inside fifteen thousand ticks, which is
+    /// what "should not be seen as a liar" is there to prevent.
+    pub fn update_on_stale_news(&mut self) {
+        self.trust = (self.trust - 0.025).max(0.0);
+    }
+
     /// Get reliability factor
     pub fn reliability(&self) -> f32 {
         self.trust

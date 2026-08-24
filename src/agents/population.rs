@@ -322,6 +322,17 @@ impl Population {
         // Process exploration for all agents (vision-based discovery)
         self.process_exploration();
 
+        // And whoever has something to say, says it to the room
+        self.say_it_out_loud();
+
+        // What nobody has any use for goes out of their heads again
+        let now = self.current_tick;
+        for agent in self.agents.iter_mut() {
+            if agent.state.is_alive {
+                agent.forget_what_does_not_matter(now);
+            }
+        }
+
         // Share technologies between nearby agents
         self.share_technologies();
 
@@ -1608,6 +1619,30 @@ impl Population {
                 })
                 .collect();
 
+            // Walking past a thing again is seeing it again.
+            //
+            // The sighting tick was set once, on first discovery, and never
+            // touched afterwards - so an agent who passed a berry patch every
+            // morning still reported the day it first found it, and "a patch I
+            // just passed" was a claim nobody in the model could make. It is
+            // the whole of the difference between a man who is out of date and
+            // a man who is lying.
+            for where_it_is in really_here.iter() {
+                if agent
+                    .exploration_knowledge
+                    .known_resources
+                    .contains_key(where_it_is)
+                    && !agent
+                        .exploration_knowledge
+                        .who_told_me
+                        .contains_key(where_it_is)
+                {
+                    agent
+                        .exploration_knowledge
+                        .saw_it_again(*where_it_is, current_tick);
+                }
+            }
+
             let found_out =
                 agent
                     .exploration_knowledge
@@ -1620,12 +1655,26 @@ impl Population {
                 }
 
                 let me = agent.id;
-                for (_, who_said_so, what_they_said) in found_out {
-                    if who_said_so == me {
+                for (_, said, what_they_said) in found_out {
+                    if said.who == me {
                         continue;
                     }
+
+                    // "An agent saying that they saw a berry patch a week
+                    // prior should not be seen as a liar if the patch was
+                    // found empty."
+                    //
+                    // A patch gets picked, an animal moves on, a seam is
+                    // worked out. Somebody who reported what was there last
+                    // season told the truth about last season, and the most
+                    // it should cost him is that his word keeps less well
+                    // than a fresh man's.
                     let subject = format!("{:?}", what_they_said).to_lowercase();
-                    agent.found_out_i_was_lied_to(who_said_so, &subject, current_tick);
+                    if said.was_he_answerable_for_it(current_tick) {
+                        agent.found_out_i_was_lied_to(said.who, &subject, current_tick);
+                    } else {
+                        agent.found_out_they_were_out_of_date(said.who);
+                    }
                 }
             }
 
@@ -1823,6 +1872,142 @@ impl Population {
     }
 
 
+
+    /// How lately somebody must have been somewhere to say with any
+    /// confidence what is there now.
+    ///
+    /// A season. Long enough that the people who work a patch of ground can
+    /// speak for it, short enough that a place nobody has visited since spring
+    /// is a place a man can say anything about.
+    const WITHIN_LIVING_MEMORY: u32 = 288;
+
+    /// How far a voice carries.
+    ///
+    /// Telling used to be strictly two-handed: one speaker, one listener, and
+    /// nobody else heard a word of it, however many people were standing
+    /// round. A settlement is not a series of private conversations.
+    const EARSHOT: i32 = 6;
+
+    /// How likely an agent is to say anything at all on a given tick.
+    ///
+    /// Talking out loud reaches everybody near enough at once, where telling
+    /// one person at a time reached one, so the same amount of news spreads
+    /// from far fewer tellings.
+    const HOW_OFTEN_ANYBODY_SPEAKS: f64 = 0.06;
+
+    /// An agent says where something is, and everybody near enough hears it.
+    ///
+    /// Each listener decides for itself whether the speaker is worth believing
+    /// - a man may be taken at his word by his friends and disbelieved by
+    /// everybody else in the same breath - and the speaker decides once, for
+    /// the whole room, whether to tell the truth.
+    fn say_it_out_loud(&mut self) {
+        use crate::core::DriveType;
+        use rand::seq::SliceRandom;
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let current_tick = self.current_tick;
+
+        let standing: Vec<(uuid::Uuid, (i32, i32, i32), bool)> = self
+            .agents
+            .iter()
+            .map(|agent| (agent.id, agent.state.position, agent.state.is_alive))
+            .collect();
+
+        for speaker in 0..self.agents.len() {
+            if !self.agents[speaker].state.is_alive {
+                continue;
+            }
+            if !rng.gen_bool(Self::HOW_OFTEN_ANYBODY_SPEAKS) {
+                continue;
+            }
+
+            let (who_i_am, where_i_stand, _) = standing[speaker];
+
+            // Who is near enough to hear
+            let audience: Vec<usize> = standing
+                .iter()
+                .enumerate()
+                .filter(|(index, (_, _, alive))| *index != speaker && *alive)
+                .filter(|(_, (_, where_they_stand, _))| {
+                    (where_they_stand.0 - where_i_stand.0).abs() <= Self::EARSHOT
+                        && (where_they_stand.1 - where_i_stand.1).abs() <= Self::EARSHOT
+                })
+                .map(|(index, _)| index)
+                .collect();
+
+            if audience.is_empty() {
+                continue;
+            }
+
+            // What there is to say. Only what the speaker has been to and
+            // looked at, so that a lie is laid at the door of whoever invented
+            // it rather than of everybody who repeated it in good faith.
+            let mine = self.agents[speaker].exploration_knowledge.seen_for_myself();
+            if mine.is_empty() {
+                continue;
+            }
+            let places: Vec<_> = mine.choose_multiple(&mut rng, 5).copied().collect();
+
+            // A man does not invent a place that somebody standing next to him
+            // has walked over - he would be contradicted before he finished
+            // speaking. So the ground nobody here has been to is the ground a
+            // lie can be told about, and the rest he can only tell straight.
+            //
+            // What lets a man contradict you is having been there lately.
+            // Testing whether he had *ever* walked the tile abolished lying
+            // outright: over fifteen thousand ticks a settlement walks over
+            // nearly everything, so nearly every place had a witness and four
+            // lies were told in a whole world's life.
+            let nobody_has_walked: Vec<_> = places
+                .iter()
+                .filter(|(where_it_is, _)| {
+                    !audience.iter().any(|listener| {
+                        self.agents[*listener]
+                            .exploration_knowledge
+                            .when_i_saw_it(where_it_is)
+                            .is_some_and(|then| {
+                                current_tick.saturating_sub(then) <= Self::WITHIN_LIVING_MEMORY
+                            })
+                    })
+                })
+                .copied()
+                .collect();
+
+            // The speaker decides once, for the whole room
+            let lying = !nobody_has_walked.is_empty()
+                && self.agents[speaker].would_lie_to_this_room(
+                    &audience
+                        .iter()
+                        .map(|listener| standing[*listener].0)
+                        .collect::<Vec<_>>(),
+                    current_tick,
+                );
+
+            let telling = if lying { &nobody_has_walked } else { &places };
+
+            let mut anybody_listened = false;
+            for listener in audience {
+                let talker_traits = self.agents[speaker].traits.clone();
+                if !self.agents[listener].would_take_their_word(who_i_am, &talker_traits) {
+                    continue;
+                }
+
+                if self.tell_them_where_it_is(speaker, listener, telling, lying, current_tick) > 0 {
+                    anybody_listened = true;
+                }
+            }
+
+            // Being listened to is what the social drive is asking for
+            if anybody_listened {
+                if let Some(drive) = self.agents[speaker].drives.get_mut(DriveType::Social) {
+                    drive.partial_satisfy(0.03);
+                }
+            }
+        }
+    }
+
     /// How far a liar moves the place he names.
     ///
     /// Far enough that the man who goes there finds nothing, which is what
@@ -1867,20 +2052,41 @@ impl Population {
                 continue;
             }
 
-            // A liar names a place a good walk from the real one
-            let named = if a_lie {
-                crate::world::Position::new(
-                    where_it_is.x + Self::A_LIE_PUTS_IT_WRONG_BY,
-                    where_it_is.y + Self::A_LIE_PUTS_IT_WRONG_BY,
+            // A liar names a place a good walk from the real one, and says he
+            // was there this morning. An honest man says when he was actually
+            // there, which may have been last season - and if the patch has
+            // been picked since, that is the patch's fault and not his.
+            let (named, when_he_saw_it) = if a_lie {
+                (
+                    crate::world::Position::new(
+                        where_it_is.x + Self::A_LIE_PUTS_IT_WRONG_BY,
+                        where_it_is.y + Self::A_LIE_PUTS_IT_WRONG_BY,
+                    ),
+                    current_tick,
                 )
             } else {
-                *where_it_is
+                (
+                    *where_it_is,
+                    self.agents[speaker]
+                        .exploration_knowledge
+                        .when_i_saw_it(where_it_is)
+                        // A man who cannot say when he saw a thing is not
+                        // claiming to have just passed it, and cannot be held
+                        // to it as though he had
+                        .unwrap_or(0),
+                )
             };
 
             let listener_agent = &mut self.agents[listener];
             listener_agent
                 .exploration_knowledge
-                .take_their_word_for_it(named, *what_it_is, speaker_id, current_tick);
+                .take_their_word_for_it(
+                    named,
+                    *what_it_is,
+                    speaker_id,
+                    when_he_saw_it,
+                    current_tick,
+                );
 
             // And it is remembered as a claim somebody made, so that going
             // there and finding nothing can be laid at his door. Until now
@@ -2035,67 +2241,9 @@ impl Population {
                         }
                     }
 
-                    // Share resources (important for survival).
-                    //
-                    // Where the food and water are is the one thing agents
-                    // tell each other that changes what they then do, so it is
-                    // the one place trust can matter. Each of them decides
-                    // whether the other is worth believing, and each decides
-                    // whether to tell the truth.
-                    if rng.gen_bool((share_probability * 0.8) as f64) {
-                        let who_i_is = self.agents[i].id;
-                        let who_j_is = self.agents[j].id;
-                        let traits_i = self.agents[i].traits.clone();
-                        let traits_j = self.agents[j].traits.clone();
-
-                        let j_believes_i =
-                            self.agents[j].would_take_their_word(who_i_is, &traits_i);
-                        let i_believes_j =
-                            self.agents[i].would_take_their_word(who_j_is, &traits_j);
-
-                        let i_lies_to_j = self.agents[i].would_lie_to(who_j_is, current_tick);
-                        let j_lies_to_i = self.agents[j].would_lie_to(who_i_is, current_tick);
-
-                        if j_believes_i {
-                            let resources_i: Vec<_> = self.agents[i]
-                                .exploration_knowledge
-                                .seen_for_myself();
-
-                            if !resources_i.is_empty() {
-                                let offered: Vec<_> = resources_i
-                                    .choose_multiple(&mut rng, 5)
-                                    .copied()
-                                    .collect();
-                                self.tell_them_where_it_is(
-                                    i,
-                                    j,
-                                    &offered,
-                                    i_lies_to_j,
-                                    current_tick,
-                                );
-                            }
-                        }
-
-                        if i_believes_j {
-                            let resources_j: Vec<_> = self.agents[j]
-                                .exploration_knowledge
-                                .seen_for_myself();
-
-                            if !resources_j.is_empty() {
-                                let offered: Vec<_> = resources_j
-                                    .choose_multiple(&mut rng, 5)
-                                    .copied()
-                                    .collect();
-                                self.tell_them_where_it_is(
-                                    j,
-                                    i,
-                                    &offered,
-                                    j_lies_to_i,
-                                    current_tick,
-                                );
-                            }
-                        }
-                    }
+                    // Where the food and water are is no longer swapped
+                    // here. It is said out loud, to whoever is near enough to
+                    // hear - see `say_it_out_loud`.
 
                     // Strengthen relationship through gossip interaction
                     let uuid_i = self.agents[i].id;

@@ -23,3 +23,4 @@ pub mod specialisation_tests;
 pub mod fight_or_flight_tests;
 pub mod relationship_graph_tests;
 pub mod distrust_tests;
+pub mod news_tests;

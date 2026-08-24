@@ -5874,6 +5874,85 @@ impl Agent {
 
 
 
+
+    /// The most places an agent keeps in its head at once.
+    ///
+    /// Nothing bounded this before. It did not matter while the only way to
+    /// learn a place was to walk past it, and it matters a great deal now that
+    /// news travels: a settlement that talks carries the whole map in every
+    /// head, which is neither true to life nor cheap.
+    pub const WHAT_A_MAN_CAN_HOLD_IN_MIND: usize = 96;
+
+    /// Forget what does not matter.
+    ///
+    /// "Information should ... be retained longer if an agent has an interest
+    /// in the topic. A topic an agent cares little for should be quickly
+    /// forgotten."
+    ///
+    /// What is worth keeping is what answers something this agent actually
+    /// wants - `how_hard_it_presses` is the same reckoning the drive hierarchy
+    /// ranks needs by - and, at the same interest, what was learned most
+    /// recently. So a thirsty man holds on to every waterhole he has heard of
+    /// and lets the flax go, and a man who wants for nothing keeps whatever he
+    /// heard last.
+    ///
+    /// Hearsay is let go before first-hand knowledge of equal interest, on the
+    /// principle that a man is surer of what he saw.
+    pub fn forget_what_does_not_matter(&mut self, current_tick: u32) {
+        if self.exploration_knowledge.known_resources.len()
+            <= Self::WHAT_A_MAN_CAN_HOLD_IN_MIND
+        {
+            return;
+        }
+
+        let mut worth: Vec<(crate::world::Position, f32)> = self
+            .exploration_knowledge
+            .known_resources
+            .iter()
+            .map(|(where_it_is, what_it_is)| {
+                let subject = format!("{:?}", what_it_is).to_lowercase();
+
+                // How much this agent wants the thing at all
+                let wanted = Self::what_this_answers(&subject)
+                    .map(|need| self.how_hard_it_presses(need))
+                    .unwrap_or(0.0);
+
+                // And how fresh the knowledge of it is, which decides between
+                // two things wanted equally
+                let learned_on = self
+                    .exploration_knowledge
+                    .when_i_saw_it(where_it_is)
+                    .unwrap_or(0);
+                let freshness = 1.0
+                    - (current_tick.saturating_sub(learned_on) as f32
+                        / crate::environment::seasons::TICKS_PER_YEAR as f32)
+                        .clamp(0.0, 1.0);
+
+                let heard_not_seen = self
+                    .exploration_knowledge
+                    .who_told_me
+                    .contains_key(where_it_is);
+
+                let keeping = wanted * 4.0 + freshness - if heard_not_seen { 0.5 } else { 0.0 };
+                (*where_it_is, keeping)
+            })
+            .collect();
+
+        worth.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let to_forget = worth.len() - Self::WHAT_A_MAN_CAN_HOLD_IN_MIND;
+        for (where_it_is, _) in worth.into_iter().take(to_forget) {
+            self.exploration_knowledge.known_resources.remove(&where_it_is);
+            self.exploration_knowledge.who_told_me.remove(&where_it_is);
+            self.exploration_knowledge
+                .resource_discovery_ticks
+                .remove(&where_it_is);
+            self.exploration_knowledge
+                .last_seen_ticks
+                .remove(&where_it_is);
+        }
+    }
+
     /// Which need a thing in the ground answers, if any.
     ///
     /// A lie about where the water is and a lie about where the pretty stones
@@ -6007,6 +6086,20 @@ impl Agent {
             .update_on_verification(false);
     }
 
+    /// And when what it was told turns out to have been true once.
+    ///
+    /// A place somebody reported a season ago and which is bare now proves
+    /// nothing against him except that his news keeps badly. It costs a little
+    /// standing and no anger at all, which is the difference between a man who
+    /// is out of date and a man who is lying.
+    pub fn found_out_they_were_out_of_date(&mut self, them: uuid::Uuid) {
+        self.knowledge
+            .trust_ratings
+            .entry(them)
+            .or_insert_with(|| super::gossip::TrustRating::new(self.id, them))
+            .update_on_stale_news();
+    }
+
     /// And when what it was told turns out to be so.
     pub fn found_out_they_were_right(&mut self, them: uuid::Uuid) {
         self.knowledge
@@ -6094,6 +6187,68 @@ impl Agent {
     /// Whether this agent will act on something [`them`] has told it.
     pub fn would_take_their_word(&self, them: uuid::Uuid, what_they_are_like: &TraitSet) -> bool {
         self.how_far_i_trust(them, what_they_are_like) >= Self::TAKE_SOMEBODY_AT_THEIR_WORD
+    }
+
+
+    /// Whether this agent would lie to a room rather than to a man.
+    ///
+    /// "An agent thinking about lying should not only take into account the
+    /// person they are talking to and any other agents who might overhear the
+    /// lie."
+    ///
+    /// `would_lie_to` weighs one listener: how honest the speaker is, and what
+    /// he thinks of the man in front of him. That is the right calculation for
+    /// a word in somebody's ear and the wrong one for something said out loud.
+    /// Three things change when there is a room:
+    ///
+    /// A lie told in front of somebody who has walked the ground is a lie that
+    /// will be contradicted on the spot, and almost nobody tries it.
+    ///
+    /// Every extra pair of ears is another person who may go and look, and
+    /// another mouth to tell everybody else what they found. The risk grows
+    /// with the audience.
+    ///
+    /// And a lie is told because there is somebody in the room worth
+    /// deceiving, so the room is weighed at its least friendly face rather
+    /// than by whoever happens to be addressed. Weighing it at its
+    /// *friendliest* - on the thought that a man will not lie in front of his
+    /// friends - reads well and stops lying dead: bonds in a settlement are
+    /// mostly warm, so the friendliest face in any room is nearly always a
+    /// close one, and the discount for it cancelled the whole temptation.
+    pub fn would_lie_to_this_room(&self, room: &[uuid::Uuid], current_tick: u32) -> bool {
+        use rand::Rng;
+
+        if room.is_empty() {
+            return false;
+        }
+
+        // Whoever in the room he would most like to mislead
+        let worth_deceiving = room
+            .iter()
+            .min_by(|a, b| {
+                let bond = |who: &uuid::Uuid| {
+                    self.relationships
+                        .get_relationship(who)
+                        .map(|r| r.bond_strength)
+                        .unwrap_or(0.0)
+                };
+                bond(a).partial_cmp(&bond(b)).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+            .unwrap_or(room[0]);
+
+        if !self.would_lie_to(worth_deceiving, current_tick) {
+            return false;
+        }
+
+        // And every extra pair of ears is another person who may go and look,
+        // and another mouth to tell the rest what they found. One listener is
+        // a private word and no different from before; a crowd of five is
+        // about a third as tempting. Making each extra ear halve it instead
+        // abolished lying altogether, which is not what "take into account"
+        // means.
+        let extra_ears = (room.len() - 1) as f64;
+        rand::thread_rng().gen_bool((1.0 / (1.0 + 0.5 * extra_ears)).clamp(0.0, 1.0))
     }
 
     /// Check if this agent would lie when sharing information
