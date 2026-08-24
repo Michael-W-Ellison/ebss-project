@@ -3,6 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+/// Twelve two-hour ticks to a day - see `crate::environment::seasons`
+const TICKS_PER_DAY: f32 = 12.0;
 use uuid::Uuid;
 use crate::core::traits::{Trait, TraitSet};
 
@@ -601,9 +604,108 @@ impl Relationship {
         self.bond_strength = (self.bond_strength + amount).min(1.0);
     }
 
+    /// The most that standing near somebody can be worth on its own.
+    ///
+    /// Being about the same place as a man every day makes him a familiar
+    /// face. It does not make him a friend, and it certainly does not make him
+    /// somebody you would grieve for. Anything past this has to be earned by
+    /// something that happened between the two of you.
+    pub const A_FAMILIAR_FACE: f32 = 0.3;
+
+    /// And the most that simply getting on with somebody can be worth.
+    ///
+    /// A man whose company suits yours becomes a friend. Being more than that
+    /// to each other is decided by what you have done, not by what you are
+    /// both like.
+    pub const GETTING_ON_WITH_SOMEBODY: f32 = 0.5;
+
+    /// Being about the same place as somebody, one tick's worth.
+    ///
+    /// This used to add up to 0.10 a tick with no ceiling, so a bond
+    /// saturated within a day of standing beside a man and nothing else about
+    /// him could be heard over it. Measured at fifteen thousand ticks: 82 to
+    /// 105 relationships apiece, of which nine in ten stood at 0.6 or better,
+    /// and a mean bond of 0.901 across a whole settlement. Everybody loved
+    /// everybody, and it was arithmetic rather than affection.
+    ///
+    /// A whole season of never leaving somebody's side now takes a stranger to
+    /// a familiar face, and no further.
+    pub fn keep_company(&mut self, closeness: f32) {
+        self.time_together += 1;
+
+        if self.bond_strength >= Self::A_FAMILIAR_FACE {
+            return;
+        }
+
+        let worth = Self::A_FAMILIAR_FACE / 288.0 * closeness.clamp(0.0, 1.0);
+        self.bond_strength = (self.bond_strength + worth).min(Self::A_FAMILIAR_FACE);
+        self.settle_what_we_are();
+    }
+
     /// Weaken bond
     pub fn weaken(&mut self, amount: f32) {
         self.bond_strength = (self.bond_strength - amount).max(-1.0);
+    }
+
+    /// What a full-blown grudge is worth against this bond in one tick.
+    ///
+    /// Set so that resentment beats proximity several times over: keeping
+    /// company is worth about a thousandth of the scale a tick at best, and a
+    /// grudge at its height is worth eight times that. A man you cannot stand
+    /// does not become a friend because you keep finding yourself standing
+    /// next to him, which was exactly what happened before.
+    pub const RESENTMENT_A_TICK: f32 = 0.008;
+
+    /// Let what this agent holds against somebody tell on what it thinks of
+    /// them.
+    ///
+    /// `EmotionState` and `Relationship` kept separate books: a grudge lived
+    /// in `anger_sources`, decayed at one per cent a tick, was read by nothing
+    /// except action selection, and never touched the bond. A man who had just
+    /// been hit still counted the man who hit him a close friend.
+    pub fn let_it_tell(&mut self, held_against_them: f32) {
+        if held_against_them <= 0.0 {
+            return;
+        }
+        self.weaken(held_against_them.clamp(0.0, 1.0) * Self::RESENTMENT_A_TICK);
+        self.settle_what_we_are();
+    }
+
+    /// Somebody has raised a hand to this agent.
+    ///
+    /// A quarter of the whole scale, at once. Being struck is not a slow
+    /// souring; it is the thing that decides what two people are to each
+    /// other, and the model had it changing nothing at all.
+    pub const WHAT_A_BLOW_COSTS: f32 = 0.25;
+
+    /// And a share of that for the one who threw it - you do not warm to
+    /// somebody you have just hit.
+    pub const WHAT_THROWING_ONE_COSTS: f32 = 0.1;
+
+    /// Put a name to what these two are, from what they think of each other.
+    ///
+    /// `RelationshipType::Rival` and `Enemy` were constructed nowhere outside
+    /// this module's own tests. Every relationship in a live settlement was
+    /// formed as `Acquaintance` and stayed `Acquaintance` whatever the bond
+    /// did, so `get_hostile_relationships` and the inspector's hostile count
+    /// read zero in every run there has ever been - including runs in which
+    /// eighty-six bonds in one settlement stood below zero.
+    ///
+    /// Blood is not renamed. A brother you cannot stand is a brother.
+    pub fn settle_what_we_are(&mut self) {
+        if self.is_family() || self.relationship_type == RelationshipType::Partner {
+            return;
+        }
+
+        self.relationship_type = if self.bond_strength <= -0.6 {
+            RelationshipType::Enemy
+        } else if self.bond_strength <= -0.2 {
+            RelationshipType::Rival
+        } else if self.bond_strength >= 0.5 {
+            RelationshipType::Friend
+        } else {
+            RelationshipType::Acquaintance
+        };
     }
 
     /// Record a positive interaction (for compatibility with social network system)
@@ -613,6 +715,7 @@ impl Relationship {
         self.strengthen(bond_change);
         self.last_interaction_tick = current_tick;
         self.total_interactions += 1;
+        self.settle_what_we_are();
     }
 
     /// Record a negative interaction (for compatibility with social network system)
@@ -622,6 +725,7 @@ impl Relationship {
         self.weaken(bond_change);
         self.last_interaction_tick = current_tick;
         self.total_interactions += 1;
+        self.settle_what_we_are();
     }
 
     /// Get relationship level (for compatibility with social network system)
@@ -739,10 +843,31 @@ impl Relationship {
             total_change *= 0.5;
         }
 
-        // Apply the change
+        // Apply the change.
+        //
+        // This runs for every nearby pair every tick, so the numbers above are
+        // a rate and not an amount: two sociable, empathetic people were
+        // gaining 0.035 a tick and became inseparable inside three days, and
+        // two who clashed were sworn enemies inside a week, both regardless of
+        // anything that had actually happened between them. A day's worth of
+        // getting on with somebody now does what a tick's worth used to.
         let old_strength = self.bond_strength;
-        self.bond_strength = (self.bond_strength + total_change).clamp(-1.0, 1.0);
+        let a_day_of_it = total_change / TICKS_PER_DAY;
+
+        if a_day_of_it > 0.0 {
+            // Getting on with a man will make him a friend. Whether he is more
+            // than that is decided by what the two of you have actually done.
+            if self.bond_strength < Self::GETTING_ON_WITH_SOMEBODY {
+                self.bond_strength =
+                    (self.bond_strength + a_day_of_it).min(Self::GETTING_ON_WITH_SOMEBODY);
+            }
+        } else {
+            // Friction is friction, and has no floor short of the scale's
+            self.bond_strength = (self.bond_strength + a_day_of_it).max(-1.0);
+        }
+
         self.time_together += 1;
+        self.settle_what_we_are();
 
         // Significant change if bond strength changed by more than 0.05
         (self.bond_strength - old_strength).abs() > 0.05
@@ -1136,8 +1261,10 @@ mod tests {
         let mut rel = Relationship::new(agent2_id, RelationshipType::Friend);
         let initial_strength = rel.bond_strength;
 
-        // Simulate multiple interactions
-        for _ in 0..10 {
+        // A season of it. This function runs for every nearby pair every
+        // tick, so it is a rate: ten ticks is under a day, and a day of
+        // disagreeing about God should not undo a friendship.
+        for _ in 0..288 {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
@@ -1162,14 +1289,22 @@ mod tests {
         let mut rel = Relationship::new(agent2_id, RelationshipType::Acquaintance);
         let initial_strength = rel.bond_strength;
 
-        // Simulate multiple interactions
-        for _ in 0..10 {
+        // A season of each other's company
+        for _ in 0..288 {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
         // Relationship should have strengthened
         assert!(rel.bond_strength > initial_strength);
         assert!(rel.bond_strength > 0.4); // Should be significantly strengthened
+
+        // And no further: getting on with a man makes him a friend, and what
+        // makes him more than that is what the two of you have done
+        assert!(
+            rel.bond_strength <= Relationship::GETTING_ON_WITH_SOMEBODY,
+            "temperament alone should not make somebody you would grieve for,              and it stood at {:.2}",
+            rel.bond_strength
+        );
     }
 
     #[test]
@@ -1364,13 +1499,18 @@ mod tests {
 
         let mut rel = Relationship::new(other_id, RelationshipType::Acquaintance);
 
-        // Simulate many conflicted interactions
-        for _ in 0..30 {
+        // A season of being thrown together with somebody who is wrong about
+        // God, wrong about the truth, and wrong about whether to hit people
+        for _ in 0..288 {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
         // Should become hostile due to multiple major conflicts
         assert!(rel.is_hostile());
         assert!(rel.bond_strength < -0.4);
+
+        // And it should say so, rather than leaving them down as
+        // acquaintances with a number nothing reads
+        assert_eq!(rel.relationship_type, RelationshipType::Enemy);
     }
 }

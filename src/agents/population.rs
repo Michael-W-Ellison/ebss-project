@@ -286,6 +286,10 @@ impl Population {
         // Update relationships between nearby agents
         self.update_relationships();
 
+        // And what they hold against each other, which until now lived in one
+        // book and the bond in another
+        self.let_grudges_tell_on_the_bond();
+
         // Decay distant relationships (every 100 ticks to reduce overhead)
         if current_tick % 100 == 0 {
             self.decay_relationships();
@@ -409,19 +413,41 @@ impl Population {
                         );
                     }
 
-                    // Strengthen bonds slightly for nearby agents
+                    // Being about the same place as somebody counts for
+                    // something, and only for something - see
+                    // Relationship::keep_company
+                    let closeness = (11.0 - distance) / 11.0;
+
                     if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&agent2_id) {
-                        // Closer = stronger bond increase (inverse of distance)
-                        let proximity_bonus = (11.0 - distance) / 100.0; // Max 0.10 at distance 0
-                        rel.strengthen(proximity_bonus);
-                        rel.time_together += 1;
+                        rel.keep_company(closeness);
                     }
 
                     if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&agent1_id) {
-                        let proximity_bonus = (11.0 - distance) / 100.0;
-                        rel.strengthen(proximity_bonus);
-                        rel.time_together += 1;
+                        rel.keep_company(closeness);
                     }
+                }
+            }
+        }
+    }
+
+    /// Carry what everybody holds against everybody into what they think of
+    /// each other.
+    ///
+    /// This runs over all of them rather than only over pairs standing near
+    /// each other, because a grudge is an opinion and not a proximity effect.
+    /// Doing it the other way would have left a hole exactly where fear now
+    /// puts one: an agent that resents a man it dare not face keeps away from
+    /// him, and would therefore have gone on counting him a friend.
+    pub(crate) fn let_grudges_tell_on_the_bond(&mut self) {
+        for agent in self.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let held: Vec<(Uuid, f32)> = agent.emotions.anger_at_people();
+            for (who, amount) in held {
+                if let Some(bond) = agent.relationships.get_relationship_mut(&who) {
+                    bond.let_it_tell(amount);
                 }
             }
         }

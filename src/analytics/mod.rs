@@ -4661,6 +4661,31 @@ impl Simulation {
                     );
                 }
 
+                // And what it does to what the two of them are to each other.
+                //
+                // The executor dealt damage, wrote anger and broke a bone, and
+                // never touched the relationship, so a man who had just been
+                // hit went on counting the man who hit him a close friend and
+                // the settlement graph had no hostile edge anywhere in it.
+                {
+                    use crate::agents::Relationship;
+
+                    let current_tick = self.current_tick;
+
+                    let struck = self.population.agents[target_index]
+                        .relationships
+                        .get_or_create_relationship(attacker_id, current_tick);
+                    struck.weaken(Relationship::WHAT_A_BLOW_COSTS);
+                    struck.settle_what_we_are();
+
+                    // You do not warm to somebody you have just hit either
+                    let striking = self.population.agents[agent_index]
+                        .relationships
+                        .get_or_create_relationship(target_id, current_tick);
+                    striking.weaken(Relationship::WHAT_THROWING_ONE_COSTS);
+                    striking.settle_what_we_are();
+                }
+
                 // Check if target died from the attack
                 let target_alive = self.population.agents[target_index].body.is_alive()
                     && self.population.agents[target_index].state.health > 0.0;
