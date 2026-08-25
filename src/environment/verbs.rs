@@ -789,7 +789,7 @@ pub const GIVE_TO: Verb = verb(
     Targets::APerson,
     Wants::BareHands,
     &[Changes::WhatIsHeld, Changes::ABond],
-    None,
+    Some("giveto"),
 );
 
 pub const TAKE_FROM: Verb = verb(
@@ -807,7 +807,7 @@ pub const TRADE: Verb = verb(
     Targets::APerson,
     Wants::BareHands,
     &[Changes::WhatIsHeld, Changes::ABond],
-    None,
+    Some("trade"),
 );
 
 pub const SHARE: Verb = verb(

@@ -64,6 +64,15 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ Handing things over. A trade wants an abundance on both sides, each of
+  which the other is short of; a gift wants only one, and costs the giver, and
+  is worth more to the bond because it leaves somebody owing. What either of
+  them counts as wanting is not a preference anybody wrote down — it is the
+  raw stuff every step and every working in the chain asks for, minus what is
+  already in the pack. Over eight worlds a settlement gives 328 times and
+  barters once or twice: a people that gives freely has little left to bargain
+  over, which is about what a band of forty who all know each other should
+  look like
 - ✅ Working a thing down into another thing, which is the other half of what
   a tool is for. A making puts several things together; a working takes one
   and reduces it. A core smashed into flakes — half the stone for the same

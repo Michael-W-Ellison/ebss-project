@@ -749,6 +749,26 @@ Cutting hides into leather fires almost never — nought to twelve times in a
 world — because hides are scarce in a pack and what there is goes straight
 into clothing. The verb works; the material does not reach it.
 
+**Handing things over**, which also settles the barter mechanism asked for a
+long way back and never delivered. A trade wants an abundance on both sides,
+each of which the other is short of. A gift wants only one, and costs the
+giver, and is worth more to the bond because it leaves somebody owing. What
+either counts as wanting is the raw stuff every step and every working asks
+for, minus what is in the pack.
+
+Over eight worlds a settlement gives 328 times apiece and barters once or
+twice. That is not a mechanism failing to fire: a people that gives freely has
+little left to bargain over, and generalised reciprocity is what a band of
+forty who all know each other actually runs on. Population 71.3 to 74.1, mean
+bond 0.74 to 0.79.
+
+The first cut measured abundance against a number — six of a thing on one side
+and fewer than six on the other — and a settlement traded once in eight worlds
+of ten thousand ticks. Abundance is a comparison, not a threshold: what makes
+a thing worth handing over is that they have markedly less of it than you do.
+The same cut also made a gift require a match on both sides, which is what a
+trade is and not what a gift is.
+
 Measured over eight worlds against `1b9aa40`: population 73.3 to 77.4, a
 difference of 4.1 at a standard error of 5.9. What did move is the spread —
 standard deviation from 15.4 to 5.9. Agents dressed 47 to 50, spears carried

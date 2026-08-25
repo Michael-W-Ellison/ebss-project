@@ -1175,6 +1175,47 @@ impl Agent {
             .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
     }
 
+    /// Everything a person could use and has next to none of.
+    ///
+    /// "The agents should also use a barter system if they have an abundance of
+    /// something another agent wants and that agent has an abundance of
+    /// something they want." This is the second half of that: the things this
+    /// agent would take if somebody offered them, being the raw stuff that
+    /// every step and every working in the chain asks for and that this pack
+    /// is short of.
+    pub fn what_i_am_short_of(&self) -> Vec<&'static str> {
+        use crate::environment::making;
+        use std::collections::HashSet;
+
+        let mut wanted: HashSet<&'static str> = HashSet::new();
+
+        for step in making::EVERY_STEP {
+            for (what, _) in step.needs {
+                wanted.insert(what);
+            }
+        }
+        for working in making::EVERY_WORKING {
+            wanted.insert(working.to);
+        }
+
+        let mut short: Vec<&'static str> = wanted
+            .into_iter()
+            .filter(|what| self.how_many_i_have(what) < Self::ENOUGH_TO_HAND)
+            .collect();
+
+        // Stable, so two agents looking at the same pack agree about it
+        short.sort_unstable();
+        short
+    }
+
+    /// Somebody did this agent a kindness, and it counts.
+    ///
+    /// The gratitude machinery was written for one caller and had none. A
+    /// thing handed over is exactly what it was for.
+    pub fn they_did_me_a_good_turn(&mut self, who: Uuid, how_much: f32) {
+        self.process_gratitude(who, how_much);
+    }
+
     /// What a grown person already knows how to do when a world opens.
     ///
     /// Every skill started at -10, the floor, for everybody. That is not a
@@ -3513,6 +3554,8 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
+            Action::Trade { .. } => "trade".to_string(),
+            Action::GiveTo { .. } => "giveto".to_string(),
             Action::Work { verb, to } => format!("{verb}:{to}"),
             Action::Taste => "taste".to_string(),
             Action::TrySwapping {
@@ -3562,7 +3605,10 @@ impl Agent {
             Action::Craft { .. } | Action::TrySwapping { .. } | Action::Work { .. } => {
                 Undertaking::Crafting
             }
-            Action::Socialize { .. } | Action::ShareInformation { .. } => Undertaking::Dealing,
+            Action::Socialize { .. }
+            | Action::ShareInformation { .. }
+            | Action::Trade { .. }
+            | Action::GiveTo { .. } => Undertaking::Dealing,
             _ => return,
         };
 

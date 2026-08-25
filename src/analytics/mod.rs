@@ -1042,6 +1042,7 @@ impl Simulation {
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
+            Action::Trade { .. } | Action::GiveTo { .. } => Some(ActionType::Social),
             Action::Work { .. } => Some(ActionType::Crafting),
             Action::Taste => Some(ActionType::Farming),
             Action::TrySwapping { .. } => Some(ActionType::Crafting),
@@ -2234,6 +2235,12 @@ impl Simulation {
                 .map(|(verb, to)| Action::Work { verb, to })
                 .or_else(|| agent.what_i_would_make().map(|item_type| Action::Craft { item_type }))
                 .or_else(|| {
+                    // Somebody standing here with the thing, who wants what is
+                    // going spare. A trade is quicker than a walk.
+                    self.somebody_to_trade_with(agent, agent_position)
+                        .map(|with| Action::Trade { with })
+                })
+                .or_else(|| {
                     agent
                         .what_i_must_find()
                         .map(|resource_type| Action::Gather { resource_type })
@@ -2335,11 +2342,18 @@ impl Simulation {
 
             // Company needs somebody to keep it
             DriveType::Social => {
-                if agent.surroundings.company {
-                    Some(Self::generate_action_for_drive(drive_type, agent_position))
-                } else {
-                    None
+                if !agent.surroundings.company {
+                    return None;
                 }
+
+                // Handing somebody something they need is the plainest sociable
+                // act there is, and it costs the giver, which is what makes it
+                // one. It comes before talking because a gift says more.
+                if let Some(to) = self.somebody_to_give_to(agent, agent_position) {
+                    return Some(Action::GiveTo { to });
+                }
+
+                Some(Self::generate_action_for_drive(drive_type, agent_position))
             }
 
             // The rest keep the simple mapping they had
@@ -2643,6 +2657,138 @@ impl Simulation {
                 }
             }
         }
+    }
+
+    /// What a fair trade is worth to a bond, and what a gift is.
+    ///
+    /// A gift is worth more, which is the whole difference between the two:
+    /// a trade leaves both parties square and a gift leaves one of them owing.
+    const WHAT_A_FAIR_TRADE_IS_WORTH: f32 = 0.15;
+    const WHAT_A_GIFT_IS_WORTH: f32 = 0.4;
+
+    /// How near two people have to be standing to hand anything over.
+    const CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER: i32 = 3;
+
+    /// What these two would swap, if anything: what the first has spare and
+    /// the second wants, and the other way round.
+    ///
+    /// "The agents should also use a barter system if they have an abundance
+    /// of something another agent wants and that agent has an abundance of
+    /// something they want." Both halves, and it returns `None` unless both
+    /// hold.
+    fn what_the_two_of_them_would_swap(
+        &self,
+        me: usize,
+        them: usize,
+    ) -> Option<((String, u32), (String, u32))> {
+        let mine = self.what_i_would_hand_over(me, them)?;
+        let theirs = self.what_i_would_hand_over(them, me)?;
+
+        if mine.0 == theirs.0 {
+            return None;
+        }
+
+        Some((mine, theirs))
+    }
+
+    /// What the first of these would hand the second, if anything.
+    ///
+    /// One-sided on purpose: it is what a gift is, and it is half of what a
+    /// trade is. Abundance is measured against the other pack rather than
+    /// against a number — what makes a thing worth handing over is that they
+    /// have much less of it than you do, which is a comparison and not a
+    /// threshold. The first cut of this asked for six of a thing on one side
+    /// and fewer than six on the other, and over eight worlds of ten thousand
+    /// ticks a settlement traded once.
+    fn what_i_would_hand_over(&self, me: usize, them: usize) -> Option<(String, u32)> {
+        let mine = self.population.agents[me].what_i_can_spare()?;
+
+        let they_have = self.population.agents[them].how_many_i_have(&mine.0);
+        let i_have = self.population.agents[me].how_many_i_have(&mine.0);
+
+        // They want it if they have markedly less of it than I do. A man with
+        // forty sticks and a man with thirty-eight are not trading partners.
+        if they_have * Self::WHAT_MAKES_IT_WORTH_HAVING >= i_have {
+            return None;
+        }
+
+        Some(mine)
+    }
+
+    /// How many times more of a thing you have to have before it is worth
+    /// somebody else's while to take it off you.
+    const WHAT_MAKES_IT_WORTH_HAVING: u32 = 2;
+
+    /// Somebody within reach worth trading with.
+    ///
+    /// Trust matters: you do not put a thing in the hands of somebody you
+    /// think would take it. What decides that is the same judgement that
+    /// decides whether to take their word - see `Agent::would_take_their_word`.
+    fn somebody_to_trade_with(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        let me = self
+            .population
+            .agents
+            .iter()
+            .position(|other| other.id == agent.id)?;
+
+        self.population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
+            .filter(|(_, them)| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            .filter(|(_, them)| agent.would_take_their_word(them.id, &them.traits))
+            .find(|(them, _)| self.what_the_two_of_them_would_swap(me, *them).is_some())
+            .map(|(_, them)| them.id)
+    }
+
+    /// How generous somebody has to feel about a person before handing them
+    /// anything for nothing.
+    ///
+    /// Higher than the bar for trading with them: a trade is square and a gift
+    /// is not, so it goes to people you actually think well of.
+    const WELL_ENOUGH_OF_THEM_TO_GIVE: f32 = 0.4;
+
+    /// Somebody within reach worth giving something to.
+    fn somebody_to_give_to(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        let me = self
+            .population
+            .agents
+            .iter()
+            .position(|other| other.id == agent.id)?;
+
+        let spare = agent.what_i_can_spare()?;
+
+        self.population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
+            .filter(|(_, them)| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            .filter(|(_, them)| {
+                agent.how_far_i_trust(them.id, &them.traits) >= Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+            })
+            .filter(|(_, them)| them.what_i_am_short_of().contains(&spare.0.as_str()))
+            .find(|(them, _)| self.what_i_would_hand_over(me, *them).is_some())
+            .map(|(_, them)| them.id)
     }
 
     /// How near you have to be standing to notice that the midden is growing.
@@ -4707,15 +4853,23 @@ impl Simulation {
             return None;
         }
 
-        let standing = self.world.resources.iter().find(|resource| {
-            resource.position == here
-                && resource.amount > Self::WHAT_A_CUTTING_TAKES
-                && resource.max_amount > Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
-        })?;
-
-        Self::what_can_be_sown()
-            .into_iter()
-            .find(|(_, crop, _)| *crop == standing.resource_type)
+        // The first thing growing here that is worth lifting - not the first
+        // thing growing here. A tile can carry more than one, and a strange
+        // plant nobody has tried standing on the same ground as a berry bush
+        // was enough to hide the bush.
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| {
+                resource.position == here
+                    && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                    && resource.max_amount > Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
+            })
+            .find(|resource| {
+                Self::what_can_be_sown()
+                    .into_iter()
+                    .any(|(_, crop, _)| crop == resource.resource_type)
+            })
             .map(|_| Action::TakeCutting)
     }
 
@@ -8920,6 +9074,127 @@ impl Simulation {
                 }
             },
 
+            Action::Trade { with } => {
+                let Some(them) = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == *with && other.state.is_alive)
+                else {
+                    return ActionResult::failure("Nobody there to trade with".to_string());
+                };
+
+                let Some((mine, theirs)) = self.what_the_two_of_them_would_swap(agent_index, them)
+                else {
+                    return ActionResult::failure(
+                        "Nothing between us that either of us wants".to_string(),
+                    );
+                };
+
+                // Half of what each has spare, so a trade leaves both better
+                // off and neither stripped
+                let how_much = |spare: u32| (spare / 2).max(1);
+                let i_hand_over = how_much(mine.1);
+                let they_hand_over = how_much(theirs.1);
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(&mine.0, i_hand_over);
+                    agent.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            theirs.0.clone(),
+                            they_hand_over,
+                            1.0,
+                        ),
+                    );
+                    agent.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
+                }
+
+                let me = self.population.agents[agent_index].id;
+                let them_id = self.population.agents[them].id;
+
+                {
+                    let other = &mut self.population.agents[them];
+                    other.inventory.remove_item(&theirs.0, they_hand_over);
+                    other.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            mine.0.clone(),
+                            i_hand_over,
+                            1.0,
+                        ),
+                    );
+                    other.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
+
+                    // A good trade is a good turn on both sides, and both
+                    // remember who it was with
+                    other.they_did_me_a_good_turn(me, Self::WHAT_A_FAIR_TRADE_IS_WORTH);
+                }
+
+                self.population.agents[agent_index]
+                    .they_did_me_a_good_turn(them_id, Self::WHAT_A_FAIR_TRADE_IS_WORTH);
+
+                debug!(
+                    "Agent {me} gave {them_id} {i_hand_over} {} for {they_hand_over} {}",
+                    mine.0, theirs.0
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.35)
+                    .with_drive_change(DriveType::Social, -0.15)
+                    .with_energy_cost(2.0)
+                    .with_message(format!(
+                        "Traded {i_hand_over} {} for {they_hand_over} {}",
+                        mine.0, theirs.0
+                    ))
+            },
+
+            Action::GiveTo { to } => {
+                let Some(them) = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == *to && other.state.is_alive)
+                else {
+                    return ActionResult::failure("Nobody there to give to".to_string());
+                };
+
+                // Something they are short of that I have too much of. A gift
+                // is one-sided: what the other has is nothing to do with it.
+                let Some(mine) = self.what_i_would_hand_over(agent_index, them) else {
+                    return ActionResult::failure(
+                        "Nothing of mine they have any use for".to_string(),
+                    );
+                };
+
+                let handed_over = (mine.1 / 2).max(1);
+                let me = self.population.agents[agent_index].id;
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(&mine.0, handed_over);
+                    agent.skills.practise(crate::agents::SkillType::Social, 10, tick_now);
+                }
+
+                {
+                    let other = &mut self.population.agents[them];
+                    other.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            mine.0.clone(),
+                            handed_over,
+                            1.0,
+                        ),
+                    );
+                    other.they_did_me_a_good_turn(me, Self::WHAT_A_GIFT_IS_WORTH);
+                }
+
+                debug!("Agent {me} gave away {handed_over} {}", mine.0);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Social, -0.4)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Gave away {handed_over} {}", mine.0))
+            },
+
             Action::Work { verb, to } => {
                 use crate::environment::making;
 
@@ -9076,15 +9351,14 @@ impl Simulation {
                 let agent_position = self.population.agents[agent_index].state.position;
                 let here = Position::new(agent_position.0, agent_position.1);
 
-                let Some(index) = self
-                    .world
-                    .resources
-                    .iter()
-                    .position(|resource| {
-                        resource.position == here && resource.amount > Self::WHAT_A_CUTTING_TAKES
-                    })
-                else {
-                    return ActionResult::failure("Nothing here to lift".to_string());
+                let Some(index) = self.world.resources.iter().position(|resource| {
+                    resource.position == here
+                        && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                        && Self::what_can_be_sown()
+                            .into_iter()
+                            .any(|(_, sowable, _)| sowable == resource.resource_type)
+                }) else {
+                    return ActionResult::failure("Nothing here worth lifting".to_string());
                 };
 
                 let crop = self.world.resources[index].resource_type;
