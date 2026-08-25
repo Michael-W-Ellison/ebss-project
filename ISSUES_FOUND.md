@@ -1564,18 +1564,86 @@ Also worth recording, because it wasted a measurement round: winding a food's
 created at tick zero, because `saturating_sub` on a `u32` at zero does
 nothing. Weathering is counted on the `Dropped` record itself now.
 
+### 25. A settlement that can pick fruit in the snow
+
+The last three batches all built machinery against a scarcity this world has
+never produced. This is the reason: growth was seasonal from the beginning and
+what was *standing* was not. A berry bush that had grown all summer still had
+its berries on it in February.
+
+Every edible thing bears in its own season now and carries nothing outside it.
+Spring gives wild leaf and shoot — `ResourceType::Greens`, almost no energy in
+it and a great deal of what a body needs a little of, which is exactly what
+somebody who has lived on stored grain all winter is short of. Summer gives
+the first roots and pods, which is not a harvest. Autumn is when everything
+else comes on at once. Winter gives nothing whatever. Things that do not grow —
+stone, water, a standing tree — bear all year, because they are not bearing at
+all.
+
+**It works, and by a wide margin.** Standing edible food in winter, averaged
+over sixteen worlds:
+
+| | before | after |
+|---|---|---|
+| standing edible in winter | 3,849 ± 148 | 492 ± 64 |
+
+t = -21, which is the largest effect measured anywhere in this project.
+
+**Two rounds of measurement each found a real defect.**
+
+*Fruit hung on the branch for three months.* The first cut shed a twentieth of
+what a plant carried each pass, which left 472 units of berries on bushes in
+midwinter — most of a season's crop still on the branch in the snow. That is
+not a lean season, it is autumn with worse weather. A quarter a pass leaves a
+hedgerow four fifths bare within five days of the season turning, which is what
+fruit does.
+
+*And the larder was in a deadlock.* Digging a pit wanted a surplus in hand;
+gathering a surplus for the store wanted a pit to put it in. Neither could
+happen first, and while food was abundant this never showed, because somebody
+was always carrying a few spare berries. The moment the land actually went
+bare, burials fell from 10.8 a world to 1.8 — the store stopped being used
+exactly when it was worth most. Autumn with nowhere to put anything is reason
+enough to dig, and digging went from 2.3 attempts a world to 40.
+
+**What it costs, and what it did not fix.**
+
+| | before | after |
+|---|---|---|
+| people at ten thousand ticks | 48.8 ± 8.9 | 34.3 ± 3.8 |
+| starving in winter | 0.2 | 0.0 |
+| burials | 20.4 | 16.4 |
+| food dried or smoked | 0.0 | 3.1 |
+| pits dug | 6.3 | 40.1 |
+| still in the ground at the end | 0.0 | 0.0 |
+| shelters built | 0 | 0 |
+
+The settlement is a third smaller and *nobody is hungrier* — starvation in
+winter is zero in both arms and burials are down. It is not dying of the
+change, it is equilibrating smaller: fewer surpluses, so fewer births.
+
+And the store still never holds anything. Forty pits a world get dug and not
+one of them has anything in it at the end. Pits are dug now and filled from
+whatever somebody happens to be carrying, which is exactly the thing seasonal
+food removes. Nothing in this model ever gathers *for the winter*; it gathers
+because it is hungry, and then puts the leftovers away. That is the last link
+missing, and it is upstream of the larder, of the sacrifice in #21 and of the
+"efficiency" question — a people that spends its whole year finding today's
+dinner never builds anything, which is why `shelters built` is zero in both
+columns and always has been.
+
 ## Housekeeping
 
-### 25. Committed backup file
+### 26. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 26. Build warnings
+### 27. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 27. Placeholder package metadata
+### 28. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

@@ -625,6 +625,8 @@ impl World {
                     ResourceType::Water => ItemType::Water,
 
                     // Agricultural
+                    ResourceType::Greens => ItemType::Greens,
+                    ResourceType::Roots => ItemType::Roots,
                     ResourceType::Grain => ItemType::Grain,
                     ResourceType::Flax => ItemType::Flax,
                     ResourceType::Herbs => ItemType::Herbs,

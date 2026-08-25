@@ -541,6 +541,18 @@ impl World {
     /// reckoned against.
     const HOW_OFTEN_THE_WEATHER_GETS_AT_IT: u32 = 10;
 
+    /// What share of what a plant is carrying comes off it each pass, once
+    /// the season it bears in has passed.
+    ///
+    /// The plant pass runs every ten ticks, so at a quarter a hedgerow is
+    /// four fifths bare within five days of the season turning and all but
+    /// empty inside a fortnight. That is what fruit does.
+    ///
+    /// A first cut used a twentieth and left 472 units of berries hanging on
+    /// bushes in midwinter - most of a season's crop still on the branch in
+    /// the snow, which is not a lean season, it is autumn with worse weather.
+    const WHAT_FALLS_OFF_A_TICK: f32 = 0.25;
+
     /// The pit dug on this tile, if there is one.
     pub fn pit_at(&self, where_it_is: Position) -> Option<&Pit> {
         self.pits.iter().find(|pit| pit.where_it_is == where_it_is)
@@ -844,6 +856,30 @@ impl World {
                 pos,
                 rng.gen_range(20..60),
             ));
+        }
+
+        // Wild leaf and shoot, and the first roots. What a hedgerow gives
+        // before anything has ripened - thin, plentiful and only there for
+        // its own few weeks of the year. Rather more patches than there are
+        // berry bushes, because a person living on greens has to pick a great
+        // many of them.
+        for (what, how_many, carrying) in [
+            (ResourceType::Greens, config.food_nodes * 3 / 2, (25, 70)),
+            (ResourceType::Roots, config.food_nodes, (15, 45)),
+        ] {
+            for _ in 0..how_many {
+                let terrain = if rng.gen::<f32>() < 0.5 {
+                    TerrainType::Meadow
+                } else {
+                    TerrainType::Plains
+                };
+                let pos = self.find_random_terrain_position(terrain);
+                self.resources.push(ResourceNode::new(
+                    what,
+                    pos,
+                    rng.gen_range(carrying.0..carrying.1),
+                ));
+            }
         }
 
         // Generate water sources (rivers, wells, springs)
@@ -1794,6 +1830,18 @@ impl World {
             if cultivated {
                 let growing = (season_modifier * ground_water).clamp(0.0, 1.0);
                 soil.nobody_weeded_this(growing, 1.0);
+            }
+
+            // A hedgerow out of season carries nothing. Growth was seasonal
+            // from the beginning and what was *standing* was not, so a berry
+            // bush that had grown all summer still had its berries on it in
+            // February - and a settlement that could pick fruit in the snow
+            // had no reason to put anything by, no lean season to be lean in,
+            // and no use for a store. What is on the plant now falls off it
+            // outside the weeks it bears, which is what fruit does.
+            if !resource.resource_type.is_it_bearing(current_season) {
+                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK);
+                continue;
             }
 
             let _regen_amount = resource.regenerate_in_ground(

@@ -90,6 +90,9 @@ pub fn resource_color(resource_type: ResourceType) -> Color32 {
         ResourceType::Food => Color32::from_rgb(255, 99, 71),
         ResourceType::Water => Color32::from_rgb(0, 191, 255),
         ResourceType::Grain => Color32::from_rgb(255, 215, 0),
+        // What a hedgerow gives before anything has ripened
+        ResourceType::Greens => Color32::from_rgb(124, 205, 124),
+        ResourceType::Roots => Color32::from_rgb(205, 133, 63),
         ResourceType::Flax => Color32::from_rgb(245, 245, 220),
         ResourceType::Herbs => Color32::from_rgb(0, 128, 0),
         ResourceType::Cotton => Color32::from_rgb(255, 250, 250),

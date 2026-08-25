@@ -23,6 +23,10 @@ pub enum ItemType {
     Water,
 
     // === Raw Materials (Agricultural) ===
+    /// Wild leaf and shoot, which is what spring gives
+    Greens,
+    /// The first roots and pods, which is what summer gives
+    Roots,
     Grain,
     Flax,
     Herbs,

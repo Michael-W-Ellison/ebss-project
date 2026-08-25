@@ -530,19 +530,44 @@ fn nobody_asks_for_a_pit_where_one_will_not_go() {
     );
 }
 
-/// With no store anywhere and nothing to spare, there is nothing to be done
-/// about tomorrow.
+/// With nothing to spare and nowhere to put anything, autumn is still a
+/// reason to dig.
+///
+/// This was a circle and it took the land actually going bare in winter to
+/// show it: digging a pit wanted a surplus in hand, and gathering a surplus
+/// for the store wanted a pit to put it in, so neither could ever happen
+/// first. The moment food became seasonal the larder stopped being used at
+/// all — burials fell from 10.8 a world to 1.8 exactly when a store was
+/// worth most.
 #[test]
-fn no_store_and_nothing_spare_is_nothing_to_do() {
+fn autumn_with_nowhere_to_put_anything_is_a_reason_to_dig() {
     let mut simulation = a_digger();
     turn_the_year_to(&mut simulation, Season::Fall);
+    let here = simulation.population.agents[0].state.position;
+
+    let answer = simulation
+        .putting_food_by(&simulation.population.agents[0], here)
+        .expect("the year is turning and there is nowhere to put anything");
+
+    assert!(
+        matches!(answer, Action::Excavate),
+        "he digs: {answer:?}"
+    );
+}
+
+/// But out of season, with nothing to spare, there is nothing to be done
+/// about tomorrow.
+#[test]
+fn no_store_and_nothing_spare_in_summer_is_nothing_to_do() {
+    let mut simulation = a_digger();
+    turn_the_year_to(&mut simulation, Season::Summer);
     let here = simulation.population.agents[0].state.position;
 
     assert!(
         simulation
             .putting_food_by(&simulation.population.agents[0], here)
             .is_none(),
-        "nothing to bury and nowhere to bury it"
+        "nobody digs a winter store in June"
     );
 }
 

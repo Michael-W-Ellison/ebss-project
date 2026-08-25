@@ -31,7 +31,12 @@ fn bare_country() -> World {
     world.resources.retain(|resource| {
         !matches!(
             resource.resource_type,
-            ResourceType::Food | ResourceType::Grain | ResourceType::Fish | ResourceType::Herbs
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Fish
+                | ResourceType::Herbs
         )
     });
     world

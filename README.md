@@ -118,6 +118,19 @@ original specifications.
   never stands its ground however the arithmetic comes out. A bear does not
   run from one man — and the same wolf that would take on a man with nothing
   in his hands thinks better of it when he has a spear
+- ✅ The hedgerows keep a year. Growth was seasonal from the beginning and
+  what was *standing* was not, so a berry bush that had grown all summer still
+  had its berries on it in February — and a settlement that can pick fruit in
+  the snow has no reason to put anything by, no lean season to be lean in, and
+  no use for a store. Spring gives wild leaf and shoot, which is almost no
+  energy and a great deal of everything else; summer gives the first roots and
+  pods, which is not a harvest; autumn is when everything else comes on at
+  once; and winter gives nothing at all. What is on a plant falls off it inside
+  a fortnight of its season turning, because that is what fruit does. Standing
+  food in winter went from 3,849 units to 492 — an 87 per cent cut and by a
+  long way the largest effect measured in this project (t = -21). What it
+  costs, and what it did not fix, is in ISSUES_FOUND.md #25
+
 - 🚧 Food rots now, and it cost a fifth of the settlement. Every spoilage time
   in the tables was written as a day-count and stored at 1440 ticks to the
   day; the calendar was later put on a scale a life fits inside — twelve ticks

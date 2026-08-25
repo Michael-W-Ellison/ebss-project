@@ -24,6 +24,18 @@ pub enum ResourceType {
     /// agent can read. The only way to find out is for somebody to eat one.
     StrangePlant,
 
+    /// Wild leafy greens and fresh shoots: what a hedgerow gives in spring.
+    ///
+    /// Thin stuff - almost no energy in it and a great deal of what a body
+    /// needs a little of - and it is what there is to eat in the months when
+    /// nothing has ripened yet.
+    Greens,
+
+    /// The first roots and pods to come on, which is what summer gives.
+    ///
+    /// Better than greens and nothing like a harvest.
+    Roots,
+
     // === Raw Materials (Agricultural) ===
     Grain,      // Wheat, barley, etc. - for flour, bread, beer
     Flax,       // For linen, rope
@@ -135,6 +147,62 @@ impl ResourceType {
             _ => 0.0,
         }
     }
+    /// When this thing bears something a person can eat.
+    ///
+    /// Growth was seasonal from the beginning and what was *standing* was
+    /// not, so a berry bush that had grown all summer still had its berries
+    /// on it in February. A hedgerow does not work like that. It carries
+    /// nothing at all for most of the year and then, for a few weeks,
+    /// everything at once.
+    ///
+    /// The year, as this world keeps it:
+    ///
+    /// - **Spring** gives leaf and shoot, and almost no energy in any of it
+    /// - **Summer** gives the first roots and pods, which is not a harvest
+    /// - **Autumn** is when everything else comes on at once
+    /// - **Winter** gives nothing, and that is the whole point of a store
+    ///
+    /// Anything that is not a growing thing - stone, clay, water - bears all
+    /// year, because it is not bearing at all.
+    pub fn when_it_bears(&self) -> &'static [crate::environment::seasons::Season] {
+        use crate::environment::seasons::Season;
+
+        const SPRING: &[Season] = &[Season::Spring];
+        const SUMMER: &[Season] = &[Season::Summer];
+        const AUTUMN: &[Season] = &[Season::Fall];
+        const THE_GROWING_HALF: &[Season] = &[Season::Spring, Season::Summer];
+        const ALL_YEAR: &[Season] = &[
+            Season::Spring,
+            Season::Summer,
+            Season::Fall,
+            Season::Winter,
+        ];
+
+        match self {
+            ResourceType::Greens => SPRING,
+            ResourceType::Roots => SUMMER,
+
+            // What ripens, and when everybody knows it ripens
+            ResourceType::Food | ResourceType::Grain | ResourceType::Honey => AUTUMN,
+
+            // Fibre and physic are cut green
+            ResourceType::Flax | ResourceType::Cotton | ResourceType::Herbs => THE_GROWING_HALF,
+
+            // Nobody has any idea what these do, including when they bear
+            ResourceType::StrangePlant => AUTUMN,
+
+            // Everything that is not a growing thing. Wood off a standing
+            // tree, stone out of the ground, water in a river: none of it
+            // bears, so none of it stops.
+            _ => ALL_YEAR,
+        }
+    }
+
+    /// Whether there is anything on it to take, this time of year.
+    pub fn is_it_bearing(&self, now: crate::environment::seasons::Season) -> bool {
+        self.when_it_bears().contains(&now)
+    }
+
 
     /// Whether an agent can eat this straight from the land.
     ///
@@ -143,7 +211,12 @@ impl ResourceType {
     pub fn is_edible(&self) -> bool {
         matches!(
             self,
-            ResourceType::Food | ResourceType::Grain | ResourceType::Fish | ResourceType::Meat
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Fish
+                | ResourceType::Meat
         )
     }
 
@@ -152,6 +225,8 @@ impl ResourceType {
         match self {
             // Something nobody has tried
             ResourceType::StrangePlant => '?',
+            ResourceType::Greens => 'v',
+            ResourceType::Roots => 'r',
 
             // Basic
             ResourceType::Wood => 't',
@@ -212,6 +287,8 @@ impl ResourceType {
     pub fn color_code(&self) -> &'static str {
         match self {
             ResourceType::StrangePlant => "\x1b[35m",  // Magenta: unknown
+            ResourceType::Greens => "\x1b[92m",        // Bright green: new leaf
+            ResourceType::Roots => "\x1b[33m",         // Yellow/brown
 
             // Basic - Original colors
             ResourceType::Wood => "\x1b[33m",      // Yellow/Brown
@@ -274,6 +351,9 @@ impl ResourceType {
     pub fn gather_time(&self) -> u32 {
         match self {
             ResourceType::StrangePlant => 25,
+            // Picking leaves is quicker than anything else anybody does
+            ResourceType::Greens => 8,
+            ResourceType::Roots => 18,
 
             // Basic - gathering
             ResourceType::Wood => 20,
@@ -391,7 +471,8 @@ impl ResourceType {
         matches!(
             self,
             ResourceType::Food | ResourceType::Bread | ResourceType::Ale |
-            ResourceType::Cheese | ResourceType::Meat | ResourceType::Fish | ResourceType::Honey
+            ResourceType::Cheese | ResourceType::Meat | ResourceType::Fish | ResourceType::Honey |
+            ResourceType::Greens | ResourceType::Roots
         )
     }
 
@@ -401,6 +482,7 @@ impl ResourceType {
             ResourceType::StrangePlant => "Unidentified",
             ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food | ResourceType::Water => "Basic Resource",
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton => "Agricultural",
+            ResourceType::Greens | ResourceType::Roots => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",
             ResourceType::Clay | ResourceType::Sand | ResourceType::Coal => "Mineral",
@@ -465,6 +547,20 @@ impl ResourceNode {
         let harvested = amount.min(self.amount);
         self.amount -= harvested;
         harvested
+    }
+
+    /// Shed what is on it, because the season it bears in has gone by.
+    ///
+    /// Fruit falls, leaf goes over, and a seed head that nobody cut shatters.
+    /// Always takes at least one, so a patch actually empties rather than
+    /// creeping down by fractions for ever.
+    pub fn what_it_carries_falls_off(&mut self, share: f32) {
+        if self.amount == 0 {
+            return;
+        }
+
+        let falling = ((self.amount as f32) * share).ceil() as u32;
+        self.amount = self.amount.saturating_sub(falling.max(1));
     }
 
     /// Check if node is depleted

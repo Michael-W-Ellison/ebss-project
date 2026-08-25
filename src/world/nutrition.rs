@@ -396,6 +396,27 @@ impl FoodDatabase {
             default_preparation: PreparationState::Raw,
         });
 
+        // === WHAT A HEDGEROW GIVES, BY SEASON ===
+
+        // Wild leaf and shoot. Almost nothing in it by way of energy and a
+        // great deal of what a body needs a little of, which is exactly what
+        // a person who has lived on stored grain all winter is short of. It
+        // does not keep at all: greens are a thing you eat where you pick
+        // them.
+        self.entries.insert(ItemType::Greens, FoodTemplate {
+            base_nutrition: NutritionalContent::new(6.0, 3.0, 45.0, 0.9),
+            base_spoilage_ticks: Self::days(3),
+            default_preparation: PreparationState::Raw,
+        });
+
+        // The first roots and pods to come on. Better than greens and nothing
+        // like a harvest, and they keep about as well as a berry does.
+        self.entries.insert(ItemType::Roots, FoodTemplate {
+            base_nutrition: NutritionalContent::new(30.0, 8.0, 20.0, 0.7),
+            base_spoilage_ticks: Self::days(14),
+            default_preparation: PreparationState::Raw,
+        });
+
         // === GRAINS (High energy, low protein) ===
 
         // Grain - high energy, low protein, moderate micronutrients

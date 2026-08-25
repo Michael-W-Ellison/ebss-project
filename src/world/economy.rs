@@ -203,6 +203,9 @@ impl Marketplace {
 
             // Agricultural resources
             ItemType::Grain | ItemType::Flax | ItemType::Herbs | ItemType::Cotton => 3,
+            // Thin stuff, and there for the picking most of spring
+            ItemType::Greens => 1,
+            ItemType::Roots => 2,
 
             // Animal products
             ItemType::Hides | ItemType::Wool | ItemType::Meat |

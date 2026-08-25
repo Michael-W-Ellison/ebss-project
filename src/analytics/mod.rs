@@ -3135,6 +3135,21 @@ impl Simulation {
             });
         }
 
+        // No store anywhere, and the year turning. Dig one.
+        //
+        // This is what was missing, and it was a circle: digging a pit wanted
+        // a surplus in hand, and gathering a surplus for the store wanted a
+        // pit to put it in. Neither could happen first. So the moment the
+        // land actually went bare in winter the larder stopped being used
+        // altogether - burials fell from 10.8 a world to 1.8 exactly when a
+        // store was worth most - because the only thing that had ever filled
+        // it was food somebody happened to be carrying.
+        //
+        // Autumn with nowhere to put anything is reason enough to dig.
+        if self.is_ground_a_pit_will_go_in(here) {
+            return Some(Action::Excavate);
+        }
+
         None
     }
 
@@ -6111,12 +6126,16 @@ impl Simulation {
     ///
     /// Foraging accepts everything that smells of food, so an agent does not
     /// starve standing in a grain field because only berries counted as edible.
-    fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 4] {
+    fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 6] {
         use crate::world::{ItemType, ResourceType};
 
         [
             (ResourceType::Food, ItemType::Food),
             (ResourceType::Grain, ItemType::Grain),
+            // What there is before anything ripens, which for half the year
+            // is the whole of what there is
+            (ResourceType::Greens, ItemType::Greens),
+            (ResourceType::Roots, ItemType::Roots),
             (ResourceType::Fish, ItemType::Fish),
             (ResourceType::Meat, ItemType::Meat),
         ]
@@ -6833,6 +6852,9 @@ impl Simulation {
                     // how a people that had never handled grain came to have
                     // none of it to sow.
                     "grain" => Some(ResourceType::Grain),
+                    // What there is to eat before anything has ripened
+                    "greens" => Some(ResourceType::Greens),
+                    "roots" => Some(ResourceType::Roots),
                     "water" => Some(ResourceType::Water),
                     // Clothing materials. Flax and cotton grow in patches an
                     // agent can walk to; hides and wool come off animals, so
