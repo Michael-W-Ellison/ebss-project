@@ -105,6 +105,24 @@ impl AnimalBehavior {
     /// What it cost, measured over twenty-four worlds: a settlement ran 465
     /// times where it should have run 213, and froze 194 times where it should
     /// have frozen 27 - most of that being children hemmed in by deer.
+    /// How readily a thing of this temper turns and faces what is coming at
+    /// it, rather than running.
+    ///
+    /// The other side of `how_much_it_menaces_you`, and the whole of an
+    /// animal's courage. A rabbit never stands its ground whatever the odds
+    /// are - that is what Passive means, and a rabbit that fights a wolf
+    /// because the arithmetic came out that way is not a rabbit. Everything
+    /// else weighs the odds, and weighs them more kindly the fiercer it is.
+    pub fn how_readily_it_stands_its_ground(&self) -> f32 {
+        match self {
+            AnimalBehavior::Passive => 0.0,
+            AnimalBehavior::Neutral => 0.6,
+            AnimalBehavior::Defensive => 0.9,
+            AnimalBehavior::Aggressive => 1.2,
+            AnimalBehavior::Territorial => 1.3,
+        }
+    }
+
     pub fn how_much_it_menaces_you(&self) -> f32 {
         match self {
             // Runs away. Not a threat to anybody, whatever it would do if

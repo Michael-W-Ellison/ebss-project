@@ -108,6 +108,33 @@ original specifications.
   will be dead by morning is not weighing his reputation. Theft went from 0.75
   a world to about 21, and it shows downstream exactly as it should: attacks
   roughly quadrupled. A settlement with thieves in it fights more
+- ✅ The beasts have an opinion about us. An animal has two drives worth the
+  name — eat, and do not be eaten — and until now it had neither about
+  people: `AnimalState::Fleeing` and `AnimalState::Attacking` had been in the
+  model since the model had animals and nothing had ever set either, so a deer
+  stood placidly in a field while somebody walked up to it with a spear.
+  Everything now reads the odds against what is coming at it and either goes
+  or turns to face it, and temper decides how kindly it reads them. A rabbit
+  never stands its ground however the arithmetic comes out. A bear does not
+  run from one man — and the same wolf that would take on a man with nothing
+  in his hands thinks better of it when he has a spear
+- 🚧 Food rots now, and it cost a fifth of the settlement. Every spoilage time
+  in the tables was written as a day-count and stored at 1440 ticks to the
+  day; the calendar was later put on a scale a life fits inside — twelve ticks
+  to the day — and the food tables were not brought with it. So meat written
+  down as lasting a day lasted a hundred and twenty of them, and grain written
+  down as ten days lasted twelve and a half years. Nothing in this world
+  spoiled, and everything followed from that: nobody ever went hungry, a
+  larder was insurance against nothing, and six of the nine preparation states
+  had never once been reached. Meat is now a season's business, fish rots
+  faster than anything else anybody catches, berries do not see half a season
+  out, and a dry seed keeps two and a half. Food left lying in the weather
+  goes off three times as fast as food in a pack; a bowl or a basket between
+  the food and the damp doubles what a pit is worth. And there is something to
+  be done about it: laying food out dries it and hanging it in the smoke of a
+  fire smokes it, which is twenty times and ten times the keeping. The cost is
+  in ISSUES_FOUND.md #24 and it is not small — 52 people against 66 — and the
+  reason is not the clock but what the clock exposed
 - 🚧 A hole in the cold ground, which is a larder and does not pay for itself
   yet. A settlement had nowhere to put anything it ate: what a person could
   put by explicitly excluded food, and the only place to put anything was a
@@ -231,7 +258,7 @@ original specifications.
   executor consults before an action runs, so a hunt without a spear and a
   stitch with no hand free are refused in one place rather than in thirty. The
   table is honest about itself: a verb nothing performs yet says so, and a test
-  fails if it stops saying so. Fifty-two of the sixty-nine are live — the
+  fails if it stops saying so. Fifty-three of the seventy are live — the
   sixty-ninth is `freeze`, which was not in the original twelve families and
   had to be added when the fight-or-flight decision was given the rest of its
   tree

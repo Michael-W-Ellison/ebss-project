@@ -245,6 +245,9 @@ pub enum Action {
     Equip { what: String },
     /// Put back into the pack whatever is occupying a hand
     Unequip { what: String },
+    /// Lay food out to dry, or hang it over a fire to smoke. The only thing
+    /// anybody here can do to make food outlast the week it was got in
+    Dry { what: String },
     /// Dig a pit in the ground here, to keep things in
     Excavate,
     /// Put something into the pit here and put the earth back over it
@@ -321,6 +324,7 @@ impl Action {
             Action::Examine { .. } => Some(DriveType::Curiosity),
             Action::Equip { .. } => Some(DriveType::Utility),
             Action::Unequip { .. } => Some(DriveType::Utility),
+            Action::Dry { .. } => Some(DriveType::Preparedness),
             Action::Excavate => Some(DriveType::Preparedness),
             Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),

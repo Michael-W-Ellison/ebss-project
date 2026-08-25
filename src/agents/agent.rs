@@ -1199,6 +1199,14 @@ impl Agent {
     /// spare.
     pub const ENOUGH_TO_HAND: u32 = 6;
 
+    /// And how much food, which is a different question.
+    ///
+    /// Lower than `ENOUGH_TO_HAND`, because food is not flint: six armfuls of
+    /// berries is not a sensible thing to be carrying about once berries
+    /// actually go off. Anything past a couple of meals is worth putting by
+    /// rather than walking around with.
+    pub const A_MEAL_OR_TWO_IN_HAND: u32 = 3;
+
     /// The thing this agent has most of beyond what it needs about it, if any.
     ///
     /// The Preparedness drive named `item_type: "resource"` - a placeholder
@@ -1235,13 +1243,35 @@ impl Agent {
             .get_all_items()
             .iter()
             .filter(|(name, item)| {
-                item.quantity > Self::ENOUGH_TO_HAND
+                item.quantity > Self::A_MEAL_OR_TWO_IN_HAND
                     && (item.is_food() || name.contains("food") || name.contains("grain"))
             })
             // What keeps worst is what most wants burying
             .max_by_key(|(_, item)| item.quantity)
-            .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
+            .map(|(name, item)| (name.clone(), item.quantity - Self::A_MEAL_OR_TWO_IN_HAND))
     }
+
+    /// Whether a thing in the pack is raw food still good enough to be worth
+    /// preserving.
+    ///
+    /// Raw, because anything already dried or salted or fermented is done.
+    /// Still sound, because preserving does not undo what has already
+    /// happened to a thing: all you get from drying carrion is dry carrion.
+    pub fn is_it_worth_drying(&self, what: &str) -> bool {
+        use crate::world::nutrition::PreparationState;
+
+        self.inventory
+            .get_item(what)
+            .and_then(|item| item.food_data.as_ref())
+            .is_some_and(|food| {
+                food.preparation == PreparationState::Raw
+                    && food.freshness >= Self::WORTH_PUTTING_BY
+            })
+    }
+
+    /// How sound a thing has to still be before anybody bothers preserving
+    /// it.
+    const WORTH_PUTTING_BY: f32 = 0.5;
 
     /// Everything a person could use and has next to none of.
     ///
@@ -3967,6 +3997,7 @@ impl Agent {
             Action::Examine { what } => format!("examine:{what}"),
             Action::Equip { .. } => "equip".to_string(),
             Action::Unequip { .. } => "unequip".to_string(),
+            Action::Dry { .. } => "dry".to_string(),
             Action::Excavate => "excavate".to_string(),
             Action::Cover { .. } => "cover".to_string(),
             Action::PickUp { .. } => "pickup".to_string(),
@@ -4028,6 +4059,9 @@ impl Agent {
             // Digging a hole and filling it is putting something by, which is
             // the same undertaking as any other kind of husbandry
             Action::Excavate | Action::Cover { .. } => Undertaking::Farming,
+            // Making food outlast the week it was got in is cookery, which is
+            // where the rest of what a fire is for already lives
+            Action::Dry { .. } => Undertaking::Cooking,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,

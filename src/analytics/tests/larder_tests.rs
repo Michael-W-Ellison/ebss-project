@@ -233,7 +233,10 @@ fn what_is_buried_outlasts_what_is_carried() {
     // comparison with it.
     let mut in_the_pack = supper(20, 0);
 
-    for _ in 0..3000 {
+    // Berries last three days in a pack, which on this calendar is
+    // thirty-six ticks. Thirty is long enough that the difference shows and
+    // short enough that there is anything left to compare.
+    for _ in 0..30 {
         simulation.world.tick();
     }
     if let Some(food) = in_the_pack.food_data.as_mut() {
@@ -375,13 +378,23 @@ fn a_store_across_the_camp_is_walked_to() {
 // Deciding to
 // --------------------------------------------------------------------------
 
-/// Somebody with more food than they can eat and no pit digs one.
+/// Somebody with more food than they can eat and no pit digs one — once it
+/// is dried. Drying comes first: a hole makes a thing keep four times as
+/// long and drying makes it keep twenty, and doing both is what a store is
+/// for.
 #[test]
 fn a_surplus_and_no_pit_means_digging() {
     let mut simulation = a_digger();
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(supper(30, 0));
+
+    simulation.execute_action(
+        &Action::Dry {
+            what: "food".to_string(),
+        },
+        0,
+    );
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -402,6 +415,12 @@ fn a_surplus_and_a_pit_means_burying() {
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(supper(30, 0));
+    simulation.execute_action(
+        &Action::Dry {
+            what: "food".to_string(),
+        },
+        0,
+    );
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -462,7 +481,13 @@ fn a_surplus_in_the_hand_gets_buried_in_any_season() {
     turn_the_year_to(&mut simulation, Season::Summer);
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(30, 0));
+        .add_item(supper(30, simulation.world.tick));
+    simulation.execute_action(
+        &Action::Dry {
+            what: "food".to_string(),
+        },
+        0,
+    );
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -489,6 +514,12 @@ fn nobody_asks_for_a_pit_where_one_will_not_go() {
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(supper(30, 0));
+    simulation.execute_action(
+        &Action::Dry {
+            what: "food".to_string(),
+        },
+        0,
+    );
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation.putting_food_by(&simulation.population.agents[0], here);

@@ -349,20 +349,50 @@ impl FoodDatabase {
         self.entries.contains_key(item_type)
     }
 
+    /// How many ticks a given number of days is, on the calendar this world
+    /// actually keeps.
+    ///
+    /// Every one of these tables was written as a day-count and stored as a
+    /// number of ticks at 1440 ticks to the day. The calendar was later put on
+    /// a scale a life fits inside - `TICKS_PER_DAY` is 12, a season is
+    /// twenty-four days and a year is 1,152 ticks - and the food tables were
+    /// not brought with it. So meat, written down as lasting a day, lasted a
+    /// hundred and twenty of them; grain written down as ten days lasted
+    /// twelve and a half years.
+    ///
+    /// Nothing in this world spoiled, and everything downstream followed from
+    /// that: nobody ever went hungry, a larder was insurance against nothing,
+    /// and six of the nine preparation states had never been reachable
+    /// because there was no reason to preserve anything. Stating the intent
+    /// in days and converting here is what keeps the two from drifting apart
+    /// again.
+    /// A first cut of this used the day-counts the tables were written with -
+    /// meat a day, berries a day and a half - and that turned out to be a
+    /// different thing on this calendar than it was on the old one. A tick
+    /// here is an *action*, not a minute: an agent gets twelve of them in a
+    /// day, and walking out to a berry patch and back is thirty or forty. Food
+    /// that lasts two days lasts less than the trip that fetches it, so
+    /// nobody ever held a surplus, nothing was ever dried or buried, and a
+    /// settlement lost a fifth of its people. These are on the scale of the
+    /// season instead, which is the unit a store is actually against.
+    const fn days(how_many: u32) -> u32 {
+        how_many * crate::environment::seasons::TICKS_PER_DAY
+    }
+
     fn register_all_foods(&mut self) {
         // === MEAT & FISH (High protein, moderate energy) ===
 
         // Meat - high protein, moderate energy, low micronutrients
         self.entries.insert(ItemType::Meat, FoodTemplate {
             base_nutrition: NutritionalContent::new(30.0, 50.0, 10.0, 0.6),
-            base_spoilage_ticks: 1440, // 1 day raw
+            base_spoilage_ticks: Self::days(10), // Under a season raw, and then it is carrion
             default_preparation: PreparationState::Raw,
         });
 
         // Fish - high protein, moderate energy, good micronutrients (omega-3, etc.)
         self.entries.insert(ItemType::Fish, FoodTemplate {
             base_nutrition: NutritionalContent::new(25.0, 45.0, 20.0, 0.7),
-            base_spoilage_ticks: 720, // 0.5 day - spoils very fast
+            base_spoilage_ticks: Self::days(6), // Fish spoils faster than anything else anybody catches
             default_preparation: PreparationState::Raw,
         });
 
@@ -371,7 +401,7 @@ impl FoodDatabase {
         // Grain - high energy, low protein, moderate micronutrients
         self.entries.insert(ItemType::Grain, FoodTemplate {
             base_nutrition: NutritionalContent::new(60.0, 15.0, 15.0, 0.1),
-            base_spoilage_ticks: 14400, // 10 days - lasts long when dry
+            base_spoilage_ticks: Self::days(60), // Two seasons and a half, which is what a dry seed does
             default_preparation: PreparationState::Raw,
         });
 
@@ -382,14 +412,14 @@ impl FoodDatabase {
         // bring it in.
         self.entries.insert(ItemType::Flour, FoodTemplate {
             base_nutrition: NutritionalContent::new(80.0, 16.0, 14.0, 0.1),
-            base_spoilage_ticks: 7200, // 5 days, against grain's 10
+            base_spoilage_ticks: Self::days(30), // Rather less than the whole seed, which is why you grind it when you mean to eat it
             default_preparation: PreparationState::Raw,
         });
 
         // Bread - processed grain, already cooked
         self.entries.insert(ItemType::Bread, FoodTemplate {
             base_nutrition: NutritionalContent::new(55.0, 12.0, 10.0, 0.3),
-            base_spoilage_ticks: 2880, // 2 days
+            base_spoilage_ticks: Self::days(20),
             default_preparation: PreparationState::Cooked,
         });
 
@@ -398,14 +428,14 @@ impl FoodDatabase {
         // Milk - balanced nutrition, high water
         self.entries.insert(ItemType::Milk, FoodTemplate {
             base_nutrition: NutritionalContent::new(25.0, 20.0, 25.0, 0.85),
-            base_spoilage_ticks: 360, // 0.25 day - spoils very fast
+            base_spoilage_ticks: Self::days(4), // Sours faster than anything but fish
             default_preparation: PreparationState::Raw,
         });
 
         // Cheese - preserved milk, concentrated nutrients
         self.entries.insert(ItemType::Cheese, FoodTemplate {
             base_nutrition: NutritionalContent::new(40.0, 35.0, 20.0, 0.35),
-            base_spoilage_ticks: 10080, // 7 days
+            base_spoilage_ticks: Self::days(50), // Which is most of the point of making it
             default_preparation: PreparationState::Fermented,
         });
 
@@ -414,14 +444,14 @@ impl FoodDatabase {
         // Honey - pure energy, practically never spoils
         self.entries.insert(ItemType::Honey, FoodTemplate {
             base_nutrition: NutritionalContent::new(80.0, 0.0, 5.0, 0.2),
-            base_spoilage_ticks: 100000, // Effectively never
+            base_spoilage_ticks: Self::days(3000), // Effectively never, and true of honey
             default_preparation: PreparationState::Raw, // Honey is special - raw but fully usable
         });
 
         // Ale - fermented grain beverage
         self.entries.insert(ItemType::Ale, FoodTemplate {
             base_nutrition: NutritionalContent::new(45.0, 5.0, 10.0, 0.9),
-            base_spoilage_ticks: 20160, // 14 days
+            base_spoilage_ticks: Self::days(80),
             default_preparation: PreparationState::Fermented,
         });
 
@@ -431,7 +461,7 @@ impl FoodDatabase {
         // High in micronutrients (vitamins from fruits/vegetables)
         self.entries.insert(ItemType::Food, FoodTemplate {
             base_nutrition: NutritionalContent::new(20.0, 5.0, 35.0, 0.8),
-            base_spoilage_ticks: 2160, // 1.5 days
+            base_spoilage_ticks: Self::days(12), // Berries off the bush. Half a season and they are jam on the inside of the pack
             default_preparation: PreparationState::Raw,
         });
     }
@@ -810,13 +840,17 @@ mod tests {
         let db = FoodDatabase::new();
         let honey = db.get(&ItemType::Honey).unwrap();
 
-        // Honey has very long spoilage time
-        assert!(honey.base_spoilage_ticks > 50000);
+        // Honey outlasts the person carrying it, which is what "never spoils"
+        // means on a calendar where a life is about eight thousand ticks.
+        // This used to be written as a bare number of ticks against the old
+        // 1440-tick day - see `FoodDatabase::days`.
+        let a_life = 8000;
+        assert!(honey.base_spoilage_ticks > a_life * 2);
 
         let mut food = db.create_food_data(&ItemType::Honey, 0).unwrap();
-        food.update_freshness(5000); // 5000 ticks later
+        food.update_freshness(a_life / 4);
 
-        // Still fresh (at 5% degradation, should be 0.95)
+        // Still fresh a couple of years on
         assert!(food.freshness > 0.9);
         assert_eq!(food.freshness_description(), "Fresh");
     }

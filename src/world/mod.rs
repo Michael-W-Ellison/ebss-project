@@ -175,6 +175,15 @@ pub struct Dropped {
     pub where_it_is: Position,
     /// The tick it was left, which is what the weather counts from
     pub since: u32,
+    /// How much extra ageing the weather has done to it, over and above the
+    /// passing of time.
+    ///
+    /// Kept as its own count rather than by winding the food's `created_tick`
+    /// backwards, which was the first attempt and silently did nothing: a
+    /// thing dropped at tick zero has a `created_tick` of zero, and
+    /// `saturating_sub` on a `u32` at zero is a very quiet no-op.
+    #[serde(default)]
+    pub weathered: u32,
 }
 
 /// A hole in the ground with food in it.
@@ -199,9 +208,13 @@ impl Pit {
     /// carries fifty and a hole in the ground takes six times that.
     pub const WHAT_A_PIT_TAKES: u32 = 300;
 
-    /// What is in there, counted.
+    /// What is in there to eat, counted. The lining is not stores.
     pub fn how_much_is_in_it(&self) -> u32 {
-        self.holds.iter().map(|item| item.quantity).sum()
+        self.holds
+            .iter()
+            .filter(|item| Self::is_it_food(item))
+            .map(|item| item.quantity)
+            .sum()
     }
 
     /// Whether there is room for more.
@@ -210,8 +223,35 @@ impl Pit {
     }
 
     /// Whether there is anything in it worth walking to.
+    ///
+    /// The vessel it is lined with does not count. A hungry man who walks to
+    /// a store and comes back with the bowl has not eaten.
     pub fn has_food(&self) -> bool {
-        self.holds.iter().any(|item| item.quantity > 0)
+        self.holds.iter().any(|item| Self::is_it_food(item))
+    }
+
+    /// Whether a thing in the pit is something to eat rather than the vessel
+    /// it is kept in.
+    fn is_it_food(item: &crate::agents::InventoryItem) -> bool {
+        item.quantity > 0 && !matches!(item.item_id.as_str(), "bowl" | "basket")
+    }
+
+    /// What is in there to eat, by name.
+    pub fn something_to_eat(&self) -> Option<&str> {
+        self.holds
+            .iter()
+            .find(|item| Self::is_it_food(item))
+            .map(|item| item.item_id.as_str())
+    }
+
+    /// Whether somebody put a vessel in it before they filled it.
+    ///
+    /// A bowl or a basket between the food and the damp is worth as much as
+    /// the hole is: see `World::what_is_buried_keeps`.
+    pub fn is_lined(&self) -> bool {
+        self.holds
+            .iter()
+            .any(|item| matches!(item.item_id.as_str(), "bowl" | "basket"))
     }
 
     /// Take some of a thing out.
@@ -391,6 +431,7 @@ impl World {
             item,
             where_it_is,
             since: tick,
+            weathered: 0,
         });
     }
 
@@ -443,9 +484,22 @@ impl World {
     /// What has gone off in there rots away like anything else.
     fn what_is_buried_keeps(&mut self) {
         let now = self.tick;
-        let ageing = now % Self::HOW_OFTEN_THE_GROUND_LETS_IT_AGE == 0;
 
         for pit in self.pits.iter_mut() {
+            // Bare earth is cool and dark and keeps a thing rather better
+            // than a pack does. Earth with a vessel in it keeps it better
+            // again: what actually gets at buried food is the ground itself -
+            // damp, and everything that lives in it - and a bowl or a basket
+            // between the two is the difference between a store and a hole
+            // full of rot.
+            let every = if pit.is_lined() {
+                Self::HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE
+            } else {
+                Self::HOW_OFTEN_BARE_EARTH_LETS_IT_AGE
+            };
+
+            let ageing = now % every == 0;
+
             for item in pit.holds.iter_mut() {
                 if let Some(food) = item.food_data.as_mut() {
                     if pit.covered && !ageing {
@@ -465,14 +519,27 @@ impl World {
         }
     }
 
-    /// One tick in this many is the only one that tells on food under the
-    /// earth.
+    /// One tick in this many is the only one that tells on food buried in
+    /// bare earth.
     ///
-    /// Four, so a pit keeps a thing four times as long as a pack does. Not a
-    /// larder in any modern sense - a hole in the ground is not a cellar -
-    /// but the difference between eating what you found today and eating in
-    /// February.
-    const HOW_OFTEN_THE_GROUND_LETS_IT_AGE: u32 = 4;
+    /// Twice as long as a pack, which is what cool and dark are worth on
+    /// their own.
+    const HOW_OFTEN_BARE_EARTH_LETS_IT_AGE: u32 = 2;
+
+    /// And in earth with a vessel between the food and the ground.
+    ///
+    /// Four times a pack. What gets at buried food is the ground itself, and
+    /// a bowl or a basket in the way of it is the difference between a store
+    /// and a hole full of rot.
+    const HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE: u32 = 4;
+
+    /// How much faster a thing goes off lying in the open than it does in a
+    /// pack.
+    const WHAT_THE_WEATHER_ADDS: u32 = 3;
+
+    /// How often the weathering pass runs, which is what the extra ageing is
+    /// reckoned against.
+    const HOW_OFTEN_THE_WEATHER_GETS_AT_IT: u32 = 10;
 
     /// The pit dug on this tile, if there is one.
     pub fn pit_at(&self, where_it_is: Position) -> Option<&Pit> {
@@ -516,7 +583,37 @@ impl World {
         let now = self.tick;
         let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
 
+        // What is lying out in the weather goes off faster than what is in
+        // somebody's pack. Sun, rain and flies get at it, and until now they
+        // did not: a thing picked up off the grass a fortnight after it was
+        // dropped was exactly as fresh as the day it fell.
+        for left in self.dropped.iter_mut() {
+            if left.item.food_data.is_none() {
+                continue;
+            }
+
+            left.weathered += (Self::WHAT_THE_WEATHER_ADDS - 1)
+                * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+
+            let weathered = left.weathered;
+            if let Some(food) = left.item.food_data.as_mut() {
+                food.update_freshness(now + weathered);
+            }
+        }
+
         self.dropped.retain(|left| {
+            // Food that has gone off entirely is not food any more, whatever
+            // the clock says about how long it has lain there
+            if left
+                .item
+                .food_data
+                .as_ref()
+                .is_some_and(|food| food.freshness <= 0.0)
+            {
+                back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
+                return false;
+            }
+
             let lain = now.saturating_sub(left.since);
 
             let gone = if left.item.food_data.is_some() {

@@ -45,6 +45,8 @@ pub mod combat_verb_tests;
 pub mod examine_tests;
 pub mod fluid_tests;
 pub mod hands_tests;
+pub mod beast_tests;
+pub mod keeping_tests;
 pub mod larder_tests;
 pub mod sacrifice_tests;
 pub mod theft_tests;

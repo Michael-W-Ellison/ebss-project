@@ -375,6 +375,13 @@ impl Simulation {
         self.feel_about_what_stands_in_the_way();
         self.square_up_to_the_people_i_resent();
 
+        // The same question from the other side. A beast has two drives worth
+        // the name - eat, and do not be eaten - and until now it had neither
+        // opinion about us: a deer stood placidly in a field while somebody
+        // walked up to it with a spear.
+        self.what_the_beasts_make_of_us();
+        self.the_beasts_act_on_it();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -2850,6 +2857,18 @@ impl Simulation {
     /// February.
     const WHAT_DIGGING_A_PIT_COSTS: f32 = 22.0;
 
+    /// How near a fire you have to be to hang something in the smoke of it.
+    const WITHIN_REACH_OF_THE_HEARTH: i32 = 2;
+
+    /// How far gone a thing can be and still be worth preserving.
+    ///
+    /// Preserving does not undo what has already happened to it: all you get
+    /// from drying carrion is dry carrion.
+    const TOO_FAR_GONE_TO_KEEP: f32 = 0.5;
+
+    /// What laying food out or hanging it in the smoke takes.
+    const WHAT_DRYING_COSTS: f32 = 3.0;
+
     /// How much stone comes out of a hole somebody digs.
     const WHAT_COMES_OUT_OF_A_HOLE: u32 = 3;
 
@@ -3055,6 +3074,16 @@ impl Simulation {
 
         let spare = agent.what_food_i_can_spare();
 
+        // Dry it before you bury it. A hole in the ground makes a thing keep
+        // four times as long; drying makes it keep twenty. Doing both is what
+        // a store is actually for, and doing neither is why nothing anybody
+        // put by ever lasted the winter.
+        if let Some((what, _)) = spare.clone() {
+            if agent.is_it_worth_drying(&what) {
+                return Some(Action::Dry { what });
+            }
+        }
+
         // Something to bury, and somewhere to bury it
         if let Some((what, _)) = spare.clone() {
             if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
@@ -3131,11 +3160,7 @@ impl Simulation {
             .world
             .nearest_full_pit(here, Self::WORTH_WALKING_TO_THE_STORE)?;
 
-        let what = pit
-            .holds
-            .iter()
-            .find(|held| held.quantity > 0)
-            .map(|held| held.item_id.clone())?;
+        let what = pit.something_to_eat()?.to_string();
 
         if paces == 0 {
             return Some(Action::PickUp { what });
@@ -4864,6 +4889,228 @@ impl Simulation {
             }
         }
     }
+
+    /// What the beasts make of us.
+    ///
+    /// The simplified other half of `feel_about_what_stands_in_the_way`. An
+    /// animal has two drives worth the name - eat, and do not be eaten - and
+    /// this is the second: run from what you cannot beat, turn on what you
+    /// can. `AnimalState::Fleeing` and `AnimalState::Attacking` have been in
+    /// the model since the model had animals and nothing had ever set either
+    /// of them, so a deer stood placidly in a field while somebody walked up
+    /// to it with a spear.
+    ///
+    /// Temper decides how kindly the odds get read, and a Passive thing never
+    /// stands its ground however the arithmetic comes out - a rabbit that
+    /// fights a wolf is not a rabbit.
+    fn what_the_beasts_make_of_us(&mut self) {
+        use crate::environment::fauna::AnimalState;
+
+        // Everybody who might be a threat to something, and what they are
+        // worth in a fight
+        let people: Vec<((i32, i32), f32, uuid::Uuid)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| {
+                let armed = agent
+                    .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)
+                    .is_some();
+
+                let worth = Self::WHAT_A_PERSON_IS_WORTH_TO_A_BEAST
+                    * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 };
+
+                (
+                    (agent.state.position.0, agent.state.position.1),
+                    worth,
+                    agent.id,
+                )
+            })
+            .collect();
+
+        // And the beasts, which are a threat to each other
+        let beasts: Vec<((i32, i32), f32, uuid::Uuid, bool)> = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive())
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                let worth = Self::what_a_beast_is_worth_in_a_fight(
+                    animal.current_health,
+                    species.health,
+                    species.attack_damage,
+                );
+                let hunts = species.behavior.how_much_it_menaces_you() >= 1.0;
+                Some((animal.position, worth, animal.id, hunts))
+            })
+            .collect();
+
+        let mut made_up_their_minds: Vec<(uuid::Uuid, AnimalState)> = Vec::new();
+
+        for animal in self.world.animals.get_all().iter() {
+            if !animal.is_alive() || !animal.is_wild() {
+                continue;
+            }
+
+            let Some(species) = self.world.animals.get_species(&animal.species_id) else {
+                continue;
+            };
+
+            let mine = Self::what_a_beast_is_worth_in_a_fight(
+                animal.current_health,
+                species.health,
+                species.attack_damage,
+            );
+
+            // The worst thing within sight of it: a person, or something
+            // bigger than itself that eats meat
+            let from_people = people
+                .iter()
+                .map(|(at, worth, who)| (*at, *worth, *who))
+                .filter(|(at, _, _)| Self::within(*at, animal.position, Self::AS_FAR_AS_A_BEAST_LOOKS));
+
+            let from_beasts = beasts
+                .iter()
+                .filter(|(_, _, who, hunts)| *hunts && *who != animal.id)
+                .map(|(at, worth, who, _)| (*at, *worth, *who))
+                .filter(|(at, _, _)| Self::within(*at, animal.position, Self::AS_FAR_AS_A_BEAST_LOOKS));
+
+            let worst = from_people
+                .chain(from_beasts)
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            let Some((where_it_is, coming, who)) = worst else {
+                continue;
+            };
+
+            // Temper reads the odds. A rabbit never fights.
+            let nerve = species.behavior.how_readily_it_stands_its_ground();
+            let stands = nerve > 0.0 && mine * nerve >= coming * Self::WHAT_IT_TAKES_TO_TURN_AND_FACE;
+
+            made_up_their_minds.push((
+                animal.id,
+                if stands {
+                    AnimalState::Attacking { target_id: who }
+                } else {
+                    AnimalState::Fleeing {
+                        from_position: where_it_is,
+                    }
+                },
+            ));
+        }
+
+        for (which, made_up) in made_up_their_minds {
+            if let Some(animal) = self
+                .world
+                .animals
+                .get_all_mut()
+                .iter_mut()
+                .find(|animal| animal.id == which)
+            {
+                animal.state = made_up;
+                animal.state_timer = Self::HOW_LONG_A_BEAST_KEEPS_ITS_NERVE;
+            }
+        }
+    }
+
+    /// And then they do something about it.
+    ///
+    /// Fleeing puts ground between the animal and whatever it saw. Standing
+    /// its ground keeps it where it is - what happens next is whoever came at
+    /// it getting bitten, which the hunt already handles.
+    fn the_beasts_act_on_it(&mut self) {
+        use crate::environment::fauna::AnimalState;
+
+        let width = self.world.grid.width as i32;
+        let height = self.world.grid.height as i32;
+
+        let mut bolted: Vec<(uuid::Uuid, (i32, i32))> = Vec::new();
+
+        for animal in self.world.animals.get_all().iter() {
+            let AnimalState::Fleeing { from_position } = animal.state else {
+                continue;
+            };
+
+            if !animal.is_alive() {
+                continue;
+            }
+
+            let dx = animal.position.0 - from_position.0;
+            let dy = animal.position.1 - from_position.1;
+            let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
+
+            let bolt = Self::HOW_FAR_A_FRIGHTENED_BEAST_GETS as f32;
+            let landed = (
+                (animal.position.0 as f32 + dx as f32 / span * bolt) as i32,
+                (animal.position.1 as f32 + dy as f32 / span * bolt) as i32,
+            );
+
+            let landed = (
+                landed.0.clamp(0, width - 1),
+                landed.1.clamp(0, height - 1),
+            );
+
+            if self.is_passable_tile(landed.0, landed.1) {
+                bolted.push((animal.id, landed));
+            }
+        }
+
+        for (which, to) in bolted {
+            if let Some(animal) = self
+                .world
+                .animals
+                .get_all_mut()
+                .iter_mut()
+                .find(|animal| animal.id == which)
+            {
+                animal.position = to;
+                animal.use_stamina(Self::WHAT_BOLTING_COSTS_A_BEAST);
+            }
+        }
+    }
+
+    /// What a beast is worth in a fight, on the same scale everything else is
+    /// reckoned on: how sound it is, and what it can do with that.
+    fn what_a_beast_is_worth_in_a_fight(health: f32, full: f32, damage: f32) -> f32 {
+        let condition = (health / full.max(1.0)).clamp(0.0, 1.0);
+        condition * (damage / 20.0).clamp(0.1, 2.0)
+    }
+
+    fn within(one: (i32, i32), other: (i32, i32), paces: i32) -> bool {
+        (one.0 - other.0).abs().max((one.1 - other.1).abs()) <= paces
+    }
+
+    /// What a person on their own is worth to something with teeth.
+    ///
+    /// About a wolf. People are slow, soft and have no claws, and what makes
+    /// them dangerous is what is in their hands.
+    const WHAT_A_PERSON_IS_WORTH_TO_A_BEAST: f32 = 0.6;
+
+    /// And what something in those hands adds.
+    const WHAT_A_SPEAR_ADDS: f32 = 2.2;
+
+    /// How much better than the thing coming at it an animal has to be before
+    /// it turns and faces it.
+    ///
+    /// Above one, because running is the safe answer and a wild thing that
+    /// gets this wrong does not get to be wrong twice.
+    const WHAT_IT_TAKES_TO_TURN_AND_FACE: f32 = 1.1;
+
+    /// How far a beast looks about itself.
+    const AS_FAR_AS_A_BEAST_LOOKS: i32 = 7;
+
+    /// How far a frightened animal gets in one turn. Further than a person:
+    /// a deer outruns anything on two legs.
+    const HOW_FAR_A_FRIGHTENED_BEAST_GETS: i32 = 6;
+
+    /// What that costs it.
+    const WHAT_BOLTING_COSTS_A_BEAST: f32 = 3.0;
+
+    /// How long an animal goes on being frightened before it settles again.
+    const HOW_LONG_A_BEAST_KEEPS_ITS_NERVE: u32 = 3;
 
     /// How close something that would eat you counts as close
     const A_THREAT_NEARBY: i32 = 8;
@@ -10089,6 +10336,65 @@ impl Simulation {
                     .with_message(format!("Looked at a {what}: it is for a {worth_a_look}"))
             },
 
+            Action::Dry { what } => {
+                use crate::world::nutrition::PreparationState;
+
+                let over_a_fire = self
+                    .nearest_fire_from(
+                        self.population.agents[agent_index].state.position,
+                        Self::WITHIN_REACH_OF_THE_HEARTH,
+                        true,
+                    )
+                    .is_some();
+
+                let agent = &mut self.population.agents[agent_index];
+
+                let Some(item) = agent.inventory.get_item_mut(what) else {
+                    return ActionResult::failure(format!("No {what} to dry"));
+                };
+
+                let Some(food) = item.food_data.as_mut() else {
+                    return ActionResult::failure(format!("{what} is not food"));
+                };
+
+                // Only raw food is worth drying. Anything already preserved
+                // is done, and anything cooked has had its chance.
+                if food.preparation != PreparationState::Raw {
+                    return ActionResult::failure(format!("That {what} is already seen to"));
+                }
+
+                // And it has to still be worth keeping. You cannot dry
+                // something that has already turned - all that gets you is
+                // dry carrion.
+                if food.freshness < Self::TOO_FAR_GONE_TO_KEEP {
+                    return ActionResult::failure(format!("That {what} is past saving"));
+                }
+
+                // In the air, or in the smoke of a fire. Smoke is quicker and
+                // works in any weather; laid out in the open it keeps longer,
+                // and it is the only one of the two a people without fire can
+                // do at all.
+                let how = if over_a_fire {
+                    PreparationState::Smoked
+                } else {
+                    PreparationState::Dried
+                };
+
+                food.set_preparation(how, tick_now);
+
+                let how_many = item.quantity;
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Cooking, 14, tick_now);
+
+                debug!("Agent {} {} {how_many} {what}", agent.id, how.name());
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Preparedness, -0.4)
+                    .with_energy_cost(Self::WHAT_DRYING_COSTS)
+                    .with_message(format!("{} {how_many} {what}", how.name()))
+            },
+
             Action::Excavate => {
                 use crate::world::{Pit, Position};
 
@@ -10194,6 +10500,32 @@ impl Simulation {
                         .practise(crate::agents::SkillType::Farming, 12, tick_now);
                 }
 
+                // A vessel goes in first, if there is one to spare. What
+                // gets at buried food is the ground itself, and a bowl or a
+                // basket in the way of it doubles what the hole is worth.
+                let lining = {
+                    let agent = &self.population.agents[agent_index];
+                    ["bowl", "basket"]
+                        .into_iter()
+                        .find(|vessel| agent.how_many_i_have(vessel) > 1)
+                };
+
+                if let Some(vessel) = lining {
+                    if self.world.pit_at(here).is_some_and(|pit| !pit.is_lined()) {
+                        self.population.agents[agent_index]
+                            .inventory
+                            .remove_item(vessel, 1);
+
+                        if let Some(pit) = self.world.pit_at_mut(here) {
+                            pit.put_in(crate::agents::InventoryItem::new_with_weight(
+                                vessel.to_string(),
+                                1,
+                                1.0,
+                            ));
+                        }
+                    }
+                }
+
                 if let Some(pit) = self.world.pit_at_mut(here) {
                     pit.put_in(going_in);
                     pit.covered = true;
@@ -10226,6 +10558,10 @@ impl Simulation {
                     .world
                     .pit_at_mut(here)
                     .and_then(|pit| {
+                        if matches!(what.as_str(), "bowl" | "basket") {
+                            return None;
+                        }
+
                         let wanted = pit
                             .holds
                             .iter()

@@ -466,6 +466,23 @@ pub const HEAT: Verb = sometimes(
     Some("craft"),
 );
 
+/// Laying food out in the air, or hanging it over a fire.
+///
+/// Not one of the specification's sixty-eight - it was added when food was
+/// first put on a clock it could actually rot against. `PreparationState`
+/// has carried Dried, Smoked, Salted, Pickled and Fermented since it was
+/// written, with a spoilage multiplier for each, and nothing had ever set any
+/// of them: there was no reason to preserve anything in a world where meat
+/// took a year and a quarter to turn.
+pub const DRY: Verb = verb(
+    "dry",
+    Family::Thermal,
+    Targets::AThingHeld,
+    Wants::BareHands,
+    &[Changes::WhatAThingIs],
+    Some("dry"),
+);
+
 pub const COOL: Verb = verb(
     "cool",
     Family::Thermal,
@@ -996,7 +1013,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 3
     SMASH, CRUSH, CUT, SCRAPE, PIERCE, DRILL, SPLIT,
     // 4
-    HEAT, COOL, QUENCH, IGNITE, MELT, ROAST,
+    HEAT, DRY, COOL, QUENCH, IGNITE, MELT, ROAST,
     // 5
     MIX, POUR, SOAK, COAT, BOIL, LEACH, FERMENT,
     // 6

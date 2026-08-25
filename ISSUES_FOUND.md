@@ -1489,18 +1489,93 @@ the sacrifice that #21 wanted still has no occasion.
 
 That is the thing to build next, and it is upstream of both.
 
+### 24. Food was on a clock a hundred and twenty times too slow
+
+This is the root of #21 and #23 and of a good deal else, and it was a units
+mistake.
+
+Every spoilage time in `FoodDatabase::register_all_foods` was written as a
+day-count and stored as a number of ticks at 1440 ticks to the day. The
+calendar was later put on a scale a life fits inside — `TICKS_PER_DAY` is 12,
+a season is twenty-four days, a year is 1,152 ticks — and the food tables were
+not brought with it. The comments still say what the author meant:
+
+| | written as | actually lasted |
+|---|---|---|
+| meat | "1 day raw" | 120 days — 1.25 years |
+| fish | "0.5 day — spoils very fast" | 60 days |
+| berries | "1.5 days" | 180 days |
+| grain | "10 days — lasts long when dry" | 1,200 days — 12.5 years |
+| ale | "14 days" | 17.5 years |
+
+Nothing in this world spoiled. Everything downstream followed: nobody ever
+went hungry (#21), a larder was insurance against nothing (#23), and six of
+the nine `PreparationState` variants — Dried, Smoked, Salted, Pickled,
+Fermented — had never once been reached by anything, because there was no
+reason to preserve anything. `set_preparation` had no caller at all.
+
+**The first cut used the day-counts as written**, and that was wrong in a
+different way. A tick on this calendar is an *action*, not a minute: an agent
+gets twelve of them in a day, and walking out to a berry patch and back is
+thirty or forty. Food that lasts two days lasts less than the trip that
+fetches it. Nobody ever held a surplus, so nothing was ever dried or buried —
+digs, burials and stores all went to exactly zero — and the settlement lost a
+fifth of its people for nothing. The times are on the scale of the season
+instead, which is the unit a store is actually against: meat ten days, berries
+twelve, grain sixty.
+
+**What it costs, sixteen worlds against sixteen:**
+
+| | before | after |
+|---|---|---|
+| people at ten thousand ticks | 66.2 ± 4.9 | 52.4 ± 7.0 |
+| food dried or smoked | 0 | 3.6 |
+| food buried | 7.1 | 23.8 |
+| still in the ground at the end | 6.9 | 0.1 |
+| carrying food | 2.8 | 0.5 |
+| hunts | 53.6 | 10.4 |
+| burials | 18.5 | 20.8 |
+
+A fifth of the population, at t = -1.6. It is worth being plain that this is
+the price of correcting a bug rather than the bug itself: food that never
+rots was wrong, and the user asked three times for it to decay. But two of
+those rows point at structural things the clock only exposed, and neither is
+fixed here.
+
+**Hunting fell five-fold and it is not the learning system.** Probing a
+settlement directly: forty of forty-seven living agents still believe hunting
+pays, and there were thirty-five attempts in ten thousand ticks. Hunting sits
+last in the Hunger chain, behind `food_action`, and `food_action` almost
+always finds a berry bush. Agents are hungry far more often now, so Hunger
+wins the drive contest far more often, and every time it does the chain stops
+at the nearest bush. A permanently hungry people forages and never hunts,
+which is the opposite of what hunger should do. The chain wants restructuring
+and that is its own piece of work with its own measurement.
+
+**Nothing stays in the store.** Twenty-four burials a world and a tenth of a
+unit still in the ground at the end. Only 3.6 of those burials were of dried
+food, so most of what goes in is raw berries at half a season, doubled by
+bare earth to exactly one season — a store laid down in autumn is empty by
+spring. Lining a pit with a bowl would double it again, and agents almost
+never have a bowl to spare.
+
+Also worth recording, because it wasted a measurement round: winding a food's
+`created_tick` backwards to age it faster is a silent no-op for anything
+created at tick zero, because `saturating_sub` on a `u32` at zero does
+nothing. Weathering is counted on the `Dropped` record itself now.
+
 ## Housekeeping
 
-### 24. Committed backup file
+### 25. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 25. Build warnings
+### 26. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 26. Placeholder package metadata
+### 27. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
