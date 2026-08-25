@@ -2749,11 +2749,17 @@ impl Simulation {
         use crate::agents::InventoryItem;
 
         let current_tick = self.current_tick;
+
+        // And how much there was on it to begin with, which is a question
+        // about the time of year - see `Climate::how_fat_the_beasts_are`.
+        let condition = self.world.climate.how_fat_the_beasts_are();
+
         dropped
             .iter()
             .map(|stack| {
-                let off_the_carcass =
-                    ((stack.quantity as f32 * with_a_knife).round() as u32).max(1);
+                let off_the_carcass = ((stack.quantity as f32 * with_a_knife * condition).round()
+                    as u32)
+                    .max(1);
                 let item_id =
                     crate::agents::storage_integration::butchered_item_id(&stack.material_id)
                         .to_string();
@@ -2771,6 +2777,23 @@ impl Simulation {
             })
             .collect()
     }
+
+    /// How often a throw tells, for somebody with no skill and no spear.
+    ///
+    /// Everything else - the hand, the shaft, being up on a horse - is added
+    /// to this. It was six in ten, which made hunting a matter of finding an
+    /// animal rather than of killing one.
+    const A_THROW_THAT_TELLS: f32 = 0.3;
+
+    /// What a throw that tells takes out of an animal.
+    const WHAT_ONE_THROW_TAKES_OUT_OF_IT: f32 = 0.35;
+
+    /// What a throw costs, whether or not it lands.
+    ///
+    /// Hunting is walking, waiting, and throwing, and most of it comes to
+    /// nothing. Three or four throws to bring a deer down at twenty-two apiece
+    /// is a morning's work for a morning's meat.
+    const WHAT_A_THROW_COSTS: f32 = 22.0;
 
     /// How far an agent will go after prey it has spotted.
     ///
@@ -2933,7 +2956,18 @@ impl Simulation {
     const A_GOOD_REACH: f32 = 60.0;
 
     /// What comes out of the water on a cast that works
-    const FISH_PER_CAST: u32 = 3;
+    const FISH_PER_CAST: u32 = 2;
+
+    /// How often a thrust tells in an empty reach, for somebody with nothing
+    /// in his hands.
+    ///
+    /// Everything worth having is added to this: the thickness of the run, the
+    /// hand, a rod, a spear. On its own it is a man standing in a river
+    /// hoping.
+    const A_THRUST_THAT_TELLS: f32 = 0.15;
+
+    /// What standing in the water costs, whether or not anything takes.
+    const WHAT_A_THRUST_COSTS: f32 = 8.0;
 
     /// What share of a fish is guts, heads and bone rather than meat.
     ///
@@ -6116,14 +6150,24 @@ impl Simulation {
                     // Get mounted combat bonus (hunting from horseback is advantageous!)
                     let mount_bonus = agent.transport.mounted_combat_bonus();
 
-                    let success_prob = (0.6 + (hunting_skill as f32 * 0.03) + weapon_bonus
+                    // Hunting is slow work. It used to land six throws in ten
+                    // for anybody at all, which made a deer a thing you walked
+                    // up to rather than a thing you stalked; a stone-age hunt
+                    // is mostly missing. What makes the difference is the
+                    // spear and the hand that throws it, not the walking up.
+                    let success_prob = (Self::A_THROW_THAT_TELLS
+                        + (hunting_skill as f32 * 0.03)
+                        + weapon_bonus
                         + mount_bonus)
-                        .clamp(0.2_f32, 0.95_f32);
+                        .clamp(0.1_f32, 0.9_f32);
 
                     if rng.gen_bool(success_prob as f64) {
-                        // Successful hunt - damage the animal
-                        // Base damage is 70% of max health, modified by mount bonus
-                        let base_damage = species.health * 0.7;
+                        // Successful hunt - damage the animal.
+                        //
+                        // A third of what it can take, not two thirds: one
+                        // clean throw did not kill a bull, and a hunt that
+                        // ends on the first hit is not a hunt.
+                        let base_damage = species.health * Self::WHAT_ONE_THROW_TAKES_OUT_OF_IT;
                         let combat_multiplier = 1.0 + mount_bonus;
                         let damage = base_damage * combat_multiplier;
                         animal.take_damage(damage);
@@ -6176,7 +6220,7 @@ impl Simulation {
 
                             let mut result = ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.4)
-                                .with_energy_cost(20.0)
+                                .with_energy_cost(Self::WHAT_A_THROW_COSTS)
                                 .with_experience(5.0)
                                 .with_message(format!("Successfully hunted {} and obtained materials", species.name));
 
@@ -6196,9 +6240,12 @@ impl Simulation {
                                 .skills
                                 .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
 
+                            // A wounded animal is not a meal. It used to
+                            // answer a tenth of a hunger for nothing at all,
+                            // which is a hunt that pays whether or not it
+                            // works.
                             ActionResult::success()
-                                .with_drive_change(DriveType::Hunger, -0.1)
-                                .with_energy_cost(15.0)
+                                .with_energy_cost(Self::WHAT_A_THROW_COSTS)
                                 .with_message(format!("Wounded {} but it escaped", species.name))
                         }
                     } else {
@@ -6223,11 +6270,11 @@ impl Simulation {
                                 "{} turned on the hunter ({:.0} damage)",
                                 species.name, species.attack_damage
                             ))
-                            .with_energy_cost(10.0);
+                            .with_energy_cost(Self::WHAT_A_THROW_COSTS);
                         }
 
                         ActionResult::failure(format!("{} escaped", species.name))
-                            .with_energy_cost(5.0)
+                            .with_energy_cost(Self::WHAT_A_THROW_COSTS)
                     }
                 } else {
                     ActionResult::failure("Animal not found".to_string())
@@ -7845,7 +7892,9 @@ impl Simulation {
                 // How thick the water is decides most of it. A run is a run:
                 // anybody standing in it comes out with something, which is
                 // exactly why a fishery is worth building a life beside and a
-                // deer is not.
+                // deer is not. It is still slow: standing in cold water
+                // waiting for something to come within reach of a thrust is
+                // most of a morning for a couple of fish.
                 let thickness = (standing as f32 / Self::A_GOOD_REACH).clamp(0.0, 1.0);
 
                 // A spear is what a people with no line fishes with, and it
@@ -7857,7 +7906,7 @@ impl Simulation {
                 let hand = (skill / 10.0).clamp(0.0, 0.5)
                     + if rod { 0.2 } else { 0.0 }
                     + (spear - 1.0) * 0.3;
-                let odds = (0.35 + 0.4 * thickness + hand).clamp(0.0, 0.95);
+                let odds = (Self::A_THRUST_THAT_TELLS + 0.4 * thickness + hand).clamp(0.0, 0.9);
 
                 if spear > 1.0 {
                     self.population.agents[agent_index]
@@ -7865,7 +7914,8 @@ impl Simulation {
                 }
 
                 if rng.gen::<f32>() > odds {
-                    return ActionResult::failure("Nothing took".to_string());
+                    return ActionResult::failure("Nothing took".to_string())
+                        .with_energy_cost(Self::WHAT_A_THRUST_COSTS);
                 }
 
                 let caught = Self::FISH_PER_CAST
@@ -7916,7 +7966,7 @@ impl Simulation {
                 ActionResult::success()
                     .with_drive_change(DriveType::Hunger, -0.15)
                     .with_drive_change(DriveType::Sustenance, -0.2)
-                    .with_energy_cost(5.0)
+                    .with_energy_cost(Self::WHAT_A_THRUST_COSTS)
                     .with_message(format!("Took {} fish out of the water", taken))
             },
 

@@ -375,6 +375,12 @@ impl ClimateManager {
         self.calendar.current_season()
     }
 
+    /// How much meat is on a wild animal at this time of year - see
+    /// [`SeasonalCalendar::how_fat_the_beasts_are`].
+    pub fn how_fat_the_beasts_are(&self) -> f32 {
+        self.calendar.how_fat_the_beasts_are()
+    }
+
     /// Get formatted date/time string
     pub fn date_time_string(&self) -> String {
         format!(

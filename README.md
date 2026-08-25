@@ -448,6 +448,22 @@ Agents remember:
 - Social relationships and observed behaviors
 - Discovered crafting recipes
 
+### The turning year
+
+Wild food is seasonal and so are the animals that eat it. What comes off a
+carcass depends on when it was killed: a deer at the end of the autumn carries
+a quarter more than the book says, the same deer at the end of the winter a
+third less. The curve runs continuously round the year and is not straight —
+an animal loses most of what it will lose in the first hard weeks of winter,
+and puts nothing back in the first weeks of spring when there is nothing yet
+to eat.
+
+Hunting and fishing are slow work. A throw lands about a fifth of the time for
+a stone-age hunter and takes a third out of the animal, so a kill is three or
+four throws and every one of them costs the same whether or not it lands. A
+spear-fisher takes about two fish from four casts in a good run and nothing at
+all from a thin one.
+
 ### Patterns
 
 An agent joins what it did to the need that got answered, and to the ground it

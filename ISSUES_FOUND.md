@@ -564,6 +564,32 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
+**Hunting and fishing are now slow work, and it costs nothing.** A throw used
+to land six times in ten for anybody at all and take two thirds of an animal
+out of it, which made a deer a thing you walked up to rather than a thing you
+stalked. A throw now lands 22.5% of the time (from 60.2%) and takes a third,
+so a kill is three or four throws; each costs the same whether or not it lands,
+and a wounded animal that gets away no longer feeds anybody. Spear-fishing the
+same: 40.1% of casts take, from 57.5%, for two fish rather than three, and
+standing in the water costs whether or not anything comes past.
+
+Measured over eight worlds a side of ten thousand ticks, the settlement absorbs
+it: 72.1 alive before and 77.9 after, a difference of 6 at a standard error of
+10. What changes is what people do. They throw three times as many spears
+(462 to 1,400 across eight worlds, because a kill takes several) and they fish
+half as much (13,314 casts to 6,275) - the learning mechanism turning away from
+work that stopped paying. Fewer of them end up in hide or fur, 3.0 a world
+against 1.9, which is the cost of it.
+
+**What comes off a carcass now depends on the time of year.** A deer killed at
+the end of the autumn carries a quarter more than the book says; the same deer
+at the end of the winter carries a third less. The curve runs continuously
+round the year - `SeasonalCalendar::how_fat_the_beasts_are` - and is not
+straight: an animal loses most of what it is going to lose in the first hard
+weeks and puts nothing back in the first weeks of the spring, because running
+both as straight lines put a deer in midwinter in the same condition as a deer
+in midsummer.
+
 **Tools now cost and return something, and a settlement cannot keep up with
 them.** Until recently a tool was a thing an agent counted: `Inventory` had
 carried durability fields since the beginning, only clothing used them, and a

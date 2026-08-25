@@ -276,6 +276,45 @@ impl SeasonalCalendar {
         Season::progress(self.day_of_year)
     }
 
+    /// How much meat is on a wild animal at this time of year, against what
+    /// the same animal carries at its fattest.
+    ///
+    /// "Killing an animal in late summer or autumn should result in more meat,
+    /// whereas killing an animal in winter and early spring should result in
+    /// less meat."
+    ///
+    /// A deer put on through the summer and the mast season is carrying a
+    /// quarter more than the book says; the same deer in March has spent four
+    /// months living on bark and is carrying a third less. The curve runs
+    /// continuously round the year - each season starts where the last one
+    /// finished - so there is no day on which a herd suddenly doubles.
+    pub fn how_fat_the_beasts_are(&self) -> f32 {
+        let through = self.season_progress();
+
+        // Condition does not run in straight lines. An animal loses most of
+        // what it is going to lose in the first hard weeks of the winter and
+        // then holds on at very little; and it puts nothing back in the first
+        // weeks of the spring, when there is nothing yet to eat, and then
+        // fattens as the grass comes. Running both of those as straight lines
+        // put a deer in midwinter in the same condition as a deer in midsummer,
+        // which is the opposite of what the specification asks for.
+        let (opens, closes, along) = match self.current_season() {
+            Season::Spring => (Self::LEANEST, 0.85, through * through),
+            Season::Summer => (0.85, 1.10, through),
+            Season::Fall => (1.10, Self::FATTEST, through),
+            Season::Winter => (Self::FATTEST, Self::LEANEST, through.powf(0.7)),
+        };
+
+        opens + (closes - opens) * along
+    }
+
+    /// What an animal carries in the last of the autumn, having eaten all
+    /// summer and all through the mast.
+    pub const FATTEST: f32 = 1.25;
+
+    /// And what it carries at the end of a winter spent on bark.
+    pub const LEANEST: f32 = 0.65;
+
     /// Get formatted date string
     pub fn date_string(&self) -> String {
         format!(

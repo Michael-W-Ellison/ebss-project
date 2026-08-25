@@ -323,6 +323,18 @@ fn a_settlement_works_out_what_answers_what() {
         );
     }
 
+    // Put water where the people are. What is under test is whether a
+    // settlement joins the drinking to the drink, not whether a random world
+    // happens to put a spring inside walking distance of where it dropped
+    // them - which it does not always, and this failed about once in fifteen
+    // runs before the water was put there on purpose.
+    let here = simulation.population.agents[0].state.position;
+    simulation.world.resources.push(ResourceNode::new(
+        ResourceType::Water,
+        crate::world::Position::new(here.0, here.1),
+        100_000,
+    ));
+
     for _ in 0..600 {
         simulation.tick();
     }
