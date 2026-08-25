@@ -458,6 +458,14 @@ an animal loses most of what it will lose in the first hard weeks of winter,
 and puts nothing back in the first weeks of spring when there is nothing yet
 to eat.
 
+What a settlement passes goes into the ground under it, and leaves a smell and
+a few seeds. Nobody lies down on fouled ground; they step off it first, which
+is what puts a midden at the edge of a camp rather than in the middle of it.
+The smell goes long before the matter does, and once it has, whatever came
+through whole comes up as food nobody planted - on the ground the people have
+moved on from, because a camp keeps its own midden too foul to grow anything
+while the camp is there.
+
 Hunting and fishing are slow work. A throw lands about a fifth of the time for
 a stone-age hunter and takes a third out of the animal, so a kill is three or
 four throws and every one of them costs the same whether or not it lands. A

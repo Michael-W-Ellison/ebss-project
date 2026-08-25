@@ -349,6 +349,9 @@ impl Simulation {
         // what the fire does to it
         self.somebody_notices_something();
 
+        // And the ground they fouled last season comes up in berries
+        self.what_was_dropped_comes_up();
+
         // Let hungry predators try their luck with the people
         self.process_predator_attacks();
 
@@ -1983,6 +1986,13 @@ impl Simulation {
             DriveType::Rest => {
                 if agent.fatigue.is_sleeping {
                     None
+                } else if let Some(clean) = self.somewhere_that_does_not_stink(agent_position) {
+                    // "Waste should smell unpleasant and repulse the agents."
+                    // Nobody lies down in it. This is the repulsion: a man who
+                    // wants to sleep and is standing on a midden moves off it
+                    // first, which over a settlement's life is what puts the
+                    // midden at the edge of the camp rather than in it.
+                    Some(Action::Move { target: clean })
                 } else {
                     Some(Action::Sleep { duration: 10 })
                 }
@@ -2309,6 +2319,110 @@ impl Simulation {
             }
         }
     }
+
+    /// How far a man will walk to get off fouled ground.
+    ///
+    /// Not far. The point is to step off the midden, not to leave the country.
+    const OFF_THE_MIDDEN: i32 = 3;
+
+    /// Clean ground within a step or two, for somebody standing on a midden.
+    ///
+    /// `None` when the ground underfoot is fine, which is the ordinary case
+    /// and costs one lookup.
+    fn somewhere_that_does_not_stink(
+        &self,
+        from: (i32, i32, i32),
+    ) -> Option<(i32, i32, i32)> {
+        use crate::world::Position;
+
+        let here = Position::new(from.0, from.1);
+        let underfoot = self.world.grid.get_tile(&here)?;
+        if !underfoot.soil.is_foul() {
+            return None;
+        }
+
+        let mut best: Option<((i32, i32, i32), f32)> = None;
+
+        for dy in -Self::OFF_THE_MIDDEN..=Self::OFF_THE_MIDDEN {
+            for dx in -Self::OFF_THE_MIDDEN..=Self::OFF_THE_MIDDEN {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+
+                let there = Position::new(from.0 + dx, from.1 + dy);
+                let Some(tile) = self.world.grid.get_tile(&there) else {
+                    continue;
+                };
+                if tile.soil.is_foul() || !tile.terrain.is_walkable() {
+                    continue;
+                }
+
+                // The nearest clean tile, so that this is a step aside rather
+                // than a march.
+                let how_far = (dx.abs() + dy.abs()) as f32;
+                if best.is_none_or(|(_, best_so_far)| how_far < best_so_far) {
+                    best = Some(((there.x, there.y, from.2), how_far));
+                }
+            }
+        }
+
+        best.map(|(where_it_is, _)| where_it_is)
+    }
+
+    /// What a midden turns into, once it has stopped being a midden.
+    ///
+    /// "If the agents are expelling their waste and piling it away from their
+    /// tents, then over time the waste should break down and seeds from the
+    /// plants they have eaten should sprout."
+    ///
+    /// Everything it needs is already on the tile: the seeds that came through
+    /// whole, the nutrient the rot released, and enough time for the smell to
+    /// go. When all three line up something comes up, and it is food, and
+    /// nobody planted it.
+    fn what_was_dropped_comes_up(&mut self) {
+        use crate::world::{Position, ResourceNode, ResourceType};
+
+        let mut came_up: Vec<Position> = Vec::new();
+
+        for (y, row) in self.world.grid.tiles.iter().enumerate() {
+            for (x, tile) in row.iter().enumerate() {
+                if tile.soil.ready_to_sprout() {
+                    came_up.push(Position::new(x as i32, y as i32));
+                }
+            }
+        }
+
+        for where_it_is in came_up {
+            // Not on top of something already growing there.
+            if self
+                .world
+                .resources
+                .iter()
+                .any(|resource| resource.position == where_it_is)
+            {
+                continue;
+            }
+
+            let seed = match self.world.grid.get_tile_mut(&where_it_is) {
+                Some(tile) => tile.soil.it_came_up(),
+                None => continue,
+            };
+
+            // What comes up is a volunteer, not a field: a few plants off one
+            // midden, and no bigger for a bigger midden.
+            let how_much = ((seed * Self::WHAT_A_MIDDEN_COMES_UP_IN).round() as u32).clamp(1, 8);
+
+            let mut volunteer =
+                ResourceNode::new(ResourceType::Food, where_it_is, how_much);
+            volunteer.amount = how_much;
+            self.world.resources.push(volunteer);
+
+            debug!("Something came up on the midden at {where_it_is:?}");
+        }
+    }
+
+    /// How much comes up off one tile's worth of seed.
+    const WHAT_A_MIDDEN_COMES_UP_IN: f32 = 8.0;
 
     /// The nearest fire within reach, and where it is.
     ///
@@ -3112,7 +3226,8 @@ impl Simulation {
         for (position, waste) in leavings {
             let here = Position::new(position.0, position.1);
             if let Some(tile) = self.world.grid.get_tile_mut(&here) {
-                tile.soil.add_leaf_litter(waste);
+                // Not just litter: a midden also has a smell and seeds in it.
+                tile.soil.somebody_voided_here(waste);
             }
         }
 
@@ -4319,6 +4434,24 @@ impl Simulation {
 
             if rot > 0.0 {
                 sources.push((agent.state.position, ScentType::Decay, rot));
+            }
+        }
+
+        // A midden. "Waste should smell unpleasant and repulse the agents":
+        // this is the smell of it. It reaches further than a berry does and
+        // nowhere near as far as a cooking fire, which is about right for
+        // something you notice when you are nearly standing in it.
+        for (y, row) in self.world.grid.tiles.iter().enumerate() {
+            for (x, tile) in row.iter().enumerate() {
+                if !tile.soil.is_foul() {
+                    continue;
+                }
+
+                let here = (x as i32, y as i32, 0);
+                let strength = (tile.soil.fouling
+                    / crate::world::soil::Soil::AS_FOUL_AS_IT_GETS)
+                    .clamp(0.0, 1.0);
+                sources.push((here, ScentType::Decay, strength));
             }
         }
 

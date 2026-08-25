@@ -581,6 +581,29 @@ half as much (13,314 casts to 6,275) - the learning mechanism turning away from
 work that stopped paying. Fewer of them end up in hide or fur, 3.0 a world
 against 1.9, which is the cost of it.
 
+**A midden smells, is walked away from, and comes up in berries - slowly.**
+Waste had been going into the ground as leaf litter since the nutrient loop was
+built, and that was all it did. It now also leaves the two things that make a
+midden a midden: a smell that reaches a few tiles and is emitted as
+`ScentType::Decay`, and seed that came through whole. A man who wants to lie
+down on fouled ground steps off it first, which over a settlement's life is
+what puts the midden at the edge of a camp rather than in it. Once the smell
+has gone - which happens an order of magnitude faster than the matter breaks
+down - whatever was in it comes up as food nobody planted.
+
+Measured at ten thousand ticks: about a thousand tiles carry fouling, a dozen
+to seventeen are foul enough at once to be walked away from, and every one of
+them carries seed. Food nodes went from 25 to 27 in one world of two and stayed
+at 25 in the other. So the loop closes, and it closes rarely, for a reason that
+is correct rather than broken: a camp keeps its own midden too foul to grow
+anything for as long as the camp is there, and what comes up comes up on ground
+the people have moved on from. Watching a settlement that never moves will
+never show it.
+
+One number had to be found by measuring. `ENOUGH_TO_COME_UP` was five times
+higher to begin with, and of a thousand tiles carrying seed not one carried
+enough: people move about, and no single tile ever caught up.
+
 **What comes off a carcass now depends on the time of year.** A deer killed at
 the end of the autumn carries a quarter more than the book says; the same deer
 at the end of the winter carries a third less. The curve runs continuously

@@ -32,6 +32,25 @@ pub struct Soil {
 
     /// Trunks, branches, bone: dense, dry inside, and slow
     pub woody_litter: f32,
+
+    /// Fresh dung lying on the surface: what a midden smells of.
+    ///
+    /// Separate from the litter because it is a different question. Litter is
+    /// about what the ground will have to eat next year; this is about what
+    /// the ground smells of today, and it goes off much faster than it breaks
+    /// down. What it turns into is in the litter already - this is only the
+    /// smell of it, and the seeds in it.
+    #[serde(default)]
+    pub fouling: f32,
+
+    /// Seeds passed through somebody, waiting on the ground they were dropped
+    /// on.
+    ///
+    /// "Seeds from the plants they have eaten should sprout." They come out
+    /// with the waste, sit until the fouling has broken down enough to be soil
+    /// rather than muck, and then come up.
+    #[serde(default)]
+    pub seeds_dropped: f32,
 }
 
 impl Soil {
@@ -172,6 +191,8 @@ impl Soil {
                 TerrainType::Wetland => 0.3,
                 _ => 0.05,
             },
+            fouling: 0.0,
+            seeds_dropped: 0.0,
         }
     }
 
@@ -200,6 +221,63 @@ impl Soil {
     /// Put soft matter on the ground: leaves, dung, spoiled food, offal
     pub fn add_leaf_litter(&mut self, amount: f32) {
         self.leaf_litter = (self.leaf_litter + amount).clamp(0.0, Self::MAX_LITTER);
+    }
+
+    /// What somebody has just passed, with whatever was in it.
+    ///
+    /// Goes into the litter like anything else soft, and additionally leaves
+    /// the two things that make a midden a midden: a smell, and seeds.
+    pub fn somebody_voided_here(&mut self, amount: f32) {
+        self.add_leaf_litter(amount);
+        self.fouling = (self.fouling + amount).clamp(0.0, Self::AS_FOUL_AS_IT_GETS);
+        self.seeds_dropped =
+            (self.seeds_dropped + amount * Self::WHAT_COMES_THROUGH_WHOLE).clamp(0.0, 1.0);
+    }
+
+    /// How foul ground can get before more of it makes no difference.
+    pub const AS_FOUL_AS_IT_GETS: f32 = 2.0;
+
+    /// Ground fouler than this is ground people will not sit on.
+    pub const FOUL_ENOUGH_TO_WALK_AWAY_FROM: f32 = 0.35;
+
+    /// What share of what goes in comes out able to grow.
+    ///
+    /// Most of a berry is digested. The pips are not, which is the whole
+    /// mechanism: a hedge grows where the birds sit.
+    pub const WHAT_COMES_THROUGH_WHOLE: f32 = 0.05;
+
+    /// How much seed has to be lying on a tile before anything comes up.
+    ///
+    /// Two units of waste on the same ground, which is about what a camp
+    /// leaves on one tile over a season. This was five times higher to begin
+    /// with, and measured over six thousand ticks it meant that of a thousand
+    /// tiles carrying seed not one carried enough: people move about, and no
+    /// single tile ever caught up.
+    pub const ENOUGH_TO_COME_UP: f32 = 0.1;
+
+    /// And how far the fouling has to have gone off before the ground under it
+    /// is soil rather than muck.
+    ///
+    /// This is the wait the specification describes: "over time the waste
+    /// should break down and seeds from the plants they have eaten should
+    /// sprout". Nothing grows out of a fresh midden.
+    pub const BROKEN_DOWN_ENOUGH_TO_GROW_IN: f32 = 0.1;
+
+    /// Whether this ground is fouled enough that people will not stay on it.
+    pub fn is_foul(&self) -> bool {
+        self.fouling >= Self::FOUL_ENOUGH_TO_WALK_AWAY_FROM
+    }
+
+    /// Whether what was dropped here is ready to come up.
+    pub fn ready_to_sprout(&self) -> bool {
+        self.seeds_dropped >= Self::ENOUGH_TO_COME_UP
+            && self.fouling <= Self::BROKEN_DOWN_ENOUGH_TO_GROW_IN
+            && self.nutrients > 0.0
+    }
+
+    /// Take the seed off the ground, because it has come up.
+    pub fn it_came_up(&mut self) -> f32 {
+        std::mem::take(&mut self.seeds_dropped)
     }
 
     /// Put dense matter on the ground: trunks, branches, bone
@@ -236,6 +314,13 @@ impl Soil {
         if activity <= 0.0 {
             return 0.0;
         }
+
+        // A midden stops smelling long before it stops being there. This runs
+        // an order of magnitude faster than the rot underneath it, which is
+        // why the ground people walked away from a season ago is ground they
+        // will sit on again.
+        const FOULING_RATE: f32 = 0.006;
+        self.fouling = (self.fouling - self.fouling * FOULING_RATE * activity * ticks).max(0.0);
 
         let from_leaves = (self.leaf_litter * LEAF_RATE * activity * ticks).min(self.leaf_litter);
         let from_wood = (self.woody_litter * WOOD_RATE * activity * ticks).min(self.woody_litter);
