@@ -234,6 +234,9 @@ pub enum Action {
     TakeFrom { from: uuid::Uuid },
     /// Put ground between yourself and something, at a run
     FleeFrom { away_from: (i32, i32, i32) },
+    /// Neither fight nor run, because neither is possible. The third answer
+    /// to a threat, and the one nobody chooses on purpose
+    Freeze,
     /// Look closely at something in the pack, and sometimes work out what it
     /// is for
     Examine { what: String },
@@ -251,6 +254,10 @@ pub enum Action {
     Trade { with: uuid::Uuid },
     /// Hand something over, wanting nothing back
     GiveTo { to: uuid::Uuid },
+    /// Give away food you need yourself, to somebody of your own who needs it
+    /// more. The other half of laying down your life for them, and the half
+    /// that happens more often than the fighting
+    GoWithout { for_them: uuid::Uuid },
     /// Work a thing in the pack down into another thing with an edge or a
     /// hammer: smashing, cutting, scraping. What each wants in the hand is
     /// declared in the verb matrix and enforced there.
@@ -306,6 +313,7 @@ impl Action {
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),
             Action::FleeFrom { .. } => Some(DriveType::Safety),
+            Action::Freeze => Some(DriveType::Safety),
             Action::Examine { .. } => Some(DriveType::Curiosity),
             Action::Equip { .. } => Some(DriveType::Utility),
             Action::Unequip { .. } => Some(DriveType::Utility),
@@ -313,6 +321,7 @@ impl Action {
             Action::PutDown { .. } => Some(DriveType::Utility),
             Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing
             Action::GiveTo { .. } => Some(DriveType::Social), // A gift is not
+            Action::GoWithout { .. } => Some(DriveType::Protection),
             Action::Work { .. } => Some(DriveType::Utility),
             Action::Taste => Some(DriveType::Curiosity), // Nobody eats a strange plant for the nutrition
             Action::TrySwapping { .. } => Some(DriveType::Curiosity),

@@ -216,6 +216,11 @@ fn what_sort_of_person_it_is_decides_how_readily() {
     population.spawn_agent(AgentConfig::default());
     population.spawn_agent(AgentConfig::default());
 
+    // Founders come with a personality already, so start from nobody in
+    // particular - otherwise this compares an honest greedy man with a
+    // greedy honest one
+    population.agents[0].traits.traits.clear();
+    population.agents[1].traits.traits.clear();
     population.agents[0].traits.add_trait(Trait::Honest);
     population.agents[1].traits.add_trait(Trait::Greedy);
 
@@ -231,6 +236,7 @@ fn what_sort_of_person_it_is_decides_how_readily() {
 fn hunger_decides_it_more_than_character_does() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
+    population.agents[0].traits.traits.clear();
     population.agents[0].traits.add_trait(Trait::Honest);
 
     let fed = population.agents[0].how_readily_i_would_take_it();
@@ -370,4 +376,224 @@ fn the_matrix_has_all_three_now() {
         !dodging.is_chosen(),
         "nobody decides to dodge; it is what a body does"
     );
+}
+
+
+// --------------------------------------------------------------------------
+// Taking is decided on drive demand
+// --------------------------------------------------------------------------
+
+/// A sack of grain is worth a great deal to a hungry man and nothing at all
+/// to a full one. The first cut of the decision could not tell the two apart,
+/// because it never looked at what was being taken.
+#[test]
+fn what_a_thing_is_worth_taking_depends_on_the_want() {
+    use crate::core::DriveType;
+
+    let mut simulation = two_people();
+    give(&mut simulation, 0, "food", 6);
+
+    if let Some(hunger) = simulation.population.agents[0]
+        .drives
+        .get_mut(DriveType::Hunger)
+    {
+        hunger.value = 0.0;
+    }
+    let full = simulation.population.agents[0].what_taking_this_would_answer("food", 6);
+
+    if let Some(hunger) = simulation.population.agents[0]
+        .drives
+        .get_mut(DriveType::Hunger)
+    {
+        hunger.value = 1.0;
+    }
+    let hungry = simulation.population.agents[0].what_taking_this_would_answer("food", 6);
+
+    assert!(
+        hungry > full,
+        "grain should be worth more to a hungry man: {hungry} against {full}"
+    );
+    assert_eq!(full, 0.0, "and nothing at all to a full one");
+}
+
+/// Two armfuls are worth more than one, and eight are not worth eight times
+/// one.
+#[test]
+fn more_of_a_thing_is_worth_more_and_sharply_less_so() {
+    use crate::core::DriveType;
+
+    let mut simulation = two_people();
+    if let Some(hunger) = simulation.population.agents[0]
+        .drives
+        .get_mut(DriveType::Hunger)
+    {
+        hunger.value = 1.0;
+    }
+
+    let one = simulation.population.agents[0].what_taking_this_would_answer("food", 1);
+    let two = simulation.population.agents[0].what_taking_this_would_answer("food", 2);
+    let plenty = simulation.population.agents[0].what_taking_this_would_answer("food", 20);
+
+    assert!(two > one, "two is better than one");
+    assert!(
+        plenty < one * 20.0,
+        "and twenty is not twenty times better: {plenty} against {one}"
+    );
+}
+
+/// What it costs rises with the number of people watching.
+#[test]
+fn every_pair_of_eyes_makes_it_dearer() {
+    let simulation = two_people();
+
+    let alone = simulation.population.agents[0].what_taking_it_would_cost_me(0, 0.7);
+    let in_company = simulation.population.agents[0].what_taking_it_would_cost_me(5, 0.7);
+
+    assert!(
+        in_company > alone,
+        "doing it in front of the settlement costs more: {in_company} against {alone}"
+    );
+    assert!(
+        alone > 0.0,
+        "and doing it in front of nobody still costs, because the victim knows"
+    );
+}
+
+/// And with how much this agent gets from the people it would be stealing
+/// from. This is most of what a bond is worth.
+#[test]
+fn stealing_from_people_you_are_close_to_costs_more() {
+    let simulation = two_people();
+
+    let strangers = simulation.population.agents[0].what_taking_it_would_cost_me(3, 0.1);
+    let neighbours = simulation.population.agents[0].what_taking_it_would_cost_me(3, 0.9);
+
+    assert!(
+        neighbours > strangers,
+        "a band of forty who all know each other has little to gain by robbing \
+         itself: {neighbours} against {strangers}"
+    );
+}
+
+/// On an ordinary day the sums come out against it.
+#[test]
+fn on_an_ordinary_day_nobody_steals() {
+    use crate::core::DriveType;
+
+    let mut simulation = two_people();
+
+    // An ordinary day: nothing that kills you is anywhere near past bearing.
+    // Founders are spawned with randomised drives, so this has to be said
+    // rather than assumed - the first cut of this test left them where they
+    // fell and failed about one run in eight.
+    for drive in [
+        DriveType::Hunger,
+        DriveType::Thirst,
+        DriveType::Rest,
+        DriveType::Safety,
+    ] {
+        if let Some(asking) = simulation.population.agents[0].drives.get_mut(drive) {
+            asking.value = 0.3;
+            asking.denied_ticks = 0;
+        }
+    }
+    assert!(
+        !simulation.population.agents[0].is_a_survival_drive_past_bearing(),
+        "this is meant to be an ordinary day"
+    );
+
+    let gain = simulation.population.agents[0].what_taking_this_would_answer("food", 4);
+    let cost = simulation.population.agents[0].what_taking_it_would_cost_me(3, 0.8);
+
+    assert!(
+        !simulation.population.agents[0].would_i_take_it(gain, cost),
+        "a settlement where theft pays is a settlement that stops being one: \
+         {gain} against {cost}"
+    );
+}
+
+/// A man who will be dead by morning is not weighing his reputation.
+#[test]
+fn a_survival_drive_past_bearing_sets_the_cost_aside() {
+    use crate::core::DriveType;
+
+    let mut simulation = two_people();
+
+    // Everything at stake, and a crowd watching
+    let cost = simulation.population.agents[0].what_taking_it_would_cost_me(8, 1.0);
+
+    if let Some(hunger) = simulation.population.agents[0]
+        .drives
+        .get_mut(DriveType::Hunger)
+    {
+        hunger.value = 1.0;
+        hunger.denied_ticks = 400;
+    }
+
+    assert!(
+        simulation.population.agents[0].is_a_survival_drive_past_bearing(),
+        "starving is what this is for"
+    );
+    assert!(
+        simulation.population.agents[0].would_i_take_it(0.2, cost),
+        "and it overrides what it will cost him afterwards"
+    );
+}
+
+/// But a starving man still does not take what is no use to him.
+#[test]
+fn even_a_starving_man_does_not_take_what_would_not_help() {
+    use crate::core::DriveType;
+
+    let mut simulation = two_people();
+    if let Some(hunger) = simulation.population.agents[0]
+        .drives
+        .get_mut(DriveType::Hunger)
+    {
+        hunger.value = 1.0;
+        hunger.denied_ticks = 400;
+    }
+
+    assert!(
+        !simulation.population.agents[0].would_i_take_it(0.0, 0.0),
+        "there is no point robbing somebody of something that answers nothing"
+    );
+}
+
+/// An honest man sees more at stake in being a thief, and a greedy one less.
+#[test]
+fn temperament_weighs_the_decision_without_deciding_it() {
+    use crate::core::traits::Trait;
+
+    let mut simulation = two_people();
+
+    // Founders are spawned with a personality already, so a test that adds
+    // Honest to somebody who is Honest measures nothing. Start from nobody
+    // in particular.
+    simulation.population.agents[0].traits.traits.clear();
+    let plain = simulation.population.agents[0].what_taking_it_would_cost_me(3, 0.7);
+
+    simulation.population.agents[0].traits.add_trait(Trait::Honest);
+    let honest = simulation.population.agents[0].what_taking_it_would_cost_me(3, 0.7);
+
+    simulation.population.agents[0].traits.traits.clear();
+    simulation.population.agents[0].traits.add_trait(Trait::Greedy);
+    let greedy = simulation.population.agents[0].what_taking_it_would_cost_me(3, 0.7);
+
+    assert!(honest > plain, "{honest} against {plain}");
+    assert!(greedy < plain, "{greedy} against {plain}");
+}
+
+/// Food answers hunger, a vessel answers thirst, a raw material answers the
+/// chain.
+#[test]
+fn a_thing_answers_the_drive_it_is_for() {
+    use crate::core::DriveType;
+
+    let simulation = two_people();
+    let who = &simulation.population.agents[0];
+
+    assert_eq!(who.what_this_would_answer("grain"), DriveType::Hunger);
+    assert_eq!(who.what_this_would_answer("water"), DriveType::Thirst);
+    assert_eq!(who.what_this_would_answer("flax"), DriveType::Utility);
 }

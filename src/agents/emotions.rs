@@ -1081,7 +1081,27 @@ pub struct ThreatAssessment {
 impl ThreatAssessment {
     /// Create threat assessment based on agent vs threat strength
     pub fn assess(agent_strength: f32, threat_strength: f32, source: EmotionSource) -> Self {
-        let threat_level = (threat_strength / agent_strength.max(0.1)).min(1.0);
+        Self::assess_against_what_is_at_stake(agent_strength, threat_strength, 1.0, source)
+    }
+
+    /// The same judgement, with what the agent stands to lose in it.
+    ///
+    /// The specification says a threat is a threat to an agent's ability to
+    /// satisfy *future* drive demand - so how much of a threat a thing is
+    /// depends on what it would end, not only on the size of its teeth. That
+    /// is what `at_stake` carries: see `Agent::what_i_stand_to_lose`.
+    ///
+    /// It moves the felt level of the threat and not the odds. Whether a man
+    /// can beat a wolf is a question about the man and the wolf; how much he
+    /// minds losing is a question about his life. Fear scales with both.
+    pub fn assess_against_what_is_at_stake(
+        agent_strength: f32,
+        threat_strength: f32,
+        at_stake: f32,
+        source: EmotionSource,
+    ) -> Self {
+        let odds = threat_strength / agent_strength.max(0.1);
+        let threat_level = (odds * at_stake.max(0.0)).min(1.0);
         let can_overcome = agent_strength >= threat_strength * 0.8;
 
         Self {
@@ -1090,6 +1110,32 @@ impl ThreatAssessment {
             source,
         }
     }
+
+    /// What several of a thing come to, against one of it.
+    ///
+    /// Four wolves are not four times one wolf and they are a great deal more
+    /// than one, which is what the model used to say: the appraisal took the
+    /// worst single thing in sight and ignored the rest, so a man surrounded
+    /// by a pack faced whichever of them was nearest. Each further one adds
+    /// less than the one before it, because a man can only be bitten from so
+    /// many sides at once.
+    pub fn a_pack_of(them: &[f32]) -> f32 {
+        let mut worst: Vec<f32> = them.to_vec();
+        worst.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+
+        worst
+            .iter()
+            .enumerate()
+            .map(|(behind, one)| one * Self::WHAT_THE_NEXT_ONE_ADDS.powi(behind as i32))
+            .sum()
+    }
+
+    /// What each one behind the first is worth, against the one in front of
+    /// it.
+    ///
+    /// Four wolves at this rate come to two and a half wolves, which is about
+    /// what a pack should be: much worse than one and not four times worse.
+    const WHAT_THE_NEXT_ONE_ADDS: f32 = 0.55;
 
     /// Get appropriate emotion for this threat
     pub fn emotion_type(&self) -> crate::core::EmotionType {

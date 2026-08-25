@@ -59,7 +59,7 @@ fn a_frightened_agent_runs_away_from_the_thing_itself() {
         .set_fear(EmotionSource::Creature(kind), 0.9);
 
     let away = simulation
-        .run_from_what_frightens_me(&simulation.population.agents[0], here)
+        .how_this_one_answers_a_threat(&simulation.population.agents[0], here)
         .expect("somebody terrified of a wolf four paces off should go");
 
     // Running is its own verb now, not a `Move` the matrix cannot tell from a
@@ -99,7 +99,7 @@ fn nobody_runs_from_an_empty_field() {
 
     assert!(
         simulation
-            .run_from_what_frightens_me(&simulation.population.agents[0], here)
+            .how_this_one_answers_a_threat(&simulation.population.agents[0], here)
             .is_none(),
         "there is no wolf in this world to run from"
     );
@@ -127,7 +127,7 @@ fn an_angry_agent_strikes_at_what_is_within_reach() {
         .set_anger(EmotionSource::Creature(kind), 0.9);
 
     let strike = simulation
-        .round_on_what_angers_me(&simulation.population.agents[0], here)
+        .how_this_one_answers_a_threat(&simulation.population.agents[0], here)
         .expect("a wolf one pace off is within reach");
 
     assert!(
@@ -158,7 +158,7 @@ fn an_angry_agent_closes_the_last_pace_but_does_not_cross_the_map() {
         .set_anger(EmotionSource::Creature(kind.clone()), 0.9);
 
     let closing = simulation
-        .round_on_what_angers_me(&simulation.population.agents[0], here)
+        .how_this_one_answers_a_threat(&simulation.population.agents[0], here)
         .expect("four paces is close enough to bother");
     assert!(
         matches!(closing, Action::Move { .. }),
@@ -171,7 +171,7 @@ fn an_angry_agent_closes_the_last_pace_but_does_not_cross_the_map() {
     }
     assert!(
         simulation
-            .round_on_what_angers_me(&simulation.population.agents[0], here)
+            .how_this_one_answers_a_threat(&simulation.population.agents[0], here)
             .is_none(),
         "nine paces is too far to go looking for a fight"
     );

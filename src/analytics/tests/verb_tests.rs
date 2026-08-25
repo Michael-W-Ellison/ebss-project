@@ -168,6 +168,8 @@ fn every_verb_is_performed_by_something_real() {
         "takefrom", "fleefrom",
         // And getting the tool out, and putting it away again
         "equip", "unequip",
+        // And the third answer to a thing that would kill you
+        "freeze",
     ];
 
     for one in EVERY_VERB {

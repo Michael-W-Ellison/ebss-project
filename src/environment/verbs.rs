@@ -830,6 +830,22 @@ pub const DODGE: Verb = happens_when(
     "something comes at you",
 );
 
+/// The third answer to a thing that would kill you, and the one nobody
+/// arrives at on purpose. It is what is left when a body can neither run nor
+/// raise a hand: see `Simulation::how_this_one_answers_a_threat`.
+///
+/// Not in the specification's twelve families - it was added when the
+/// fight-or-flight decision was given the rest of its tree, because a
+/// decision with two branches and no answer for "neither" is not a decision.
+pub const FREEZE: Verb = verb(
+    "freeze",
+    Family::Combat,
+    Targets::Nobody,
+    Wants::BareHands,
+    &[Changes::Nothing],
+    Some("freeze"),
+);
+
 pub const PARRY: Verb = verb(
     "parry",
     Family::Combat,
@@ -986,7 +1002,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 8
     HARVEST, HUNT, BUTCHER, EAT, DRINK, TASTE,
     // 9
-    ATTACK_WITH, DEFEND_WITH, THROW, AIM, DODGE, PARRY,
+    ATTACK_WITH, DEFEND_WITH, THROW, AIM, DODGE, PARRY, FREEZE,
     // 10
     GIVE_TO, TAKE_FROM, TRADE, SHARE, COMMUNICATE,
     // 11

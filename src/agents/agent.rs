@@ -519,6 +519,19 @@ impl LifeStage {
         matches!(self, LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elderly)
     }
 
+    /// Whether somebody at this stage of life could stand and fight a wolf.
+    ///
+    /// The very young cannot, and that is the commonest reason in the world
+    /// for fighting not to be an option. An old one can - not well, and
+    /// `Agent::own_strength` already knows what their body is worth - but
+    /// they can raise a hand.
+    pub fn can_fight(&self) -> bool {
+        matches!(
+            self,
+            LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elderly
+        )
+    }
+
     /// Get learning rate multiplier for this stage
     pub fn learning_rate(&self) -> f32 {
         match self {
@@ -2773,6 +2786,116 @@ impl Agent {
     /// It is what the agent *believes*, not what is true. Two agents of
     /// identical build appraise the same wolf differently if one of them has
     /// beaten a wolf before, and that is the point.
+    /// Whether this agent could raise a hand to anything at all.
+    ///
+    /// Not whether it would win - that is `ThreatAssessment` - but whether
+    /// fighting is available to it as a thing to do. Two ways it is not: no
+    /// arm that works, and a body with so little left in it that the first
+    /// blow returned would finish the job.
+    pub fn could_i_fight_at_all(&self, coming: f32) -> bool {
+        use super::body::BodyPartType;
+
+        // A child does not fight a wolf. This is not a judgement about how
+        // brave it is - it is the commonest way in the world for fighting to
+        // not be an option, and leaving it out made freezing unreachable:
+        // measured over eight worlds, not one agent ever froze, because
+        // anybody with an arm and more health than one bite would take had
+        // fighting available to them.
+        if !self.state.life_stage.can_fight() {
+            return false;
+        }
+
+        let an_arm = [BodyPartType::LeftArm, BodyPartType::RightArm]
+            .iter()
+            .any(|part| {
+                self.body
+                    .get_part(*part)
+                    .is_some_and(|arm| arm.is_functional())
+            });
+
+        if !an_arm {
+            return false;
+        }
+
+        // A man with four points of health left does not trade blows with a
+        // wolf. What one would cost him is what he already knows from having
+        // stood his ground before - see `what_a_blow_costs_me`.
+        self.state.health > self.what_a_blow_costs_me(coming)
+    }
+
+    /// Whether this agent could run anywhere.
+    ///
+    /// Running is not walking: it costs `WHAT_RUNNING_COSTS` and a body with
+    /// nothing left in it cannot pay. Legs that do not work stop it too.
+    /// Whether there is anywhere to run *to* is a question about the ground
+    /// and belongs to the simulation - see `Simulation::is_there_anywhere_to_run`.
+    pub fn could_i_run_at_all(&self, what_it_takes: f32) -> bool {
+        use super::body::BodyPartType;
+
+        let a_leg = [BodyPartType::LeftLeg, BodyPartType::RightLeg]
+            .iter()
+            .any(|part| {
+                self.body
+                    .get_part(*part)
+                    .is_some_and(|leg| leg.is_functional())
+            });
+
+        a_leg && self.state.energy > what_it_takes
+    }
+
+    /// What this agent has to lose - the drive demand still standing between
+    /// it and being satisfied, which is what a thing that would kill it
+    /// actually takes away.
+    ///
+    /// The specification says a threat is a threat *to the agent's ability to
+    /// satisfy future drive demand*, and that is a different quantity from
+    /// how large the animal's teeth are. A wolf does not take an agent's
+    /// health; it takes every meal, every drink and every night's sleep that
+    /// agent had left. So what it costs is measured on the drives.
+    ///
+    /// Every drive that is asking contributes what it is asking for, ranked:
+    /// the ones that kill you count for most, the ones that decide whether
+    /// there is anybody here in ten years next, and the ones that decide what
+    /// sort of place it is least. A person with nothing pressing still has
+    /// something to lose - `WHAT_BEING_ALIVE_IS_WORTH` - because being alive
+    /// is itself the thing that makes tomorrow's dinner possible.
+    pub fn what_i_stand_to_lose(&self) -> f32 {
+        use crate::core::drives::DriveRank;
+
+        let asked: f32 = self
+            .drives
+            .drives
+            .iter()
+            .map(|drive| {
+                let weight = match drive.drive_type.rank() {
+                    DriveRank::Primary => 1.0,
+                    DriveRank::Secondary => 0.5,
+                    DriveRank::Tertiary => 0.2,
+                };
+                drive.urgency().clamp(0.0, 1.0) * weight
+            })
+            .sum();
+
+        // Four primaries at full cry is the most anybody carries, so that is
+        // what the scale is divided by
+        let carried = (asked / Self::WHAT_A_LIFE_FULL_OF_WANT_COMES_TO).clamp(0.0, 1.0);
+
+        Self::WHAT_BEING_ALIVE_IS_WORTH
+            + carried * (1.0 - Self::WHAT_BEING_ALIVE_IS_WORTH)
+    }
+
+    /// What a person with nothing pressing still stands to lose, against
+    /// somebody who is starving, parched and worn out at once.
+    ///
+    /// Not far off the whole of it: a comfortable man does not shrug at a
+    /// wolf. What the rest of the scale buys is that a desperate one minds
+    /// rather more.
+    const WHAT_BEING_ALIVE_IS_WORTH: f32 = 0.75;
+
+    /// The most drive demand anybody carries at once, in the units
+    /// `what_i_stand_to_lose` sums.
+    const WHAT_A_LIFE_FULL_OF_WANT_COMES_TO: f32 = 4.0;
+
     pub fn own_strength(&self) -> f32 {
         let health_factor = self.state.health / 100.0;
         let body_factor = self.body.movement_speed_multiplier();
@@ -2848,8 +2971,14 @@ impl Agent {
     ) -> super::EmotionType {
         use super::ThreatAssessment;
 
-        let assessment =
-            ThreatAssessment::assess(self.own_strength(), threat_strength, source.clone());
+        // What the thing would end, which is what makes it a threat rather
+        // than merely a large animal - see `what_i_stand_to_lose`
+        let assessment = ThreatAssessment::assess_against_what_is_at_stake(
+            self.own_strength(),
+            threat_strength,
+            self.what_i_stand_to_lose(),
+            source.clone(),
+        );
 
         let emotion_type = assessment.emotion_type();
         let emotion_amount = assessment.emotion_amount();
@@ -3815,6 +3944,7 @@ impl Agent {
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
             Action::FleeFrom { .. } => "fleefrom".to_string(),
+            Action::Freeze => "freeze".to_string(),
             Action::Examine { what } => format!("examine:{what}"),
             Action::Equip { .. } => "equip".to_string(),
             Action::Unequip { .. } => "unequip".to_string(),
@@ -3822,6 +3952,7 @@ impl Agent {
             Action::PutDown { .. } => "putdown".to_string(),
             Action::Trade { .. } => "trade".to_string(),
             Action::GiveTo { .. } => "giveto".to_string(),
+            Action::GoWithout { .. } => "gowithout".to_string(),
             Action::Work { verb, to } => format!("{verb}:{to}"),
             Action::Taste => "taste".to_string(),
             Action::TrySwapping {
@@ -3863,6 +3994,9 @@ impl Agent {
             // works; it must not teach you that you can win, or a man who has
             // outrun four wolves goes and picks a fight with the fifth
             Action::FleeFrom { .. } => Undertaking::Fleeing,
+            // Freezing is not an attempt at anything and teaches nothing: an
+            // agent that lived through it did not do so by freezing well
+            Action::Freeze => return,
             Action::Fish => Undertaking::Fishing,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
@@ -3879,7 +4013,8 @@ impl Agent {
             Action::Socialize { .. }
             | Action::ShareInformation { .. }
             | Action::Trade { .. }
-            | Action::GiveTo { .. } => Undertaking::Dealing,
+            | Action::GiveTo { .. }
+            | Action::GoWithout { .. } => Undertaking::Dealing,
             _ => return,
         };
 
@@ -7161,6 +7296,149 @@ impl Agent {
 
         how_readily.clamp(0.0, 1.0)
     }
+
+    /// Which drive a thing answers, as far as this agent is concerned.
+    ///
+    /// Rough, and it has to be: the model has no table saying what each of a
+    /// hundred item names is *for*. What it does have is food that declares
+    /// itself food, vessels that hold water, and a chain that says which raw
+    /// things it is forever short of. Everything else is something to have
+    /// put by.
+    pub fn what_this_would_answer(&self, what: &str) -> crate::core::DriveType {
+        use crate::core::DriveType;
+
+        if self
+            .inventory
+            .get_item(what)
+            .is_some_and(|item| item.is_food())
+            || matches!(what, "food" | "grain" | "flour" | "bread" | "fish" | "meat")
+        {
+            return DriveType::Hunger;
+        }
+
+        if what == "water"
+            || self
+                .inventory
+                .get_item(what)
+                .is_some_and(|item| item.is_container())
+        {
+            return DriveType::Thirst;
+        }
+
+        if crate::environment::making::is_a_familiar_thing(what) {
+            return DriveType::Utility;
+        }
+
+        DriveType::Preparedness
+    }
+
+    /// What taking a thing would actually be worth to this agent.
+    ///
+    /// The specification asks for theft to be decided on drive demand rather
+    /// than on temperament, and this is the first half of it: how much of
+    /// what this agent is asking for would a handful of that answer. A sack
+    /// of grain is worth a great deal to a hungry man and nothing at all to a
+    /// full one, and until now the decision could not tell the two apart
+    /// because it never looked at what was being taken.
+    pub fn what_taking_this_would_answer(&self, what: &str, how_many: u32) -> f32 {
+        let answers = self.what_this_would_answer(what);
+
+        let urgency = self
+            .drives
+            .get(answers)
+            .map(|drive| drive.urgency().clamp(0.0, 1.0))
+            .unwrap_or(0.0);
+
+        // More of a thing is worth more, and sharply less so: the second
+        // armful of grain does not answer hunger twice
+        let how_much = (how_many as f32 / Self::WHAT_A_USEFUL_HAUL_IS).clamp(0.0, 1.0);
+
+        urgency * how_much
+    }
+
+    /// How many of a thing counts as having got something worth having.
+    const WHAT_A_USEFUL_HAUL_IS: f32 = 4.0;
+
+    /// What taking it would cost this agent later.
+    ///
+    /// The second half: taking threatens *future* drive demand satisfaction,
+    /// and in this model it does so through the bonds. Everything a person
+    /// gets from other people - gifts, trades, news, somebody to have a child
+    /// with, somebody who does not leave them to the wolves - runs on the
+    /// bond, and a theft costs it with the victim and with everybody who saw.
+    ///
+    /// `watching` is how many people are near enough to see, the victim
+    /// included. `bonds` is what this agent currently gets from the people it
+    /// would be stealing in front of, on the same 0..1 scale a bond is on.
+    pub fn what_taking_it_would_cost_me(&self, watching: usize, bonds: f32) -> f32 {
+        use crate::core::traits::Trait;
+
+        // What the eyes are worth. Doing it in front of nobody still costs
+        // something, because the victim always knows.
+        let seen = 1.0 + watching as f32 * Self::WHAT_ANOTHER_PAIR_OF_EYES_ADDS;
+
+        let mut cost = bonds.clamp(0.0, 1.0) * seen * Self::WHAT_A_BOND_IS_WORTH_KEEPING;
+
+        // Temperament does not decide this any more, but it does weigh it: an
+        // honest man sees more at stake in being a thief and a greedy one
+        // sees less
+        if self.traits.has(Trait::Honest) {
+            cost *= 1.6;
+        }
+        if self.traits.has(Trait::Greedy) {
+            cost *= 0.6;
+        }
+
+        cost
+    }
+
+    /// What each further witness adds to what a theft costs.
+    const WHAT_ANOTHER_PAIR_OF_EYES_ADDS: f32 = 0.5;
+
+    /// What standing among the people you live with is worth, against the
+    /// most a single haul could answer.
+    ///
+    /// Above 1.0, so that on an ordinary day the sums come out against
+    /// stealing: a settlement where theft pays is a settlement that stops
+    /// being one.
+    const WHAT_A_BOND_IS_WORTH_KEEPING: f32 = 1.4;
+
+    /// Whether this agent would take it, weighing the one against the other.
+    ///
+    /// > the decision to commit theft should be made if the theft will satisfy
+    /// > drive demand and not threaten future drive demand satisfaction. if a
+    /// > survival drive is strong enough, it will override the risk to future
+    /// > drive satisfaction to ensure immediate survival.
+    ///
+    /// So: gain against cost, and a primary drive past
+    /// `WHEN_TOMORROW_STOPS_MATTERING` sets the cost aside altogether. A man
+    /// who will be dead by morning is not weighing his reputation.
+    pub fn would_i_take_it(&self, gain: f32, cost: f32) -> bool {
+        if self.is_a_survival_drive_past_bearing() {
+            return gain > 0.0;
+        }
+
+        gain > cost
+    }
+
+    /// Whether something that kills you is far enough along to stop an agent
+    /// caring what anybody thinks.
+    pub fn is_a_survival_drive_past_bearing(&self) -> bool {
+        use crate::core::drives::DriveRank;
+
+        self.drives
+            .drives
+            .iter()
+            .filter(|drive| drive.drive_type.rank() == DriveRank::Primary)
+            .any(|drive| drive.urgency() >= Self::WHEN_TOMORROW_STOPS_MATTERING)
+    }
+
+    /// How hard something that kills you has to be pressing before a person
+    /// stops weighing what it will cost them afterwards.
+    ///
+    /// High on purpose. This is the override, not the ordinary case: it is
+    /// the difference between a hungry man and a starving one.
+    const WHEN_TOMORROW_STOPS_MATTERING: f32 = 0.85;
 
     /// And when what it was told turns out to have been true once.
     ///

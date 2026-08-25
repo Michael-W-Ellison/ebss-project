@@ -575,15 +575,32 @@ impl Simulation {
                         );
                         (survival_action, false)
                     }
+                    // PRIORITY -0.5: somebody of this agent's own who will
+                    // not last the week, and food in the pack it is going to
+                    // want itself.
+                    //
+                    // An override rather than a drive, and it has to be: a
+                    // sacrifice that only happens when nothing else is
+                    // pressing is not a sacrifice. The agent has already been
+                    // asked whether it is itself past bearing, above, and
+                    // `somebody_of_mine_who_needs_it_more` refuses again -
+                    // two dead people is not better than one.
+                    else if let Some(for_them) =
+                        self.somebody_of_mine_who_needs_it_more(agent, agent_position)
+                    {
+                        debug!("Agent {agent_id} is going without for {for_them}");
+                        (Action::GoWithout { for_them }, false)
+                    }
                     // PRIORITY 0: Check emotional overrides (fear/anger from
                     // what is in front of the agent, or from being attacked)
                     else if agent.emotions.should_flee() {
-                        // Frightened of something that is actually there: put
-                        // ground between the two of you. This is the branch
-                        // the appraisal feeds; the attacker branches below it
-                        // are for agents, who are not creatures.
+                        // Frightened of something that is actually there. The
+                        // whole tree lives in `how_this_one_answers_a_threat`
+                        // - run, or turn and fight if there is nowhere to run,
+                        // or freeze if there is neither. The attacker branches
+                        // below it are for agents, who are not creatures.
                         if let Some(away) = self
-                            .run_from_what_frightens_me(agent, agent_position)
+                            .how_this_one_answers_a_threat(agent, agent_position)
                             .or_else(|| {
                                 self.run_from_whoever_frightens_me(agent, agent_position)
                             })
@@ -639,7 +656,7 @@ impl Simulation {
                         // what keeps this from eating a settlement's whole day.
                         if let Some(strike) = self
                             .round_on_whoever_angers_me(agent, agent_position)
-                            .or_else(|| self.round_on_what_angers_me(agent, agent_position))
+                            .or_else(|| self.how_this_one_answers_a_threat(agent, agent_position))
                         {
                             debug!(
                                 "Agent {} STANDING GROUND against {:?} (anger={:.2})",
@@ -2812,6 +2829,13 @@ impl Simulation {
     /// person spends by doing this instead of something else.
     const WHAT_GETTING_A_THING_OUT_COSTS: f32 = 1.5;
 
+    /// What freezing costs, which is nothing but the turn.
+    ///
+    /// Deliberately cheap in energy and ruinous in every other way: an agent
+    /// that freezes has spent a turn not getting away from the thing that is
+    /// about to reach it.
+    const WHAT_FREEZING_COSTS: f32 = 0.5;
+
     /// How far somebody will walk for a thing they can see lying on the ground.
     const WORTH_WALKING_OVER_FOR: u32 = 12;
 
@@ -2868,36 +2892,35 @@ impl Simulation {
             target: (there.x, there.y, agent_position.2),
         })
     }
-
-    /// Somebody standing here worth helping yourself from.
+    /// Somebody within reach worth taking something off.
     ///
-    /// Nobody steals for the sake of it. What decides it is what sort of
-    /// person this is and how badly the want is pressing - see
-    /// `Agent::how_readily_i_would_take_it` - and, just as much, who is
-    /// watching: a man does not rob somebody he thinks well of, and does not
-    /// rob anybody at all in front of a crowd.
+    /// Decided on drive demand, which is what the specification asks for and
+    /// what the first cut of this did not do. That one was a temperament roll
+    /// - a base chance, nudged by Honest and Greedy and by whether the agent
+    /// was starving - and it never looked at what was being taken or what it
+    /// was worth. It fired once in eight worlds of ten thousand ticks, and
+    /// when it did fire the agent had no idea whether the thing it had just
+    /// robbed somebody for was any use to it.
+    ///
+    /// Now: what would this answer, against what it would cost me later. The
+    /// cost runs through the bonds, because in this model everything a person
+    /// gets from other people runs through the bonds. And a primary drive
+    /// past bearing sets the cost aside, because a man who will be dead by
+    /// morning is not weighing his reputation.
     fn somebody_to_take_from(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<uuid::Uuid> {
-        use rand::Rng;
-
         let me = self
             .population
             .agents
             .iter()
             .position(|other| other.id == agent.id)?;
 
-        let how_readily = agent.how_readily_i_would_take_it();
-
-        if how_readily <= 0.0 {
-            return None;
-        }
-
         // Who would see it. The same reckoning a liar makes about the people
         // in earshot - it is the same kind of decision.
-        let watching = self
+        let watching: Vec<&crate::agents::Agent> = self
             .population
             .agents
             .iter()
@@ -2908,13 +2931,27 @@ impl Simulation {
                     .max((them.state.position.1 - agent_position.1).abs())
                     <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP
             })
-            .count();
+            .collect();
 
-        let odds = how_readily / (1.0 + watching as f32);
+        // And what this agent gets from them, which is what it would be
+        // spending
+        let bonds = if watching.is_empty() {
+            0.0
+        } else {
+            watching
+                .iter()
+                .map(|them| {
+                    agent
+                        .relationships
+                        .get_relationship(&them.id)
+                        .map(|bond| bond.bond_strength)
+                        .unwrap_or(0.0)
+                })
+                .sum::<f32>()
+                / watching.len() as f32
+        };
 
-        if !rand::thread_rng().gen_bool(odds.clamp(0.0, 1.0) as f64) {
-            return None;
-        }
+        let cost = agent.what_taking_it_would_cost_me(watching.len(), bonds);
 
         self.population
             .agents
@@ -2927,14 +2964,15 @@ impl Simulation {
                     .max((them.state.position.1 - agent_position.1).abs())
                     <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
             })
-            // Not somebody you think well of. This is most of what a bond is
-            // worth: it is the reason people who like each other do not rob
-            // each other.
-            .filter(|(_, them)| {
-                agent.how_far_i_trust(them.id, &them.traits) < Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+            // The best thing anybody standing here has that this agent wants
+            .filter_map(|(them, they)| {
+                let (what, how_many) = self.what_i_would_hand_over(them, me)?;
+                let gain = agent.what_taking_this_would_answer(&what, how_many);
+                Some((they.id, gain))
             })
-            .find(|(them, _)| self.what_i_would_hand_over(*them, me).is_some())
-            .map(|(_, them)| them.id)
+            .filter(|(_, gain)| agent.would_i_take_it(*gain, cost))
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(who, _)| who)
     }
 
     /// How generous somebody has to feel about a person before handing them
@@ -2976,6 +3014,64 @@ impl Simulation {
             .find(|(them, _)| self.what_i_would_hand_over(me, *them).is_some())
             .map(|(_, them)| them.id)
     }
+
+    /// Somebody of this agent's own who is worse off than it is, and hungry
+    /// enough that the difference matters.
+    ///
+    /// This is the gift that costs, and it is deliberately kept apart from
+    /// `somebody_to_give_to`: that one hands over what is spare, and what is
+    /// spare is by definition not a sacrifice. Here an agent hands over food
+    /// it is going to want itself, because somebody it loves will not last
+    /// the week without it.
+    fn somebody_of_mine_who_needs_it_more(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        // Nothing to give
+        agent.find_best_food_to_eat()?;
+
+        // And an agent already past bearing itself keeps what it has. This is
+        // not selfishness so much as arithmetic: two dead people is not
+        // better than one.
+        if agent.state.is_starving() && agent.nutrition.is_starving() {
+            return None;
+        }
+
+        self.population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            .filter(|them| {
+                agent
+                    .relationships
+                    .get_relationship(&them.id)
+                    .is_some_and(|bond| bond.is_loved_one())
+            })
+            // Worse off than this agent, and badly enough for it to count
+            .filter(|them| them.nutrition.is_starving() || them.state.is_starving())
+            .filter(|them| them.find_best_food_to_eat().is_none())
+            .min_by(|a, b| {
+                a.nutrition
+                    .energy_reserves
+                    .partial_cmp(&b.nutrition.energy_reserves)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|them| them.id)
+    }
+
+    /// What going without for somebody is worth to them, against an ordinary
+    /// gift.
+    ///
+    /// More, and it should be: a thing somebody could spare is not the same
+    /// as a thing they could not.
+    const WHAT_GOING_WITHOUT_IS_WORTH: f32 = 0.8;
 
     /// How near you have to be standing to notice that the midden is growing.
     const CLOSE_ENOUGH_TO_SEE_IT_COME_UP: i32 = 6;
@@ -4118,25 +4214,6 @@ impl Simulation {
             .min_by_key(|(_, _, paces)| *paces)
     }
 
-    /// Go, and put the thing behind you.
-    ///
-    /// The flight branch of action selection was keyed on `last_attacker`,
-    /// which is only ever another agent, so an agent frightened of a wolf fell
-    /// straight through it and carried on foraging with the wolf at its elbow.
-    /// Fear of a creature now moves the agent directly away from it.
-    fn run_from_what_frightens_me(
-        &self,
-        agent: &crate::agents::Agent,
-        agent_position: (i32, i32, i32),
-    ) -> Option<Action> {
-        let (kind, _) = agent.emotions.what_frightens_me_most()?;
-        let (_, where_it_is, _) = self.nearest_of_kind(kind, agent_position)?;
-
-        Some(Action::FleeFrom {
-            away_from: (where_it_is.0, where_it_is.1, agent_position.2),
-        })
-    }
-
     /// Head off in the opposite direction, far enough not to arrive back where
     /// you started worrying.
     fn put_ground_between(from: (i32, i32, i32), away_from: (i32, i32)) -> Action {
@@ -4327,39 +4404,200 @@ impl Simulation {
         ))
     }
 
-    /// Turn on the thing, if it is close enough to hit.
+    /// The whole answer to a thing that would kill you, in the order the
+    /// specification gives it.
     ///
-    /// An angry agent stands its ground; it does not cross the map looking for
-    /// a fight. Anything out of arm's reach is left alone and the agent gets on
-    /// with its day, which is also what keeps a settlement from spending a
-    /// quarter of its life walking towards wolves.
-    fn round_on_what_angers_me(
+    /// > if this threat seems like something he can overcome, the man attacks.
+    /// > if not, the man flees in fear. if fleeing does not seem like an
+    /// > option, then the only alternative is to fight. if fighting does not
+    /// > seem like an option, then the only alternative is to flee. if the
+    /// > agent cannot select between one of those two options, they freeze.
+    ///
+    /// The appraisal has already answered the first question: it comes out as
+    /// anger where the thing can be overcome and fear where it cannot - see
+    /// `Agent::appraise_what_is_there`. What was missing was everything after
+    /// it. An agent who could not overcome the thing ran, and if there was
+    /// nowhere to run it simply went back to gathering berries with a wolf at
+    /// its elbow; an agent who could overcome it fought, and if its arms were
+    /// gone it did the same. Neither of the two cornered cases existed, and
+    /// nor did the third answer.
+    fn how_this_one_answers_a_threat(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        let (kind, _) = agent.emotions.what_angers_me_most()?;
+        // What it is, where it is, and how hard it hits
+        let (kind, standing) = agent
+            .emotions
+            .what_frightens_me_most()
+            .map(|(kind, _)| (kind, false))
+            .or_else(|| {
+                agent
+                    .emotions
+                    .what_angers_me_most()
+                    .map(|(kind, _)| (kind, true))
+            })?;
+
         let (which, where_it_is, paces) = self.nearest_of_kind(kind, agent_position)?;
 
-        if paces <= Self::HUNT_REACH {
-            return Some(Action::Fight {
-                animal_id: which,
-                weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+        let coming = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .find(|animal| animal.id == which)
+            .and_then(|animal| self.world.animals.get_species(&animal.species_id))
+            .map(|species| species.attack_damage)
+            .unwrap_or(0.0);
+
+        // Standing your ground is something you do to what is in front of
+        // you. Nobody crosses a field to pick a fight with a wolf, and an
+        // agent that is not afraid of a thing four paces off has no business
+        // with it at all - it gets on with its day.
+        if standing && paces > Self::WITHIN_A_STEP_OR_TWO {
+            return None;
+        }
+
+        let could_fight = agent.could_i_fight_at_all(coming);
+
+        // Somebody of this agent's own, in the way of the thing, who cannot
+        // deal with it themselves. A person does not run from a wolf that is
+        // standing over their child, whatever the odds are - and the odds are
+        // exactly what this sets aside. It is the one place in the model
+        // where an agent knowingly takes the worse of two options.
+        if could_fight && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
+            return Some(if paces <= Self::HUNT_REACH {
+                Action::Fight {
+                    animal_id: which,
+                    weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+                }
+            } else {
+                Action::Move {
+                    target: (where_it_is.0, where_it_is.1, agent_position.2),
+                }
             });
         }
 
-        // Close the last pace or two, but no further. The appraisal already
-        // scales a creature's strength by how near it is, so anything that
-        // angers an agent past the threshold is close by anyway - this is for
-        // the wolf that is nearly in reach, not the one across the field.
-        if paces <= Self::WITHIN_A_STEP_OR_TWO {
-            return Some(Action::Move {
-                target: (where_it_is.0, where_it_is.1, agent_position.2),
-            });
-        }
+        let could_run = agent.could_i_run_at_all(Self::WHAT_RUNNING_COSTS)
+            && self.is_there_anywhere_to_run(agent_position, where_it_is);
 
-        None
+        let fight = || {
+            if paces <= Self::HUNT_REACH {
+                Action::Fight {
+                    animal_id: which,
+                    weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+                }
+            } else {
+                // Close the last pace or two, and no further
+                Action::Move {
+                    target: (where_it_is.0, where_it_is.1, agent_position.2),
+                }
+            }
+        };
+
+        let run = || Action::FleeFrom {
+            away_from: (where_it_is.0, where_it_is.1, agent_position.2),
+        };
+
+        match (standing, could_fight, could_run) {
+            // What it wanted to do, and it can
+            (true, true, _) => Some(fight()),
+            (false, _, true) => Some(run()),
+
+            // Cornered: it wanted to run and there is nowhere to go, so it
+            // turns and fights. Or it wanted to fight and cannot lift an arm,
+            // so it goes.
+            (false, true, false) => Some(fight()),
+            (true, false, true) => Some(run()),
+
+            // Neither. This is the case the decision never had an answer for.
+            (_, false, false) => Some(Action::Freeze),
+        }
     }
+
+    /// Whether somebody this agent loves is in the way of the thing, and could
+    /// not deal with it themselves.
+    ///
+    /// The paradigm case, and the reason this exists: a wolf standing over a
+    /// child. The child cannot fight it and very likely cannot outrun it, and
+    /// the parent is the only thing between them. What comes of that is a
+    /// fight the parent may well lose, which is the point - the specification
+    /// asks for agents that can lay down their lives for their family, and an
+    /// agent that only ever fights what it can beat cannot do that.
+    fn somebody_of_mine_is_in_the_way(
+        &self,
+        agent: &crate::agents::Agent,
+        where_it_is: (i32, i32),
+        coming: f32,
+    ) -> bool {
+        self.population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| {
+                agent
+                    .relationships
+                    .get_relationship(&them.id)
+                    .is_some_and(|bond| bond.is_loved_one())
+            })
+            // In the way of it: nearer the thing than a person would choose
+            // to be
+            .filter(|them| {
+                (them.state.position.0 - where_it_is.0)
+                    .abs()
+                    .max((them.state.position.1 - where_it_is.1).abs())
+                    <= Self::STANDING_OVER_THEM
+            })
+            // And unable to do anything about it. Somebody who can fight it
+            // themselves is not being protected, they are being joined
+            .any(|them| !them.could_i_fight_at_all(coming))
+    }
+
+    /// How near the thing somebody has to be before they count as being in
+    /// its way.
+    const STANDING_OVER_THEM: i32 = 2;
+
+    /// Whether there is any ground to run to, away from the thing.
+    ///
+    /// Half the answer to "fleeing does not seem like an option": a man with
+    /// his back to a cliff has nowhere to go however much he would like to.
+    /// The other half is the body, and belongs to the agent - see
+    /// `Agent::could_i_run_at_all`.
+    fn is_there_anywhere_to_run(
+        &self,
+        from: (i32, i32, i32),
+        away_from: (i32, i32),
+    ) -> bool {
+        let dx = from.0 - away_from.0;
+        let dy = from.1 - away_from.1;
+        let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
+
+        // The way it would actually go, and the two quarters either side of
+        // it. Anything behind is running towards the thing.
+        let straight = (dx as f32 / span, dy as f32 / span);
+        let ways = [
+            straight,
+            (-straight.1, straight.0),
+            (straight.1, -straight.0),
+        ];
+
+        ways.iter().any(|(wx, wy)| {
+            let landed = (
+                from.0 + (wx * Self::FAR_ENOUGH_TO_COUNT_AS_AWAY) as i32,
+                from.1 + (wy * Self::FAR_ENOUGH_TO_COUNT_AS_AWAY) as i32,
+            );
+
+            landed.0 >= 0
+                && landed.1 >= 0
+                && landed.0 < self.world.grid.width as i32
+                && landed.1 < self.world.grid.height as i32
+                && self.is_passable_tile(landed.0, landed.1)
+        })
+    }
+
+    /// How far off a person has to be able to get before it counts as
+    /// somewhere to run to.
+    const FAR_ENOUGH_TO_COUNT_AS_AWAY: f32 = 3.0;
 
     /// What share of what an agent has left counts as having got off lightly
     const A_SCRATCH: f32 = 0.25;
@@ -4415,8 +4653,13 @@ impl Simulation {
 
             let (x, y, _) = agent.state.position;
 
-            // The worst thing within sight of this agent, if anything
-            let worst = hunters
+            // Everything within sight of this agent that would eat it. All of
+            // it, not the worst of it: the appraisal used to take the single
+            // largest thing in view and throw the rest away, so a man
+            // surrounded by four wolves faced whichever one happened to be
+            // nearest and felt no differently about it than he would about
+            // one.
+            let closing: Vec<(f32, &String)> = hunters
                 .iter()
                 .filter_map(|((hx, hy), strength, what)| {
                     let paces = (hx - x).abs().max((hy - y).abs());
@@ -4433,13 +4676,24 @@ impl Simulation {
 
                     Some((strength * nearness, what))
                 })
-                .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+                .collect();
+
+            // What it is called is the name of the worst of them: a man
+            // hemmed in by wolves is afraid of wolves, whatever else is in
+            // the field
+            let worst = closing
+                .iter()
+                .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(_, what)| (*what).clone());
 
             match worst {
-                Some((strength, what)) => {
+                Some(what) => {
+                    let all: Vec<f32> = closing.iter().map(|(strength, _)| *strength).collect();
+                    let pack = crate::agents::ThreatAssessment::a_pack_of(&all);
+
                     agent.appraise_what_is_there(
-                        strength,
-                        crate::agents::EmotionSource::Creature(what.clone()),
+                        pack,
+                        crate::agents::EmotionSource::Creature(what),
                     );
                 }
                 None => {
@@ -9553,6 +9807,20 @@ impl Simulation {
                     .with_message(format!("Put the {what} away"))
             },
 
+            Action::Freeze => {
+                // The third answer, and the only one nobody arrives at on
+                // purpose: it is what is left when a body can neither run nor
+                // raise a hand. Nothing happens. The agent stays exactly where
+                // it is, which is the whole of what freezing costs - whatever
+                // was coming is still coming, and is now a tick closer.
+                let agent = &self.population.agents[agent_index];
+                debug!("Agent {} froze", agent.id);
+
+                ActionResult::success()
+                    .with_energy_cost(Self::WHAT_FREEZING_COSTS)
+                    .with_message("Froze".to_string())
+            },
+
             Action::FleeFrom { away_from } => {
                 // Running is not walking. A frightened person covers more
                 // ground in a turn and is a good deal more tired at the end of
@@ -9802,6 +10070,48 @@ impl Simulation {
                         "Traded {i_hand_over} {} for {they_hand_over} {}",
                         mine.0, theirs.0
                     ))
+            },
+
+            Action::GoWithout { for_them } => {
+                // The other half of laying down your life for somebody, and
+                // the half that happens more often than the fighting. A gift
+                // is what a person can spare; this is what they cannot.
+                let Some(them) = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == *for_them && other.state.is_alive)
+                else {
+                    return ActionResult::failure("Nobody there to give to".to_string());
+                };
+
+                let Some(mine) = self.population.agents[agent_index]
+                    .find_best_food_to_eat()
+                    .filter(|what| self.population.agents[agent_index].how_many_i_have(what) > 0)
+                else {
+                    return ActionResult::failure("Nothing to go without".to_string());
+                };
+
+                let me = self.population.agents[agent_index].id;
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(&mine, 1);
+                }
+
+                {
+                    let other = &mut self.population.agents[them];
+                    other.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(mine.clone(), 1, 1.0),
+                    );
+                    other.they_did_me_a_good_turn(me, Self::WHAT_GOING_WITHOUT_IS_WORTH);
+                }
+
+                debug!("Agent {me} went without their own {mine} for {for_them}");
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Protection, -0.5)
+                    .with_message(format!("Went without their own {mine}"))
             },
 
             Action::GiveTo { to } => {

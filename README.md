@@ -64,6 +64,53 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ A threat is a threat to what an agent still has to do, and a pack is a
+  pack. Two things were wrong with the appraisal. It read danger off the
+  animal's own statistics and nothing else, so it was a question about teeth
+  rather than about what the teeth would end — what a wolf takes is not a
+  man's health, it is every meal, every drink and every night's sleep he had
+  left, and that is what `Agent::what_i_stand_to_lose` now measures on the
+  drives. And it took the single worst thing in sight and threw the rest away,
+  so a man hemmed in by four wolves faced whichever one happened to be
+  nearest. Several of a thing now add up, with each behind the first worth
+  rather less than the one in front of it: four wolves come to about two and a
+  half, which is much worse than one and not four times worse. A man who would
+  stand his ground against one now runs from four, which is the specification's
+  own example and a test
+- ✅ Five answers to a thing that would kill you, where there used to be two.
+  Fight if you can win; run if you cannot; turn and fight anyway if there is
+  nowhere to run; go anyway if you cannot lift an arm; and when neither is
+  possible, freeze. Neither cornered case existed — an agent with nowhere to
+  go went back to gathering berries with a wolf at its elbow — and nor did the
+  third answer. Freezing fires about 174 times in a settlement's ten thousand
+  ticks, and almost all of it is children: a child cannot fight a wolf, and a
+  tired child cannot outrun one either. That clause is what made the branch
+  reachable at all; with the body and the health tests alone, not one agent in
+  eight worlds ever froze
+- ✅ Taking is decided on drive demand, not on temperament. The old decision
+  was a chance nudged by Honest and Greedy, and it never looked at what was
+  being taken: a man robbed somebody without knowing whether the thing was any
+  use to him, and it happened once in eight worlds. Now it is what this would
+  answer against what it would cost later — the gain is the urgency of
+  whichever drive the thing serves, and the cost runs through the bonds,
+  because in this model everything a person gets from other people runs
+  through the bonds. On an ordinary day the sums come out against it. A
+  primary drive past bearing sets the cost aside altogether, because a man who
+  will be dead by morning is not weighing his reputation. Theft went from 0.75
+  a world to 23, and it shows downstream exactly as it should: attacks rose
+  from 42 to 188 and burials from 14.5 to 20. A settlement with thieves in it
+  fights more and buries more people
+- 🚧 Laying down your life for your own, which half works. A wolf standing
+  over somebody you love who cannot deal with it themselves brings you at it
+  whatever the odds — the one place in the model where an agent knowingly
+  takes the worse of two options, and the only way a parent can die for a
+  child. The other half, going without food you need so that somebody who
+  needs it more gets it, is built and tested and has never once fired: at ten
+  thousand ticks not one of sixty-five agents is carrying any food at all and
+  not one is starving. Everything gathered is eaten within a few ticks. There
+  is no occasion for the sacrifice because there is no scarcity and no larder.
+  See ISSUES_FOUND.md #21
+
 - ✅ Two hands, that hold particular things. `A_PAIR_OF_HANDS` had been in the
   matrix since the matrix existed and nothing had made it true: a tool in the
   pack was a tool in the hand, so an axe helped you the moment you owned one
@@ -158,7 +205,10 @@ original specifications.
   executor consults before an action runs, so a hunt without a spear and a
   stitch with no hand free are refused in one place rather than in thirty. The
   table is honest about itself: a verb nothing performs yet says so, and a test
-  fails if it stops saying so. Forty-nine of the sixty-eight are live
+  fails if it stops saying so. Fifty of the sixty-nine are live — the
+  sixty-ninth is `freeze`, which was not in the original twelve families and
+  had to be added when the fight-or-flight decision was given the rest of its
+  tree
 - ✅ Four ways into farming, none of which is anybody's idea about agriculture.
   Grain carried through the wet — a marsh, a riverbank, a downpour on open
   ground — starts coming up in the pack, and what falls out of a pack takes

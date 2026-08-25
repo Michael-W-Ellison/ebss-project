@@ -1363,18 +1363,57 @@ full pack pure gain and a basket a thing with no downside. Nothing up to two
 fifths of what the arms will hold, rising to about twice the energy a step at
 the limit.
 
+### 21. Nobody carries food, so nobody can go without it
+
+The specification asks for agents that can sacrifice themselves for their
+family and loved ones. Two forms of that were built. One works and one has
+never fired.
+
+**Standing in the way works.** A wolf within two paces of somebody this agent
+loves, who could not fight it themselves, brings the agent at it regardless of
+the odds — which is the point, and the only place in the model where an agent
+knowingly takes the worse of two options. Everything else in the
+fight-or-flight tree is about picking the better one, and a parent with a wolf
+standing over their child is not picking anything. Tests hold both halves: the
+same man with four wolves at his elbow runs when the child is elsewhere and
+goes at them when it is not, and he does not lay down his life for a grown man
+who could fight them himself.
+
+**Going without has no occasion.** The other form — handing over food you are
+going to want yourself, to somebody of your own who will not last the week —
+is built, tested, and fired zero times in eight worlds of ten thousand ticks.
+It is not a bug in the decision. Probing the settlement directly, at ten
+thousand ticks:
+
+| | world 1 | world 2 | world 3 |
+|---|---|---|---|
+| alive | 69 | 70 | 59 |
+| carrying any food | 5 | 3 | 4 |
+| starving | 0 | 0 | 0 |
+
+Sampling every twenty-five ticks over a whole run, only 262 agent-samples out
+of roughly 28,000 had so much as a meal in the pack, and on not one of those
+occasions was a bonded neighbour standing next to them starving — because
+nobody is ever starving. Everything gathered is eaten within a few ticks;
+there is no larder and no scarcity for a sacrifice to be a sacrifice against.
+
+Two things would give it an occasion, and neither is in this batch's scope: a
+reason to carry a meal rather than eat it where it was found, and a winter bad
+enough that somebody goes short. The machinery is there for a settlement that
+has either.
+
 ## Housekeeping
 
-### 21. Committed backup file
+### 22. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 22. Build warnings
+### 23. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 23. Placeholder package metadata
+### 24. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
