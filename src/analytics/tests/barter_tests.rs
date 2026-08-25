@@ -47,6 +47,29 @@ fn two_people() -> Simulation {
         }
     }
 
+    // And they think well enough of each other to hand something over. Whom a
+    // founder trusts is drawn with their traits, so leaving it to chance made
+    // these tests fail about one full run in five - and what is being tested
+    // here is the swap, not the trusting.
+    let names: Vec<uuid::Uuid> = simulation.population.agents.iter().map(|a| a.id).collect();
+
+    for who in 0..2 {
+        for them in &names {
+            if *them == names[who] {
+                continue;
+            }
+
+            let mut bond = crate::agents::Relationship::new(
+                *them,
+                crate::agents::RelationshipType::Friend,
+            );
+            bond.bond_strength = 0.8;
+            simulation.population.agents[who]
+                .relationships
+                .add_relationship(bond);
+        }
+    }
+
     simulation
 }
 

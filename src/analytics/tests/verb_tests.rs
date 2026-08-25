@@ -173,6 +173,30 @@ fn every_verb_is_performed_by_something_real() {
     }
 }
 
+/// A verb the world carries out rather than somebody choosing is still a verb
+/// that happens, and the matrix should say so rather than calling it idle.
+#[test]
+fn a_verb_nobody_chooses_can_still_be_live() {
+    let happen_to_you: Vec<&str> = EVERY_VERB
+        .iter()
+        .filter(|verb| !verb.is_chosen() && verb.is_live())
+        .map(|verb| verb.called)
+        .collect();
+
+    assert!(
+        !happen_to_you.is_empty(),
+        "some verbs are not decisions: {happen_to_you:?}"
+    );
+
+    for one in EVERY_VERB.iter().filter(|verb| !verb.is_chosen() && verb.is_live()) {
+        assert!(
+            one.happens_when.is_some(),
+            "{} is live and unchosen and should say what occasions it",
+            one.called
+        );
+    }
+}
+
 /// And the matrix is honest about what it has not built.
 #[test]
 fn the_matrix_admits_what_nothing_does_yet() {

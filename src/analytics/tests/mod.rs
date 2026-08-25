@@ -41,3 +41,4 @@ pub mod verb_tests;
 pub mod working_tests;
 pub mod barter_tests;
 pub mod ground_tests;
+pub mod combat_verb_tests;

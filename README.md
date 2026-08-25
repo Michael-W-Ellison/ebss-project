@@ -64,6 +64,14 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ A throw parts you from the spear. Half the throws that miss put the shaft
+  on the ground somewhere out past where the hunter was standing, and it is a
+  spear again as soon as somebody walks over and picks it up — which is what
+  makes a missed throw cost more than the walking. And what is in the hand
+  when something comes at you turns some of the blow: nobody decides to get a
+  spear between himself and a wolf, so the matrix carries that as a verb the
+  world performs rather than one anybody chooses. It is why carrying a spear
+  is worth something to a man who never hunts
 - ✅ Things lie on the ground. A thing used to be either in somebody's pack or
   nowhere: an axe existed for exactly as long as its owner did, and a people
   that spent a season making them had nothing to show for it the morning after

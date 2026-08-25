@@ -650,6 +650,25 @@ pub const METAL_KNIFE_FOR_CRAFTING: Tool = Tool {
     how_long_it_lasts: 90.0,
 };
 
+/// What a man gets between himself and something that is coming at him.
+///
+/// Not the same job as hunting with it: a thrown spear is a throw and a
+/// braced one is a fence. Both wear the shaft, and the second wears it faster,
+/// because what it is being asked to do is stop something.
+pub const SPEAR_FOR_KEEPING_IT_OFF: Tool = Tool {
+    called: "spear",
+    helps: SkillType::MeleeCombat,
+    how_much_better: 1.9,
+    how_long_it_lasts: 25.0,
+};
+
+pub const AXE_FOR_KEEPING_IT_OFF: Tool = Tool {
+    called: "handaxe",
+    helps: SkillType::MeleeCombat,
+    how_much_better: 1.5,
+    how_long_it_lasts: 40.0,
+};
+
 /// An axe with a metal head. Twice the tool a stone one is, and it lasts.
 pub const METAL_AXE_FOR_WOOD: Tool = Tool {
     called: "metalaxe",
@@ -694,7 +713,18 @@ pub const EVERY_TOOL: &[Tool] = &[
     METAL_AXE_FOR_STONE,
     METAL_SPEAR_FOR_HUNTING,
     METAL_SPEAR_FOR_FISHING,
+    SPEAR_FOR_KEEPING_IT_OFF,
+    AXE_FOR_KEEPING_IT_OFF,
+    METAL_SPEAR_FOR_KEEPING_IT_OFF,
 ];
+
+/// And the same in metal, which stops a good deal more.
+pub const METAL_SPEAR_FOR_KEEPING_IT_OFF: Tool = Tool {
+    called: "metalspear",
+    helps: SkillType::MeleeCombat,
+    how_much_better: 2.4,
+    how_long_it_lasts: 100.0,
+};
 
 /// The tools that are any use for a kind of work.
 pub fn what_helps_with(trade: SkillType) -> impl Iterator<Item = &'static Tool> {

@@ -155,6 +155,13 @@ pub struct Verb {
     /// [`crate::agents::Agent::what_was_tried`] names it — or `None` where the
     /// verb is declared and nothing does it yet.
     pub done_by: Option<&'static str>,
+    /// Or, for a verb nobody chooses, what brings it about.
+    ///
+    /// Some verbs are not decisions. Nobody decides to get a spear between
+    /// himself and a wolf; it is what happens when the wolf arrives and there
+    /// is a spear in his hand. Those are carried out by the world rather than
+    /// by an `Action`, and this says what occasions them.
+    pub happens_when: Option<&'static str>,
     /// Whether the action that performs it does so every time.
     ///
     /// `Craft` is whichever of heating, lashing and attaching the step in hand
@@ -169,8 +176,15 @@ pub struct Verb {
 }
 
 impl Verb {
-    /// Whether anything in the simulation actually performs this verb
+    /// Whether anything in the simulation actually performs this verb,
+    /// whether by somebody's choosing or by the world's.
     pub fn is_live(&self) -> bool {
+        self.done_by.is_some() || self.happens_when.is_some()
+    }
+
+    /// Whether it is a thing somebody decides to do, as against a thing that
+    /// happens to them.
+    pub fn is_chosen(&self) -> bool {
         self.done_by.is_some()
     }
 
@@ -197,7 +211,24 @@ const fn verb(
         wants,
         changes,
         done_by,
+        happens_when: None,
         always: true,
+    }
+}
+
+/// The same, for a verb nobody chooses: it happens when the thing named
+/// happens, and what it wants in the hand decides whether it happens at all.
+const fn happens_when(
+    called: &'static str,
+    family: Family,
+    targets: Targets,
+    wants: Wants,
+    changes: &'static [Changes],
+    occasion: &'static str,
+) -> Verb {
+    Verb {
+        happens_when: Some(occasion),
+        ..verb(called, family, targets, wants, changes, None)
     }
 }
 
@@ -734,13 +765,16 @@ pub const ATTACK_WITH: Verb = verb(
     Some("attack"),
 );
 
-pub const DEFEND_WITH: Verb = verb(
+/// Nobody decides to do this. It is what happens when something comes at you
+/// and there is a shaft in your hand, and it is why carrying a spear is worth
+/// something even to a man who never hunts.
+pub const DEFEND_WITH: Verb = happens_when(
     "defend with",
     Family::Combat,
     Targets::Nobody,
     Wants::AToolFor(SkillType::MeleeCombat),
-    &[Changes::ABody],
-    None,
+    &[Changes::ABody, Changes::WhatAThingIs],
+    "something comes at you",
 );
 
 pub const THROW: Verb = verb(
@@ -749,7 +783,7 @@ pub const THROW: Verb = verb(
     Targets::AnAnimal,
     Wants::ThisInHand("spear"),
     &[Changes::ABody, Changes::WhatIsHeld],
-    None,
+    Some("hunt"),
 );
 
 pub const AIM: Verb = verb(
@@ -965,12 +999,25 @@ pub fn what_that_action_does(named: &str) -> Vec<&'static Verb> {
 /// document: the requirement is declared in one place and enforced in one
 /// place, and adding a verb to the table is what makes it enforced.
 pub fn what_this_action_cannot_do_without(named: &str) -> Vec<Wants> {
-    EVERY_VERB
+    let mut wanted: Vec<Wants> = Vec::new();
+
+    for verb in EVERY_VERB
         .iter()
         .filter(|verb| verb.done_by == Some(named) && verb.always)
-        .map(|verb| verb.wants)
-        .filter(|wants| !matches!(wants, Wants::BareHands))
-        .collect()
+    {
+        if matches!(verb.wants, Wants::BareHands) {
+            continue;
+        }
+
+        // Two verbs of one action can want the same thing - a hunt is a
+        // throwing and a hunting and both want the spear - and asking for it
+        // twice is asking for it once.
+        if !wanted.contains(&verb.wants) {
+            wanted.push(verb.wants);
+        }
+    }
+
+    wanted
 }
 
 /// How many hands a person has to work with.

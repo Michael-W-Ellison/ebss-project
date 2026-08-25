@@ -3580,6 +3580,13 @@ impl Simulation {
     /// What a throw that tells takes out of an animal.
     const WHAT_ONE_THROW_TAKES_OUT_OF_IT: f32 = 0.35;
 
+    /// How often a throw that misses puts the shaft somewhere you have to go
+    /// and get it.
+    ///
+    /// Half. A spear is not spent by being thrown, it is mislaid by it, and
+    /// the difference between those two is a walk.
+    const HOW_OFTEN_A_MISS_LOSES_THE_SHAFT: f64 = 0.5;
+
     /// What a throw costs, whether or not it lands.
     ///
     /// Hunting is walking, waiting, and throwing, and most of it comes to
@@ -7527,6 +7534,41 @@ impl Simulation {
                             .skills
                             .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
 
+                        // And a throw that misses is a spear on the ground
+                        // somewhere out past where the animal was. Half the
+                        // time it is close enough to walk over and pick up
+                        // and half the time it is in the bracken; either way
+                        // it is not in the hand any more, which is what makes
+                        // a missed throw cost something besides the walk.
+                        //
+                        // This is the state-change half of `throw` in the verb
+                        // matrix: what leaves the hand goes somewhere.
+                        if spear > 1.0 && rng.gen_bool(Self::HOW_OFTEN_A_MISS_LOSES_THE_SHAFT) {
+                            let stood = self.population.agents[agent_index].state.position;
+                            let fell = crate::world::Position::new(
+                                stood.0 + rng.gen_range(-3..=3),
+                                stood.1 + rng.gen_range(-3..=3),
+                            );
+
+                            let thrown = self.population.agents[agent_index]
+                                .inventory
+                                .get_item("spear")
+                                .cloned();
+
+                            if let Some(mut thrown) = thrown {
+                                thrown.quantity = 1;
+                                self.population.agents[agent_index]
+                                    .inventory
+                                    .remove_item("spear", 1);
+                                self.world.somebody_left_this(thrown, fell, tick_now);
+
+                                debug!(
+                                    "Agent {} threw and missed; the spear is at {fell:?}",
+                                    self.population.agents[agent_index].id
+                                );
+                            }
+                        }
+
                         // A rabbit runs. A boar turns round.
                         let fights_back = matches!(
                             species.behavior,
@@ -10741,13 +10783,33 @@ impl Simulation {
             }
 
             {
+                // What is in the hand when the thing comes at you. A man who
+                // gets a spear between himself and a wolf takes a good deal
+                // less of it than a man who gets an arm up, and this is the
+                // whole of what the matrix means by a verb that wants a tool:
+                // `defend with` cannot be done bare-handed, so a man with
+                // nothing in his hands simply does not do it.
+                let landed = self.population.agents[agent_index].what_a_blow_costs_me(damage);
+                let turned = damage - landed;
+
                 let agent = &mut self.population.agents[agent_index];
-                agent.take_damage(damage);
+
+                // And putting a shaft in the way of something is hard on the
+                // shaft
+                if turned > 0.0 {
+                    if let Some(broke) =
+                        agent.wear_what_i_worked_with(crate::agents::SkillType::MeleeCombat)
+                    {
+                        debug!("Agent {} broke a {broke} keeping it off", agent.id);
+                    }
+                }
+
+                agent.take_damage(landed);
                 agent.emotions.record_attack(animal_id, current_tick);
 
                 debug!(
-                    "Agent {} was attacked by a hungry animal ({:.0} damage)",
-                    agent.id, damage
+                    "Agent {} was attacked by a hungry animal ({landed:.0} of {damage:.0} damage got through)",
+                    agent.id
                 );
             }
 

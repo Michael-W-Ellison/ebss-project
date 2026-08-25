@@ -791,6 +791,31 @@ out of what was in his pack walked twelve tiles for a stick instead. It
 belongs beside going out to fetch a thing, which is what it is a substitute
 for, and not ahead of making one.
 
+**A throw parts you from the spear.** Half the throws that miss put the shaft
+on the ground somewhere out past where the hunter was standing, and it is a
+spear again as soon as somebody walks over and picks it up — which is what
+makes a missed throw cost more than the walking, and which the ground store
+above had to exist before it could. Over eight worlds against `25903eb`
+settlements finished with two or three spears lying in the bracken and the
+number of times anybody stooped for anything went from 39 to 79. Hunts 95 to
+108. Population 68.4 to 69.1.
+
+**And some verbs are not decisions.** Nobody chooses to get a spear between
+himself and a wolf; it is what happens when the wolf arrives and there is a
+spear in his hand. The matrix carries that kind now — `happens_when` beside
+`done_by` — so a verb the world performs is not filed alongside the ones
+nothing performs at all. A spear turns about half of a blow and an axe about a
+third, and both are the worse for it. The effect is not separable at the
+settlement level: mean health was 93.5 before and 93.6 after, because
+predators reach very few people in a world.
+
+Three of my own tests turned out to be asserting deterministic outcomes from
+random gates, and only failed in full-suite runs where the seeds differ:
+whether two strangers trust each other enough to trade is drawn with their
+traits, whether a pack has room for what a test hands it depends on what else
+is in it, and `Lessons::will_try_this_again` is a roll by design — it is what
+stops anybody doing the same thing for ever.
+
 Measured over eight worlds against `1b9aa40`: population 73.3 to 77.4, a
 difference of 4.1 at a standard error of 5.9. What did move is the spread —
 standard deviation from 15.4 to 5.9. Agents dressed 47 to 50, spears carried

@@ -1568,6 +1568,22 @@ impl Agent {
     /// towards bare hands, and a tool that was badly made was never much of
     /// one - "repeating the action increases the quality of the outcome",
     /// which is only true of anything if the quality is worth having.
+    /// How much of a blow gets through what is in this agent's hands.
+    ///
+    /// "Defend with" is a verb nobody chooses. It is what happens when
+    /// something comes at you and there is a shaft in your hand, and it is why
+    /// carrying a spear is worth something to a man who never hunts. What it
+    /// wants in the hand is declared in the verb matrix like everything else;
+    /// a man with nothing in his hands simply does not do it, and takes the
+    /// whole of what is coming.
+    ///
+    /// Putting a shaft in the way of something is hard on the shaft, so the
+    /// caller is expected to wear it afterwards.
+    pub fn what_a_blow_costs_me(&self, coming: f32) -> f32 {
+        let turned = self.how_much_my_tools_help(super::SkillType::MeleeCombat);
+        coming / turned.max(1.0)
+    }
+
     /// Whether there is a hand free to take hold of something with.
     ///
     /// The first cut of this counted a hand as full for every kind of tool in

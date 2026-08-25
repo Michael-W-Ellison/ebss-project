@@ -331,11 +331,15 @@ fn doing_it_once_is_what_makes_it_a_thing_you_do() {
             .remove_item("tinder", 1);
     }
 
-    assert_eq!(
-        simulation.population.agents[0].what_i_would_work_on(),
-        Some(("scrape".to_string(), "wood".to_string())),
-        "and will make more on purpose"
-    );
+    // And will make more on purpose. Whether he gets round to it on any
+    // particular turn is a roll - see `Lessons::NEVER_QUITE_GIVES_UP`, which
+    // is what stops anybody doing the same thing for ever - so this asks
+    // whether it is a thing he does at all rather than a thing he does now.
+    let would = (0..60)
+        .filter_map(|_| simulation.population.agents[0].what_i_would_work_on())
+        .any(|(verb, to)| verb == "scrape" && to == "wood");
+
+    assert!(would, "and will make more on purpose");
 }
 
 /// Nobody spends a life smashing cores they have no use for.
@@ -343,7 +347,9 @@ fn doing_it_once_is_what_makes_it_a_thing_you_do() {
 fn nobody_works_more_than_they_have_a_use_for() {
     let mut simulation = a_person();
     empty_the_pack(&mut simulation);
-    give(&mut simulation, "stone", 40);
+    // A few cores rather than an armful: a pack holds only so much, and a
+    // full one silently refuses the flakes this test goes on to hand over
+    give(&mut simulation, "stone", 6);
     give_a_tool(&mut simulation, "handaxe");
 
     assert_eq!(
@@ -353,6 +359,10 @@ fn nobody_works_more_than_they_have_a_use_for() {
     );
 
     give(&mut simulation, "flint", making::A_FEW_SPARE);
+    assert!(
+        simulation.population.agents[0].how_many_i_have("flint") >= making::A_FEW_SPARE,
+        "the flakes have to actually be in the pack for this to mean anything"
+    );
 
     assert!(
         simulation.population.agents[0]
