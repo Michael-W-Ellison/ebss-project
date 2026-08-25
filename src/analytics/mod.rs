@@ -1042,6 +1042,7 @@ impl Simulation {
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
+            Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),
             Action::Trade { .. } | Action::GiveTo { .. } => Some(ActionType::Social),
             Action::Work { .. } => Some(ActionType::Crafting),
             Action::Taste => Some(ActionType::Farming),
@@ -2240,6 +2241,11 @@ impl Simulation {
                     self.somebody_to_trade_with(agent, agent_position)
                         .map(|with| Action::Trade { with })
                 })
+                // And a thing already lying on the ground is quicker than
+                // either: stooping is where scavenging belongs, beside going
+                // out to fetch a thing rather than ahead of making one out of
+                // what is already in the pack.
+                .or_else(|| self.something_worth_stooping_for(agent, agent_position))
                 .or_else(|| {
                     agent
                         .what_i_must_find()
@@ -2749,6 +2755,63 @@ impl Simulation {
             .filter(|(_, them)| agent.would_take_their_word(them.id, &them.traits))
             .find(|(them, _)| self.what_the_two_of_them_would_swap(me, *them).is_some())
             .map(|(_, them)| them.id)
+    }
+
+    /// How far somebody will walk for a thing they can see lying on the ground.
+    const WORTH_WALKING_OVER_FOR: u32 = 12;
+
+    /// Something lying about that this agent has a use for.
+    ///
+    /// A thing on the ground is a thing somebody else made and did not take
+    /// with them: a worn axe beside a man who drowned, a spear thrown and not
+    /// recovered, whatever fell out of a full pack. Picking it up is the
+    /// cheapest way there is to get a tool, and it is why what a people makes
+    /// outlives the people who made it.
+    fn something_worth_stooping_for(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let short_of = agent.what_i_am_short_of();
+
+        // Worth having: something the chain wants that this pack is short of,
+        // or any tool at all - a spare axe is never wasted
+        let worth_it = |what: &str| {
+            short_of.contains(&what)
+                || crate::environment::making::EVERY_TOOL
+                    .iter()
+                    .any(|tool| tool.called == what)
+        };
+
+        // Underfoot first
+        if let Some(left) = self
+            .world
+            .what_is_lying_at(&here)
+            .into_iter()
+            .find(|left| worth_it(&left.item.item_id))
+        {
+            return Some(Action::PickUp {
+                what: left.item.item_id.clone(),
+            });
+        }
+
+        // Then anything close enough to be worth the walk
+        let there = self
+            .world
+            .dropped
+            .iter()
+            .filter(|left| worth_it(&left.item.item_id))
+            .map(|left| (left.where_it_is, here.distance_to(&left.where_it_is)))
+            .filter(|(_, apart)| *apart <= Self::WORTH_WALKING_OVER_FOR)
+            .min_by_key(|(_, apart)| *apart)
+            .map(|(where_it_is, _)| where_it_is)?;
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
     }
 
     /// How generous somebody has to feel about a person before handing them
@@ -3855,6 +3918,27 @@ impl Simulation {
                 tile.soil.add_leaf_litter(soft);
                 tile.soil.add_woody_litter(bone);
             }
+        }
+
+        self.what_the_dead_left_behind();
+    }
+
+    /// What a person was carrying stays where they fell.
+    ///
+    /// Everything a people makes used to go into the ground with whoever
+    /// happened to be holding it: an axe was a thing that existed for exactly
+    /// as long as its owner did. A pack falls where its owner does, and the
+    /// next person along can pick it up - which is most of how a stone-age
+    /// people ever accumulates anything at all.
+    fn what_the_dead_left_behind(&mut self) {
+        use crate::world::Position;
+
+        let left = std::mem::take(&mut self.population.what_the_dead_left);
+        let now = self.current_tick;
+
+        for (item, position) in left {
+            self.world
+                .somebody_left_this(item, Position::new(position.0, position.1), now);
         }
     }
 
@@ -9072,6 +9156,75 @@ impl Simulation {
                     .with_drive_change(DriveType::Curiosity, -0.3)
                     .with_energy_cost(step.effort)
                 }
+            },
+
+            Action::PickUp { what } => {
+                use crate::world::Position;
+
+                let here = {
+                    let at = self.population.agents[agent_index].state.position;
+                    Position::new(at.0, at.1)
+                };
+
+                let Some(item) = self.world.take_off_the_ground(&here, what) else {
+                    return ActionResult::failure(format!("No {what} lying here"));
+                };
+
+                let how_many = item.quantity;
+                let agent = &mut self.population.agents[agent_index];
+
+                // A full pack cannot take it, and it stays where it was
+                if agent.inventory.weight_capacity_remaining()
+                    < item.weight_per_unit * how_many as f32
+                {
+                    self.world.somebody_left_this(item, here, tick_now);
+                    return ActionResult::failure("No room for it".to_string());
+                }
+
+                agent.inventory.add_item(item);
+
+                debug!("Agent {} picked up {how_many} {what} at {here:?}", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.2)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Picked up {how_many} {what}"))
+            },
+
+            Action::PutDown { what } => {
+                use crate::world::Position;
+
+                let here = {
+                    let at = self.population.agents[agent_index].state.position;
+                    Position::new(at.0, at.1)
+                };
+
+                let Some(item) = self.population.agents[agent_index]
+                    .inventory
+                    .get_item(what)
+                    .cloned()
+                else {
+                    return ActionResult::failure(format!("No {what} to put down"));
+                };
+
+                if item.quantity == 0 {
+                    return ActionResult::failure(format!("No {what} to put down"));
+                }
+
+                let how_many = item.quantity;
+                self.population.agents[agent_index]
+                    .inventory
+                    .remove_item(what, how_many);
+                self.world.somebody_left_this(item, here, tick_now);
+
+                debug!(
+                    "Agent {} put down {how_many} {what} at {here:?}",
+                    self.population.agents[agent_index].id
+                );
+
+                ActionResult::success()
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Put down {how_many} {what}"))
             },
 
             Action::Trade { with } => {

@@ -230,6 +230,10 @@ pub enum Action {
     /// Go over a standing field pulling weeds out of it and picking pests off
     /// it, which is most of what growing a crop actually consists of
     TendField,
+    /// Take something lying on the ground here into the pack
+    PickUp { what: String },
+    /// Set something down on the ground here
+    PutDown { what: String },
     /// Swap something there is too much of for something there is not enough
     /// of, with somebody who has the opposite problem
     Trade { with: uuid::Uuid },
@@ -288,6 +292,8 @@ impl Action {
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
+            Action::PickUp { .. } => Some(DriveType::Utility),
+            Action::PutDown { .. } => Some(DriveType::Utility),
             Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing
             Action::GiveTo { .. } => Some(DriveType::Social), // A gift is not
             Action::Work { .. } => Some(DriveType::Utility),

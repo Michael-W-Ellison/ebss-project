@@ -40,3 +40,4 @@ pub mod swap_tests;
 pub mod verb_tests;
 pub mod working_tests;
 pub mod barter_tests;
+pub mod ground_tests;

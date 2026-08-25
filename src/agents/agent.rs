@@ -3554,6 +3554,8 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
+            Action::PickUp { .. } => "pickup".to_string(),
+            Action::PutDown { .. } => "putdown".to_string(),
             Action::Trade { .. } => "trade".to_string(),
             Action::GiveTo { .. } => "giveto".to_string(),
             Action::Work { verb, to } => format!("{verb}:{to}"),

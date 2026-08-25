@@ -127,6 +127,9 @@ pub struct Population {
     /// each is worth to the ground as soft matter and as bone. A population
     /// has no world to put them in, so it holds them here until one does.
     pub bodies_where_they_fell: Vec<((i32, i32, i32), f32, f32)>,
+    /// And what those bodies were carrying, held in the same way and for the
+    /// same reason - see `Simulation::what_the_dead_left_behind`.
+    pub what_the_dead_left: Vec<(super::InventoryItem, (i32, i32, i32))>,
 }
 
 impl Population {
@@ -146,6 +149,7 @@ impl Population {
             technology_registry: registry,
             pending_events: Vec::new(),
             bodies_where_they_fell: Vec::new(),
+            what_the_dead_left: Vec::new(),
         }
     }
 
@@ -166,6 +170,7 @@ impl Population {
             technology_registry: registry,
             pending_events: Vec::new(),
             bodies_where_they_fell: Vec::new(),
+            what_the_dead_left: Vec::new(),
         }
     }
 
@@ -848,6 +853,25 @@ impl Population {
                         agent.knowledge.known_information.insert(death_info.id, death_info);
                     }
                 }
+            }
+        }
+
+        // What they were carrying stays in the world. A person dies where they
+        // are standing and their pack falls there: a worn axe beside a man who
+        // drowned is a worn axe the next person along can pick up, and it is
+        // the difference between a people's work outliving them and going into
+        // the ground with whoever happened to be holding it.
+        //
+        // The world is not reachable from here, so it is left in a basket for
+        // the simulation to empty - see `Simulation::what_the_dead_left_behind`.
+        for agent in self.agents.iter().filter(|agent| !agent.state.is_alive) {
+            let where_they_fell = agent.state.position;
+
+            for item in agent.inventory.get_all_items().values() {
+                if item.quantity == 0 {
+                    continue;
+                }
+                self.what_the_dead_left.push((item.clone(), where_they_fell));
             }
         }
 

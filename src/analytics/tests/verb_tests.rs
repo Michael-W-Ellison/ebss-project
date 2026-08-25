@@ -158,6 +158,8 @@ fn every_verb_is_performed_by_something_real() {
         "smash", "crush", "cut", "scrape", "drill", "split",
         // Handing things over
         "trade", "giveto",
+        // And putting things down and taking them up
+        "pickup", "putdown",
     ];
 
     for one in EVERY_VERB {

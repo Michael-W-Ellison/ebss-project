@@ -130,6 +130,16 @@ pub struct World {
     pub road_network: path_planning::RoadNetwork, // Road and path network
     pub territory_manager: territory::TerritoryManager, // Territory claiming and ownership
 
+    /// Everything lying about on the ground where somebody left it.
+    ///
+    /// Before this a thing was either in somebody's pack or it did not exist.
+    /// Nothing could be put down and picked up again, and when a person died
+    /// everything they had carried went out of the world with them - so a
+    /// people that spent a season making axes had nothing to show for it the
+    /// morning after the man who made them drowned.
+    #[serde(default)]
+    pub dropped: Vec<Dropped>,
+
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
     /// Drawn once when the country is made and never shown to anybody living
@@ -138,6 +148,19 @@ pub struct World {
     /// health or their life. See `ResourceType::StrangePlant`.
     #[serde(default)]
     pub what_the_strange_plants_are: Vec<bool>,
+}
+
+/// Something lying on the ground where somebody left it.
+///
+/// A thing put down, dropped out of a full pack, thrown and not recovered, or
+/// left where its owner died. It is the same item it was in the pack: a worn
+/// axe on the ground is still a worn axe when the next person picks it up.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dropped {
+    pub item: crate::agents::InventoryItem,
+    pub where_it_is: Position,
+    /// The tick it was left, which is what the weather counts from
+    pub since: u32,
 }
 
 /// World configuration
@@ -276,6 +299,83 @@ impl WorldConfig {
 }
 
 impl World {
+    /// Somebody put this down, or dropped it, or died holding it.
+    pub fn somebody_left_this(&mut self, item: crate::agents::InventoryItem, where_it_is: Position, tick: u32) {
+        if item.quantity == 0 {
+            return;
+        }
+
+        self.dropped.push(Dropped {
+            item,
+            where_it_is,
+            since: tick,
+        });
+    }
+
+    /// What is lying on a given tile, newest first.
+    pub fn what_is_lying_at(&self, where_it_is: &Position) -> Vec<&Dropped> {
+        let mut here: Vec<&Dropped> = self
+            .dropped
+            .iter()
+            .filter(|left| left.where_it_is == *where_it_is)
+            .collect();
+
+        here.reverse();
+        here
+    }
+
+    /// Take a named thing off the ground here, if it is there.
+    pub fn take_off_the_ground(
+        &mut self,
+        where_it_is: &Position,
+        called: &str,
+    ) -> Option<crate::agents::InventoryItem> {
+        let which = self
+            .dropped
+            .iter()
+            .rposition(|left| left.where_it_is == *where_it_is && left.item.item_id == called)?;
+
+        Some(self.dropped.remove(which).item)
+    }
+
+    /// How long a thing lies where it was left before the weather has it.
+    ///
+    /// A season and a half for anything: long enough that somebody walking the
+    /// same country again finds it, short enough that a world does not silt up
+    /// with everything anybody ever put down.
+    pub const HOW_LONG_A_THING_LIES_THERE: u32 = 432;
+
+    /// What the weather does to what is lying about.
+    ///
+    /// Food goes first and goes into the ground, which is where food goes.
+    /// Everything else weathers away in its own time.
+    fn what_is_lying_about_weathers(&mut self) {
+        let now = self.tick;
+        let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
+
+        self.dropped.retain(|left| {
+            let lain = now.saturating_sub(left.since);
+
+            let gone = if left.item.food_data.is_some() {
+                lain >= Self::HOW_LONG_A_THING_LIES_THERE / 4
+            } else {
+                lain >= Self::HOW_LONG_A_THING_LIES_THERE
+            };
+
+            if gone && left.item.food_data.is_some() {
+                back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
+            }
+
+            !gone
+        });
+
+        for (where_it_is, worth) in back_to_the_ground {
+            if let Some(tile) = self.grid.get_tile_mut(&where_it_is) {
+                tile.soil.add_leaf_litter(worth);
+            }
+        }
+    }
+
     /// How many different unknown plants grow in a world.
     ///
     /// Few enough that a people can get through them in a few generations,
@@ -329,6 +429,7 @@ impl World {
             road_network: path_planning::RoadNetwork::new(),
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
+            dropped: Vec::new(),
         };
 
         // The ground under the terrain that was just generated
@@ -1312,6 +1413,11 @@ impl World {
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.tick_all();
+
+        // And the weather gets at whatever is lying about
+        if self.tick % 10 == 0 {
+            self.what_is_lying_about_weathers();
+        }
 
         // Update animals (AI, movement, aging)
         self.animals.tick();

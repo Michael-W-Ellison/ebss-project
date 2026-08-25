@@ -64,6 +64,13 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ Things lie on the ground. A thing used to be either in somebody's pack or
+  nowhere: an axe existed for exactly as long as its owner did, and a people
+  that spent a season making them had nothing to show for it the morning after
+  the man who made them drowned. A pack now falls where its owner does, and it
+  is the same worn axe when the next person picks it up. Anything worth having
+  within a dozen paces is worth stooping for. Food left lying goes into the
+  ground in a few weeks; everything else weathers away in a season and a half
 - ✅ Handing things over. A trade wants an abundance on both sides, each of
   which the other is short of; a gift wants only one, and costs the giver, and
   is worth more to the bond because it leaves somebody owing. What either of

@@ -280,7 +280,7 @@ pub const PICK_UP: Verb = verb(
     Targets::AThingUnderfoot,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld],
-    None,
+    Some("pickup"),
 );
 
 pub const PLACE_DOWN: Verb = verb(
@@ -289,7 +289,7 @@ pub const PLACE_DOWN: Verb = verb(
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatIsHeld],
-    None,
+    Some("putdown"),
 );
 
 /// Not an act so much as a state: what carrying costs is paid every tick.
@@ -326,7 +326,7 @@ pub const RELEASE: Verb = verb(
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatIsHeld],
-    None,
+    Some("putdown"),
 );
 
 // ---------------------------------------------------------------------------

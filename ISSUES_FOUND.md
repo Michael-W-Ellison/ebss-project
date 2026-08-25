@@ -769,6 +769,28 @@ a thing worth handing over is that they have markedly less of it than you do.
 The same cut also made a gift require a match on both sides, which is what a
 trade is and not what a gift is.
 
+**Things lying on the ground**, which the manipulation verbs needed and the
+world did not have. A thing was either in a pack or nowhere. Nothing could be
+put down and taken up again, and when somebody died everything they had
+carried went out of the world with them — so an axe existed for exactly as
+long as its owner did, and a people that spent a season making them had
+nothing to show for it the morning after the man who made them drowned.
+
+A pack falls where its owner does and stays the thing it was: a worn axe on
+the ground is a worn axe when the next person picks it up. Food left lying
+goes into the soil in a few weeks and everything else weathers away in a
+season and a half, so a world does not silt up with everything anybody ever
+put down. Over eight worlds against `566f18d` settlements stooped for
+something 45 times apiece and finished with thirteen things lying about, two
+or three of them tools. Population 68.1 to 64.4, a difference of 3.7 at a
+standard error of 9.9 — noise, and so is everything else measured.
+
+One ordering mistake worth recording: scavenging first went ahead of
+everything else the Utility drive does, so a man who could have made a spear
+out of what was in his pack walked twelve tiles for a stick instead. It
+belongs beside going out to fetch a thing, which is what it is a substitute
+for, and not ahead of making one.
+
 Measured over eight worlds against `1b9aa40`: population 73.3 to 77.4, a
 difference of 4.1 at a standard error of 5.9. What did move is the spread —
 standard deviation from 15.4 to 5.9. Agents dressed 47 to 50, spears carried
