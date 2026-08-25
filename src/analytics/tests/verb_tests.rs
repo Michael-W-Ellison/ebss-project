@@ -160,6 +160,8 @@ fn every_verb_is_performed_by_something_real() {
         "trade", "giveto",
         // And putting things down and taking them up
         "pickup", "putdown",
+        // And turning a strange thing over in your hands
+        "examine",
     ];
 
     for one in EVERY_VERB {

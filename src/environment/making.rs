@@ -440,6 +440,30 @@ pub fn everything_to_find_out() -> impl Iterator<Item = &'static Making> {
     EVERY_STEP.iter().filter(|step| !step.obvious)
 }
 
+/// Whether a named thing is already part of something everybody understands.
+///
+/// A length of cord is a thing every person here has handled a thousand times:
+/// turning one over in your hands tells you nothing, whatever else in the
+/// world happens to be held together with cord. A lump of bright stone is not,
+/// and that is the difference between a thing worth looking at and a thing
+/// worth using.
+///
+/// This is what keeps looking closely from being a way of reading the whole
+/// table: without it, examining a piece of cordage announced the metal knife,
+/// because a metal knife happens to be lashed together.
+pub fn is_a_familiar_thing(what: &str) -> bool {
+    EVERY_STEP
+        .iter()
+        .filter(|step| step.obvious)
+        .any(|step| {
+            step.makes == what || step.needs.iter().any(|(needs, _)| *needs == what)
+        })
+        || EVERY_WORKING
+            .iter()
+            .filter(|working| working.obvious)
+            .any(|working| working.to == what || working.makes == what)
+}
+
 /// The step that makes a named thing, if there is one.
 pub fn how_to_make(what: &str) -> Option<&'static Making> {
     EVERY_STEP.iter().find(|step| step.makes == what)

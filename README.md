@@ -64,6 +64,15 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ Looking closely at a strange thing you are already carrying. The third
+  road into the chain, beside doing a thing twice to see it happen again and
+  putting the wrong thing where a part goes — and the cheapest, a turn and no
+  materials, which is why it pays off least often. Only a genuinely unfamiliar
+  thing raises a question: a length of cord is something every person here has
+  handled a thousand times, whatever else happens to be lashed together with
+  it. This is what finally carries the discovery chain to its end — metal
+  tools now exist in a settlement, which in every measurement before this they
+  did not
 - ✅ A throw parts you from the spear. Half the throws that miss put the shaft
   on the ground somewhere out past where the hunter was standing, and it is a
   spear again as soon as somebody walks over and picks it up — which is what

@@ -912,25 +912,31 @@ pub const EXAMINE: Verb = verb(
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatIsKnown],
-    None,
+    Some("examine"),
 );
 
-pub const SMELL: Verb = verb(
+/// Nobody decides to smell something. What is rotting, what is cooking and
+/// what is standing in the next field give themselves away, and a nose that
+/// is there picks them up - see `Simulation::emit_scents`.
+pub const SMELL: Verb = happens_when(
     "smell",
     Family::Sensory,
     Targets::AThingUnderfoot,
     Wants::BareHands,
     &[Changes::WhatIsKnown],
-    None,
+    "something nearby gives itself away",
 );
 
-pub const LISTEN: Verb = verb(
+/// And nobody decides to overhear. Anything said within earshot is heard by
+/// whoever is standing there, which is how a lie gets found out and how
+/// anybody learns where the water is without walking to it.
+pub const LISTEN: Verb = happens_when(
     "listen",
     Family::Sensory,
     Targets::Nobody,
     Wants::BareHands,
     &[Changes::WhatIsKnown],
-    None,
+    "somebody says something in earshot",
 );
 
 /// The whole matrix, in the order of the twelve families.

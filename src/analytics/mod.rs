@@ -1042,6 +1042,7 @@ impl Simulation {
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
+            Action::Examine { .. } => Some(ActionType::Crafting),
             Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),
             Action::Trade { .. } | Action::GiveTo { .. } => Some(ActionType::Social),
             Action::Work { .. } => Some(ActionType::Crafting),
@@ -2289,6 +2290,13 @@ impl Simulation {
                     return Some(action);
                 }
 
+                // Turning over something in the pack that might be for
+                // something. Cheaper than any other experiment - it costs the
+                // turn and nothing else.
+                if let Some(what) = agent.what_i_would_look_at() {
+                    return Some(Action::Examine { what });
+                }
+
                 // Doing something to a thing to see what it turns into. The
                 // cheapest kind of experiment there is: the materials are in
                 // the pack and the tool is in the hand either way.
@@ -2756,6 +2764,13 @@ impl Simulation {
             .find(|(them, _)| self.what_the_two_of_them_would_swap(me, *them).is_some())
             .map(|(_, them)| them.id)
     }
+
+    /// How often turning a thing over in your hands tells you what it is for.
+    ///
+    /// Low, and scaled by the hand doing the turning. It has to be low: this
+    /// costs a turn and no materials, so if it were generous it would collapse
+    /// the whole chain into an afternoon spent looking at things.
+    const WHAT_LOOKING_CLOSELY_IS_WORTH: f32 = 0.06;
 
     /// How far somebody will walk for a thing they can see lying on the ground.
     const WORTH_WALKING_OVER_FOR: u32 = 12;
@@ -9198,6 +9213,75 @@ impl Simulation {
                     .with_drive_change(DriveType::Curiosity, -0.3)
                     .with_energy_cost(step.effort)
                 }
+            },
+
+            Action::Examine { what } => {
+                use crate::environment::making;
+
+                if self.population.agents[agent_index].how_many_i_have(what) == 0 {
+                    return ActionResult::failure(format!("No {what} in hand to look at"));
+                }
+
+                // What this thing goes into that nobody here has worked out.
+                // Looking closely at a lump of something you are already
+                // carrying is the cheapest experiment there is - it costs a
+                // turn and no materials - and it is the third road into the
+                // chain, beside doing a thing twice to see it again and
+                // putting the wrong thing where a part goes.
+                if making::is_a_familiar_thing(what) {
+                    return ActionResult::failure(format!(
+                        "A {what} is a {what}; there is nothing to see in one"
+                    ))
+                    .with_energy_cost(1.0);
+                }
+
+                let could_be_for: Vec<&'static str> = making::everything_to_find_out()
+                    .filter(|step| step.needs.iter().any(|(needs, _)| needs == what))
+                    .map(|step| step.makes)
+                    .chain(
+                        making::every_working_to_find_out()
+                            .filter(|working| working.to == *what)
+                            .map(|working| working.makes),
+                    )
+                    .filter(|makes| {
+                        !self.population.agents[agent_index]
+                            .what_i_found_out()
+                            .contains(*makes)
+                    })
+                    .collect();
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.practise(crate::agents::SkillType::Crafting, 4, tick_now);
+
+                let Some(worth_a_look) = could_be_for.first().copied() else {
+                    return ActionResult::failure(format!("Nothing new about a {what}"))
+                        .with_drive_change(DriveType::Curiosity, -0.1)
+                        .with_energy_cost(1.0);
+                };
+
+                // Turning it over in your hands is not the same as knowing.
+                // Most of the time it tells you nothing, which is why this
+                // does not collapse the chain into an afternoon's inspection.
+                let hand = agent.skills.hand_for(crate::agents::SkillType::Crafting);
+                let odds = (Self::WHAT_LOOKING_CLOSELY_IS_WORTH * hand).clamp(0.0, 0.5);
+
+                if !rng.gen_bool(odds as f64) {
+                    return ActionResult::failure(format!("Turned the {what} over, none the wiser"))
+                        .with_drive_change(DriveType::Curiosity, -0.2)
+                        .with_energy_cost(1.0);
+                }
+
+                agent.found_out_how_to(worth_a_look);
+
+                debug!(
+                    "Agent {} looked at a {what} and saw what it is for ({worth_a_look})",
+                    agent.id
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Curiosity, -0.5)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Looked at a {what}: it is for a {worth_a_look}"))
             },
 
             Action::PickUp { what } => {

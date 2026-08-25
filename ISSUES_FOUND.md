@@ -809,6 +809,29 @@ third, and both are the worse for it. The effect is not separable at the
 settlement level: mean health was 93.5 before and 93.6 after, because
 predators reach very few people in a world.
 
+**Looking closely at a strange thing**, which turned out to be the piece the
+discovery chain had been missing all along. The deepest steps — the shiny
+lump out of a fire, the blade beaten out of it, the knife and the axe hafted
+from that — were reported twice in this file as built, tested and idle,
+because the only ways in were repeating a trick you had already stumbled on
+and putting the wrong thing where a part goes, and both of those want you to
+have got there first.
+
+Turning over a thing you are already carrying costs a turn and no materials,
+so it is the cheapest experiment there is and pays off least often: six per
+cent, scaled by the hand doing the turning. Over eight worlds against
+`1d1d863` the agents who know what a bright stone does went from 0.9 a world
+to 15, those who know what to beat one into from 0.1 to 5.5, and metal tools
+existed in seven worlds of eight where in every measurement before this they
+existed in none. Population 67.9 to 67.3.
+
+The first cut let an agent look at anything. Examining a length of cord
+announced the metal knife, because a metal knife happens to be lashed
+together, and 30 to 44 agents a world "worked out" steps they had no business
+reaching. A thing that is already part of something everybody understands
+raises no questions, however much else it goes into; only something outside
+all of that does.
+
 Three of my own tests turned out to be asserting deterministic outcomes from
 random gates, and only failed in full-suite runs where the seeds differ:
 whether two strangers trust each other enough to trade is drawn with their

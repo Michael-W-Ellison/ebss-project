@@ -1382,6 +1382,48 @@ impl Agent {
             .map(|step| step.makes.to_string())
     }
 
+    /// Something in the pack worth turning over in the hands.
+    ///
+    /// A thing this agent is carrying that goes into a step or a working
+    /// nobody here has worked out. Looking closely at it costs a turn and no
+    /// materials, which makes it the cheapest way into the chain and the one
+    /// that has to pay off least often - see
+    /// `Simulation::WHAT_LOOKING_CLOSELY_IS_WORTH`.
+    pub fn what_i_would_look_at(&self) -> Option<String> {
+        use crate::environment::making;
+
+        let unfamiliar = |what: &str| {
+            // A thing that is already part of something everybody understands
+            // raises no questions, however much else it goes into
+            if making::is_a_familiar_thing(what) {
+                return false;
+            }
+
+            making::everything_to_find_out()
+                .filter(|step| step.needs.iter().any(|(needs, _)| *needs == what))
+                .map(|step| step.makes)
+                .chain(
+                    making::every_working_to_find_out()
+                        .filter(|working| working.to == what)
+                        .map(|working| working.makes),
+                )
+                .any(|makes| !self.found_out.contains(makes))
+        };
+
+        self.inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0)
+            .map(|item| item.item_id.as_str())
+            .filter(|what| unfamiliar(what))
+            .filter(|what| {
+                self.lessons
+                    .will_try_this_again(&format!("examine:{what}"))
+            })
+            .map(|what| what.to_string())
+            .next()
+    }
+
     /// Something in the pack worth breaking down, and what to break it with.
     ///
     /// Returns the verb and the thing it is done to. Only workings this agent
@@ -3570,6 +3612,7 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
+            Action::Examine { what } => format!("examine:{what}"),
             Action::PickUp { .. } => "pickup".to_string(),
             Action::PutDown { .. } => "putdown".to_string(),
             Action::Trade { .. } => "trade".to_string(),

@@ -230,6 +230,9 @@ pub enum Action {
     /// Go over a standing field pulling weeds out of it and picking pests off
     /// it, which is most of what growing a crop actually consists of
     TendField,
+    /// Look closely at something in the pack, and sometimes work out what it
+    /// is for
+    Examine { what: String },
     /// Take something lying on the ground here into the pack
     PickUp { what: String },
     /// Set something down on the ground here
@@ -292,6 +295,7 @@ impl Action {
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
+            Action::Examine { .. } => Some(DriveType::Curiosity),
             Action::PickUp { .. } => Some(DriveType::Utility),
             Action::PutDown { .. } => Some(DriveType::Utility),
             Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing

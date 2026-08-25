@@ -105,15 +105,20 @@ fn a_kill_fills_the_pack_with_meat_and_skins() {
         .skills
         .set_skill_level(SkillType::Hunting, 8);
 
-    // A spear, because a hunt is a spear and an animal - the verb matrix
-    // refuses one without the other, see `environment::verbs`
-    simulation.population.agents[0]
-        .inventory
-        .add_item(crate::agents::InventoryItem::new_with_weight(
-            "spear".to_string(),
-            1,
-            2.0,
-        ));
+    // Spears, because a hunt is a spear and an animal - the verb matrix
+    // refuses one without the other, see `environment::verbs` - and because
+    // half the throws that miss leave the shaft in the bracken. One spear and
+    // forty throws is one throw.
+    for _ in 0..8 {
+        simulation.population.agents[0]
+            .inventory
+            .add_item(crate::agents::InventoryItem::new_with_durability(
+                "spear".to_string(),
+                1,
+                25.0,
+                crate::agents::Quality::Basic,
+            ));
+    }
 
     // Even a practised hunter misses sometimes
     for _ in 0..40 {
