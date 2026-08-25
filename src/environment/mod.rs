@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use crate::core::DriveType;
 
 pub mod making;
+pub mod verbs;
 mod material;
 mod action;
 mod crafting;

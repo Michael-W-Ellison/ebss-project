@@ -105,6 +105,16 @@ fn a_kill_fills_the_pack_with_meat_and_skins() {
         .skills
         .set_skill_level(SkillType::Hunting, 8);
 
+    // A spear, because a hunt is a spear and an animal - the verb matrix
+    // refuses one without the other, see `environment::verbs`
+    simulation.population.agents[0]
+        .inventory
+        .add_item(crate::agents::InventoryItem::new_with_weight(
+            "spear".to_string(),
+            1,
+            2.0,
+        ));
+
     // Even a practised hunter misses sometimes
     for _ in 0..40 {
         if simulation
@@ -166,6 +176,13 @@ fn hunting_teaches_hunting() {
 
     let mut simulation = Simulation::new(world, population);
     simulation.population.agents[0].state.position = (30, 30, 0);
+    simulation.population.agents[0]
+        .inventory
+        .add_item(crate::agents::InventoryItem::new_with_weight(
+            "spear".to_string(),
+            1,
+            2.0,
+        ));
 
     let before = simulation.population.agents[0]
         .skills

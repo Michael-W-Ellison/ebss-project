@@ -63,7 +63,15 @@ original specifications.
   stripped ground, somewhere three times better a fortnight off, no crop
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
-  ISSUES_FOUND.md #12
+  ISSUES_FOUND.md #13
+- ✅ Every action defined by three things: what it targets, what it wants in
+  the hand, and what it changes. Sixty-eight verbs across twelve families live
+  in one table — `src/environment/verbs.rs` — and the table is what the
+  executor consults before an action runs, so a hunt without a spear and a
+  stitch with no hand free are refused in one place rather than in thirty. The
+  table is honest about itself: a verb nothing performs yet says so, and a test
+  fails if it stops saying so. Twenty-odd of the sixty-eight are live; the
+  chemical and fluid family is entirely declaration so far
 - ✅ Four ways into farming, none of which is anybody's idea about agriculture.
   Grain carried through the wet — a marsh, a riverbank, a downpour on open
   ground — starts coming up in the pack, and what falls out of a pack takes
@@ -111,7 +119,7 @@ original specifications.
   back more than a casual one, and a dedicated tailor makes better coats and
   wastes fewer. Skill used to measure how much of the map somebody had walked
   over: everybody was a master farmer, nobody had farmed, and none of it did
-  anything. See ISSUES_FOUND.md #17
+  anything. See ISSUES_FOUND.md #18
 - ✅ Everybody is somebody: a founder is drawn with three to five compatible
   traits out of sixty-odd, and everybody born afterwards takes after their two
   parents. Forty founders are forty different people
@@ -120,7 +128,7 @@ original specifications.
   pushing before starting work and a coward starts running at a smaller wolf.
   Measured against the old action ladder it changed almost nothing; both things
   that blocked it have since been rebuilt, and whether it now tells has not
-  been re-measured. See ISSUES_FOUND.md #16
+  been re-measured. See ISSUES_FOUND.md #17
 - ✅ Drives that know which of them matters: they are ranked primary, secondary
   and tertiary, and among the primaries the one that would kill soonest wins —
   a thirsty man stops hunting. Each drive waits on the one before it in the

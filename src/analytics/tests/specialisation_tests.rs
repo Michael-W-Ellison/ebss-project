@@ -273,6 +273,17 @@ fn a_dedicated_tailor_wastes_less_and_makes_better() {
                 recipe.material_amount,
             ));
 
+            // And something to cut and stitch with. Sewing wants an edge in
+            // the hand - see `environment::verbs` - and a fresh bench that
+            // took the knife away with everything else would be a bench
+            // nobody can work at.
+            agent.inventory.add_item(InventoryItem::new_with_durability(
+                "stoneknife".to_string(),
+                1,
+                30.0,
+                Quality::Basic,
+            ));
+
             let made = simulation.execute_action(
                 &Action::MakeClothing {
                     garment: recipe.id.to_string(),

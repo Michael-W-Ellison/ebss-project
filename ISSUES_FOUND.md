@@ -699,7 +699,7 @@ Partly answered since, by accident rather than by design: grain that gets wet
 sprouts, and a sprouted grain that falls out of a pack takes root — so grain
 patches now propagate, and eight worlds finished with 12.9 of them against 7.8.
 That is more grain in the country than a world starts with, and it still is not
-enough for grain to be the thing a settlement reaches for. See #11.
+enough for grain to be the thing a settlement reaches for. See #12.
 
 The first cut of the sowing rule let an agent sow anything in its pack. Over
 eight worlds the people put in flax and cotton — they carry it for clothing —
@@ -711,7 +711,54 @@ Also found on the way: `Gather { resource_type: "grain" }` was not a request
 the executor understood. It fell through to "unknown resource type" and failed.
 Grain only ever arrived as an edible substitute for a request for food.
 
-### 11. Four accidents that teach farming, and two that hardly ever happen
+### 11. What an action wants in the hand was never asked in one place
+
+Thirty-odd actions, each with an executor arm that resolved its own target its
+own way and checked its own preconditions its own way or not at all. `Cook`
+looked for a fire. `Craft` looked for a fire only when the step wanted one.
+`Gather` consulted a tool for a multiplier and then proceeded bare-handed if
+there wasn't one. `TendField` asked for nothing. There was no answer to "what
+does this verb want in its hands", because nothing ever asked.
+
+There is a table now — `src/environment/verbs.rs` — carrying sixty-eight verbs
+across the twelve families, each declaring what it targets, what it wants in
+hand (bare hands, a hand free, any tool for a trade, or one named thing), what
+it changes, and which action performs it. The executor asks the table before
+every action, so the requirement is declared once and enforced once. Two things
+are enforced that were not: a hunt wants a spear — the specification's own
+"hunting = spear + animal" — and stitching wants a hand free.
+
+The table is honest about what it does not do. Twenty-two of the sixty-eight
+verbs have something performing them; forty-six are declared and idle, and the
+whole chemical and fluid family is declaration. A test fails if the table stops
+saying so, because a matrix that quietly implied sixty-eight working verbs
+would be worse than no matrix.
+
+Measured over eight worlds against `1b9aa40`: population 73.3 to 77.4, a
+difference of 4.1 at a standard error of 5.9. What did move is the spread —
+standard deviation from 15.4 to 5.9. Agents dressed 47 to 50, spears carried
+45 to 50, knives 33 to 40, hunts 93 to 104.
+
+Two wrong turns on the way, both caught by measuring rather than by reading.
+
+**Sewing wanted an edge.** True of sewing and false of this economy: stone
+knives wear through faster than a people replaces them, so a requirement for a
+knife is one most people cannot meet most of the time. Over eight worlds it
+took the agents who finished dressed from 47 to 23 and drove clothing attempts
+from 774 to 5,694, almost all refusals. Sewing wants a hand free instead —
+still a real requirement, and one the economy can carry. What a knife is worth
+to the work is what it always was: how well the garment comes out.
+
+**A pack is not a pair of hands.** The first free-hand rule counted a hand as
+full for every kind of tool in the pack, so a man who owned an axe and a spear
+had no hands at all and could never stitch again. That made it worse, not
+better: clothing attempts went to 8,913 and the people finished in their
+shirtsleeves anyway. A tool is carried and taken out when it is wanted. What
+actually leaves somebody with nothing to work with is being loaded to the limit
+of what they can carry, and that is what the rule measures now. It bites on one
+or two agents in a world, which is about right.
+
+### 12. Four accidents that teach farming, and two that hardly ever happen
 
 Farming had one route in and two teachers. It has four of each now, and none of
 them is anybody's idea about agriculture — which is the point, because nobody
@@ -774,7 +821,7 @@ the table, so the man who found one could never deliberately make a second.
 Both new tools are steps now, marked as things nobody is born knowing, and the
 substitution is how you come to know them.
 
-### 12. There is no camp for nomadism to be a departure from
+### 13. There is no camp for nomadism to be a departure from
 
 A people that cannot farm has nothing it can do to make this ground carry
 more, so it should go where the ground already carries something, and a people
@@ -810,14 +857,14 @@ about twelve people. What replaced it is relative: somewhere three times better
 than here. That stops the moment the camp arrives, because it is then standing
 on the best ground it knows of.
 
-### 13. Agents still cannot hear anything
+### 14. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 14. Zoning and territory are never established
+### 15. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -825,7 +872,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 15. Agents carry food they will never eat
+### 16. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -835,7 +882,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 16. Personality exists and reaches the drives, and still decides nothing
+### 17. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -1017,7 +1064,7 @@ within reach of everybody, that adds up for every pair alike. It is the same
 shape of defect as the two that were fixed — an unbounded accumulator over a
 long run — and the principle has not yet been applied to it.
 
-### 17. Skill measured how far you had walked, and bought nothing
+### 18. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
 
@@ -1073,16 +1120,16 @@ matching the eight-world baseline exactly.
 
 ## Housekeeping
 
-### 18. Committed backup file
+### 19. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 19. Build warnings
+### 20. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 20. Placeholder package metadata
+### 21. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

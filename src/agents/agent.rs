@@ -1485,6 +1485,26 @@ impl Agent {
     /// towards bare hands, and a tool that was badly made was never much of
     /// one - "repeating the action increases the quality of the outcome",
     /// which is only true of anything if the quality is worth having.
+    /// Whether there is a hand free to take hold of something with.
+    ///
+    /// The first cut of this counted a hand as full for every kind of tool in
+    /// the pack, so a man who owned an axe and a spear had no hands at all and
+    /// could never stitch a coat again. A pack is not a pair of hands: a tool
+    /// is carried and taken out when it is wanted, and at rest a person's
+    /// hands are empty.
+    ///
+    /// What genuinely leaves somebody with nothing to work with is being
+    /// loaded to the limit of what they can carry - arms full, and the next
+    /// thing they pick up is the thing they drop. That is what this measures,
+    /// and it is the "free-hand" half of what an action requires.
+    pub fn a_hand_to_spare(&self) -> bool {
+        self.inventory.weight_capacity_remaining() > Self::WHAT_A_FREE_HAND_MEANS
+    }
+
+    /// How much a person has to have spare before they count as having a hand
+    /// free, in the units the pack is weighed in.
+    const WHAT_A_FREE_HAND_MEANS: f32 = 2.0;
+
     pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
         let Some(tool) = self.what_i_have_to_work_with(trade) else {
             return 1.0;

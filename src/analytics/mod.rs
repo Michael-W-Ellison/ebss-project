@@ -5444,6 +5444,48 @@ impl Simulation {
             .unwrap_or(false)
     }
 
+    /// Whether the hands doing this have what the verb wants in them.
+    ///
+    /// Returns what is missing, or `None` when the action can go ahead. The
+    /// requirement comes from the matrix rather than from here: this function
+    /// knows how to ask an agent what it is holding and nothing else about
+    /// which verbs want what.
+    fn what_these_hands_are_short_of(
+        &self,
+        action: &Action,
+        agent_index: usize,
+    ) -> Option<String> {
+        use crate::environment::verbs;
+
+        let agent = &self.population.agents[agent_index];
+
+        // The action's bare name, which is how the matrix refers to it:
+        // "gather:wood" is a gather
+        let tried = crate::agents::Agent::what_was_tried(action);
+        let named = tried.split(':').next().unwrap_or(&tried);
+
+        let wanted = verbs::what_this_action_cannot_do_without(named);
+        if wanted.is_empty() {
+            return None;
+        }
+
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let helped_by = |trade| agent.what_i_have_to_work_with(trade).is_some();
+        let a_hand_to_spare = agent.a_hand_to_spare();
+
+        wanted
+            .into_iter()
+            .find(|wants| !wants.satisfied_by(&holding, &helped_by, a_hand_to_spare))
+            .map(|wants| match wants {
+                verbs::Wants::ThisInHand(what) => format!("No {what} in hand for that"),
+                verbs::Wants::AToolFor(trade) => {
+                    format!("Nothing in hand that is any use for {}", trade.name())
+                }
+                verbs::Wants::AFreeHand => "Both hands full".to_string(),
+                verbs::Wants::BareHands => "Nothing wanting".to_string(),
+            })
+    }
+
     fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
         use rand::Rng;
         use crate::world::nutrition::CookingOutcome;
@@ -5454,6 +5496,14 @@ impl Simulation {
         // Doing the work is what keeps a hand in it - see
         // `Skills::let_unused_skills_rust`
         let tick_now = self.current_tick;
+
+        // What the verb matrix says this cannot be done without. One check
+        // here, from one table, rather than thirty arms each deciding for
+        // themselves whether a man needs a knife to skin something - see
+        // `environment::verbs`.
+        if let Some(missing) = self.what_these_hands_are_short_of(action, agent_index) {
+            return ActionResult::failure(missing);
+        }
 
         match action {
             Action::Eat { food_type } => {
