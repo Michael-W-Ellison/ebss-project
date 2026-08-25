@@ -94,13 +94,13 @@ fn a_practised_hand_makes_a_thing_that_lasts_longer() {
 
     let beginner = {
         let agent = &mut population.agents[0];
-        agent.skills.set_skill_level(SkillType::Hunting, -8);
+        agent.skills.set_skill_level(SkillType::Crafting, -8);
         agent.a_tool_fresh_from_these_hands("spear", 1, 2.0)
     };
 
     let practised = {
         let agent = &mut population.agents[0];
-        agent.skills.set_skill_level(SkillType::Hunting, 8);
+        agent.skills.set_skill_level(SkillType::Crafting, 8);
         agent.a_tool_fresh_from_these_hands("spear", 1, 2.0)
     };
 
@@ -337,4 +337,129 @@ fn a_spear_makes_a_hunter_of_somebody() {
     let helped = agent.how_much_my_tools_help(SkillType::Hunting);
     assert!(helped > 1.0, "a spear should count for something in a hunt");
     assert!(helped <= SPEAR_FOR_HUNTING.how_much_better);
+}
+
+/// The tenth spear a man makes is a better spear than his first.
+#[test]
+fn a_practised_hand_makes_a_tool_that_works_better() {
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+
+    fn helped(agent: &mut Agent, hand: i32) -> f32 {
+        agent.skills.set_skill_level(SkillType::Crafting, hand);
+        agent.inventory.remove_item("spear", 1);
+        let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
+        agent.inventory.add_item(spear);
+        agent.how_much_my_tools_help(SkillType::Hunting)
+    }
+
+    let agent = &mut population.agents[0];
+    let first = helped(agent, -8);
+    let tenth = helped(agent, 8);
+
+    assert!(
+        tenth > first,
+        "practice should tell on how well the thing works: {tenth} against {first}"
+    );
+    assert!(
+        tenth <= SPEAR_FOR_HUNTING.how_much_better * 1.5,
+        "and not turn one man into three"
+    );
+}
+
+/// A badly made tool is still better than no tool.
+#[test]
+fn even_crude_work_beats_bare_hands() {
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let agent = &mut population.agents[0];
+    agent.skills.set_skill_level(SkillType::Crafting, -10);
+
+    let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
+    assert_eq!(spear.quality, Some(Quality::Pathetic));
+    agent.inventory.add_item(spear);
+
+    assert!(
+        agent.how_much_my_tools_help(SkillType::Hunting) > 1.0,
+        "the worst spear anybody ever made is still a spear"
+    );
+}
+
+/// Doing the thing over and over is what makes the thing better.
+///
+/// The whole loop, through the real crafting path: make, get better at making,
+/// and find that what comes out of your hands has improved.
+#[test]
+fn making_the_same_thing_over_and_over_improves_it() {
+    use crate::environment::Action;
+
+    let mut simulation = one_agent_world();
+
+    fn spear_from(simulation: &mut Simulation) -> (Option<crate::agents::skills::Quality>, f32) {
+        {
+            let agent = &mut simulation.population.agents[0];
+            agent.inventory.remove_item("spear", 1);
+            carrying(agent, "wood", 1);
+            carrying(agent, "knappedtip", 1);
+            carrying(agent, "lashing", 1);
+        }
+        let result = simulation.execute_action(
+            &Action::Craft { item_type: "spear".to_string() },
+            0,
+        );
+        assert!(result.success, "{:?}", result.message);
+        let made = simulation.population.agents[0]
+            .inventory
+            .get_item("spear")
+            .expect("he is holding the spear he just made");
+        (made.quality, made.max_durability.unwrap_or(0.0))
+    }
+
+    let started_at = simulation.population.agents[0]
+        .skills
+        .get_skill_mut(SkillType::Crafting)
+        .level;
+    let (first_quality, first_life) = spear_from(&mut simulation);
+
+    // Knap flakes until the hand has learned something. Two hundred is more
+    // than it takes and bounds the loop.
+    for _ in 0..200 {
+        {
+            let agent = &mut simulation.population.agents[0];
+            agent.inventory.remove_item("knappedtip", 1);
+            carrying(agent, "stone", 2);
+        }
+        simulation.execute_action(
+            &Action::Craft { item_type: "knappedtip".to_string() },
+            0,
+        );
+        if simulation.population.agents[0]
+            .skills
+            .get_skill_mut(SkillType::Crafting)
+            .level
+            > started_at
+        {
+            break;
+        }
+    }
+
+    let ended_at = simulation.population.agents[0]
+        .skills
+        .get_skill_mut(SkillType::Crafting)
+        .level;
+    assert!(
+        ended_at > started_at,
+        "knapping two hundred flakes should teach a man something: still at {ended_at}"
+    );
+
+    let (later_quality, later_life) = spear_from(&mut simulation);
+    assert!(
+        later_life > first_life,
+        "the spear made by the practised hand should outlast the first: \
+         {later_life} against {first_life}"
+    );
+    assert!(
+        later_quality >= first_quality,
+        "and be no worse a spear: {later_quality:?} against {first_quality:?}"
+    );
 }

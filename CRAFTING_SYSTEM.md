@@ -43,8 +43,13 @@ drive asks; `Action::Craft` resolves a named step here before falling through
 to the table below.
 
 A tool made this way is as good as the hands that made it: `Quality::from_hand`
-and `how_long_this_one_lasts` set what it is worth and how long it lasts, so
-the same man's tenth spear outlasts his first. `Making::obvious` marks what a
+and `how_long_this_one_lasts` set what it is worth and how long it lasts, from
+the maker's hand at the trade the step calls for — a spear is only as good as
+the man who lashed it, whoever ends up throwing it. Quality tells on how well
+the tool works as well as on how long it lasts, squeezed into the band
+`Agent::WHAT_GOOD_WORK_IS_WORTH` so that the tenth spear is half again the
+first and not three times it. A step that costs more to do teaches more, so a
+spear is worth two flakes of practice. `Making::obvious` marks what a
 stone-age people arrives already knowing — everything in the table today, with
 the field there for the things they will have to find out.
 

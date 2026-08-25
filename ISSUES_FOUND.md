@@ -547,7 +547,10 @@ man with a stone axe felled timber at exactly the rate of a man with his bare
 hands. An axe is now worth up to 1.8x on timber and 1.5x on stone, a spear
 counts in a hunt and in the shallows, a knife nearly doubles what comes off a
 carcass — and each of them wears out in twenty-five to forty pieces of work,
-sooner if the hand that made it was clumsy.
+sooner if the hand that made it was clumsy. What the hand that made it could do
+also decides how well it works, so a man's tenth spear is half again the spear
+his first was and lasts twice as long, which is what "repeating the action
+increases the quality of the outcome" comes to.
 
 Measured over eight worlds of ten thousand ticks, the settlement works with
 tools that are visibly used up: the mean condition of every tool held is 0.72

@@ -1270,25 +1270,41 @@ impl Agent {
             })
     }
 
+    /// How much better a well made tool is than a badly made one, at the
+    /// extremes.
+    ///
+    /// `Quality::modifier` runs from 0.5 to 2.0, which put on top of the
+    /// tool's own multiplier would make an expert's axe worth two and a half
+    /// men. This is the band it is squeezed into: the tenth spear a man makes
+    /// is half again the spear his first was, and no more than that.
+    const WHAT_GOOD_WORK_IS_WORTH: (f32, f32) = (0.7, 1.5);
+
     /// What having the right tool multiplies a piece of work by.
     ///
     /// One if there is nothing to hand, which is what a pair of bare hands
     /// gets. A tool most of the way through its life is most of the way back
-    /// towards bare hands.
+    /// towards bare hands, and a tool that was badly made was never much of
+    /// one - "repeating the action increases the quality of the outcome",
+    /// which is only true of anything if the quality is worth having.
     pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
         let Some(tool) = self.what_i_have_to_work_with(trade) else {
             return 1.0;
         };
 
-        let left = self
-            .inventory
-            .get_item(tool.called)
-            .map(|item| item.durability_percentage())
-            .unwrap_or(0.0);
+        let Some(carried) = self.inventory.get_item(tool.called) else {
+            return 1.0;
+        };
+
+        let left = carried.durability_percentage();
+        let (worst, best) = Self::WHAT_GOOD_WORK_IS_WORTH;
+        let how_well_made = carried
+            .quality
+            .map(|quality| quality.modifier().clamp(worst, best))
+            .unwrap_or(1.0);
 
         // A blunt axe is still an axe, so half the gain survives to the end
         // of its life and the other half wears away with it.
-        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left)
+        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left) * how_well_made
     }
 
     /// Wear the tool used for a piece of work, and say if it broke.
@@ -1347,7 +1363,14 @@ impl Agent {
             .iter()
             .find(|tool| tool.called == called)
         {
-            let hand = self.skills.hand_for(tool.helps);
+            // The hand that matters is the one that does the making, not the
+            // one that will use the thing: a spear is only as good as the man
+            // who lashed it, whoever ends up throwing it.
+            let trade = crate::environment::making::how_to_make(called)
+                .map(|step| step.hands)
+                .unwrap_or(tool.helps);
+            let hand = self.skills.hand_for(trade);
+
             let lasts = crate::environment::making::how_long_this_one_lasts(tool, hand);
             made.current_durability = Some(lasts);
             made.max_durability = Some(lasts);

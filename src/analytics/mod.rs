@@ -5213,8 +5213,11 @@ impl Simulation {
                     }
 
                     {
+                        // A spear teaches more than a length of cordage does,
+                        // in the proportion the two cost to do.
+                        let learned = (step.effort / 4.0).round().max(1.0) as u32;
                         let skill = agent.skills.get_skill_mut(step.hands);
-                        skill.gain_experience(1);
+                        skill.gain_experience(learned);
                         skill.last_used = tick_now;
                     }
 
