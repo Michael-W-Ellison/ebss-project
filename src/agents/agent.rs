@@ -855,6 +855,9 @@ pub struct Agent {
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
     found_out: std::collections::HashSet<String>,
+    /// What has answered which need, and where it answered it.
+    #[serde(default)]
+    pub patterns: super::patterns::Patterns,
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
 
@@ -935,6 +938,7 @@ impl Agent {
             technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             found_out: std::collections::HashSet::new(),
+            patterns: super::patterns::Patterns::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
@@ -3387,6 +3391,64 @@ impl Agent {
             } else {
                 tree.penalize_action(&action_name, 0.05);
             }
+        }
+    }
+
+    /// Link what was just done to the need it answered.
+    ///
+    /// The specification's pattern formation: "when an agent satisfies drive
+    /// demand, it links its previous actions taken to the drive satisfaction
+    /// to form a pattern". The action and the ground it was done on go down
+    /// against every need the doing of it actually eased.
+    ///
+    /// A drive that barely moved is not evidence of anything - joining that to
+    /// whatever the agent happened to be doing is how a superstition gets
+    /// made - so only a real fall counts. And an action that was *aimed* at a
+    /// need and did not answer it counts against the pattern, so that ground
+    /// which has stopped working stops being worth the walk back.
+    pub fn link_what_worked(
+        &mut self,
+        action: &Action,
+        action_result: &ActionResult,
+        aimed_at: DriveType,
+        where_it_was: (i32, i32, i32),
+        now: u32,
+    ) {
+        use super::patterns::Patterns;
+
+        let what = Self::what_was_tried(action);
+        let mut answered_anything = false;
+
+        for (need, change) in &action_result.drive_changes {
+            if *change <= -Patterns::ENOUGH_TO_NOTICE {
+                self.patterns.it_worked(*need, &what, where_it_was, now);
+                if *need == aimed_at {
+                    answered_anything = true;
+                }
+            }
+        }
+
+        if !answered_anything {
+            self.patterns.it_did_not(aimed_at, &what);
+        }
+    }
+
+    /// Ground this agent would walk back to for a need, if any.
+    ///
+    /// Not the tile it is standing on: this answers "where do I go", and the
+    /// answer "here" is no answer.
+    pub fn somewhere_that_answered(
+        &self,
+        need: DriveType,
+        from: (i32, i32, i32),
+        now: u32,
+    ) -> Option<(i32, i32, i32)> {
+        let there = self.patterns.where_it_worked(need, now)?;
+
+        if (there.0 - from.0).abs() + (there.1 - from.1).abs() <= 1 {
+            None
+        } else {
+            Some(there)
         }
     }
 

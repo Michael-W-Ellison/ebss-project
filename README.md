@@ -448,6 +448,29 @@ Agents remember:
 - Social relationships and observed behaviors
 - Discovered crafting recipes
 
+### Patterns
+
+An agent joins what it did to the need that got answered, and to the ground it
+was standing on when it did — `agents::patterns`. A drive that falls by a real
+amount under some action writes that action down against that need, with the
+place; a drive that barely moved writes nothing, because joining a drive's own
+drift to whatever the agent happened to be doing is how a superstition gets
+made. An action aimed at a need that does not answer it counts against the
+pattern, so ground that stops working stops being worth the walk back.
+
+Three times is a habit and a season is as long as a place stays worth walking
+to. Measured over eight worlds of ten thousand ticks, a settlement works out
+about thirteen of these per living agent from nothing, and four agents in five
+end up knowing where the water is.
+
+What it does not do is change how a settlement fares. Eight worlds a side at
+ten thousand ticks put the population up by 16 at a standard error of 11; eight
+worlds a side at twelve thousand put it *down* by 14 at a standard error of 10.
+Two runs pointing opposite ways at the same size is noise, and the honest
+reading is that the mechanism costs nothing and buys nothing yet. It is kept
+because it is the substrate the rest of the discovery work stands on, and
+because what it records is worth having whether or not it has paid off.
+
 ### Learning
 - **Trial & Error**: Random exploration with reinforcement
 - **Observation**: Young agents copy experienced agents

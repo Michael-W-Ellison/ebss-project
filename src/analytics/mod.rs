@@ -729,6 +729,13 @@ impl Simulation {
                 // and less of what does not
                 agent.learn_from(&action, action_result.success);
 
+                // Then join the doing to the need it answered and the ground
+                // it was answered on, which is what lets a thirsty man walk
+                // back to the bank he drank from yesterday
+                let where_it_was = agent.state.position;
+                let now = self.current_tick;
+                agent.link_what_worked(&action, &action_result, drive_type, where_it_was, now);
+
                 // Apply trait-based happiness rewards for successful actions
                 if action_result.success {
                     agent.apply_trait_action_rewards(&action);
@@ -1381,6 +1388,24 @@ impl Simulation {
             return Some(Action::Gather { resource_type: "water".to_string() });
         }
 
+        // Nowhere known to drink by sight or smell, but somewhere that has
+        // answered this before.
+        //
+        // This was aimed at `Gather: No water sources nearby`, the largest
+        // single failure in the simulation, on the theory that nothing joined
+        // the drink an agent had yesterday to the bank it drank from. Measured
+        // over eight worlds a side it did not move that failure at all - the
+        // rate is 3.7% of all actions without this and 4.7% with it, which is
+        // noise - so whatever is producing those refusals is not an agent
+        // being unable to remember where water is. See ISSUES_FOUND #2. It is
+        // kept because it is the answer of last resort before striking out
+        // blind, and because it costs nothing.
+        if let Some(there) =
+            agent.somewhere_that_answered(DriveType::Thirst, agent_position, self.current_tick)
+        {
+            return Some(Action::Move { target: there });
+        }
+
         // Nowhere known to drink: go looking, if it has come to that
         if desperate {
             return Some(Self::search_leg(agent, agent_position, self.current_tick));
@@ -1463,6 +1488,13 @@ impl Simulation {
 
         if let Some(action) = self.migration_action(agent, agent_position) {
             return Some(action);
+        }
+
+        // Ground that has fed this agent before, when nothing nearer will.
+        if let Some(there) =
+            agent.somewhere_that_answered(DriveType::Hunger, agent_position, self.current_tick)
+        {
+            return Some(Action::Move { target: there });
         }
 
         // Starving with nowhere known to go: search rather than stand still

@@ -28,3 +28,4 @@ pub mod stone_age_tests;
 pub mod making_tests;
 pub mod tool_wear_tests;
 pub mod discovery_tests;
+pub mod pattern_tests;

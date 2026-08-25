@@ -134,6 +134,30 @@ The largest remaining failure is the one this entry opened with: `Gather: No
 water sources nearby`, 12,000-20,000 a world, which is now roughly two thirds
 of everything that still fails.
 
+**And the obvious explanation for it is wrong.** The reading above - that an
+agent away from water spends its turns asking for it because nothing joins the
+drink it had yesterday to the bank it drank from - was tested directly by
+giving agents exactly that memory (see `agents::patterns`). It made no
+difference: eight worlds a side of ten thousand ticks put the refusal at 3.7%
+of all actions without the memory and 4.7% with it, a difference of 0.010 at a
+standard error of 0.017. The count rises with the population rather than with
+anything else.
+
+Nor does the memory pay off anywhere else. Population came out 16 higher at ten
+thousand ticks (se 11) and 14 *lower* at twelve thousand (se 10), eight worlds
+a side each time: two runs pointing opposite ways at the same size, which is
+noise. It also widened the spread - eight worlds ran from 89 to 119 people
+without it and from 41 to 121 with it.
+
+What is left is a decision that was true when it was made. `water_action`
+chooses to drink when a source with water in it stands within the foraging
+radius; the action is carried out later in the same tick, by which time some
+other agent may have drunk the last of it. Every agent that decided to drink at
+a spring holding one unit fails but the first. That would explain a failure
+that scales with population, cannot be removed by better memory, and never
+falls however well the settlement is doing - but it has not been confirmed, and
+confirming it is the next thing anybody should do to this entry.
+
 | Measure | Before | After |
 | --- | --- | --- |
 | All actions failing | 58.1% | **6.6%** |
