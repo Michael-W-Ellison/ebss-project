@@ -680,6 +680,22 @@ impl Simulation {
                 // Drop travel plans toward places the agent cannot reach
                 let action = self.retarget_unreachable_move(agent_index, action);
 
+                // A job that wants a hand free, and both of them full. A
+                // person does not stand there defeated by it: they put
+                // something down and get on with it. This is the only place
+                // `Unequip` is ever chosen, because it is the only reason
+                // anybody would.
+                let action = self.free_a_hand_for(action, agent_index);
+
+                // And a job whose tool is still in the bag: spend the turn
+                // getting it out. The first cut of this put equipping at the
+                // bottom of the Utility chain, where it fired half a time in
+                // a world of ten thousand ticks - there is always some
+                // material wanting fetching, so nothing ever reached it.
+                // Reaching for a tool is not what somebody does with a spare
+                // moment, it is what they do just before using it.
+                let action = self.get_the_tool_out_for(action, agent_index);
+
                 // What the settlement spends its days doing
                 let did = if running_away {
                     "Flee".to_string()
@@ -2788,6 +2804,13 @@ impl Simulation {
 
     /// And what it takes out of them.
     const WHAT_RUNNING_COSTS: f32 = 14.0;
+
+    /// What it costs to get a thing out of the pack, or put it back.
+    ///
+    /// Nearly nothing, because it is nearly nothing - the point of the action
+    /// is the turn it takes rather than the effort, and a turn is what a
+    /// person spends by doing this instead of something else.
+    const WHAT_GETTING_A_THING_OUT_COSTS: f32 = 1.5;
 
     /// How far somebody will walk for a thing they can see lying on the ground.
     const WORTH_WALKING_OVER_FOR: u32 = 12;
@@ -5809,6 +5832,110 @@ impl Simulation {
     /// requirement comes from the matrix rather than from here: this function
     /// knows how to ask an agent what it is holding and nothing else about
     /// which verbs want what.
+    /// Spend the turn getting the tool out, when the job about to be done
+    /// wants one and it is still in the pack.
+    ///
+    /// The matrix already says which actions want a tool and for what trade,
+    /// so this asks it rather than keeping a second list. It costs the agent
+    /// a turn and buys back `WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH` on this
+    /// piece of work and every piece after it until the thing is put away.
+    fn get_the_tool_out_for(&self, action: Action, agent_index: usize) -> Action {
+        use crate::environment::verbs;
+
+        // Freeing a hand is itself the answer to a different problem, and the
+        // two must not fight over the turn
+        if matches!(action, Action::Equip { .. } | Action::Unequip { .. }) {
+            return action;
+        }
+
+        let agent = &self.population.agents[agent_index];
+
+        if !agent.a_hand_to_spare() {
+            return action;
+        }
+
+        let tried = crate::agents::Agent::what_was_tried(&action);
+        let named = tried.split(':').next().unwrap_or(&tried);
+
+        let wanted = verbs::what_this_action_cannot_do_without(named);
+
+        let out = wanted.iter().find_map(|wants| match wants {
+            verbs::Wants::AToolFor(trade) => agent
+                .what_i_have_to_work_with(*trade)
+                .filter(|tool| !agent.is_in_my_hand(tool.called))
+                .map(|tool| tool.called),
+            _ => None,
+        });
+
+        match out {
+            Some(what) => Action::Equip {
+                what: what.to_string(),
+            },
+            None => action,
+        }
+    }
+
+    /// Turn an action refused for want of a free hand into the act of freeing
+    /// one.
+    ///
+    /// The matrix will refuse the job either way; the difference is whether
+    /// the agent spends the turn failing or spends it putting the axe away.
+    /// Anything else the matrix objects to - no tool at all, no vessel - is
+    /// left alone, because emptying a hand does not help with those.
+    /// What a step costs, as a multiple of what it costs empty-handed.
+    ///
+    /// Nothing at all up to `WHAT_GOES_UNNOTICED` of what a person can carry
+    /// - a pack with a day's food and a spear in it is not a burden - and
+    /// then rising to `WHAT_A_FULL_PACK_COSTS` at the limit of what the arms
+    /// will hold.
+    fn what_this_load_costs(agent: &crate::agents::Agent) -> f32 {
+        let capacity = agent.inventory.effective_max_weight();
+
+        if capacity <= 0.0 {
+            return 1.0;
+        }
+
+        let loaded = (agent.inventory.current_weight / capacity).clamp(0.0, 1.0);
+        let felt = ((loaded - Self::WHAT_GOES_UNNOTICED) / (1.0 - Self::WHAT_GOES_UNNOTICED))
+            .clamp(0.0, 1.0);
+
+        1.0 + felt * (Self::WHAT_A_FULL_PACK_COSTS - 1.0)
+    }
+
+    /// The share of what somebody can carry that they carry without feeling
+    /// it.
+    const WHAT_GOES_UNNOTICED: f32 = 0.4;
+
+    /// What a step costs somebody loaded to the limit, against the same step
+    /// taken empty-handed.
+    const WHAT_A_FULL_PACK_COSTS: f32 = 1.8;
+
+    fn free_a_hand_for(&self, action: Action, agent_index: usize) -> Action {
+        use crate::environment::verbs;
+
+        let agent = &self.population.agents[agent_index];
+
+        if agent.a_hand_to_spare() {
+            return action;
+        }
+
+        let tried = crate::agents::Agent::what_was_tried(&action);
+        let named = tried.split(':').next().unwrap_or(&tried);
+
+        let wants_a_hand = verbs::what_this_action_cannot_do_without(named)
+            .iter()
+            .any(|wants| matches!(wants, verbs::Wants::AFreeHand));
+
+        if !wants_a_hand {
+            return action;
+        }
+
+        match agent.what_i_would_put_away() {
+            Some(what) => Action::Unequip { what },
+            None => action,
+        }
+    }
+
     fn what_these_hands_are_short_of(
         &self,
         action: &Action,
@@ -7272,7 +7399,14 @@ impl Simulation {
                 // Base energy cost (modified by speed and distance)
                 let base_energy_cost = 2.0;
                 let actual_energy_cost = if movement_speed > 0.1 {
-                    base_energy_cost / movement_speed
+                    // And by what is on the agent's back. Carrying was free
+                    // until now: a man walked as easily under sixty pounds of
+                    // stone as under nothing, which made a full pack pure
+                    // gain and a basket a thing with no cost at all. A load
+                    // is paid for with every step taken under it - which is
+                    // what `verbs::CARRY` had always claimed and nothing had
+                    // ever made true.
+                    base_energy_cost * Self::what_this_load_costs(agent) / movement_speed
                 } else {
                     // Legs too damaged, can't move
                     return ActionResult::failure("Too injured to move (legs crippled)".to_string());
@@ -9375,6 +9509,48 @@ impl Simulation {
                     .with_drive_change(DriveType::Utility, -0.35)
                     .with_energy_cost(2.0)
                     .with_message(format!("Took {took} {} from somebody", theirs.0))
+            },
+
+            Action::Equip { what } => {
+                // Getting the thing out. It stays in the pack - a hand is a
+                // claim on a thing rather than a second place to keep it -
+                // and what it buys is `WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH`
+                // back on every piece of work done with it.
+                let agent = &mut self.population.agents[agent_index];
+
+                if agent.is_in_my_hand(what) {
+                    return ActionResult::failure(format!("Already holding the {what}"));
+                }
+
+                if agent.how_many_i_have(what) == 0 {
+                    return ActionResult::failure(format!("No {what} to take up"));
+                }
+
+                if !agent.take_in_hand(what) {
+                    return ActionResult::failure("Both hands full".to_string());
+                }
+
+                debug!("Agent {} took up a {what}", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.1)
+                    .with_energy_cost(Self::WHAT_GETTING_A_THING_OUT_COSTS)
+                    .with_message(format!("Took up a {what}"))
+            },
+
+            Action::Unequip { what } => {
+                let agent = &mut self.population.agents[agent_index];
+
+                if !agent.put_away(what) {
+                    return ActionResult::failure(format!("Not holding a {what}"));
+                }
+
+                debug!("Agent {} put the {what} away", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.1)
+                    .with_energy_cost(Self::WHAT_GETTING_A_THING_OUT_COSTS)
+                    .with_message(format!("Put the {what} away"))
             },
 
             Action::FleeFrom { away_from } => {

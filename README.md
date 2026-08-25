@@ -64,6 +64,22 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ Two hands, that hold particular things. `A_PAIR_OF_HANDS` had been in the
+  matrix since the matrix existed and nothing had made it true: a tool in the
+  pack was a tool in the hand, so an axe helped you the moment you owned one
+  whether or not you had got it out, and "a free hand" could only be guessed
+  at from how loaded the pack was. Getting the thing out is a turn's work now
+  and is worth it, a person can only hold two of the four or five tools a
+  working settlement owns, and a job that wants a hand free gets one by
+  putting something away rather than by failing. Carrying costs something too
+  — up to about twice the energy per step at the limit of what the arms will
+  hold, where before a man walked as easily under sixty pounds of stone as
+  under nothing. What this batch is actually worth, though, is the bug it
+  turned up: because the free-hand test was a pack-weight test, and a
+  settlement lives at the limit of what it can carry, every action the matrix
+  said wanted a hand free was being quietly refused for everybody. Removing
+  that one test on its own takes a settlement from 65.6 people to 79.8
+
 - ✅ Taking what is not yours, and running. Both were in the world already and
   neither had a name: flight went out as a `Move` like any other, so a man who
   had escaped four wolves had no record of having escaped anything. Running is
@@ -142,9 +158,7 @@ original specifications.
   executor consults before an action runs, so a hunt without a spear and a
   stitch with no hand free are refused in one place rather than in thirty. The
   table is honest about itself: a verb nothing performs yet says so, and a test
-  fails if it stops saying so. Forty-four of the sixty-eight are live; what is
-  left is mostly the equipment family, which wants a real in-the-hand state
-  before `equip` and `use` can mean anything
+  fails if it stops saying so. Forty-nine of the sixty-eight are live
 - ✅ Four ways into farming, none of which is anybody's idea about agriculture.
   Grain carried through the wet — a marsh, a riverbank, a downpour on open
   ground — starts coming up in the pack, and what falls out of a pack takes

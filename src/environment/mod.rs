@@ -237,6 +237,11 @@ pub enum Action {
     /// Look closely at something in the pack, and sometimes work out what it
     /// is for
     Examine { what: String },
+    /// Take a tool out of the pack and into a hand, so it is there when the
+    /// work starts rather than being dug out mid-job
+    Equip { what: String },
+    /// Put back into the pack whatever is occupying a hand
+    Unequip { what: String },
     /// Take something lying on the ground here into the pack
     PickUp { what: String },
     /// Set something down on the ground here
@@ -302,6 +307,8 @@ impl Action {
             Action::TakeFrom { .. } => Some(DriveType::Utility),
             Action::FleeFrom { .. } => Some(DriveType::Safety),
             Action::Examine { .. } => Some(DriveType::Curiosity),
+            Action::Equip { .. } => Some(DriveType::Utility),
+            Action::Unequip { .. } => Some(DriveType::Utility),
             Action::PickUp { .. } => Some(DriveType::Utility),
             Action::PutDown { .. } => Some(DriveType::Utility),
             Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing

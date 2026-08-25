@@ -314,6 +314,11 @@ impl Population {
             agent.tick_with_percepts(current_tick); // Process percepts with timestamp
             // Aging, metabolism, food spoilage and fatigue (pregnancy modifier applied inside)
             agent.process_survival_tick(current_tick);
+            // A hand cannot go on holding a spear that has been given away,
+            // stolen, worn through or eaten. Everything leaves the pack
+            // through the inventory, which knows nothing about hands, so the
+            // hands are reconciled against it once a tick.
+            agent.let_go_of_what_i_no_longer_have();
         }
 
         // Update relationships between nearby agents

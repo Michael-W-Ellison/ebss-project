@@ -896,6 +896,17 @@ pub struct Agent {
     /// hunting.
     #[serde(default)]
     pub lessons: super::practices::Lessons,
+    /// What is actually in this agent's hands, as against what is in the pack.
+    ///
+    /// A pair of them, which is what `verbs::A_PAIR_OF_HANDS` has always said
+    /// and nothing had ever made true. Before this a tool in the pack was a
+    /// tool in the hand: an axe helped you the moment you owned one, whether
+    /// or not you had got it out, and "a free hand" could only be guessed at
+    /// from how loaded the pack was. Taking a thing in hand is a turn's work
+    /// now, it is worth doing because a tool already out does more, and it
+    /// costs you the hand until you put it away.
+    #[serde(default)]
+    pub hands: [Option<String>; 2],
     /// What the world around this agent is doing, as far as its drives care.
     /// Filled in by the simulation once a tick; empty for an agent ticked
     /// without a world, which is the right answer for a world that is not
@@ -967,6 +978,7 @@ impl Agent {
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
+            hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
@@ -1706,21 +1718,87 @@ impl Agent {
     ///
     /// The first cut of this counted a hand as full for every kind of tool in
     /// the pack, so a man who owned an axe and a spear had no hands at all and
-    /// could never stitch a coat again. A pack is not a pair of hands: a tool
-    /// is carried and taken out when it is wanted, and at rest a person's
-    /// hands are empty.
+    /// could never stitch a coat again. The second guessed at it from how
+    /// loaded the pack was, which was a fudge and was written down as one.
     ///
-    /// What genuinely leaves somebody with nothing to work with is being
-    /// loaded to the limit of what they can carry - arms full, and the next
-    /// thing they pick up is the thing they drop. That is what this measures,
-    /// and it is the "free-hand" half of what an action requires.
+    /// There are two hands now and they hold particular things, so this is
+    /// simply a question about them.
+    ///
+    /// The pack does not come into it, and the third cut of this was the one
+    /// that found out why. A settlement lives at or over the limit of what it
+    /// can carry - measured mean load 70 against a capacity of 50 - so a rule
+    /// that wanted spare capacity meant nobody in the model ever had a hand
+    /// free for anything. What a heavy pack costs is paid in the walking, by
+    /// `Simulation::what_this_load_costs`, which is where it belongs.
     pub fn a_hand_to_spare(&self) -> bool {
-        self.inventory.weight_capacity_remaining() > Self::WHAT_A_FREE_HAND_MEANS
+        self.hands.iter().any(|hand| hand.is_none())
     }
 
-    /// How much a person has to have spare before they count as having a hand
-    /// free, in the units the pack is weighed in.
-    const WHAT_A_FREE_HAND_MEANS: f32 = 2.0;
+    /// Whether this particular thing is out and in a hand.
+    pub fn is_in_my_hand(&self, what: &str) -> bool {
+        self.hands
+            .iter()
+            .any(|hand| hand.as_deref() == Some(what))
+    }
+
+    /// What is out, in whichever order the hands happen to be in.
+    pub fn what_is_in_my_hands(&self) -> impl Iterator<Item = &str> {
+        self.hands.iter().filter_map(|hand| hand.as_deref())
+    }
+
+    /// Take something out of the pack and into a hand.
+    ///
+    /// Refuses what is not in the pack, what is already out, and anything at
+    /// all when both hands are full. Nothing leaves the pack: a hand is a
+    /// claim on a thing rather than a second place to keep it, which is what
+    /// keeps a thing from existing twice.
+    pub fn take_in_hand(&mut self, what: &str) -> bool {
+        if self.is_in_my_hand(what) {
+            return false;
+        }
+
+        if self.how_many_i_have(what) == 0 {
+            return false;
+        }
+
+        let Some(free) = self.hands.iter().position(|hand| hand.is_none()) else {
+            return false;
+        };
+
+        self.hands[free] = Some(what.to_string());
+        true
+    }
+
+    /// Put a thing back in the pack, freeing the hand.
+    pub fn put_away(&mut self, what: &str) -> bool {
+        let Some(held) = self
+            .hands
+            .iter()
+            .position(|hand| hand.as_deref() == Some(what))
+        else {
+            return false;
+        };
+
+        self.hands[held] = None;
+        true
+    }
+
+    /// A hand does not go on holding what the owner no longer has.
+    ///
+    /// Anything given away, traded, stolen, worn out or eaten leaves the pack
+    /// through the inventory, which knows nothing about hands - so the hands
+    /// are checked against the pack rather than being told.
+    pub fn let_go_of_what_i_no_longer_have(&mut self) {
+        for hand in 0..self.hands.len() {
+            let gone = self.hands[hand]
+                .as_deref()
+                .is_some_and(|what| self.inventory.get_item(what).is_none_or(|item| item.quantity == 0));
+
+            if gone {
+                self.hands[hand] = None;
+            }
+        }
+    }
 
     pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
         let Some(tool) = self.what_i_have_to_work_with(trade) else {
@@ -1738,9 +1816,56 @@ impl Agent {
             .map(|quality| quality.modifier().clamp(worst, best))
             .unwrap_or(1.0);
 
+        // An axe in the pack is an axe you have to stop and dig out. It still
+        // works - a person is not helpless because the thing is in the bag -
+        // but a tool already in the hand is worth appreciably more, and that
+        // difference is the whole reason anybody bothers to take one out.
+        let out = if self.is_in_my_hand(tool.called) {
+            1.0
+        } else {
+            Self::WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH
+        };
+
         // A blunt axe is still an axe, so half the gain survives to the end
         // of its life and the other half wears away with it.
-        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left) * how_well_made
+        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left) * how_well_made * out
+    }
+
+    /// What a tool you have not got out is worth against one you have.
+    ///
+    /// Not nothing: you can reach into a bag mid-job. The first cut put it at
+    /// two thirds and that was much too harsh - a person can only hold two
+    /// things and a working settlement owns four or five, so most work is
+    /// done with something fetched out of the bag, and taxing all of it a
+    /// sixth cost the settlement a quarter of its standing crop and 40 per
+    /// cent of its tools. It is a small edge, not a penalty for being
+    /// organised.
+    pub const WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH: f32 = 0.9;
+
+    /// What to let go of when both hands are full and the job wants one free.
+    ///
+    /// The least useful of what is being held, by the same reckoning that
+    /// decided to pick it up.
+    pub fn what_i_would_put_away(&self) -> Option<String> {
+        use crate::environment::making;
+
+        let worth = |what: &str| {
+            making::EVERY_TOOL
+                .iter()
+                .find(|tool| tool.called == what)
+                .map(|tool| self.skills.hand_for(tool.helps) * tool.how_much_better)
+                // Something in the hand that is not a tool at all is the
+                // first thing to go
+                .unwrap_or(0.0)
+        };
+
+        self.what_is_in_my_hands()
+            .min_by(|a, b| {
+                worth(a)
+                    .partial_cmp(&worth(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|what| what.to_string())
     }
 
     /// Wear the tool used for a piece of work, and say if it broke.
@@ -3691,6 +3816,8 @@ impl Agent {
             Action::TakeFrom { .. } => "takefrom".to_string(),
             Action::FleeFrom { .. } => "fleefrom".to_string(),
             Action::Examine { what } => format!("examine:{what}"),
+            Action::Equip { .. } => "equip".to_string(),
+            Action::Unequip { .. } => "unequip".to_string(),
             Action::PickUp { .. } => "pickup".to_string(),
             Action::PutDown { .. } => "putdown".to_string(),
             Action::Trade { .. } => "trade".to_string(),

@@ -344,13 +344,13 @@ pub const PLACE_DOWN: Verb = verb(
 );
 
 /// Not an act so much as a state: what carrying costs is paid every tick.
-pub const CARRY: Verb = verb(
+pub const CARRY: Verb = happens_when(
     "carry",
     Family::Manipulation,
     Targets::AThingHeld,
     Wants::AFreeHand,
     &[Changes::ABody],
-    None,
+    "a loaded pack is paid for with every step taken under it",
 );
 
 pub const DROP: Verb = verb(
@@ -362,13 +362,16 @@ pub const DROP: Verb = verb(
     Some("spreadmuck"),
 );
 
-pub const HOLD: Verb = verb(
+/// The state a thing is in between being taken up and being put away. Not
+/// something anybody decides once `equip` exists - it is what `equip` leaves
+/// behind, and what makes the tool worth more than the same tool in the bag.
+pub const HOLD: Verb = happens_when(
     "hold",
     Family::Manipulation,
     Targets::AThingHeld,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld],
-    None,
+    "a thing taken up stays in the hand until it is put away",
 );
 
 pub const RELEASE: Verb = verb(
@@ -904,7 +907,7 @@ pub const EQUIP: Verb = verb(
     Targets::AThingHeld,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld],
-    None,
+    Some("equip"),
 );
 
 pub const UNEQUIP: Verb = verb(
@@ -913,16 +916,18 @@ pub const UNEQUIP: Verb = verb(
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatIsHeld],
-    None,
+    Some("unequip"),
 );
 
-pub const USE: Verb = verb(
+/// A tool put to its purpose. Nobody chooses this: it is what happens to the
+/// axe when the tree comes down, and it is why an axe is a finite thing.
+pub const USE: Verb = happens_when(
     "use",
     Family::Equipment,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatAThingIs],
-    None,
+    "a tool does a piece of work and is the worse for it",
 );
 
 // ---------------------------------------------------------------------------

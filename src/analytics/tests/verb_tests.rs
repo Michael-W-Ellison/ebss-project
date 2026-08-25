@@ -166,6 +166,8 @@ fn every_verb_is_performed_by_something_real() {
         "examine",
         // And helping yourself to what somebody else is carrying, and running
         "takefrom", "fleefrom",
+        // And getting the tool out, and putting it away again
+        "equip", "unequip",
     ];
 
     for one in EVERY_VERB {
@@ -278,14 +280,17 @@ fn a_trade_requirement_takes_any_tool_for_that_trade() {
         true
     ));
 }
-
-/// A hand is free until the arms are full.
+/// A hand is free until it is holding something.
 ///
-/// Owning tools does not take your hands away — a pack is not a pair of hands,
-/// and that mistake cost a settlement its coats once already. Being loaded to
-/// the limit of what you can carry does.
+/// This used to be a question about the pack: a person counted as having a
+/// hand free if they had spare carrying capacity. That was written down as a
+/// fudge and it turned out to be a bad one - a settlement lives at or over
+/// the limit of what it can carry, so nobody in the model ever had a hand
+/// free for anything, and every action the matrix said wanted one was quietly
+/// refused for everybody. There are two hands now and they hold particular
+/// things.
 #[test]
-fn a_hand_is_free_until_the_arms_are_full() {
+fn a_hand_is_free_until_it_is_holding_something() {
     let mut simulation = a_person();
     empty_the_pack(&mut simulation);
 
@@ -301,16 +306,29 @@ fn a_hand_is_free_until_the_arms_are_full() {
         "a man who owns an axe and a spear still has hands"
     );
 
-    // Loaded to the limit, and there is nowhere to put anything
+    simulation.population.agents[0].take_in_hand("handaxe");
+    assert!(
+        simulation.population.agents[0].a_hand_to_spare(),
+        "one hand on the axe leaves the other"
+    );
+
+    simulation.population.agents[0].take_in_hand("spear");
+    assert!(
+        !simulation.population.agents[0].a_hand_to_spare(),
+        "an axe in one hand and a spear in the other is no hands"
+    );
+
+    // And a full pack is not the same question. What a load costs is paid in
+    // the walking - see `Simulation::what_this_load_costs`.
+    simulation.population.agents[0].put_away("spear");
     let room = simulation.population.agents[0]
         .inventory
         .weight_capacity_remaining();
-    give(&mut simulation, "stone", (room / 1.0).ceil() as u32);
+    give(&mut simulation, "stone", room.ceil() as u32);
 
     assert!(
-        !simulation.population.agents[0].a_hand_to_spare(),
-        "arms full of rock is no hands: {:.1} spare",
-        simulation.population.agents[0].inventory.weight_capacity_remaining()
+        simulation.population.agents[0].a_hand_to_spare(),
+        "a heavy pack is a heavy pack, not a missing hand"
     );
 }
 

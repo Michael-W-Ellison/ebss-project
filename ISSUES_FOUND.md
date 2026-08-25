@@ -1315,18 +1315,66 @@ enough to drive the trust down — and this world does not.
 with the spread between worlds narrowing from a standard error of 9.0 to 4.3.
 Standing crop 5,080 against 4,573 (t = 1.4). Deaths 19.0 against 16.0.
 
+### 20. A free hand was a question about the pack, and nobody ever had one
+
+The verb matrix has said since it was written that some actions want a hand
+free — stitching a coat, lashing a haft, weaving a basket — and until now
+there was nothing in the model that could answer the question. Two cuts were
+tried and both were wrong. The first counted a hand as full for every kind of
+tool in the pack, so a man who owned an axe and a spear had no hands at all
+and could never stitch anything again. The second asked whether the pack had
+spare carrying capacity, which was written down at the time as a fudge.
+
+It was a worse fudge than it looked. A settlement lives at or over the limit
+of what it can carry — measured mean load 70 against a capacity of 50 — so on
+that rule nobody in the model ever had a hand free for anything, and every
+action the matrix said wanted one was being quietly refused for the whole
+population. Removing that single test, changing nothing else, takes a
+settlement from 65.6 people at ten thousand ticks to 79.8 (se 4.7 and 3.5).
+That is the largest single effect measured in this project, and it came from
+deleting a line.
+
+**So the hands are real now.** Two of them, holding named things. Taking a
+tool out is `Action::Equip` and costs a turn; it is chosen not when somebody
+has a spare moment but in the moment before the work, because the first cut
+put it at the bottom of the Utility chain where it fired half a time in a
+world of ten thousand ticks — there is always some material wanting fetching,
+so nothing ever reached it. A job that wants a hand free and finds both full
+becomes `Action::Unequip` rather than a failure. A hand is reconciled against
+the pack every tick, because everything an agent loses — given away, stolen,
+worn through, eaten — leaves through the inventory, which knows nothing about
+hands.
+
+**And what a tool in the bag is worth had to be measured twice.** The first
+cut said two thirds of one in the hand, which sounded modest and was not: a
+settlement owns four or five tools and a person can hold two, so most work is
+done with something fetched out of the bag, and taxing all of it a sixth cost
+the settlement a quarter of its standing crop (4,777 to 3,420) and 40 per cent
+of its tools (110 to 65). At nine tenths both recover — crop 5,139, tools 91 —
+and the settlement lands at 72.8 against the 79.8 of the fix alone. That gap
+is 0.8 standard errors and its sign is what you would expect: the model got
+more honest about tools and the people got slightly poorer for it. What is
+bought with it is that `equip`, `unequip`, `hold`, `use` and `carry` stop
+being declarations.
+
+**Carrying costs something now as well.** It cost nothing at all before: a man
+walked as easily under sixty pounds of stone as under nothing, which made a
+full pack pure gain and a basket a thing with no downside. Nothing up to two
+fifths of what the arms will hold, rising to about twice the energy a step at
+the limit.
+
 ## Housekeeping
 
-### 20. Committed backup file
+### 21. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 21. Build warnings
+### 22. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 22. Placeholder package metadata
+### 23. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

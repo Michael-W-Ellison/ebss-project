@@ -44,4 +44,5 @@ pub mod ground_tests;
 pub mod combat_verb_tests;
 pub mod examine_tests;
 pub mod fluid_tests;
+pub mod hands_tests;
 pub mod theft_tests;
