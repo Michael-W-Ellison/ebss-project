@@ -61,6 +61,13 @@ fn put_plant(simulation: &mut Simulation, where_it_is: Position, crop: ResourceT
     if let Some(tile) = simulation.world.grid.get_tile_mut(&where_it_is) {
         tile.terrain = Terrain::new(TerrainType::Plains);
     }
+    // Whatever the world happened to put there is not what this test is
+    // about, and a second resource on the tile is the difference between
+    // lifting a slip of the plant the test placed and lifting a boulder
+    simulation
+        .world
+        .resources
+        .retain(|resource| resource.position != where_it_is);
     let mut patch = ResourceNode::new(crop, where_it_is, how_much.max(1));
     patch.amount = how_much;
     simulation.world.resources.push(patch);

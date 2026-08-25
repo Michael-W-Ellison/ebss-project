@@ -2179,6 +2179,9 @@ impl Simulation {
             DriveType::Hunger => {
                 let starving = agent.state.is_starving() || agent.nutrition.is_starving();
                 self.food_action(agent, agent_position, starving)
+                    // A store within reach beats a walk out to a berry bush,
+                    // which is the whole of what digging one buys
+                    .or_else(|| self.something_out_of_the_store(agent, agent_position))
                     .or_else(|| self.fishing_action(agent, agent_position))
                     .or_else(|| self.hunting_action(agent, agent_position))
             }
@@ -2295,16 +2298,20 @@ impl Simulation {
                 }),
 
             // Putting something by needs something to put by
-            DriveType::Preparedness => {
-                if let Some((what, how_many)) = agent.what_i_can_spare() {
-                    Some(Action::Store {
+            // Putting something by, which until now could not mean food.
+            // `what_i_can_spare` explicitly excludes anything anybody eats,
+            // and the only place to put anything was a global bag of counts
+            // with no position that nothing ever spoiled in - so a settlement
+            // stored materials it rarely needed and never once stored a meal.
+            // A hole in the cold ground is what a people this far along has.
+            DriveType::Preparedness => self
+                .putting_food_by(agent, agent_position)
+                .or_else(|| {
+                    agent.what_i_can_spare().map(|(what, how_many)| Action::Store {
                         item_type: what,
                         amount: how_many,
                     })
-                } else {
-                    None
-                }
-            }
+                }),
             // Nothing in the world is fine enough to want yet - see
             // ISSUES_FOUND.md #5. Until something is, this need has no answer
             // and stands aside rather than spending the turn walking after a
@@ -2836,6 +2843,19 @@ impl Simulation {
     /// about to reach it.
     const WHAT_FREEZING_COSTS: f32 = 0.5;
 
+    /// What digging a pit takes out of somebody.
+    ///
+    /// A real morning's work, and deliberately so: this is the most expensive
+    /// single act in the model, because it is the one that buys a settlement a
+    /// February.
+    const WHAT_DIGGING_A_PIT_COSTS: f32 = 22.0;
+
+    /// How much stone comes out of a hole somebody digs.
+    const WHAT_COMES_OUT_OF_A_HOLE: u32 = 3;
+
+    /// How much a person carries away from a store in one go.
+    const WHAT_A_PERSON_TAKES_OUT: u32 = 8;
+
     /// How far somebody will walk for a thing they can see lying on the ground.
     const WORTH_WALKING_OVER_FOR: u32 = 12;
 
@@ -3014,6 +3034,139 @@ impl Simulation {
             .find(|(them, _)| self.what_i_would_hand_over(me, *them).is_some())
             .map(|(_, them)| them.id)
     }
+
+    /// Digging a store, filling it, or going out for something to fill it
+    /// with.
+    ///
+    /// Three steps and the drive picks whichever it is up to. A person with
+    /// more food than they can eat and a pit to hand buries it; a person with
+    /// more food than they can eat and no pit digs one; a person with a pit
+    /// that has room and nothing to put in it goes and gets something. That
+    /// last is the one that matters, and it is the only reason anybody in this
+    /// model ever gathers food they are not about to eat.
+    fn putting_food_by(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        let spare = agent.what_food_i_can_spare();
+
+        // Something to bury, and somewhere to bury it
+        if let Some((what, _)) = spare.clone() {
+            if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
+                return Some(Action::Cover { what });
+            }
+
+            if let Some((pit, _)) = self
+                .world
+                .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
+            {
+                return Some(Action::Move {
+                    target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+                });
+            }
+
+            // Nowhere to put it. Dig - but only where a hole will go. The
+            // first cut asked for one wherever somebody happened to be
+            // standing, and the executor refused most of them: measured at
+            // 100 attempts a world for 1.7 pits, which is ninety-eight turns
+            // spent trying to dig a hole in a lake.
+            if self.is_ground_a_pit_will_go_in(here) {
+                return Some(Action::Excavate);
+            }
+        }
+
+        // A store with room in it, and nothing to fill it with. This is the
+        // one that makes a settlement gather more than it eats - and it is
+        // the one that has to be kept to its season.
+        //
+        // The first cut of this ran all year. A settlement dug and foraged
+        // for a larder in the middle of summer with berries on every bush,
+        // spent 351 trips a world on it, and came out ten people smaller for
+        // the effort. Nobody puts food by in June. What a person does in
+        // autumn, with the year turning and the harvest in, is exactly this.
+        if !matches!(
+            self.world.climate.current_season(),
+            crate::environment::seasons::Season::Fall
+        ) {
+            return None;
+        }
+
+        if self
+            .world
+            .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
+            .is_some()
+        {
+            return Some(Action::Gather {
+                resource_type: "food".to_string(),
+            });
+        }
+
+        None
+    }
+
+    /// Whether this agent should go and draw on the store rather than the
+    /// land.
+    ///
+    /// A pit within reach with something in it beats walking out to a berry
+    /// bush, which is the whole of what a larder buys.
+    fn something_out_of_the_store(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        // Somebody with supper in the pack does not dig it up
+        if agent.find_best_food_to_eat().is_some() {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let (pit, paces) = self
+            .world
+            .nearest_full_pit(here, Self::WORTH_WALKING_TO_THE_STORE)?;
+
+        let what = pit
+            .holds
+            .iter()
+            .find(|held| held.quantity > 0)
+            .map(|held| held.item_id.clone())?;
+
+        if paces == 0 {
+            return Some(Action::PickUp { what });
+        }
+
+        Some(Action::Move {
+            target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+        })
+    }
+
+    /// Whether a hole will go in here.
+    ///
+    /// The same question a field asks, and for the same reason: you cannot dig
+    /// a pit in a lake or in bare rock. Asked in the decision as well as in
+    /// the executor, because an agent standing on the wrong ground would
+    /// otherwise ask for a pit every turn for the rest of its life.
+    fn is_ground_a_pit_will_go_in(&self, here: crate::world::Position) -> bool {
+        if self.world.pit_at(here).is_some() {
+            return false;
+        }
+
+        self.world
+            .grid
+            .get_tile(&here)
+            .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+            .unwrap_or(false)
+    }
+
+    /// How far somebody will walk to a store, either to fill it or to draw on
+    /// it.
+    const WORTH_WALKING_TO_THE_STORE: u32 = 14;
 
     /// Somebody of this agent's own who is worse off than it is, and hungry
     /// enough that the difference matters.
@@ -9936,6 +10089,127 @@ impl Simulation {
                     .with_message(format!("Looked at a {what}: it is for a {worth_a_look}"))
             },
 
+            Action::Excavate => {
+                use crate::world::{Pit, Position};
+
+                let here = {
+                    let at = self.population.agents[agent_index].state.position;
+                    Position::new(at.0, at.1)
+                };
+
+                if self.world.pit_at(here).is_some() {
+                    return ActionResult::failure("There is already a pit here".to_string());
+                }
+
+                // Ground you can break. The same question a field asks, and
+                // for the same reason: you cannot dig a hole in a lake or in
+                // bare rock.
+                let will_dig = self
+                    .world
+                    .grid
+                    .get_tile(&here)
+                    .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+                    .unwrap_or(false);
+
+                if !will_dig {
+                    return ActionResult::failure("Nothing to dig here".to_string());
+                }
+
+                self.world.pits.push(Pit {
+                    where_it_is: here,
+                    holds: Vec::new(),
+                    covered: false,
+                    dug: tick_now,
+                });
+
+                // What comes out of a hole. The matrix says excavating changes
+                // the ground and what is held, and this is the second half.
+                let agent = &mut self.population.agents[agent_index];
+                agent.inventory.add_item(crate::agents::InventoryItem::new_with_weight(
+                    "stone".to_string(),
+                    Self::WHAT_COMES_OUT_OF_A_HOLE,
+                    1.0,
+                ));
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Mining, 20, tick_now);
+
+                debug!("Agent {} dug a pit at {here:?}", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Preparedness, -0.3)
+                    .with_energy_cost(Self::WHAT_DIGGING_A_PIT_COSTS)
+                    .with_message("Dug a pit".to_string())
+            },
+
+            Action::Cover { what } => {
+                use crate::world::Position;
+
+                let here = {
+                    let at = self.population.agents[agent_index].state.position;
+                    Position::new(at.0, at.1)
+                };
+
+                if self.world.pit_at(here).is_none() {
+                    return ActionResult::failure("No pit here to put it in".to_string());
+                }
+
+                let Some(mine) = self.population.agents[agent_index]
+                    .inventory
+                    .get_item(what)
+                    .filter(|item| item.quantity > 0)
+                    .cloned()
+                else {
+                    return ActionResult::failure(format!("No {what} to put by"));
+                };
+
+                let room = self
+                    .world
+                    .pit_at(here)
+                    .map(|pit| crate::world::Pit::WHAT_A_PIT_TAKES - pit.how_much_is_in_it())
+                    .unwrap_or(0);
+
+                if room == 0 {
+                    return ActionResult::failure("The pit is full".to_string());
+                }
+
+                // A person keeps a couple of days about them and buries the
+                // rest. Burying the lot would have them walk away from a full
+                // pit with nothing to eat on the way home.
+                let keeping_back = crate::agents::Agent::ENOUGH_TO_HAND.min(mine.quantity);
+                let putting_by = (mine.quantity - keeping_back).min(room);
+
+                if putting_by == 0 {
+                    return ActionResult::failure("Not enough to be worth burying".to_string());
+                }
+
+                let mut going_in = mine.clone();
+                going_in.quantity = putting_by;
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(what, putting_by);
+                    agent
+                        .skills
+                        .practise(crate::agents::SkillType::Farming, 12, tick_now);
+                }
+
+                if let Some(pit) = self.world.pit_at_mut(here) {
+                    pit.put_in(going_in);
+                    pit.covered = true;
+                }
+
+                debug!(
+                    "Agent {} buried {putting_by} {what} at {here:?}",
+                    self.population.agents[agent_index].id
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Preparedness, -0.5)
+                    .with_energy_cost(4.0)
+                    .with_message(format!("Put {putting_by} {what} by"))
+            },
+
             Action::PickUp { what } => {
                 use crate::world::Position;
 
@@ -9943,6 +10217,40 @@ impl Simulation {
                     let at = self.population.agents[agent_index].state.position;
                     Position::new(at.0, at.1)
                 };
+
+                // A pit here is the first place to look. Taking from one is
+                // not a separate verb: a person opening a store and closing it
+                // again is one act, and the matrix already has stooping for a
+                // thing underfoot.
+                if let Some(from_the_pit) = self
+                    .world
+                    .pit_at_mut(here)
+                    .and_then(|pit| {
+                        let wanted = pit
+                            .holds
+                            .iter()
+                            .find(|held| held.item_id == *what && held.quantity > 0)
+                            .cloned()?;
+
+                        let taking = Self::WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity);
+                        pit.take_out(what, taking);
+
+                        let mut got = wanted;
+                        got.quantity = taking;
+                        Some(got)
+                    })
+                {
+                    let how_many = from_the_pit.quantity;
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.add_item(from_the_pit);
+
+                    debug!("Agent {} took {how_many} {what} out of the pit", agent.id);
+
+                    return ActionResult::success()
+                        .with_drive_change(DriveType::Hunger, -0.1)
+                        .with_energy_cost(1.5)
+                        .with_message(format!("Took {how_many} {what} out of the pit"));
+                }
 
                 let Some(item) = self.world.take_off_the_ground(&here, what) else {
                     return ActionResult::failure(format!("No {what} lying here"));

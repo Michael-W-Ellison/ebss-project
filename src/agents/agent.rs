@@ -1224,6 +1224,25 @@ impl Agent {
             .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
     }
 
+    /// Food this agent has more of than it is going to eat.
+    ///
+    /// Deliberately separate from `what_i_can_spare`, which excludes anything
+    /// anybody eats: that one is about materials for the chain and it was
+    /// right to leave food out of it while there was nowhere to put food. A
+    /// hole in the ground is somewhere to put food.
+    pub fn what_food_i_can_spare(&self) -> Option<(String, u32)> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(name, item)| {
+                item.quantity > Self::ENOUGH_TO_HAND
+                    && (item.is_food() || name.contains("food") || name.contains("grain"))
+            })
+            // What keeps worst is what most wants burying
+            .max_by_key(|(_, item)| item.quantity)
+            .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
+    }
+
     /// Everything a person could use and has next to none of.
     ///
     /// "The agents should also use a barter system if they have an abundance of
@@ -3948,6 +3967,8 @@ impl Agent {
             Action::Examine { what } => format!("examine:{what}"),
             Action::Equip { .. } => "equip".to_string(),
             Action::Unequip { .. } => "unequip".to_string(),
+            Action::Excavate => "excavate".to_string(),
+            Action::Cover { .. } => "cover".to_string(),
             Action::PickUp { .. } => "pickup".to_string(),
             Action::PutDown { .. } => "putdown".to_string(),
             Action::Trade { .. } => "trade".to_string(),
@@ -4004,6 +4025,9 @@ impl Agent {
             | Action::TendField
             | Action::TakeCutting
             | Action::PlantCutting => Undertaking::Farming,
+            // Digging a hole and filling it is putting something by, which is
+            // the same undertaking as any other kind of husbandry
+            Action::Excavate | Action::Cover { .. } => Undertaking::Farming,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,

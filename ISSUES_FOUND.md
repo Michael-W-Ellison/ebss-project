@@ -1436,18 +1436,71 @@ regardless — a herd of reindeer registering as a pack of wolves is wrong
 whatever it does to the hunting figures — but it was not costing the
 settlement its dinner.
 
+### 23. The larder is built, and a settlement that never starves has no use for one
+
+Issue #21 above found that not one agent in sixty-five was carrying food and
+not one was starving, so there was no occasion for anybody to go without for
+their family. Half of that has a cause that could be built: there was nowhere
+to put food. `Agent::what_i_can_spare` explicitly excluded anything anybody
+eats, and the only place to put anything was `World::storehouse_inventory` — a
+single global bag of counts with no position that nothing ever spoils in.
+
+**So a settlement can dig now.** A pit takes a stone tool and a real morning's
+work (22 energy, the most expensive single act in the model). Food goes in,
+the earth goes back over it, and while it is covered its ageing clock is held
+back on three ticks in four, so it keeps four times as long as it would in a
+pack. Hunger looks in the nearest store before it walks out to a berry bush.
+That makes `excavate` and `cover` live verbs and gives `Preparedness` a way to
+want food, which it never had.
+
+**Two rounds of measurement each found a real defect.**
+
+*The first cut put food by all year.* A settlement dug and foraged for a
+larder in the middle of summer with berries on every bush: 351 gathering trips
+a world, and ten fewer people (76.9 to 66.4, t = -2.1) for the effort. Nobody
+puts food by in June. Deliberate foraging for the store is now autumn work; a
+genuine surplus already in the hand is buried whatever month it is.
+
+*The second asked for a pit wherever somebody was standing.* The decision
+checked whether a pit was within fourteen paces; the executor checked whether
+the ground would take one. Between them a settlement made a hundred attempts a
+world and finished with 1.7 pits — ninety-eight turns spent trying to dig a
+hole in a lake. The decision asks the ground first now, and attempts fell to
+fifteen.
+
+**Where it ends up, over sixteen worlds against sixteen:**
+
+| | before | after |
+|---|---|---|
+| people at ten thousand ticks | 76.9 ± 3.9 | 69.7 ± 3.5 |
+| pits standing | 0 | 1.4 |
+| units in the ground | 0 | 11.6 |
+| carrying food | 2.5 | 3.6 |
+| starving | 0.06 | 0.00 |
+| went without for family | 0.5 | 0.0 |
+
+The machinery works and it does not pay. Seven people is not significant at
+this sample (t = -1.4) but the sign is the same across all three arms, and the
+reason is plain in the last two rows: nobody was starving before and nobody is
+starving now. A store is insurance, and this world has nothing to insure
+against. Until a lean season can actually bite — a winter that strips the
+land, a crop that fails — a larder is a cost with a theoretical benefit, and
+the sacrifice that #21 wanted still has no occasion.
+
+That is the thing to build next, and it is upstream of both.
+
 ## Housekeeping
 
-### 23. Committed backup file
+### 24. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 24. Build warnings
+### 25. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 25. Placeholder package metadata
+### 26. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

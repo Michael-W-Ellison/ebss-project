@@ -245,6 +245,10 @@ pub enum Action {
     Equip { what: String },
     /// Put back into the pack whatever is occupying a hand
     Unequip { what: String },
+    /// Dig a pit in the ground here, to keep things in
+    Excavate,
+    /// Put something into the pit here and put the earth back over it
+    Cover { what: String },
     /// Take something lying on the ground here into the pack
     PickUp { what: String },
     /// Set something down on the ground here
@@ -317,6 +321,8 @@ impl Action {
             Action::Examine { .. } => Some(DriveType::Curiosity),
             Action::Equip { .. } => Some(DriveType::Utility),
             Action::Unequip { .. } => Some(DriveType::Utility),
+            Action::Excavate => Some(DriveType::Preparedness),
+            Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),
             Action::PutDown { .. } => Some(DriveType::Utility),
             Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing

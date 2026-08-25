@@ -108,6 +108,24 @@ original specifications.
   will be dead by morning is not weighing his reputation. Theft went from 0.75
   a world to about 21, and it shows downstream exactly as it should: attacks
   roughly quadrupled. A settlement with thieves in it fights more
+- 🚧 A hole in the cold ground, which is a larder and does not pay for itself
+  yet. A settlement had nowhere to put anything it ate: what a person could
+  put by explicitly excluded food, and the only place to put anything was a
+  single global bag of counts with no position that nothing ever spoiled in.
+  A pit is dug with a stone tool, food goes in, the earth goes back over it,
+  and what is under there ages at a quarter the rate it would in a pack —
+  which is not a cellar, but it is the difference between eating what you
+  found today and eating in February. Hunger draws on the nearest store before
+  it walks out to a berry bush. Two rounds of measurement each turned up a
+  real defect and each was fixed: the first cut foraged for the larder all
+  year round, which is nobody's idea of husbandry and cost 351 trips a world,
+  and the second asked for a pit wherever somebody happened to be standing,
+  so ninety-eight attempts in a hundred were somebody trying to dig a hole in
+  a lake. What is left is a settlement that digs about one and a half pits and
+  keeps a dozen units in them, at a cost of some seven people (se 5, not
+  significant, but negative in sign across all three arms). It does not fix
+  what it was built to fix, because nothing in this world makes anybody go
+  hungry — see ISSUES_FOUND.md #21 and #23
 - 🚧 Laying down your life for your own, which half works. A wolf standing
   over somebody you love who cannot deal with it themselves brings you at it
   whatever the odds — the one place in the model where an agent knowingly
@@ -213,7 +231,7 @@ original specifications.
   executor consults before an action runs, so a hunt without a spear and a
   stitch with no hand free are refused in one place rather than in thirty. The
   table is honest about itself: a verb nothing performs yet says so, and a test
-  fails if it stops saying so. Fifty of the sixty-nine are live — the
+  fails if it stops saying so. Fifty-two of the sixty-nine are live — the
   sixty-ninth is `freeze`, which was not in the original twelve families and
   had to be added when the fight-or-flight decision was given the rest of its
   tree

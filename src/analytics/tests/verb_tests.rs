@@ -170,6 +170,8 @@ fn every_verb_is_performed_by_something_real() {
         "equip", "unequip",
         // And the third answer to a thing that would kill you
         "freeze",
+        // And digging a store and filling it in
+        "excavate", "cover",
     ];
 
     for one in EVERY_VERB {

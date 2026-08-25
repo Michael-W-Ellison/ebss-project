@@ -140,6 +140,20 @@ pub struct World {
     #[serde(default)]
     pub dropped: Vec<Dropped>,
 
+    /// Pits dug in the ground, and what is keeping in them.
+    ///
+    /// A settlement had nowhere to put anything. The storehouse is a single
+    /// global bag of counts with no position, nothing in it ever spoils, and
+    /// what an agent could put by explicitly excluded food - so nothing that
+    /// anybody eats was ever stored anywhere by anybody. Measured at ten
+    /// thousand ticks, not one of sixty-five living agents was carrying so
+    /// much as a meal. A hole in the cold ground with the earth back over it
+    /// is what a people this far along actually has, and it is the difference
+    /// between a settlement that eats what it finds today and one that eats
+    /// in February.
+    #[serde(default)]
+    pub pits: Vec<Pit>,
+
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
     /// Drawn once when the country is made and never shown to anybody living
@@ -161,6 +175,74 @@ pub struct Dropped {
     pub where_it_is: Position,
     /// The tick it was left, which is what the weather counts from
     pub since: u32,
+}
+
+/// A hole in the ground with food in it.
+///
+/// Covered or open. Covered is what does the work: earth over the top keeps
+/// the sun and the air off, and what is in there ages at a quarter the rate
+/// it would in somebody's pack. Open, it is a hole with food in it, which is
+/// to say it is much the same as leaving it on the grass.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Pit {
+    pub where_it_is: Position,
+    pub holds: Vec<crate::agents::InventoryItem>,
+    pub covered: bool,
+    /// The tick it was dug, which is what the ground counts from
+    pub dug: u32,
+}
+
+impl Pit {
+    /// How much a pit holds, in the units a pack is weighed in.
+    ///
+    /// Generous against a pack, which is the point of digging one - a person
+    /// carries fifty and a hole in the ground takes six times that.
+    pub const WHAT_A_PIT_TAKES: u32 = 300;
+
+    /// What is in there, counted.
+    pub fn how_much_is_in_it(&self) -> u32 {
+        self.holds.iter().map(|item| item.quantity).sum()
+    }
+
+    /// Whether there is room for more.
+    pub fn has_room(&self) -> bool {
+        self.how_much_is_in_it() < Self::WHAT_A_PIT_TAKES
+    }
+
+    /// Whether there is anything in it worth walking to.
+    pub fn has_food(&self) -> bool {
+        self.holds.iter().any(|item| item.quantity > 0)
+    }
+
+    /// Take some of a thing out.
+    pub fn take_out(&mut self, what: &str, how_many: u32) -> u32 {
+        let Some(held) = self
+            .holds
+            .iter_mut()
+            .find(|item| item.item_id == what && item.quantity > 0)
+        else {
+            return 0;
+        };
+
+        let taken = how_many.min(held.quantity);
+        held.quantity -= taken;
+        self.holds.retain(|item| item.quantity > 0);
+        taken
+    }
+
+    /// Put something in.
+    pub fn put_in(&mut self, item: crate::agents::InventoryItem) {
+        if let Some(already) = self
+            .holds
+            .iter_mut()
+            .find(|held| held.item_id == item.item_id)
+        {
+            already.quantity += item.quantity;
+            return;
+        }
+
+        self.holds.push(item);
+    }
 }
 
 /// World configuration
@@ -349,6 +431,87 @@ impl World {
     ///
     /// Food goes first and goes into the ground, which is where food goes.
     /// Everything else weathers away in its own time.
+    /// Cold ground with the earth back over it keeps food.
+    ///
+    /// `FoodData::update_freshness` works off elapsed time since the thing was
+    /// made, so the way to make a pit keep something is to hold that clock
+    /// back: on three ticks in every four the buried food's `created_tick` is
+    /// pushed forward with the world, so a season underground costs it what a
+    /// fortnight in a pack would. An open pit is a hole with food in it and
+    /// keeps nothing at all.
+    ///
+    /// What has gone off in there rots away like anything else.
+    fn what_is_buried_keeps(&mut self) {
+        let now = self.tick;
+        let ageing = now % Self::HOW_OFTEN_THE_GROUND_LETS_IT_AGE == 0;
+
+        for pit in self.pits.iter_mut() {
+            for item in pit.holds.iter_mut() {
+                if let Some(food) = item.food_data.as_mut() {
+                    if pit.covered && !ageing {
+                        food.created_tick = food.created_tick.saturating_add(1);
+                    }
+                    food.update_freshness(now);
+                }
+            }
+
+            pit.holds.retain(|item| {
+                item.quantity > 0
+                    && item
+                        .food_data
+                        .as_ref()
+                        .is_none_or(|food| food.freshness > 0.0)
+            });
+        }
+    }
+
+    /// One tick in this many is the only one that tells on food under the
+    /// earth.
+    ///
+    /// Four, so a pit keeps a thing four times as long as a pack does. Not a
+    /// larder in any modern sense - a hole in the ground is not a cellar -
+    /// but the difference between eating what you found today and eating in
+    /// February.
+    const HOW_OFTEN_THE_GROUND_LETS_IT_AGE: u32 = 4;
+
+    /// The pit dug on this tile, if there is one.
+    pub fn pit_at(&self, where_it_is: Position) -> Option<&Pit> {
+        self.pits.iter().find(|pit| pit.where_it_is == where_it_is)
+    }
+
+    /// The same, to put something in or take something out of.
+    pub fn pit_at_mut(&mut self, where_it_is: Position) -> Option<&mut Pit> {
+        self.pits
+            .iter_mut()
+            .find(|pit| pit.where_it_is == where_it_is)
+    }
+
+    /// The nearest pit with anything in it, and how far off it is.
+    pub fn nearest_full_pit(&self, from: Position, within: u32) -> Option<(&Pit, u32)> {
+        self.pits
+            .iter()
+            .filter(|pit| pit.has_food())
+            .map(|pit| {
+                let paces = from.distance_to(&pit.where_it_is);
+                (pit, paces)
+            })
+            .filter(|(_, paces)| *paces <= within)
+            .min_by_key(|(_, paces)| *paces)
+    }
+
+    /// The nearest pit with room in it.
+    pub fn nearest_pit_with_room(&self, from: Position, within: u32) -> Option<(&Pit, u32)> {
+        self.pits
+            .iter()
+            .filter(|pit| pit.has_room())
+            .map(|pit| {
+                let paces = from.distance_to(&pit.where_it_is);
+                (pit, paces)
+            })
+            .filter(|(_, paces)| *paces <= within)
+            .min_by_key(|(_, paces)| *paces)
+    }
+
     fn what_is_lying_about_weathers(&mut self) {
         let now = self.tick;
         let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
@@ -430,6 +593,7 @@ impl World {
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             dropped: Vec::new(),
+            pits: Vec::new(),
         };
 
         // The ground under the terrain that was just generated
@@ -1418,6 +1582,9 @@ impl World {
         if self.tick % 10 == 0 {
             self.what_is_lying_about_weathers();
         }
+
+        // What is under the earth keeps
+        self.what_is_buried_keeps();
 
         // Update animals (AI, movement, aging)
         self.animals.tick();

@@ -699,22 +699,26 @@ pub const BURROW: Verb = verb(
     None,
 );
 
+/// Digging a hole in the ground to keep things in, and what comes out of it.
 pub const EXCAVATE: Verb = verb(
     "excavate",
     Family::Subterranean,
     Targets::TheGroundUnderfoot,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::TheGround, Changes::WhatIsHeld],
-    None,
+    Some("excavate"),
 );
 
+/// Putting the earth back over what you have just put in the hole. Cold
+/// ground with a lid of soil on it is what a people this far along has instead
+/// of a cellar, and it keeps food four times as long as a pack does.
 pub const COVER: Verb = verb(
     "cover",
     Family::Subterranean,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::TheGround, Changes::WhatIsHeld],
-    None,
+    Some("cover"),
 );
 
 // ---------------------------------------------------------------------------
