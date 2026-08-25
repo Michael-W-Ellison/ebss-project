@@ -15,6 +15,15 @@ pub enum ResourceType {
     Food, // Generic food (berries, generic edibles)
     Water, // Fresh water from rivers, wells, springs
 
+    /// Something growing that nobody has tried yet.
+    ///
+    /// "A curious agent might taste a random plant. If the plant is edible,
+    /// the agent survives and thrives. If the plant is toxic or inedible, the
+    /// agent dies or starves." Whether a given kind of strange plant feeds you
+    /// or kills you is a property of the world and is not written anywhere an
+    /// agent can read. The only way to find out is for somebody to eat one.
+    StrangePlant,
+
     // === Raw Materials (Agricultural) ===
     Grain,      // Wheat, barley, etc. - for flour, bread, beer
     Flax,       // For linen, rope
@@ -63,6 +72,46 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
+    /// How well this crop repays being sown rather than found.
+    ///
+    /// "They need to discover which plants are suitable for farming." Not every
+    /// plant is. Grain was made out of a grass by people who kept putting the
+    /// heaviest heads back in the ground, and it answers a plough with several
+    /// times what it gives wild. A berry bush set in rows is still a berry
+    /// bush. A stand of herbs is worth nothing more for being weeded.
+    ///
+    /// Nobody is told which is which. An agent sows what it has in its pack,
+    /// walks back at harvest, and finds out.
+    pub fn takes_to_the_plough(&self) -> f32 {
+        match self {
+            ResourceType::Grain => 3.0,
+            ResourceType::Flax | ResourceType::Cotton => 1.6,
+            ResourceType::Food => 1.15,
+            ResourceType::Herbs => 1.0,
+            _ => 1.0,
+        }
+    }
+
+    /// The kind of thing a name asks for.
+    ///
+    /// The names are the ones an inventory carries and an `Action::Gather`
+    /// asks by, so that a chain of makings can say "flax" and have the
+    /// gathering path go and find some.
+    pub fn called(name: &str) -> Option<Self> {
+        Some(match name {
+            "wood" => ResourceType::Wood,
+            "stone" => ResourceType::Stone,
+            "iron" => ResourceType::Iron,
+            "food" => ResourceType::Food,
+            "water" => ResourceType::Water,
+            "flax" => ResourceType::Flax,
+            "cotton" => ResourceType::Cotton,
+            "hides" => ResourceType::Hides,
+            "wool" => ResourceType::Wool,
+            _ => return None,
+        })
+    }
+
     /// How strongly this gives itself away by smell where it lies untouched,
     /// as a fraction of an agent's full smelling range.
     ///
@@ -101,6 +150,9 @@ impl ResourceType {
     /// Get ASCII character for rendering
     pub fn ascii_char(&self) -> char {
         match self {
+            // Something nobody has tried
+            ResourceType::StrangePlant => '?',
+
             // Basic
             ResourceType::Wood => 't',
             ResourceType::Stone => 's',
@@ -159,6 +211,8 @@ impl ResourceType {
     /// Get color code for terminal rendering
     pub fn color_code(&self) -> &'static str {
         match self {
+            ResourceType::StrangePlant => "\x1b[35m",  // Magenta: unknown
+
             // Basic - Original colors
             ResourceType::Wood => "\x1b[33m",      // Yellow/Brown
             ResourceType::Stone => "\x1b[37;1m",   // Bright White
@@ -219,6 +273,8 @@ impl ResourceType {
     /// For processed/finished: time to craft (base time, modified by skill)
     pub fn gather_time(&self) -> u32 {
         match self {
+            ResourceType::StrangePlant => 25,
+
             // Basic - gathering
             ResourceType::Wood => 20,
             ResourceType::Stone => 30,
@@ -342,6 +398,7 @@ impl ResourceType {
     /// Get category description
     pub fn category(&self) -> &'static str {
         match self {
+            ResourceType::StrangePlant => "Unidentified",
             ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food | ResourceType::Water => "Basic Resource",
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
@@ -369,6 +426,13 @@ pub struct ResourceNode {
     /// trickle eventually amounts to something
     #[serde(default)]
     pub inflow_carried: f32,
+
+    /// Which sort of thing this is, where the sort matters and the resource
+    /// type does not say. Only strange plants use it: two patches of
+    /// `StrangePlant` with different kinds are different plants, one of which
+    /// may be supper and the other of which may not.
+    #[serde(default)]
+    pub kind: u8,
 }
 
 impl ResourceNode {
@@ -379,6 +443,20 @@ impl ResourceNode {
             amount,
             max_amount: amount,
             inflow_carried: 0.0,
+            kind: 0,
+        }
+    }
+
+    /// The same, for one of the several sorts of strange plant
+    pub fn of_kind(
+        resource_type: ResourceType,
+        position: Position,
+        amount: u32,
+        kind: u8,
+    ) -> Self {
+        Self {
+            kind,
+            ..Self::new(resource_type, position, amount)
         }
     }
 
@@ -477,6 +555,27 @@ impl ResourceNode {
     /// What ground with nothing left in it still carries: the odd volunteer
     /// plant living off what blows in, and not a crop.
     const MIN_YIELD_SHARE: f32 = 0.05;
+
+    /// The same, for ground that has been broken and sown.
+    ///
+    /// Breaking ground buys uptake and it buys this, and nothing else: a field
+    /// of grain stands far thicker than the same ground would carry wild,
+    /// because it is all one plant and all of it wanted. What it does not buy
+    /// is speed - a crop grows at the pace its kind grows at, worked or not.
+    ///
+    /// How much thicker depends on what was sown. This is where suitability
+    /// tells: a field of grain carries three times what the ground would
+    /// otherwise, a field of berry bushes barely more than the hedge it came
+    /// out of. See [`ResourceType::takes_to_the_plough`].
+    pub fn how_heavy_a_crop_it_carries(&self, fertility: f32, cultivated: bool) -> u32 {
+        let standing = self.standing_capacity(fertility) as f32;
+
+        if !cultivated {
+            return standing.round() as u32;
+        }
+
+        (standing * self.resource_type.takes_to_the_plough()).round() as u32
+    }
 
     /// How fast this water refills, given the ground it sits on and the
     /// weather over it.
@@ -652,7 +751,7 @@ impl ResourceNode {
         cultivated: bool,
         soil: &mut Soil,
     ) -> u32 {
-        if self.amount >= self.standing_capacity(soil.fertility()) {
+        if self.amount >= self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated) {
             return 0; // As heavy a crop as this ground will carry
         }
 
@@ -666,6 +765,7 @@ impl ResourceNode {
             // Renewable resources
             ResourceType::Wood => 0.01,       // Trees grow slowly
             ResourceType::Food => 0.025,      // Berries and fruit, in their own time
+            ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
             ResourceType::Grain => 0.015,     // Wild grain is thin stuff
             ResourceType::Herbs => 0.04,      // Herbs grow quickly
             ResourceType::Flax => 0.03,
@@ -697,7 +797,10 @@ impl ResourceNode {
 
         // Apply temperature modifier (most resources prefer moderate temps)
         let temp_modifier = match self.resource_type {
-            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => {
+            ResourceType::Food
+            | ResourceType::Grain
+            | ResourceType::Herbs
+            | ResourceType::StrangePlant => {
                 // Plants prefer 15-25°C
                 if temperature >= 15.0 && temperature <= 25.0 {
                     1.5 // Ideal conditions
@@ -775,9 +878,24 @@ impl ResourceNode {
             return 0;
         }
 
+        // And what is taking it before the farmer does. A field is the best
+        // ground there is and everything else knows it: what a crop keeps is
+        // what the weeds and the vermin leave. On unbroken ground this is one -
+        // a meadow cannot get any weedier than it already is.
+        let kept = if cultivated {
+            soil.what_the_crop_keeps()
+        } else {
+            1.0
+        };
+
+
         // Calculate total regeneration
-        let regen_amount =
-            base_rate * temp_modifier * precip_modifier * season_modifier * nutrient_factor;
+        let regen_amount = base_rate
+            * temp_modifier
+            * precip_modifier
+            * season_modifier
+            * nutrient_factor
+            * kept;
 
         // Carry the fraction over rather than rounding it away: wild food
         // regrows slowly enough that rounding to whole units each pass loses most
@@ -787,7 +905,7 @@ impl ResourceNode {
         self.inflow_carried -= regen_units;
 
         // Add regenerated amount, capped at what this ground will carry
-        let capacity = self.standing_capacity(soil.fertility());
+        let capacity = self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated);
         let headroom = capacity.saturating_sub(self.amount);
         let actual_regen = (regen_units as u32).min(headroom);
         self.amount += actual_regen;

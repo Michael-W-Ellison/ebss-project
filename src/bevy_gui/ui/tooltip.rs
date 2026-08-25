@@ -82,6 +82,8 @@ pub fn terrain_color(terrain: TerrainType) -> Color32 {
 /// Get resource color for map rendering
 pub fn resource_color(resource_type: ResourceType) -> Color32 {
     match resource_type {
+        // Something nobody has tried yet
+        ResourceType::StrangePlant => Color32::from_rgb(186, 85, 211),
         ResourceType::Wood => Color32::from_rgb(139, 69, 19),
         ResourceType::Stone => Color32::from_rgb(169, 169, 169),
         ResourceType::Iron => Color32::from_rgb(112, 128, 144),
@@ -130,6 +132,7 @@ pub fn building_color(building_type: BuildingType, completed: bool) -> Color32 {
         return Color32::from_rgb(180, 150, 100);
     }
     match building_type {
+        BuildingType::SkinTent => Color32::from_rgb(160, 130, 96),
         BuildingType::Longhouse => Color32::from_rgb(139, 90, 43),
         BuildingType::UpgradedLonghouse => Color32::from_rgb(160, 82, 45),
         BuildingType::SmallHouse => Color32::from_rgb(160, 82, 45),

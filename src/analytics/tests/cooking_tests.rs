@@ -177,23 +177,27 @@ fn an_agent_lights_a_fire_and_cooks_on_it() {
 
     assert!(ever_lit, "the agent should have got a fire going");
 
-    let agent = &simulation.population.agents[0];
-    let cooked = agent
-        .inventory
-        .get_all_items()
-        .values()
-        .filter(|item| {
-            item.food_data
-                .as_ref()
-                .map(|food| food.preparation == PreparationState::Cooked)
-                .unwrap_or(false)
-        })
-        .count();
+    // What it *did*, not what it is still holding. Asserting on leftovers
+    // read as the same thing and is not: an agent that cooks and then eats
+    // its dinner has cooked, and whether any is left at tick four hundred
+    // turns on how hungry it happened to be.
+    let put_on_the_fire = simulation
+        .actions_taken
+        .get("Cook")
+        .copied()
+        .unwrap_or(0);
+    let came_off_badly = simulation
+        .actions_failed
+        .get("Cook")
+        .copied()
+        .unwrap_or(0);
 
     assert!(
-        cooked > 0,
-        "the agent should be carrying something it cooked, has: {:?}",
-        agent.inventory.get_all_items().keys().collect::<Vec<_>>()
+        put_on_the_fire > came_off_badly,
+        "the agent should have cooked something: it put food on the fire {} \
+         times and {} of those came to nothing",
+        put_on_the_fire,
+        came_off_badly
     );
 }
 

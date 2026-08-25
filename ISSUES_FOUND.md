@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Six tests fail intermittently
+### 1. Eight tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -22,6 +22,8 @@ and running the project.
     analytics::tests::agent_building_integration_tests::test_production_chain_buildings_cluster
     analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
     analytics::tests::longevity_tests::water_is_not_used_up
+    analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
+    analytics::tests::news_tests::honest_agents_do_not_end_up_accused
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -30,7 +32,15 @@ before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
 asserts that a world holds 95% of its water after six thousand ticks, and
 across twelve worlds the worst case sits at 98.4% — on the commit before the
 calendar was fixed it sat at 95.6%, so the margin got wider rather than
-narrower, and the tail is simply thin. All six build a world through
+narrower, and the tail is simply thin. The seventh was found while checking
+whether a change had broken it: it fails about one run in six *and does so on
+the commit before the change too*, so it was an undocumented flake rather than
+a regression — the test itself says a random world does not always let an agent
+reach the flax it can see. The eighth was found the same way: it failed once
+in a full-suite run and then passed ten times running on its own, and what it
+asserts — that no honest agent is ever accused of lying — depends on where a
+random world happens to put its resources and who happens to walk over them.
+All eight build a world through
 `World::new`, which draws from `thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
@@ -38,10 +48,164 @@ the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
-which is corrosive: check whether the failing test is one of these six before
+which is corrosive: check whether the failing test is one of these eight before
 assuming a regression.
 
-### 2. No error recovery around a tick
+### 2. Three fifths of everything a settlement does fails — mostly fixed
+
+The drive hierarchy made the drives ask for the right things. Almost nothing
+underneath them can deliver. Measured over two worlds of fifteen thousand ticks
+(2.1M actions), by share of all actions taken and how often each one failed:
+
+| Action | Share of all actions | Failed |
+| --- | --- | --- |
+| Gather | 21.5% | **85.6%** |
+| Mate | 19.7% | **99.9%** |
+| Build | 12.1% | **100.0%** |
+| Store | 4.7% | **100.0%** |
+| Craft | 4.2% | **99.3%** |
+| Move, Sleep, SeekShelter, Eat | 36.1% | 0% |
+
+That is **about three fifths of every action a settlement takes coming to
+nothing**. Each of the five has a distinct and nameable cause, and none of them
+is subtle:
+
+**Store never works at all.** `generate_action_for_drive` maps Preparedness to
+`Action::Store { item_type: "resource" }` — a placeholder string the executor
+does not recognise. 13,713 failures in four thousand ticks, every one of them
+`Unknown item type: resource`. The drive is answerable; the action is a stub.
+
+**Craft cannot bootstrap.** Utility maps to `Action::Craft { item_type:
+"woodenaxe" }`, which needs Crafting at −5. Skill starts at −10 and rises only
+by *doing*, so no agent can ever make its first axe: `insufficient skill (need
+-5, have -8)`. Some also want a technology nobody has. This is why the world
+has no tools in it, which issue #5 records as a gap in crafting — it is not
+that nothing makes tools, it is that the one recipe agents reach for is behind
+a skill gate they cannot climb.
+
+**Build is attempted with nothing to build from.** `Missing resources for
+SmallHouse: 38 wood (have 12), 30 stone` — and the stone line has no "have"
+at all, because they have none. Nothing checks materials before choosing to
+build and nothing makes an agent gather *towards* a build, so the Construction
+drive spends an eighth of the settlement's life restating that it has not got
+enough wood.
+
+**Mate is aimed at whoever is nearest.** `resolve_action_target` fills a nil
+target with the nearest agent, not a viable mate, so the top reasons are
+`Target cannot reproduce (too young, too old, or pregnant)` and `Agents too far
+apart for mating`. One birth per thousand-odd attempts.
+
+**Gather fails because there is no water.** The single largest failure in the
+whole simulation, 131,436 in one pair of worlds: `Gather: No water sources
+nearby`. Thirst maps to `Action::Gather { resource_type: "water" }` and the
+agent is nowhere near any. Thirst is a primary drive that outranks nearly
+everything, so an agent away from water spends its turns asking for it and
+being told no, rather than walking to it.
+
+The common shape is the same in all five: **a drive is answered by naming an
+action, and nothing checks that the action can succeed from where the agent is
+standing with what it is carrying.** Before the drive hierarchy these drives
+rarely won a turn, so the actions were rarely attempted and the failures were
+invisible. Ranking the drives properly is what exposed it.
+
+It also corrects something recorded earlier in this document: `Action::Build`
+and `Action::Socialize` becoming non-zero after the hierarchy was reported as
+progress. Build became non-zero and has **never once succeeded**.
+
+**Since largely fixed.** Founders arrive with the hands of grown people and
+stone tools, so crafting is no longer behind a skill only crafting can teach; a
+skin tent is the first shelter, so building no longer needs thirty stone a
+stone-age people cannot quarry; putting something by names a thing out of the
+agent's own pack instead of a placeholder; mating chooses somebody who could
+actually bear a child and whom the agent trusts; building is not attempted with
+an empty pack; and, generally, an action that keeps failing gets chosen less
+often, per particular thing tried rather than per kind of undertaking.
+
+**Craft now never fails.** The recipe chain finished the job. Measured over
+eight worlds a side of ten thousand ticks against commit `ec9399a`: craft was
+attempted 17,724 times a world and failed 17,577 of them — 99.2%, every one of
+them `Cannot craft woodenaxe`, either a missing technology or a skill gate. It
+is now attempted 529 times a world and **fails none of them**, because Utility
+asks for a step the pack will actually carry rather than for a named end
+product. All actions failing fell from 11.6% (se 0.9) to 6.0% (se 0.5), and
+stayed at 6.0% (se 0.8) once tools began wearing out.
+
+The largest remaining failure is the one this entry opened with: `Gather: No
+water sources nearby`, 12,000-20,000 a world, which is now roughly two thirds
+of everything that still fails.
+
+**And the obvious explanation for it is wrong.** The reading above - that an
+agent away from water spends its turns asking for it because nothing joins the
+drink it had yesterday to the bank it drank from - was tested directly by
+giving agents exactly that memory (see `agents::patterns`). It made no
+difference: eight worlds a side of ten thousand ticks put the refusal at 3.7%
+of all actions without the memory and 4.7% with it, a difference of 0.010 at a
+standard error of 0.017. The count rises with the population rather than with
+anything else.
+
+Nor does the memory pay off anywhere else. Population came out 16 higher at ten
+thousand ticks (se 11) and 14 *lower* at twelve thousand (se 10), eight worlds
+a side each time: two runs pointing opposite ways at the same size, which is
+noise. It also widened the spread - eight worlds ran from 89 to 119 people
+without it and from 41 to 121 with it.
+
+What is left is a decision that was true when it was made. `water_action`
+chooses to drink when a source with water in it stands within the foraging
+radius; the action is carried out later in the same tick, by which time some
+other agent may have drunk the last of it. Every agent that decided to drink at
+a spring holding one unit fails but the first. That would explain a failure
+that scales with population, cannot be removed by better memory, and never
+falls however well the settlement is doing - but it has not been confirmed, and
+confirming it is the next thing anybody should do to this entry.
+
+| Measure | Before | After |
+| --- | --- | --- |
+| All actions failing | 58.1% | **6.6%** |
+| Population at 15,000 ticks | 136 | 218 |
+| Move failing | 73% | 0.1% |
+| Mate, share of all actions | 22.5% | below the top twelve |
+| Build, Store | 100% failing | out of the reckoning |
+
+What is left is a thirsty agent nowhere near water, and children born during a
+run who have not yet learned to craft — the second of which is correct and
+self-correcting. The cost of all this is issue #3.
+
+### 3. The nutrient loop does not keep up with a settlement that works
+
+`the_farmed_ground_holds_up_longer` asks that farmed ground keep at least half
+its fertility over ten thousand ticks of a settlement working it. It passed
+three times in three before the work of issue #2 and passes about three times
+in six after.
+
+This is not a flake and it is not a bug in the loop. It is what the loop costs
+when the people on top of it stop wasting their lives. Three fifths of every
+action a settlement took used to come to nothing; it is now under a tenth, and
+the population at fifteen thousand ticks went from 136 to 218 on the same land.
+Twice as many people, each of them twice as effective, take a great deal more
+off the ground.
+
+The mechanism was isolated rather than guessed at. Granting founders the
+`wooden_tools` technology - which clears twenty-five thousand crafting failures
+at a stroke - took the test from three-in-four to one-in-five on its own: a
+people who can put a handle on a stone strip the land far faster. That grant
+was removed for exactly this reason, and it is only half the story; the rest is
+the general rise in effectiveness.
+
+**It wants a decision rather than a patch**, and the decision is not the
+simulation's to make:
+
+- Let the settlement press harder and rely on the brakes the model already has
+  - breeding gated on surplus, and migration when the ground fails - to find
+  the new equilibrium, and move the threshold this test asserts.
+- Or put more back: the fishery is the one input that is not paid for out of
+  the same ground (issue #6 and the audit), and a settlement that fished harder
+  could carry more people on the same soil.
+- Or accept a smaller settlement and slow the birth rate.
+
+Left failing rather than quietly weakened, because the assertion is measuring
+something real and the number it is measuring has genuinely changed.
+
+### 4. No error recovery around a tick
 
 One panicking agent ends the whole run and loses everything since the last
 autosave. There is no isolation of per-agent failure and no attempt to
@@ -53,7 +217,7 @@ crash took the entire simulation with it.
 
 ## Design gaps that show up as odd behaviour
 
-### 3. A settlement that overshoots slides instead of settling back
+### 5. A settlement that overshoots slides instead of settling back
 
 Traced over six worlds to thirty thousand ticks. A settlement grows, strips the
 ground it farms, and then slides — it does not find a smaller level and hold
@@ -262,7 +426,7 @@ What remains: a spent field still counts as a field, so a settlement still will
 not break new ground while exhausted ones sit inside its radius, and nobody has
 still ever died of hunger.
 
-### 4. Winter is not cold: the tile temperature is frozen at first touch
+### 6. Winter is not cold: the tile temperature is frozen at first touch
 
 `ClimateManager::get_biome` builds a `Biome` for a position the first time
 anybody asks about it, stamps the current season and hour into it, and caches
@@ -319,7 +483,7 @@ weather.
 Fixing it is not just a cache invalidation: making winter genuinely cold is a
 real change to the balance and would need measuring before and after.
 
-### 5. Three drives ask for things the world cannot give
+### 7. Three drives ask for things the world cannot give
 
 The design document's Appendix A gives each drive a list of **increase
 conditions** — Safety on "hostile entity proximity, recent injury, darkness",
@@ -351,7 +515,10 @@ nine came unpinned:
 | Utility | 1.00, active 100% | 0.60, active 100% |
 | Luxury | 1.00, active 100% | 0.98, active 100% |
 
-**The three that stayed high are the finding.** Preparedness asks for stockpiled
+**The three that stayed high were the finding at the time, and issue #2 has
+since named the reason.** It is not that the world has no way to answer them:
+Store is a stub that cannot succeed, and the one thing agents try to craft is
+behind a skill gate they cannot climb. Preparedness asks for stockpiled
 food, materials and tools; Utility for tools in working order; Luxury for
 something fine. Counting what thirty agents were carrying at eight thousand
 ticks: 102 wood, 21 food, 17 leather, 14 horn, 12 flax, 11 cotton, 8 wool, and
@@ -361,7 +528,16 @@ the world has no path to satisfy them. That is a gap in crafting and
 tool-making, not in the drive system, and it was invisible while every drive
 sat at its ceiling for reasons of its own.
 
-### 6. The ecology settles in most worlds, not all
+**And the pegging is gone, though the gap is not.** The drive hierarchy puts
+each drive behind the one it depends on — Preparedness cannot build until
+Hunger and Thirst are reliably answered, Utility until Construction or
+Industry is — so a drive the world cannot satisfy no longer sits at 1.00
+shouting over everything else. Luxury fell from above its threshold 98.9% of
+the time to 0.5%, Preparedness from 98.2% to 0%, Utility from 84.6% to 0.6%.
+The world still has no tools and nothing decorative in it; what changed is
+that the absence no longer drowns out the drives that *can* be answered.
+
+### 8. The ecology settles in most worlds, not all
 
 Over forty worlds, predators are still alive at the end in thirty-six and
 herds stay bounded in thirty-three. In the seven that run away the predators
@@ -369,7 +545,7 @@ died out first, and although animals do wander back in from off the map, the
 trickle is slow enough — by design — that a world can spend thousands of ticks
 with its herds climbing unopposed before a replacement pack arrives.
 
-### 7. Clothing and hunting cost about what they return
+### 9. Clothing and hunting cost about what they return
 
 Over forty worlds, clothing halves how often agents are cold (28% to 16%) and
 warms cores by half a degree, at three points of the fed population and three
@@ -388,35 +564,412 @@ fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
 
-### 8. Fear is a hunger signal, and now it is no signal at all
+**Hunting and fishing are now slow work, and it costs nothing.** A throw used
+to land six times in ten for anybody at all and take two thirds of an animal
+out of it, which made a deer a thing you walked up to rather than a thing you
+stalked. A throw now lands 22.5% of the time (from 60.2%) and takes a third,
+so a kill is three or four throws; each costs the same whether or not it lands,
+and a wounded animal that gets away no longer feeds anybody. Spear-fishing the
+same: 40.1% of casts take, from 57.5%, for two fish rather than three, and
+standing in the water costs whether or not anything comes past.
 
-`calculate_survival_drive_emotion` derives fear from unmet hunger, thirst and
-rest. When that was written hunger saturated between meals, so fear sat around
-0.8 most of the time and `should_flee`, which triggers above 0.6, read as
-firing in ordinary circumstances rather than in response to a threat.
+Measured over eight worlds a side of ten thousand ticks, the settlement absorbs
+it: 72.1 alive before and 77.9 after, a difference of 6 at a standard error of
+10. What changes is what people do. They throw three times as many spears
+(462 to 1,400 across eight worlds, because a kill takes several) and they fish
+half as much (13,314 casts to 6,275) - the learning mechanism turning away from
+work that stopped paying. Fewer of them end up in hide or fur, 3.0 a world
+against 1.9, which is the cost of it.
 
-**The wiring is unchanged and the symptom has inverted.** Fear is still
-computed from the survival drives, but the survival drives are answered now, so
-they rarely pass the 0.7 the fear calculation starts at. Measured over three
-worlds of twenty-five agents to six thousand ticks: mean fear 0.01 to 0.06,
-**two of a hundred and seventy agents above 0.5**, and not one at any sample
-above the 0.6 that `should_flee` wants. Mean anger is 0.00.
+**A midden smells, is walked away from, and comes up in berries - slowly.**
+Waste had been going into the ground as leaf litter since the nutrient loop was
+built, and that was all it did. It now also leaves the two things that make a
+midden a midden: a smell that reaches a few tiles and is emitted as
+`ScentType::Decay`, and seed that came through whole. A man who wants to lie
+down on fouled ground steps off it first, which over a settlement's life is
+what puts the midden at the edge of a camp rather than in it. Once the smell
+has gone - which happens an order of magnitude faster than the matter breaks
+down - whatever was in it comes up as food nobody planted.
 
-So the emotional override in `generate_action` — the branch that lets an agent
-run or fight instead of doing what its drives say — never fires. An emotional
-model that reported the wrong thing has become one that reports nothing. The
-fix is the same either way: fear should come from what is in front of the
-agent, and hunger should press through the hunger drive, which is what that
-drive is for.
+Measured at ten thousand ticks: about a thousand tiles carry fouling, a dozen
+to seventeen are foul enough at once to be walked away from, and every one of
+them carries seed. Food nodes went from 25 to 27 in one world of two and stayed
+at 25 in the other. So the loop closes, and it closes rarely, for a reason that
+is correct rather than broken: a camp keeps its own midden too foul to grow
+anything for as long as the camp is there, and what comes up comes up on ground
+the people have moved on from. Watching a settlement that never moves will
+never show it.
 
-### 9. Agents still cannot hear anything
+One number had to be found by measuring. `ENOUGH_TO_COME_UP` was five times
+higher to begin with, and of a thousand tiles carrying seed not one carried
+enough: people move about, and no single tile ever caught up.
+
+**What comes off a carcass now depends on the time of year.** A deer killed at
+the end of the autumn carries a quarter more than the book says; the same deer
+at the end of the winter carries a third less. The curve runs continuously
+round the year - `SeasonalCalendar::how_fat_the_beasts_are` - and is not
+straight: an animal loses most of what it is going to lose in the first hard
+weeks and puts nothing back in the first weeks of the spring, because running
+both as straight lines put a deer in midwinter in the same condition as a deer
+in midsummer.
+
+**Tools now cost and return something, and a settlement cannot keep up with
+them.** Until recently a tool was a thing an agent counted: `Inventory` had
+carried durability fields since the beginning, only clothing used them, and a
+man with a stone axe felled timber at exactly the rate of a man with his bare
+hands. An axe is now worth up to 1.8x on timber and 1.5x on stone, a spear
+counts in a hunt and in the shallows, a knife nearly doubles what comes off a
+carcass — and each of them wears out in twenty-five to forty pieces of work,
+sooner if the hand that made it was clumsy. What the hand that made it could do
+also decides how well it works, so a man's tenth spear is half again the spear
+his first was and lasts twice as long, which is what "repeating the action
+increases the quality of the outcome" comes to.
+
+Measured over eight worlds of ten thousand ticks, the settlement works with
+tools that are visibly used up: the mean condition of every tool held is 0.72
+of new (se 0.02) and about one living agent in three is carrying something
+worn through (21.3 a world, se 6.5). Toolmaking rises by a quarter to keep up —
+529 crafts a world without the wear, 668 with it (se 60) — which is the
+replacement cycle running.
+
+**And there is now something past the stone age to find out.** Three steps —
+a bright stone held in a fire, a lump beaten out with a hammerstone, a blade
+given a handle — are marked as things nobody arrives knowing, and are found out
+only by an agent who happens to be holding the makings in the right conditions
+while curious enough to notice. Measured over four worlds of ten thousand
+ticks: iron reached agents' packs in all four (36 to 55 of them carrying some),
+two worlds worked out what a fire does to it, two got as far as a metal blade,
+and one finished a metal knife. So metalworking is a thing that happens to some
+settlements and not others, which is what it should be, but it is rare enough
+that a run has to be watched for it rather than expected.
+
+It buys nothing measurable yet. Population is 80.0 alive at the baseline (se
+4.8) and 70.2 across the sixteen worlds run with the chain and the tools (se
+4.6): a difference of 9.8 at 6.6, which is noise with a hint of a decline in
+it. That is roughly what the specification asks for — "everything should be
+slow and inefficient", "wood and stone tools should wear out quickly" — but it
+means the multipliers are only worth having if a people can keep a stock of
+tools, and nothing yet makes one ahead of needing it.
+
+### 10. Farming is learned now, and the plant nobody can reach
+
+Breaking ground used to be something every founder was born knowing, and a
+field was sown and then forgotten: nothing came on in it, nothing took it, and
+what it grew was the same whether anybody went near it again. Three things
+changed and were measured over eight worlds of ten thousand ticks each,
+against `44f7019`.
+
+**A field goes over if nobody works it.** Weeds and vermin come on in ground
+that is growing something, at a rate that takes an unattended field to about
+half overrun in a season and right over in three. What they leave is what the
+farmer gets, down to a tenth of the crop. Going round the field is an action
+with a cost and a skill behind it; a practised hand gets round three times as
+much of it in a turn as a beginner. Over eight worlds the settlements worked
+their fields 388 times each on average — an action that did not exist before —
+and held cultivated ground at 0.15 of overrun.
+
+**Nobody is born believing in it.** Farming is a `Practice` now, like spreading
+muck: an agent breaks ground out of curiosity until something proves it works,
+and two things prove it. One is standing in your own field and seeing a crop in
+it. The other is the midden — a people that voids the pips of what it eats in
+one place walks past a season later to find the same plants standing in its own
+refuse, and whoever is within six tiles takes the lesson. At ten thousand ticks
+about 45% of a living settlement (mean 31 of 69) has farming as settled
+practice and about 70% have some opinion of it, where before the number was
+not defined because everybody simply farmed.
+
+**Population did not move.** 60.9 people at ten thousand ticks before (se 8.3),
+68.8 after (se 8.9): a difference of 7.9 at a standard error of 12.2, which is
+noise. Fields broken went 81 to 91. What is standing on broken ground at any
+moment went the other way, 743 to 392, for the reason in the next paragraph.
+
+**The plant nobody can reach.** What goes in the ground is what is in the pack,
+and of what is in the pack the crop the agent's own record rates best. Grain
+carries three times what the ground would otherwise and a berry bush in rows
+is still a berry bush, so this is the mechanism by which a people finds out
+which plants are worth sowing — and in eight worlds it never fired. Every field
+in every world was sown with berries. A default world places six wild grain
+patches against twenty-five of generic food, foraging takes the nearest edible,
+and grain therefore almost never reaches a pack at all. The suitability
+machinery is built, tested and idle. Making it fire means putting more wild
+grain in the world, which is a world-generation change with its own measurement
+to do, not a line to tune here.
+
+Partly answered since, by accident rather than by design: grain that gets wet
+sprouts, and a sprouted grain that falls out of a pack takes root — so grain
+patches now propagate, and eight worlds finished with 12.9 of them against 7.8.
+That is more grain in the country than a world starts with, and it still is not
+enough for grain to be the thing a settlement reaches for. See #12.
+
+The first cut of the sowing rule let an agent sow anything in its pack. Over
+eight worlds the people put in flax and cotton — they carry it for clothing —
+and the food standing on the map fell by ninety per cent while they farmed
+linen. A field broken to answer hunger now only takes something a person can
+eat.
+
+Also found on the way: `Gather { resource_type: "grain" }` was not a request
+the executor understood. It fell through to "unknown resource type" and failed.
+Grain only ever arrived as an edible substitute for a request for food.
+
+### 11. What an action wants in the hand was never asked in one place
+
+Thirty-odd actions, each with an executor arm that resolved its own target its
+own way and checked its own preconditions its own way or not at all. `Cook`
+looked for a fire. `Craft` looked for a fire only when the step wanted one.
+`Gather` consulted a tool for a multiplier and then proceeded bare-handed if
+there wasn't one. `TendField` asked for nothing. There was no answer to "what
+does this verb want in its hands", because nothing ever asked.
+
+There is a table now — `src/environment/verbs.rs` — carrying sixty-eight verbs
+across the twelve families, each declaring what it targets, what it wants in
+hand (bare hands, a hand free, any tool for a trade, or one named thing), what
+it changes, and which action performs it. The executor asks the table before
+every action, so the requirement is declared once and enforced once. Two things
+are enforced that were not: a hunt wants a spear — the specification's own
+"hunting = spear + animal" — and stitching wants a hand free.
+
+The table is honest about what it does not do. Twenty-five of the sixty-eight
+verbs have something performing them; forty-three are declared and idle, and
+the whole chemical and fluid family is declaration. A test fails if the table
+stops saying so, because a matrix that quietly implied sixty-eight working
+verbs would be worse than no matrix.
+
+Three of the idle ones have since been built, and building them showed what
+the matrix is worth: smashing, cutting and scraping are a table of workings
+that say what turns into what, and not one word about what they want in the
+hand — the verb says that, and the executor enforces it without knowing
+anything about stone. Over eight worlds against `c6218ae` the settlements
+smashed 866 cores and scraped 901 sticks apiece, spears carried went from 33
+to 65 because a struck flake is half the stone of a raw core, fires standing
+went from 37 to 43, and about two thirds of a living settlement worked out
+what shavings are for. Population 85.5 to 79.3, a difference of 6.3 at a
+standard error of 7.6.
+
+Cutting hides into leather fires almost never — nought to twelve times in a
+world — because hides are scarce in a pack and what there is goes straight
+into clothing. The verb works; the material does not reach it.
+
+**Handing things over**, which also settles the barter mechanism asked for a
+long way back and never delivered. A trade wants an abundance on both sides,
+each of which the other is short of. A gift wants only one, and costs the
+giver, and is worth more to the bond because it leaves somebody owing. What
+either counts as wanting is the raw stuff every step and every working asks
+for, minus what is in the pack.
+
+Over eight worlds a settlement gives 328 times apiece and barters once or
+twice. That is not a mechanism failing to fire: a people that gives freely has
+little left to bargain over, and generalised reciprocity is what a band of
+forty who all know each other actually runs on. Population 71.3 to 74.1, mean
+bond 0.74 to 0.79.
+
+The first cut measured abundance against a number — six of a thing on one side
+and fewer than six on the other — and a settlement traded once in eight worlds
+of ten thousand ticks. Abundance is a comparison, not a threshold: what makes
+a thing worth handing over is that they have markedly less of it than you do.
+The same cut also made a gift require a match on both sides, which is what a
+trade is and not what a gift is.
+
+**Things lying on the ground**, which the manipulation verbs needed and the
+world did not have. A thing was either in a pack or nowhere. Nothing could be
+put down and taken up again, and when somebody died everything they had
+carried went out of the world with them — so an axe existed for exactly as
+long as its owner did, and a people that spent a season making them had
+nothing to show for it the morning after the man who made them drowned.
+
+A pack falls where its owner does and stays the thing it was: a worn axe on
+the ground is a worn axe when the next person picks it up. Food left lying
+goes into the soil in a few weeks and everything else weathers away in a
+season and a half, so a world does not silt up with everything anybody ever
+put down. Over eight worlds against `566f18d` settlements stooped for
+something 45 times apiece and finished with thirteen things lying about, two
+or three of them tools. Population 68.1 to 64.4, a difference of 3.7 at a
+standard error of 9.9 — noise, and so is everything else measured.
+
+One ordering mistake worth recording: scavenging first went ahead of
+everything else the Utility drive does, so a man who could have made a spear
+out of what was in his pack walked twelve tiles for a stick instead. It
+belongs beside going out to fetch a thing, which is what it is a substitute
+for, and not ahead of making one.
+
+**A throw parts you from the spear.** Half the throws that miss put the shaft
+on the ground somewhere out past where the hunter was standing, and it is a
+spear again as soon as somebody walks over and picks it up — which is what
+makes a missed throw cost more than the walking, and which the ground store
+above had to exist before it could. Over eight worlds against `25903eb`
+settlements finished with two or three spears lying in the bracken and the
+number of times anybody stooped for anything went from 39 to 79. Hunts 95 to
+108. Population 68.4 to 69.1.
+
+**And some verbs are not decisions.** Nobody chooses to get a spear between
+himself and a wolf; it is what happens when the wolf arrives and there is a
+spear in his hand. The matrix carries that kind now — `happens_when` beside
+`done_by` — so a verb the world performs is not filed alongside the ones
+nothing performs at all. A spear turns about half of a blow and an axe about a
+third, and both are the worse for it. The effect is not separable at the
+settlement level: mean health was 93.5 before and 93.6 after, because
+predators reach very few people in a world.
+
+**Looking closely at a strange thing**, which turned out to be the piece the
+discovery chain had been missing all along. The deepest steps — the shiny
+lump out of a fire, the blade beaten out of it, the knife and the axe hafted
+from that — were reported twice in this file as built, tested and idle,
+because the only ways in were repeating a trick you had already stumbled on
+and putting the wrong thing where a part goes, and both of those want you to
+have got there first.
+
+Turning over a thing you are already carrying costs a turn and no materials,
+so it is the cheapest experiment there is and pays off least often: six per
+cent, scaled by the hand doing the turning. Over eight worlds against
+`1d1d863` the agents who know what a bright stone does went from 0.9 a world
+to 15, those who know what to beat one into from 0.1 to 5.5, and metal tools
+existed in seven worlds of eight where in every measurement before this they
+existed in none. Population 67.9 to 67.3.
+
+The first cut let an agent look at anything. Examining a length of cord
+announced the metal knife, because a metal knife happens to be lashed
+together, and 30 to 44 agents a world "worked out" steps they had no business
+reaching. A thing that is already part of something everybody understands
+raises no questions, however much else it goes into; only something outside
+all of that does.
+
+Three of my own tests turned out to be asserting deterministic outcomes from
+random gates, and only failed in full-suite runs where the seeds differ:
+whether two strangers trust each other enough to trade is drawn with their
+traits, whether a pack has room for what a test hands it depends on what else
+is in it, and `Lessons::will_try_this_again` is a roll by design — it is what
+stops anybody doing the same thing for ever.
+
+Measured over eight worlds against `1b9aa40`: population 73.3 to 77.4, a
+difference of 4.1 at a standard error of 5.9. What did move is the spread —
+standard deviation from 15.4 to 5.9. Agents dressed 47 to 50, spears carried
+45 to 50, knives 33 to 40, hunts 93 to 104.
+
+Two wrong turns on the way, both caught by measuring rather than by reading.
+
+**Sewing wanted an edge.** True of sewing and false of this economy: stone
+knives wear through faster than a people replaces them, so a requirement for a
+knife is one most people cannot meet most of the time. Over eight worlds it
+took the agents who finished dressed from 47 to 23 and drove clothing attempts
+from 774 to 5,694, almost all refusals. Sewing wants a hand free instead —
+still a real requirement, and one the economy can carry. What a knife is worth
+to the work is what it always was: how well the garment comes out.
+
+**A pack is not a pair of hands.** The first free-hand rule counted a hand as
+full for every kind of tool in the pack, so a man who owned an axe and a spear
+had no hands at all and could never stitch again. That made it worse, not
+better: clothing attempts went to 8,913 and the people finished in their
+shirtsleeves anyway. A tool is carried and taken out when it is wanted. What
+actually leaves somebody with nothing to work with is being loaded to the limit
+of what they can carry, and that is what the rule measures now. It bites on one
+or two agents in a world, which is about right.
+
+### 12. Four accidents that teach farming, and two that hardly ever happen
+
+Farming had one route in and two teachers. It has four of each now, and none of
+them is anybody's idea about agriculture — which is the point, because nobody
+gets ideas about agriculture before there is any.
+
+**Grain gets wet and stops being grain.** A pack carried across a marsh, along
+a riverbank, or through a downpour on open ground has grain coming up in it.
+What sprouted works its way out of the pack, and what falls on ground that can
+carry it grows where somebody happened to be standing. Whoever is within six
+tiles of that learns what seed does. Over eight worlds the grain patches
+standing at the end went from 7.8 to 12.9.
+
+**Somebody moves the bush instead of walking to it.** A person who walks half a
+morning to the same berry patch lifts a slip of it and puts it in beside the
+tents. It is not a theory about growing things, it is an opinion about the
+walk. This turned out to be the strongest of the four by a long way: eight
+worlds lifted 269 slips apiece and put 193 of them in, and the food standing on
+the map went from 1,319 units to 5,526.
+
+That last number wants watching. The first cut took three units off the parent
+plant, left the parent as big as it was, and grew into a plant carrying forty:
+transplanting was not moving food about, it was manufacturing it, and the map
+carried six times what it had. A slip now comes off the parent's carrying
+capacity rather than only off this year's crop, and grows into somewhat more
+than it cost rather than thirteen times. Four times the standing food is still
+a large change for one mechanism and it is what a people that plants things
+would do.
+
+**Population did not move.** 70.5 at ten thousand ticks before, 75.0 after: a
+difference of 4.5 at a standard error of 7.2. Fields went 93 to 101 and the
+share of a living settlement with farming as settled practice went from 34 to
+43 of about 70.
+
+**Some plants are things nobody has tried, and hardly anybody ever does.** Four
+sorts grow in a world; which are supper is drawn when the country is made and
+written nowhere anybody in it can read. A curious agent with nothing pressing
+walks over and eats one, and it costs him between a bad afternoon and his life.
+Everybody standing round him learns it for nothing. Over eight worlds this
+happened three times in total, in three different worlds — twice the plant was
+food. It is built, it is tested, and it is barely exercised: curiosity rarely
+wins a turn against everything else a person wants, and sixteen patches in a
+hundred-tile country are not often underfoot.
+
+The first cut of it never fired at all, in eight worlds of ten thousand ticks.
+Two things were wrong: it asked the agent to be standing exactly on the plant,
+and it rolled the odds again on every tick of the walk, so a small chance was
+compounded against itself until nobody ever arrived. The roll is made once now,
+to set out.
+
+**Putting the wrong thing where a part goes** fires in about half of worlds and
+has never yet produced anything. The good substitutions want a metal blade in
+hand, and a metal blade is three discoveries deep already — so what actually
+gets tried is a hide where the flax goes, over and over, by people who have
+hides. The mechanism is sound and the tree above it is too tall for ten
+thousand ticks.
+
+Found on the way: a discovered thing nobody can make again is not a discovery.
+A metal axe existed only as the outcome of a substitution and had no step in
+the table, so the man who found one could never deliberately make a second.
+Both new tools are steps now, marked as things nobody is born knowing, and the
+substitution is how you come to know them.
+
+### 13. There is no camp for nomadism to be a departure from
+
+A people that cannot farm has nothing it can do to make this ground carry
+more, so it should go where the ground already carries something, and a people
+that can farm should stop. That decision now exists: an agent with no
+established farming practice, standing on ground carrying less than four units
+a head within foraging reach, with somewhere three times better between twenty
+and sixty tiles off, picks up and goes. A standing crop on broken ground nearby
+cancels it, and so does knowing how to farm.
+
+It is built, it is tested, and over sixteen worlds it changed nothing
+measurable. The camp walked 1,301 tiles in ten thousand ticks before and 1,331
+after. Net displacement of the centroid was 28 tiles either way. Population
+73.1 before and 64.6 after, a difference of 8.5 at a standard error of 6.5 -
+consistently negative across two batches and not significant in either.
+
+The reason is the finding. There is no camp. A settlement in this model is not
+an entity with a location that people belong to; it is however many agents
+happen to be standing near each other, and each of them is already dragged
+across the map by its own foraging. They walk thirteen hundred tiles a run
+whatever they believe about farming, and they finish about fourteen tiles from
+each other's centre. Making the ground under a people something it can decide
+to leave means first making the people a thing that is somewhere, which is a
+larger piece of work than a decision function - a settlement with a seat, a
+hearth the camp follows, and a way for a move to be agreed rather than taken
+one agent at a time.
+
+The first cut of the rule asked for an absolute standard of good ground -
+twenty-five units a head - which no ground in the world meets for a settlement
+of any size. It fired every tick of every life. Foraging fell forty per cent,
+the food standing on the map went up four and a half times because nobody was
+eating it, the camp ended up no further from where it started, and it cost
+about twelve people. What replaced it is relative: somewhere three times better
+than here. That stops the moment the camp arrives, because it is then standing
+on the best ground it knows of.
+
+### 14. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 10. Zoning and territory are never established
+### 15. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -424,7 +977,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 11. Agents carry food they will never eat
+### 16. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -434,7 +987,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 12. Personality exists and reaches the drives, and still decides nothing
+### 17. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -529,58 +1082,159 @@ The three things that would fix it, in order of what they buy:
    I said this was "one hook in `DriveState`, and it is what turns sixty labels
    into sixty people". That was wrong, and the reason is worth writing down.
 
-   **What blocks it is the action-selection ladder, not the drives.**
-   `generate_non_emotional_action` is thirteen fixed priorities, and drives are
-   consulted only at the thirteenth, after survival, protection, clothing,
-   cooking, muck, farming, fishing, hunting, percepts, plans and goals have all
-   had their turn. Seventy-nine per cent of everything a settlement does is
-   `Foraging`, and almost all of it comes off that ladder rather than out of a
-   drive — so leaning on the Industry drive barely moves it.
+   **What blocked it was the action-selection ladder, not the drives, and
+   that has since been rebuilt.** `generate_non_emotional_action` used to be
+   thirteen fixed priorities with drives consulted only at the thirteenth,
+   after survival, protection, clothing, cooking, muck, farming, fishing,
+   hunting, percepts, plans and goals had all had their turn. Seventy-nine per
+   cent of everything a settlement did was `Foraging`, almost all of it off
+   that ladder rather than out of a drive, so leaning on the Industry drive
+   barely moved it.
 
-   And when the thirteenth priority *is* reached, three drives take it every
-   time. Measured over four thousand agent-samples, Luxury stands above its
-   threshold **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** —
-   because nothing in the world can answer them (issue #5). Construction is
-   above its threshold 12.7% of the time and Social 38.1%, so they are not
-   quiet; they simply never win, and `Action::Build` and `Action::Socialize`
-   are chosen **zero** times in 777 agent-lives.
+   And when the thirteenth priority *was* reached, three drives took it every
+   time. Over four thousand agent-samples, Luxury stood above its threshold
+   **98.9%** of the time, Preparedness **98.2%**, Utility **84.6%** — because
+   nothing in the world could answer them (issue #7). Construction was above
+   its threshold 12.7% of the time and Social 38.1%, so they were not quiet;
+   they simply never won, and `Action::Build` and `Action::Socialize` were
+   chosen **zero** times in 777 agent-lives.
 
-   So the order of work is the other way round from what I assumed: the pegged
-   drives have to be answerable and the ladder has to let drives decide more
-   than a thirteenth of the time, and only then does a personality have room to
-   show. The hook is in and correct; it is waiting on both.
+   The drive hierarchy inverted that ladder: the drives are now ranked first
+   and the highest-ranked one that this agent can actually answer chooses the
+   action, with the old fixed order kept only as a fallback for the drives
+   that have no answer. Foraging fell from 79% of everything to 25%, Luxury
+   from 98.9% pegged to 0.5%, Preparedness from 98.2% to 0%, Utility from
+   84.6% to 0.6%, and `Action::Build` and `Action::Socialize` became non-zero
+   for the first time.
+
+   So the hook has the room it was waiting for, and whether a personality now
+   tells has not been re-measured since. The fourteen-world reading above was
+   taken against the old ladder and should not be quoted as the current state.
 
 3. **Give agents a reason to need each other.** Everyone still does
    everything, so no agent is ever the one who has what another wants. The
    fishery is the first thing in the model that is *place-bound* — you must be
    at the water — which is the raw material for a real division of labour.
 
-**And a fourth, which assigning traits revealed.** The relationship graph is
-still undifferentiated: 33 to 43 relationships each, of which 31 to 37 are
-close, and **none hostile**, in settlements of 43 to 69. That is no longer
-because traits do not vary. It is arithmetic.
-`Relationship::update_from_trait_interaction` subtracts 0.01 to 0.03 for each
-clashing pair of traits, while `Population::update_relationships` adds up to
-0.10 in proximity bonus to every nearby pair on every tick. Being near somebody
-outweighs disliking them by three to ten times, and applies always rather than
-only when there is a clash, so every relationship saturates at close regardless
-of who the two people are. Nobody ever undertakes a social act either:
-`Undertaking::Dealing` is attempted zero times in a whole run.
+**And a fourth, which assigning traits revealed — since fixed.** The
+relationship graph was undifferentiated: every bond saturated at close and
+**none was hostile**, in any settlement, ever. It was arithmetic rather than
+affection. `Population::update_relationships` added up to 0.10 in proximity
+bonus to every nearby pair on every tick with no ceiling, so a bond saturated
+within a day of standing beside somebody;
+`Relationship::update_from_trait_interaction` ran on the same per-tick
+schedule and moved a bond 0.035 a tick for two people who got on. Both were
+rates being read as amounts.
+
+Both are rates now. A season of never leaving somebody's side makes them a
+familiar face and stops; a season of getting on with them makes them a friend
+and stops. Anything past that has to be earned by what the two of them have
+actually done. On top of that, a grudge weighs on the bond at eight times what
+keeping company is worth, and a blow costs a quarter of the whole scale at
+once. `settle_what_we_are` then puts a name to the number, so
+`RelationshipType::Rival` and `Enemy` — which had been constructed nowhere
+outside a test file in the project's history — appear in live settlements.
+
+Measured at fifteen thousand ticks, three worlds:
+
+| | Before | After |
+| --- | --- | --- |
+| Mean bond across a settlement | 0.901 | 0.78–0.83 |
+| Relationships named Rival | 0 | 10–14 |
+| Relationships named Enemy | 0 | 40–83 |
+| Relationships named Friend | 0 | 3,646–5,101 |
+
+The interesting negative: zeroing the grudge weight and running again leaves
+the enemy count where it was. What makes enemies in a settlement is being hit,
+not being lied to — the grudge mechanism is wired and correct per grudge, and
+grudge-generating events are simply rarer than blows.
+
+At eight worlds a side, relationships named rival or enemy went from **0.00
+per agent to 1.53**, at 5.30 standard errors — one of the few results in this
+project that clears the bar decisively — and the mean bond from 0.90 to 0.82.
+It costs fourteen more deaths (1.81 se) on a settlement with slightly more
+births and a slightly higher peak, so more turnover rather than failure, and
+eight of eight settlements were still inhabited.
+
+Nobody undertaking a social act is fixed separately: `Undertaking::Dealing`
+was attempted zero times in a whole run before the drive hierarchy let drives
+choose actions, and `Socialize` now runs at about 0.6% of everything a
+settlement does.
+
+**What is left of it.** Close relationships are still the large majority — 86
+of 108 per agent. Proximity and temperament are capped now, so what carries a
+bond past friendship is `positive_interaction` from social acts, at 0.01 to
+0.05 apiece; over fifteen thousand ticks in a settlement where everybody is
+within reach of everybody, that adds up for every pair alike. It is the same
+shape of defect as the two that were fixed — an unbounded accumulator over a
+long run — and the principle has not yet been applied to it.
+
+### 18. Skill measured how far you had walked, and bought nothing
+
+**Since fixed**, and recorded because the shape of it recurs.
+
+Experience was granted for *looking*. The resource-discovery pass filtered on
+the tick a thing was found and ran every tick, so a thing seen once paid out on
+ten consecutive ticks — fifty Farming experience for walking past a grain
+field, half a level, in a settled world holding ninety of them. A level cost a
+flat hundred wherever you stood, so the last step from journeyman to master was
+as cheap as the first away from knowing nothing. Nothing ever took a skill
+back.
+
+Between them, skill level measured how much of the map somebody had wandered
+over. Across 298 agents at eight thousand ticks:
+
+| trade | mean level (−10 to 10) | at journeyman or better |
+| --- | --- | --- |
+| Farming | **9.9** | 297 of 298 |
+| Herbalism | 1.0 | 293 |
+| Woodcutting | 0.5 | 265 |
+| Leatherworking | **−9.2** | 0 |
+| Hunting | **−9.9** | 0 |
+
+Everybody was a master farmer and nobody had farmed. The trades nothing could
+be *discovered* for stayed on the floor however much of them was done. And
+none of it mattered anyway: `Skill::speed_multiplier`, `Skill::perform_check`
+and `Skill::determine_quality` were all built and had no callers anywhere, and
+the harvest site carried the comment "determine harvest amount based on
+resource type and skill" above code that did not consult the skill. A lifetime
+at a trade brought back exactly what a first day did.
+
+Four things went in. Finding a thing pays once and pays a pittance; a level
+costs more the higher it goes, sized against the roughly two hundred and fifty
+goes at anything an agent gets in a working life; a trade not practised for a
+year begins to go, and keeps going, though never below apprentice; and what a
+hand is worth — half at the bottom, double at the top — now decides what comes
+off a field per trip and whether a garment is finished or spoiled in the
+making.
+
+The spread that came out, same measurement:
+
+| | before | after |
+| --- | --- | --- |
+| Best trade per agent | 9.9 | −2.4 |
+| Trades off the floor per agent | 5.8 of 8 | 4.6 of 8 |
+| Reached journeyman in anything | 297 of 298 | 92 of 284 |
+
+Most people are now mediocre at several things and a minority are genuinely
+good at one, which is the point. A settlement is unaffected: six worlds to
+fifteen thousand ticks came out at 100.5 people on 0.561 farmed fertility,
+matching the eight-world baseline exactly.
 
 ---
 
 ## Housekeeping
 
-### 13. Committed backup file
+### 19. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 14. Build warnings
+### 20. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 15. Placeholder package metadata
+### 21. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
@@ -701,3 +1355,68 @@ Listed so nobody re-investigates them. Each has regression tests in
   used as a probability; 44.7% of adult pairs produced odds above 1.0, which
   panics the sampler. Only reachable once agents could feed and water
   themselves well enough to reproduce.
+- **Every drive was equal, and the ladder decided everything.** The nine drives
+  had weights but no order, so nothing said that a man dying of thirst should
+  stop hunting; and `generate_non_emotional_action` consulted them only at the
+  thirteenth of thirteen fixed priorities, so almost nothing a settlement did
+  came out of a drive at all. Drives now carry a rank — primary, secondary,
+  tertiary — and inside the primary band the one that would kill soonest wins,
+  computed live from how long this agent could actually last. Each drive is
+  also gated behind the one it follows in the specification's chains, so
+  Preparedness cannot build while its owner is hungry. Foraging fell from 79%
+  of everything a settlement does to 25%, three permanently pegged drives came
+  off their ceilings, and `Action::Build` and `Action::Socialize` were chosen
+  for the first time in the project's history.
+- **A shut-out drive drained forty times faster than it filled.** Gating a
+  drive behind its predecessor needed a way for the gated drive to fall quiet,
+  and `fall_quiet` used one flat rate for all nine. For Reproduction, which
+  accumulates at 0.001 a tick, that rate was 0.004 — so the 9.9% of ticks an
+  agent spent with its primaries unanswered cost it half its total accumulation
+  and halved the birth rate. Measured at eight worlds a side, this alone was
+  the difference between a settlement of 45 and one of 30. A drive now fades at
+  the pace it would have grown.
+- **News had no age, no room, and no shelf life.** A claim carried who made it
+  and nothing else, so a man who honestly reported a patch he saw last season
+  was called a liar the moment somebody found it picked. Telling was strictly
+  two-handed - one speaker, one listener, nobody else hearing a word of it
+  however many were standing round - and a liar weighed only the man in front
+  of him. And what an agent remembered was bounded by nothing, so a settlement
+  that talks carried the whole map in every head. A claim now says when the
+  speaker saw the thing and he is answerable for two days; being out of date
+  costs a sixth of a lie and no anger. Speech reaches everybody in earshot,
+  and a liar picks ground nobody present has walked lately. An agent holds
+  ninety-six places and lets go of what answers no need it has. Two things
+  turned up on the way: the periodic sweep over remembered claims was making
+  every accusation in the model, all of them false, and is retired in favour
+  of the sight pass; and the first cut of "count the room" abolished lying
+  outright by letting anybody who had *ever* walked the ground contradict it.
+- **Nobody could be disbelieved, and nobody could lie.** Trust lived in three
+  books that never met — a verified track record in the knowledge base, an
+  enum on the relationship, and a sum of trait modifiers that mixed "do I
+  believe people" with "do people believe me" — and the channel that actually
+  carries information between agents consulted none of them. Resource and
+  building locations went into `exploration_knowledge`, which is what foraging
+  reads, from anybody at all, and could not be wrong: `would_lie_to` weighs
+  honesty and the relationship, and its only caller was itself never called.
+  Agents now decide whose word to take, a liar can name a place that is not
+  there, and the lie is found out by walking to it. What it costs him depends
+  on what he lied about, weighed by how hard that need is pressing on the man
+  he lied to. Two things had to be fixed first: an agent's map mixed what it
+  had seen with what it had been told, so it read its own hearsay back as
+  confirmation and every lie verified as true; and agents passed hearsay on as
+  first hand, which laundered a lie so thoroughly that a hundred and fifty of
+  them produced four thousand accusations against honest people.
+- **Fear was a hunger reading and anger was nothing at all.**
+  `calculate_survival_drive_emotion` derived fear from how high a survival
+  drive's value stood, so it originally sat near 0.8 between meals and — once
+  the survival drives were being answered — inverted to nearly zero. Anger was
+  written only by the resolution of a blow that had already landed, and
+  measured at exactly 0.00 over three worlds. `should_flee` and
+  `should_attack` therefore never fired in a settlement's whole life, so the
+  emotional branch of `generate_action` was dead code. Both are appraisals
+  now: what is in front of the agent is weighed against what the agent can do
+  about it, and the answer comes out as anger where it can be fought and fear
+  where it cannot. `ThreatAssessment` had always been able to make that
+  judgement; nothing had ever asked it about anything but a wound. What
+  happened in past fights scales the estimate, so an agent that has been
+  beaten runs where one that has won stands.

@@ -366,7 +366,14 @@ fn the_children_of_a_settlement_live_past_infancy() {
 
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..12_000 {
+    // Five years, not ten. This asked for twelve thousand ticks when a
+    // settlement of that age held under a hundred people; it now holds getting
+    // on for twice that, and the cost of a tick rises with the square of who
+    // is standing about, so the same claim was taking the best part of an hour
+    // to check in a debug build. Six thousand ticks is four full years and is
+    // long enough over: a settlement that has not raised a child in four years
+    // is not going to.
+    for _ in 0..6_000 {
         simulation.tick();
     }
 
@@ -380,6 +387,6 @@ fn the_children_of_a_settlement_live_past_infancy() {
 
     assert!(
         born_here >= 5,
-        "twelve thousand ticks in, a settlement should hold people born into it, not {born_here}"
+        "six thousand ticks in, a settlement should hold people born into it, not {born_here}"
     );
 }

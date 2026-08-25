@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::core::DriveType;
 
+pub mod making;
+pub mod verbs;
 mod material;
 mod action;
 mod crafting;
@@ -175,6 +177,17 @@ pub enum Action {
         animal_id: uuid::Uuid,
         weapon: Option<String>,
     },
+    /// Stand your ground against an animal that is not being hunted.
+    ///
+    /// Distinct from `Hunt`, which is how an agent goes after food and skins
+    /// and reads the Hunting skill. This is what an angry agent does to the
+    /// thing that is frightening everybody: it reads MeleeCombat, it teaches
+    /// the agent about fighting rather than about hunting, and it is worth
+    /// doing on a full stomach.
+    Fight {
+        animal_id: uuid::Uuid,
+        weapon: Option<String>,
+    },
     /// Tame a wild animal
     Tame {
         animal_id: uuid::Uuid,
@@ -214,6 +227,37 @@ pub enum Action {
     WearClothing { garment: String },
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
+    /// Go over a standing field pulling weeds out of it and picking pests off
+    /// it, which is most of what growing a crop actually consists of
+    TendField,
+    /// Look closely at something in the pack, and sometimes work out what it
+    /// is for
+    Examine { what: String },
+    /// Take something lying on the ground here into the pack
+    PickUp { what: String },
+    /// Set something down on the ground here
+    PutDown { what: String },
+    /// Swap something there is too much of for something there is not enough
+    /// of, with somebody who has the opposite problem
+    Trade { with: uuid::Uuid },
+    /// Hand something over, wanting nothing back
+    GiveTo { to: uuid::Uuid },
+    /// Work a thing in the pack down into another thing with an edge or a
+    /// hammer: smashing, cutting, scraping. What each wants in the hand is
+    /// declared in the verb matrix and enforced there.
+    Work { verb: String, to: String },
+    /// Eat a piece of something growing that nobody has tried, and find out
+    Taste,
+    /// Attempt a known step with the wrong thing where one of the parts goes
+    TrySwapping {
+        instead_of_making: String,
+        instead_of: String,
+        put_in: String,
+    },
+    /// Lift a piece of a plant that is known to be good, to carry home
+    TakeCutting,
+    /// Put a carried cutting in the ground where the agent is standing
+    PlantCutting,
     /// Tip whatever is spoiling in the pack onto the ground here
     SpreadMuck,
     /// Take what the run is carrying, from the reach the agent is standing at
@@ -241,6 +285,7 @@ impl Action {
             Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
             Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
+            Action::Fight { .. } => Some(DriveType::Safety), // Driving a thing off, not eating it
             Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
@@ -249,6 +294,17 @@ impl Action {
             Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
+            Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
+            Action::Examine { .. } => Some(DriveType::Curiosity),
+            Action::PickUp { .. } => Some(DriveType::Utility),
+            Action::PutDown { .. } => Some(DriveType::Utility),
+            Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing
+            Action::GiveTo { .. } => Some(DriveType::Social), // A gift is not
+            Action::Work { .. } => Some(DriveType::Utility),
+            Action::Taste => Some(DriveType::Curiosity), // Nobody eats a strange plant for the nutrition
+            Action::TrySwapping { .. } => Some(DriveType::Curiosity),
+            Action::TakeCutting => Some(DriveType::Sustenance),
+            Action::PlantCutting => Some(DriveType::Sustenance),
             Action::SpreadMuck => Some(DriveType::Sustenance),
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),

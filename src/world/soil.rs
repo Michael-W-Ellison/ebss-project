@@ -32,6 +32,38 @@ pub struct Soil {
 
     /// Trunks, branches, bone: dense, dry inside, and slow
     pub woody_litter: f32,
+
+    /// Fresh dung lying on the surface: what a midden smells of.
+    ///
+    /// Separate from the litter because it is a different question. Litter is
+    /// about what the ground will have to eat next year; this is about what
+    /// the ground smells of today, and it goes off much faster than it breaks
+    /// down. What it turns into is in the litter already - this is only the
+    /// smell of it, and the seeds in it.
+    #[serde(default)]
+    pub fouling: f32,
+
+    /// Seeds passed through somebody, waiting on the ground they were dropped
+    /// on.
+    ///
+    /// "Seeds from the plants they have eaten should sprout." They come out
+    /// with the waste, sit until the fouling has broken down enough to be soil
+    /// rather than muck, and then come up.
+    #[serde(default)]
+    pub seeds_dropped: f32,
+
+    /// What is growing in a field that nobody wanted there.
+    ///
+    /// "Farmers should not just drop seeds and get crops. They need to
+    /// maintain the fields, clearing weeds and removing pests." Broken ground
+    /// is the best ground there is and everything else knows it: a field left
+    /// alone goes back to being a meadow, and what it carries goes with it.
+    #[serde(default)]
+    pub weeds: f32,
+
+    /// And what is eating it.
+    #[serde(default)]
+    pub pests: f32,
 }
 
 impl Soil {
@@ -172,6 +204,10 @@ impl Soil {
                 TerrainType::Wetland => 0.3,
                 _ => 0.05,
             },
+            fouling: 0.0,
+            seeds_dropped: 0.0,
+            weeds: 0.0,
+            pests: 0.0,
         }
     }
 
@@ -200,6 +236,63 @@ impl Soil {
     /// Put soft matter on the ground: leaves, dung, spoiled food, offal
     pub fn add_leaf_litter(&mut self, amount: f32) {
         self.leaf_litter = (self.leaf_litter + amount).clamp(0.0, Self::MAX_LITTER);
+    }
+
+    /// What somebody has just passed, with whatever was in it.
+    ///
+    /// Goes into the litter like anything else soft, and additionally leaves
+    /// the two things that make a midden a midden: a smell, and seeds.
+    pub fn somebody_voided_here(&mut self, amount: f32) {
+        self.add_leaf_litter(amount);
+        self.fouling = (self.fouling + amount).clamp(0.0, Self::AS_FOUL_AS_IT_GETS);
+        self.seeds_dropped =
+            (self.seeds_dropped + amount * Self::WHAT_COMES_THROUGH_WHOLE).clamp(0.0, 1.0);
+    }
+
+    /// How foul ground can get before more of it makes no difference.
+    pub const AS_FOUL_AS_IT_GETS: f32 = 2.0;
+
+    /// Ground fouler than this is ground people will not sit on.
+    pub const FOUL_ENOUGH_TO_WALK_AWAY_FROM: f32 = 0.35;
+
+    /// What share of what goes in comes out able to grow.
+    ///
+    /// Most of a berry is digested. The pips are not, which is the whole
+    /// mechanism: a hedge grows where the birds sit.
+    pub const WHAT_COMES_THROUGH_WHOLE: f32 = 0.05;
+
+    /// How much seed has to be lying on a tile before anything comes up.
+    ///
+    /// Two units of waste on the same ground, which is about what a camp
+    /// leaves on one tile over a season. This was five times higher to begin
+    /// with, and measured over six thousand ticks it meant that of a thousand
+    /// tiles carrying seed not one carried enough: people move about, and no
+    /// single tile ever caught up.
+    pub const ENOUGH_TO_COME_UP: f32 = 0.1;
+
+    /// And how far the fouling has to have gone off before the ground under it
+    /// is soil rather than muck.
+    ///
+    /// This is the wait the specification describes: "over time the waste
+    /// should break down and seeds from the plants they have eaten should
+    /// sprout". Nothing grows out of a fresh midden.
+    pub const BROKEN_DOWN_ENOUGH_TO_GROW_IN: f32 = 0.1;
+
+    /// Whether this ground is fouled enough that people will not stay on it.
+    pub fn is_foul(&self) -> bool {
+        self.fouling >= Self::FOUL_ENOUGH_TO_WALK_AWAY_FROM
+    }
+
+    /// Whether what was dropped here is ready to come up.
+    pub fn ready_to_sprout(&self) -> bool {
+        self.seeds_dropped >= Self::ENOUGH_TO_COME_UP
+            && self.fouling <= Self::BROKEN_DOWN_ENOUGH_TO_GROW_IN
+            && self.nutrients > 0.0
+    }
+
+    /// Take the seed off the ground, because it has come up.
+    pub fn it_came_up(&mut self) -> f32 {
+        std::mem::take(&mut self.seeds_dropped)
     }
 
     /// Put dense matter on the ground: trunks, branches, bone
@@ -237,6 +330,13 @@ impl Soil {
             return 0.0;
         }
 
+        // A midden stops smelling long before it stops being there. This runs
+        // an order of magnitude faster than the rot underneath it, which is
+        // why the ground people walked away from a season ago is ground they
+        // will sit on again.
+        const FOULING_RATE: f32 = 0.006;
+        self.fouling = (self.fouling - self.fouling * FOULING_RATE * activity * ticks).max(0.0);
+
         let from_leaves = (self.leaf_litter * LEAF_RATE * activity * ticks).min(self.leaf_litter);
         let from_wood = (self.woody_litter * WOOD_RATE * activity * ticks).min(self.woody_litter);
 
@@ -268,5 +368,62 @@ impl Soil {
 impl Default for Soil {
     fn default() -> Self {
         Self::for_terrain(TerrainType::Plains)
+    }
+}
+
+impl Soil {
+    /// How thick weed and vermin get before there is nothing left worth
+    /// harvesting.
+    pub const OVERRUN: f32 = 1.0;
+
+    /// How fast a field goes back to meadow, per tick of growing weather.
+    ///
+    /// A season of neglect takes a field most of the way. Nothing comes in on
+    /// ground that is not broken - a meadow cannot get any weedier than it
+    /// already is.
+    pub const WHAT_A_FIELD_LOSES_TO_NEGLECT: f32 = 0.004;
+
+    /// And how much of it one visit from a farmer puts right.
+    ///
+    /// Not all of it. Weeding is a thing you do again next week.
+    pub const WHAT_ONE_VISIT_PUTS_RIGHT: f32 = 0.45;
+
+    /// Let a season of nobody looking after it tell on a field.
+    ///
+    /// `growing` is how good the weather is for growing anything at all, which
+    /// is the same weather the crop wants: weeds do best exactly when the
+    /// wheat does.
+    pub fn nobody_weeded_this(&mut self, growing: f32, ticks: f32) {
+        let coming_on = growing.clamp(0.0, 1.0) * Self::WHAT_A_FIELD_LOSES_TO_NEGLECT * ticks;
+
+        self.weeds = (self.weeds + coming_on).clamp(0.0, Self::OVERRUN);
+        // Vermin follow the crop rather than the weather, and are slower to
+        // find a field than the weeds in it are.
+        self.pests = (self.pests + coming_on * 0.6).clamp(0.0, Self::OVERRUN);
+    }
+
+    /// Somebody spent a turn in the field pulling things up and picking things
+    /// off.
+    pub fn somebody_worked_this_field(&mut self) {
+        self.weeds = (self.weeds - Self::WHAT_ONE_VISIT_PUTS_RIGHT).max(0.0);
+        self.pests = (self.pests - Self::WHAT_ONE_VISIT_PUTS_RIGHT).max(0.0);
+    }
+
+    /// Whether this field is worth a farmer's turn.
+    pub fn wants_working(&self) -> bool {
+        self.weeds + self.pests >= Self::WORTH_A_TURN
+    }
+
+    /// How far gone a field has to be before somebody walks over to it.
+    pub const WORTH_A_TURN: f32 = 0.3;
+
+    /// What share of what a field would carry actually comes off it.
+    ///
+    /// Weeds take the ground's share, vermin take the crop's. Both together,
+    /// left alone, come to nearly nothing - which is the difference between
+    /// dropping seed and farming.
+    pub fn what_the_crop_keeps(&self) -> f32 {
+        let taken = (self.weeds + self.pests) / (2.0 * Self::OVERRUN);
+        (1.0 - taken.clamp(0.0, 1.0) * 0.9).clamp(0.1, 1.0)
     }
 }

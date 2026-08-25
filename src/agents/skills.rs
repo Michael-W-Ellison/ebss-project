@@ -141,6 +141,24 @@ pub enum Quality {
 }
 
 impl Quality {
+    /// The quality a given pair of hands turns out.
+    ///
+    /// `hand` is the multiplier from [`Skill::hand`]: 0.5 for the clumsiest
+    /// possible, 1.25 for an untrained adult, 2.0 for the best there is. The
+    /// bands are set so that a founder - who arrives four or five levels
+    /// below untrained, having lived a life but no more than that - makes
+    /// crude things. None of them are experts at making anything.
+    pub fn from_hand(hand: f32) -> Self {
+        match hand {
+            h if h < 0.8 => Quality::Pathetic,
+            h if h < 1.1 => Quality::Crude,
+            h if h < 1.4 => Quality::Basic,
+            h if h < 1.65 => Quality::Moderate,
+            h if h < 1.85 => Quality::Advanced,
+            _ => Quality::Expert,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Quality::Pathetic => "Pathetic",
@@ -323,6 +341,9 @@ pub struct Skill {
     pub skill_type: SkillType,
     pub level: i32, // -10 to 10
     pub experience: u32,
+    /// The tick this was last actually practised
+    #[serde(default)]
+    pub last_used: u32,
 }
 
 impl Skill {
@@ -331,6 +352,7 @@ impl Skill {
             skill_type,
             level: -10, // Start at lowest level
             experience: 0,
+            last_used: 0,
         }
     }
 
@@ -340,6 +362,7 @@ impl Skill {
             skill_type,
             level: level.clamp(-10, 10),
             experience: 0,
+            last_used: 0,
         }
     }
 
@@ -362,6 +385,23 @@ impl Skill {
     /// Get speed multiplier (each level = 5%)
     pub fn speed_multiplier(&self) -> f32 {
         1.0 + (self.level as f32 * 0.05)
+    }
+
+    /// What a hand of this practice is worth at the work, against an ordinary
+    /// one.
+    ///
+    /// Half at the bottom, double at the top, and one in the middle of the
+    /// range. This is the number that makes a trade worth having: it is what
+    /// comes off a field per trip, what a piece of work is worth, how much of
+    /// the material is not wasted. Without it a lifetime at a trade bought
+    /// nothing at all, because `speed_multiplier`, `perform_check` and
+    /// `determine_quality` were built and had no callers anywhere.
+    pub fn hand(&self) -> f32 {
+        const CLUMSIEST: f32 = 0.5;
+        const BEST: f32 = 2.0;
+
+        let along = (self.level + 10) as f32 / 20.0;
+        CLUMSIEST + (BEST - CLUMSIEST) * along
     }
 
     /// Perform skill check with optional tool quality
@@ -471,14 +511,51 @@ impl Skill {
         }
     }
 
+    /// What the first step up costs, from knowing nothing at all
+    pub const FIRST_STEP: u32 = 40;
+
+    /// And how much more each step costs than the one below it.
+    ///
+    /// Sized against how many times an agent actually does anything. Measured
+    /// over fourteen worlds, the busiest trade in a settlement is gathering at
+    /// something like two hundred and fifty goes in a working life, and most
+    /// trades far fewer. A curve steep enough to be interesting has to fit
+    /// inside that: at these numbers somebody who gives a life to one trade
+    /// finishes near the top of it, somebody who dabbles at a third of the
+    /// rate finishes near the bottom, and the last step still costs nearly
+    /// five times the first.
+    pub const STEEPER_EACH_TIME: u32 = 8;
+
+    /// What it costs to climb one level from here.
+    ///
+    /// A flat hundred at every level meant the twenty steps from raw beginner
+    /// to master cost the same at the top as at the bottom, and anybody who
+    /// touched a trade ran to the ceiling of it. Getting the hang of something
+    /// is quick and getting good at it is not: the first step costs thirty and
+    /// the last costs five hundred, so the whole climb is about five and a half
+    /// thousand - a life's work at one trade, and out of reach for somebody
+    /// splitting their days across eight.
+    pub fn experience_for_next_level(level: i32) -> u32 {
+        let steps_taken = (level + 10).max(0) as u32;
+        Self::FIRST_STEP + Self::STEEPER_EACH_TIME * steps_taken
+    }
+
     /// Gain experience from successful completion
     pub fn gain_experience(&mut self, amount: u32) {
         self.experience += amount;
 
-        // Level up if enough experience (simple: 100 exp per level)
-        while self.experience >= 100 && self.level < 10 {
-            self.experience -= 100;
+        while self.level < 10 {
+            let wanted = Self::experience_for_next_level(self.level);
+            if self.experience < wanted {
+                break;
+            }
+            self.experience -= wanted;
             self.level += 1;
+        }
+
+        // At the ceiling there is nothing left to bank towards
+        if self.level >= 10 {
+            self.experience = 0;
         }
     }
 
@@ -487,7 +564,7 @@ impl Skill {
         if self.level >= 10 {
             1.0
         } else {
-            self.experience as f32 / 100.0
+            self.experience as f32 / Self::experience_for_next_level(self.level) as f32
         }
     }
 
@@ -567,6 +644,78 @@ impl Skills {
     pub fn gain_experience(&mut self, skill_type: SkillType, amount: u32) {
         let skill = self.get_skill_mut(skill_type);
         skill.gain_experience(amount);
+    }
+
+    /// What this agent's hand is worth at a trade, against an ordinary one.
+    ///
+    /// Half for somebody who has never done it, double for a master. Somebody
+    /// who has not touched the skill at all counts as never having done it.
+    pub fn hand_for(&self, skill_type: SkillType) -> f32 {
+        self.get_skill_if_exists(skill_type)
+            .map(|skill| skill.hand())
+            .unwrap_or_else(|| Skill::new(skill_type).hand())
+    }
+
+    /// Practise a skill at a given tick, so that it is known to be in use.
+    ///
+    /// The same as gaining experience, and additionally the thing that keeps a
+    /// trade from rusting - see [`Self::let_unused_skills_rust`].
+    pub fn practise(&mut self, skill_type: SkillType, amount: u32, current_tick: u32) {
+        let skill = self.get_skill_mut(skill_type);
+        skill.gain_experience(amount);
+        skill.last_used = current_tick;
+    }
+
+    /// How long a hand keeps its trade before it starts to go.
+    ///
+    /// A year of not doing the work at all. Somebody who farms in the spring
+    /// and does other things all summer does not forget how to farm.
+    pub const KEEPS_FOR: u32 = 1_152;
+
+    /// And how long a level lasts after that.
+    pub const LOSES_A_LEVEL_EVERY: u32 = 576;
+
+    /// How far a trade can fall away.
+    ///
+    /// Not to nothing. Somebody who spent years at a trade and then left it
+    /// is worse than they were and better than somebody who never did it, and
+    /// stays that way - which is also what makes coming back to a trade
+    /// cheaper than starting one.
+    pub const NEVER_QUITE_FORGOTTEN: i32 = -5;
+
+    /// Let go of what has not been done in a long time.
+    ///
+    /// Nothing took a skill back before this, so a long-lived agent could hold
+    /// every trade at once and being a generalist cost nothing at all. It is
+    /// the other half of making mastery expensive: the climb is long enough
+    /// that only a specialist finishes it, and this is what stops somebody
+    /// finishing all eight climbs one after another over a long life.
+    pub fn let_unused_skills_rust(&mut self, current_tick: u32) {
+        for skill in self.skills.values_mut() {
+            if skill.level <= Self::NEVER_QUITE_FORGOTTEN {
+                continue;
+            }
+
+            let idle = current_tick.saturating_sub(skill.last_used);
+            if idle < Self::KEEPS_FOR {
+                continue;
+            }
+
+            let gone = ((idle - Self::KEEPS_FOR) / Self::LOSES_A_LEVEL_EVERY) as i32;
+            if gone == 0 {
+                continue;
+            }
+
+            let was = skill.level;
+            skill.level = (skill.level - 1).max(Self::NEVER_QUITE_FORGOTTEN);
+
+            if skill.level != was {
+                // Whatever was banked towards the next level goes with it, and
+                // the clock restarts so the next level takes as long again
+                skill.experience = 0;
+                skill.last_used = current_tick.saturating_sub(Self::KEEPS_FOR);
+            }
+        }
     }
 
     /// Get all skills
@@ -653,14 +802,27 @@ mod tests {
 
     #[test]
     fn test_skill_progression() {
+        // A level used to cost a flat hundred wherever you stood, so the last
+        // step from journeyman to master was as cheap as the first away from
+        // knowing nothing, and anybody who touched a trade ran to the ceiling
+        // of it. It costs more the higher it goes now.
         let mut skill = Skill::new(SkillType::Mining);
         assert_eq!(skill.level, -10);
 
-        skill.gain_experience(100);
+        skill.gain_experience(Skill::experience_for_next_level(-10));
         assert_eq!(skill.level, -9);
 
-        skill.gain_experience(500);
+        // The same experience again buys less of a climb the second time
+        let first_five: u32 = (-9..-4).map(Skill::experience_for_next_level).sum();
+        skill.gain_experience(first_five);
         assert_eq!(skill.level, -4);
+
+        let next_five: u32 = (-4..1).map(Skill::experience_for_next_level).sum();
+        assert!(
+            next_five > first_five,
+            "the five levels after should cost more than the five before: \
+             {next_five} against {first_five}"
+        );
     }
 
     #[test]

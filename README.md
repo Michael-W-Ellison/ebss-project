@@ -18,14 +18,14 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
-weather, and reproduces over tens of thousands of ticks. Roughly 95,000 lines
-across 200 source files, with 1,199 library tests.
+weather, and reproduces over tens of thousands of ticks. Roughly 108,000 lines
+across 207 source files, with 1,279 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,236 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,316 tests across the workspace.
 The work left is connecting rather than building — several analytics
-components are libraries with no caller, and agents cannot yet see each other
-or hear anything. See
+components are libraries with no caller, and agents cannot yet hear anything.
+See
 [PROJECT_STATUS.txt](PROJECT_STATUS.txt) for measured detail and
 [ISSUES_FOUND.md](ISSUES_FOUND.md) for the current defect list. The
 [Software Design Document](EBSS_Software_Design_Document.docx) holds the
@@ -58,18 +58,176 @@ original specifications.
 - ✅ Farming: agents break open grass into fields and sow them. A field gets at
   more of what the soil holds and carries a heavier crop — it does not grow
   anything faster than that plant's kind can grow
+- 🚧 A people without a field goes where the ground already carries something,
+  and one that has worked farming out stays. The decision is built and tested —
+  stripped ground, somewhere three times better a fortnight off, no crop
+  standing here — and over sixteen worlds it changed nothing measurable,
+  because there is no camp in this model for it to be a departure from. See
+  ISSUES_FOUND.md #13
+- ✅ Looking closely at a strange thing you are already carrying. The third
+  road into the chain, beside doing a thing twice to see it happen again and
+  putting the wrong thing where a part goes — and the cheapest, a turn and no
+  materials, which is why it pays off least often. Only a genuinely unfamiliar
+  thing raises a question: a length of cord is something every person here has
+  handled a thousand times, whatever else happens to be lashed together with
+  it. This is what finally carries the discovery chain to its end — metal
+  tools now exist in a settlement, which in every measurement before this they
+  did not
+- ✅ A throw parts you from the spear. Half the throws that miss put the shaft
+  on the ground somewhere out past where the hunter was standing, and it is a
+  spear again as soon as somebody walks over and picks it up — which is what
+  makes a missed throw cost more than the walking. And what is in the hand
+  when something comes at you turns some of the blow: nobody decides to get a
+  spear between himself and a wolf, so the matrix carries that as a verb the
+  world performs rather than one anybody chooses. It is why carrying a spear
+  is worth something to a man who never hunts
+- ✅ Things lie on the ground. A thing used to be either in somebody's pack or
+  nowhere: an axe existed for exactly as long as its owner did, and a people
+  that spent a season making them had nothing to show for it the morning after
+  the man who made them drowned. A pack now falls where its owner does, and it
+  is the same worn axe when the next person picks it up. Anything worth having
+  within a dozen paces is worth stooping for. Food left lying goes into the
+  ground in a few weeks; everything else weathers away in a season and a half
+- ✅ Handing things over. A trade wants an abundance on both sides, each of
+  which the other is short of; a gift wants only one, and costs the giver, and
+  is worth more to the bond because it leaves somebody owing. What either of
+  them counts as wanting is not a preference anybody wrote down — it is the
+  raw stuff every step and every working in the chain asks for, minus what is
+  already in the pack. Over eight worlds a settlement gives 328 times and
+  barters once or twice: a people that gives freely has little left to bargain
+  over, which is about what a band of forty who all know each other should
+  look like
+- ✅ Working a thing down into another thing, which is the other half of what
+  a tool is for. A making puts several things together; a working takes one
+  and reduces it. A core smashed into flakes — half the stone for the same
+  edge — a hide cut into leather, a stick scraped into shavings. Each wants
+  something in the hand and is refused without it, and the edge that did it is
+  the worse for it. Shavings are a discovery: everybody knows a fire wants
+  wood, and that a fire wants wood cut small enough to catch is a thing
+  somebody works out with a scraper in his hand and a hearth that will not
+  light. A hearth laid with tinder takes half the timber
+- ✅ Every action defined by three things: what it targets, what it wants in
+  the hand, and what it changes. Sixty-eight verbs across twelve families live
+  in one table — `src/environment/verbs.rs` — and the table is what the
+  executor consults before an action runs, so a hunt without a spear and a
+  stitch with no hand free are refused in one place rather than in thirty. The
+  table is honest about itself: a verb nothing performs yet says so, and a test
+  fails if it stops saying so. Twenty-odd of the sixty-eight are live; the
+  chemical and fluid family is entirely declaration so far
+- ✅ Four ways into farming, none of which is anybody's idea about agriculture.
+  Grain carried through the wet — a marsh, a riverbank, a downpour on open
+  ground — starts coming up in the pack, and what falls out of a pack takes
+  root where somebody was standing. Somebody who walks half a morning to the
+  same berry bush lifts a slip of it and puts it in beside the tents, because
+  the walk is the thing he minds. The midden the people void in comes up in
+  what they ate. And a crop carried home off broken ground settles it. Whoever
+  is standing near enough to see any of that happen takes the lesson
+- ✅ Some plants are things nobody has tried. Four sorts grow in a world and
+  which of them are supper is drawn when the country is made and written
+  nowhere anybody living in it can read. A curious agent with nothing pressing
+  on him occasionally eats one: if it feeds him, the people have a new food
+  and can gather it; if it does not, it costs him between a bad afternoon and
+  his life. Everybody standing round him learns it for nothing, which is most
+  of what being a people rather than a person is worth
+- ✅ Putting the wrong thing where a part goes. A man who can haft a flake to a
+  stick knows the shape of the job — a shaft, a head, something to bind them —
+  and can put something unexpected where the head goes. Almost always he ends
+  up with a lump tied to a stick and has wasted a good stick; the materials go
+  either way. Occasionally he ends up with a metal axe, and knows how to do it
+  again on purpose
+- ✅ Farming is worked out, and then worked at. Nobody starts out believing that
+  seed put in the ground on purpose comes back as food; breaking ground is a
+  hunch an agent follows out of curiosity until something proves it. Two things
+  prove it: an armful carried home off broken ground, and a walk past the
+  midden a season after the people voided the pips of what they ate, to find
+  the same plants standing in their own refuse. A field is not sown and
+  forgotten either — weeds and vermin come on in it every tick it is growing,
+  and what they leave is what the farmer gets, down to a tenth of the crop on
+  ground nobody has been near. Going round a field pulling weeds and picking
+  pests off it is an action with a cost, chosen because the field wants it, and
+  a practised hand gets round more of it in a turn. What goes in the ground is
+  what is in the pack: an agent that has only ever stripped berry bushes sows
+  berries, works the field all season and finds out what a berry bush thinks of
+  a plough. Grain carries three times what the ground would otherwise; a berry
+  bush in rows is still a berry bush
 - ✅ Learned practices: nobody tells an agent that muck does a field good. It
   tries it, watches what happens, keeps or drops the idea, and the neighbours
   who saw it take something from that too
+- ✅ A trade is worth having: experience comes from doing the work rather than
+  from walking past it, a level costs more the higher it goes, and a trade left
+  unpractised for a year starts to go. What a practised hand is worth runs from
+  half to double, and it decides what comes off a field per trip and whether a
+  garment is finished or spoiled in the making — so a dedicated farmer brings
+  back more than a casual one, and a dedicated tailor makes better coats and
+  wastes fewer. Skill used to measure how much of the map somebody had walked
+  over: everybody was a master farmer, nobody had farmed, and none of it did
+  anything. See ISSUES_FOUND.md #18
 - ✅ Everybody is somebody: a founder is drawn with three to five compatible
   traits out of sixty-odd, and everybody born afterwards takes after their two
   parents. Forty founders are forty different people
 - 🚧 Personality reaches the drives — a trait scales how loudly a drive argues
   and moves the point at which somebody acts on it, so a lazy person needs more
-  pushing before starting work and a coward starts running at a smaller wolf —
-  but it still changes almost nothing about what anybody does. Drives are
-  consulted at the thirteenth of thirteen action priorities, and when they are,
-  three drives nothing can answer take every turn. See ISSUES_FOUND.md #12
+  pushing before starting work and a coward starts running at a smaller wolf.
+  Measured against the old action ladder it changed almost nothing; both things
+  that blocked it have since been rebuilt, and whether it now tells has not
+  been re-measured. See ISSUES_FOUND.md #17
+- ✅ Drives that know which of them matters: they are ranked primary, secondary
+  and tertiary, and among the primaries the one that would kill soonest wins —
+  a thirsty man stops hunting. Each drive waits on the one before it in the
+  chain, so nobody puts food by while hungry or wants finery while cold. The
+  ranked drives choose the action now; before this they were consulted at the
+  thirteenth of thirteen fixed priorities and 79% of everything a settlement
+  did was foraging. It is 25% now, and agents build and talk to each other for
+  the first time
+- ✅ Fear and anger that mean something: an agent weighs what is in front of it
+  against what it can do about it — its health, its build, what it is carrying,
+  what it can use, its nerve, and how the last fight went — and what it can
+  fight makes it angry while what it cannot makes it afraid. Somebody who has
+  been beaten runs where somebody who has won stands their ground. Before this,
+  fear was a reading off the hunger drive and anger was written only by a blow
+  that had already landed, so in a whole settlement's life nobody ever ran from
+  anything or turned on anything
+- ✅ And those feelings reach the hands. A frightened agent puts ground between
+  itself and the thing; an angry one strikes at what is within arm's reach, and
+  closes the last pace or two, but does not cross the map looking for a fight.
+  It turned out nearly all the anger in the model was a grudge against a
+  *person* — of every agent ready to fight, anger at people ran thirty times
+  anger at creatures — held for life and with nothing downstream of it. So a
+  grudge now decides the same thing: square up to somebody you cannot stand if
+  you reckon you can take them, keep well clear of them if you cannot. Nobody
+  raises a hand to a child, to their own parent, or to their own children
+- ✅ And what an agent feels about somebody reaches what it thinks of them. A
+  settlement used to have no hostile relationship anywhere in it, ever — every
+  bond saturated at close, because standing near somebody was worth up to a
+  tenth of the whole scale *every tick* and nothing else could be heard over
+  it. Proximity and temperament are dispositions now, with a pace and a
+  ceiling: a season of never leaving somebody's side makes them a familiar
+  face, a season of getting on with them makes them a friend, and anything
+  past that is earned by what the two of you have done. A grudge weighs on the
+  bond at eight times what keeping company is worth, a blow costs a quarter of
+  the scale at once, and the relationship is renamed to match — so settlements
+  now contain rivals and enemies as well as friends
+- ✅ Whose word an agent takes. Where the food and water are is the one thing
+  agents tell each other that changes what they then do, and it used to go
+  from anybody to anybody — including somebody just named an enemy — and could
+  not be wrong, because the one function that weighs whether to lie was never
+  called. Agents now decide whether to believe each other, from what the two
+  of them are to each other, whether that one has been right before, and what
+  sort of people they both are; and a man who would rather lie names a place
+  that is not there. It is found out by walking to it, and what it costs him
+  depends on what he lied about — sending a starving man to an empty field is
+  not the same as misdescribing a pile of rocks
+- ✅ News with an age, a room and a shelf life. What a man says he saw *and
+  when* both travel with the claim, so somebody who reported a patch last
+  season is not called a liar when it turns out to have been picked since —
+  only a man who says he walked past it this morning can be held to what is
+  there now. It is said out loud rather than whispered, so everybody within
+  earshot hears it and each decides for themselves whether to believe him;
+  and a man thinking of lying picks ground nobody present has walked lately,
+  because a crowd is both more people to fool and more people who may go and
+  look. What an agent keeps in its head is bounded and sorted by what it needs,
+  so a thirsty man holds on to every waterhole he has heard of and forgets
+  where the flax was
 - ✅ A fishery, which is the one food the land does not pay for: fish come up
   the river on the season rather than growing back out of what is left of them,
   so a reach fished out fills again from the catchment. What is left of a fish,
@@ -282,12 +440,152 @@ document says of them. See **The drive system against its specification** in
 [SIMULATION_AUDIT.md](SIMULATION_AUDIT.md) for what that changed and for the
 three drives that stay high because nothing in the world can answer them.
 
+They are not equal, and they are not independent. Each has a rank:
+
+- **Primary** (Hunger, Sustenance, Thirst, Rest, Safety) — immediate survival.
+  Among these the one that would kill this agent soonest wins, worked out from
+  what it actually has left rather than from a table, so a hungry man who is
+  also dying of thirst goes to the water.
+- **Secondary** (Curiosity, Social, Reproduction, Shelter, Preparedness) —
+  longer-term survival and mental wellbeing.
+- **Tertiary** (Luxury, Utility, Construction, Industry, Protection) — comfort
+  and standing.
+
+And each waits on the one before it. Hunger and Sustenance must be reliably
+answered before Preparedness builds, and Preparedness before Luxury; Thirst
+before Preparedness; Rest and Safety before Shelter; Safety and Reproduction
+before Protection; Social before Construction and Industry, and those before
+Utility; all four primaries before Reproduction. A hungry agent does not think
+about putting food by, and a drive that is shut out falls quiet at the pace it
+would have grown rather than waiting at its ceiling.
+
+### Emotion
+Fear and anger are appraisals rather than timers. Twice over — for a thing that
+*threatens* an agent's ability to satisfy its drives, and for one that has been
+*preventing* it — the agent asks whether it could fight the thing. Where it
+could, the feeling is anger and it stands; where it could not, the feeling is
+fear and it goes. What it reckons itself worth in a fight is its health, its
+build, what armour and weapon it carries, its combat skill and its nerve,
+scaled by what past fights taught it: an agent that has won before is worth
+half again, one beaten every time is worth two fifths less. So two agents of
+identical build appraise the same wolf differently, and the beaten one runs
+where the winner stands.
+
+Both feelings reach the hands. Fear moves an agent away from what it is afraid
+of, far enough not to arrive back inside the range it started worrying at.
+Anger strikes at what is within arm's reach — `Action::Fight` for a creature,
+`Action::Attack` for a person — and closes the last pace or two, but no
+further: the appraisal already scales a thing by how near it is, so what
+angers an agent past the threshold is close by anyway.
+
+Grudges are the same appraisal applied to people. The grudge itself is what an
+agent feels; whether it comes out as squaring up or keeping clear is decided
+by whether the agent reckons it can take them, re-asked every time they are in
+the same place. It is read per person rather than off total anger, because
+three mild grudges add up to a man who reads as ready to fight and has nobody
+in particular to fight.
+
+### Relationships
+A bond runs from −1.0 to 1.0 and a name follows it: Enemy below −0.6, Rival
+below −0.2, Friend above 0.5, Acquaintance between. Family is never renamed —
+a brother you cannot stand is a brother.
+
+What moves it is divided between what people *are* and what they have *done*.
+Being about the same place as somebody, and finding their temperament suits
+yours, are dispositions: they work slowly, over seasons, and they stop — the
+first at a familiar face, the second at a friend. What takes two people past
+that is what has actually happened between them: meals shared, help offered,
+gifts given, children raised — and, in the other direction, a grudge nursed
+or a blow struck.
+
+Before this, proximity alone added up to a tenth of the whole scale every
+tick. Everybody in a settlement loved everybody, and it was arithmetic rather
+than affection.
+
+### Trust
+Trust is not a fourth book. `how_far_i_trust` answers it from what already
+exists: the bond, weighted heaviest, because you believe your friends; whether
+that person has been right before, which moves only on something the agent went
+and checked; what sort of person is doing the listening — a Paranoid one
+believes nobody, a Trusting one believes anybody; and what sort is doing the
+talking, because a charmer gets the benefit of the doubt and somebody who puts
+you off does not.
+
+An agent below the line hears a claim and does not go and stand on it. A lie is
+a real place-name moved a good walk from the real thing, and it is found out
+the moment the agent looks at the spot and sees bare ground — which is also
+what tells hearsay from what an agent saw for itself. Agents pass on only what
+they have been to and looked at, so the man who invented a place is the man
+blamed for it rather than everyone who repeated it in good faith.
+
+A claim also carries its age. "I saw berries there" and "I saw berries there
+this morning" are different claims, and only the second can be held against
+the speaker when somebody finds the patch bare — a place changes, and a man
+who told the truth about last season told the truth. Being out of date costs a
+sixth of what a lie costs and no anger at all.
+
+Talking is public. A speaker reaches everybody within earshot at once, and a
+man weighing a lie weighs the whole room: the ground he names has to be ground
+nobody standing there has walked lately, or he is contradicted before he
+finishes, and every extra pair of ears is another person who may go and look.
+
+And nothing is kept for ever. An agent holds about ninety-six places in mind,
+and what it lets go of first is what answers no need it has — hearsay before
+what it saw itself, and older before newer where it wants them equally.
+
 ### Memory
 Agents remember:
 - Spatial locations (resources, structures, landmarks)
 - Storage contents with decay over time
 - Social relationships and observed behaviors
 - Discovered crafting recipes
+
+### The turning year
+
+Wild food is seasonal and so are the animals that eat it. What comes off a
+carcass depends on when it was killed: a deer at the end of the autumn carries
+a quarter more than the book says, the same deer at the end of the winter a
+third less. The curve runs continuously round the year and is not straight —
+an animal loses most of what it will lose in the first hard weeks of winter,
+and puts nothing back in the first weeks of spring when there is nothing yet
+to eat.
+
+What a settlement passes goes into the ground under it, and leaves a smell and
+a few seeds. Nobody lies down on fouled ground; they step off it first, which
+is what puts a midden at the edge of a camp rather than in the middle of it.
+The smell goes long before the matter does, and once it has, whatever came
+through whole comes up as food nobody planted - on the ground the people have
+moved on from, because a camp keeps its own midden too foul to grow anything
+while the camp is there.
+
+Hunting and fishing are slow work. A throw lands about a fifth of the time for
+a stone-age hunter and takes a third out of the animal, so a kill is three or
+four throws and every one of them costs the same whether or not it lands. A
+spear-fisher takes about two fish from four casts in a good run and nothing at
+all from a thin one.
+
+### Patterns
+
+An agent joins what it did to the need that got answered, and to the ground it
+was standing on when it did — `agents::patterns`. A drive that falls by a real
+amount under some action writes that action down against that need, with the
+place; a drive that barely moved writes nothing, because joining a drive's own
+drift to whatever the agent happened to be doing is how a superstition gets
+made. An action aimed at a need that does not answer it counts against the
+pattern, so ground that stops working stops being worth the walk back.
+
+Three times is a habit and a season is as long as a place stays worth walking
+to. Measured over eight worlds of ten thousand ticks, a settlement works out
+about thirteen of these per living agent from nothing, and four agents in five
+end up knowing where the water is.
+
+What it does not do is change how a settlement fares. Eight worlds a side at
+ten thousand ticks put the population up by 16 at a standard error of 11; eight
+worlds a side at twelve thousand put it *down* by 14 at a standard error of 10.
+Two runs pointing opposite ways at the same size is noise, and the honest
+reading is that the mechanism costs nothing and buys nothing yet. It is kept
+because it is the substrate the rest of the discovery work stands on, and
+because what it records is worth having whether or not it has paid off.
 
 ### Learning
 - **Trial & Error**: Random exploration with reinforcement

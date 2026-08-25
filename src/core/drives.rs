@@ -259,6 +259,95 @@ impl DriveType {
         Some(demand.clamp(0.0, 1.0))
     }
 
+    /// How hard this drive is allowed to press on an agent's attention.
+    ///
+    /// Three bands, and the band is about *interruption* rather than about how
+    /// much anybody wants the thing. A primary need can take an agent off
+    /// whatever else it is doing; a secondary one waits for a lull; a tertiary
+    /// one waits for a good year. What unlocks what is a separate matter and
+    /// lives in [`Self::unlocked_by`].
+    pub fn rank(&self) -> DriveRank {
+        match self {
+            // These kill you, and the only question is which kills you first
+            DriveType::Hunger
+            | DriveType::Thirst
+            | DriveType::Rest
+            | DriveType::Safety => DriveRank::Primary,
+
+            // These decide whether there is anybody here in ten years
+            DriveType::Sustenance
+            | DriveType::Preparedness
+            | DriveType::Shelter
+            | DriveType::Social
+            | DriveType::Reproduction
+            | DriveType::Curiosity => DriveRank::Secondary,
+
+            // These decide what sort of place it is
+            DriveType::Luxury
+            | DriveType::Utility
+            | DriveType::Construction
+            | DriveType::Industry
+            | DriveType::Protection => DriveRank::Tertiary,
+        }
+    }
+
+    /// What has to be answered before this drive is worth anything.
+    ///
+    /// A hungry person is not thinking about saving food for later, and
+    /// somebody who cannot keep the rain off is not thinking about whether
+    /// their coat is a fine one. Each drive names what stands before it; a
+    /// drive that names nothing is always free to build.
+    ///
+    /// The chains, in full:
+    ///
+    /// - Hunger, then Sustenance, then Preparedness, then Luxury
+    /// - Thirst, then Preparedness
+    /// - Rest, then Shelter
+    /// - Safety, then Shelter, then Protection
+    /// - Social, then Construction and Industry, then Utility
+    /// - every primary answered, then Reproduction, then Protection
+    ///
+    /// Where two chains meet on one drive - Preparedness stands after both
+    /// Sustenance and Thirst, Shelter after both Rest and Safety, Protection
+    /// after both Safety and Reproduction - all of them have to be answered.
+    pub fn unlocked_by(&self) -> &'static [DriveType] {
+        match self {
+            // Nothing stands before a thing that kills you, and nothing stands
+            // before wanting to know or wanting company
+            DriveType::Hunger
+            | DriveType::Thirst
+            | DriveType::Rest
+            | DriveType::Safety
+            | DriveType::Curiosity
+            | DriveType::Social => &[],
+
+            // Next winter's grain waits on tonight's dinner
+            DriveType::Sustenance => &[DriveType::Hunger],
+            DriveType::Preparedness => &[DriveType::Sustenance, DriveType::Thirst],
+            DriveType::Luxury => &[DriveType::Preparedness],
+
+            // A roof is what you want once you are rested and safe
+            DriveType::Shelter => &[DriveType::Rest, DriveType::Safety],
+
+            // Building and working are things people do together
+            DriveType::Construction => &[DriveType::Social],
+            DriveType::Industry => &[DriveType::Social],
+            DriveType::Utility => &[DriveType::Construction, DriveType::Industry],
+
+            // Nobody has children while something is still trying to kill them
+            DriveType::Reproduction => &[
+                DriveType::Hunger,
+                DriveType::Thirst,
+                DriveType::Rest,
+                DriveType::Safety,
+            ],
+
+            // And looking after somebody else waits on being safe yourself,
+            // and on there being somebody of your own to look after
+            DriveType::Protection => &[DriveType::Safety, DriveType::Reproduction],
+        }
+    }
+
     /// Whether this drive is about the season after next rather than the next
     /// few hours.
     ///
@@ -519,6 +608,39 @@ impl Drive {
         self.value * self.weight * self.lean
     }
 
+    /// How fast a need out of reach stops being felt, against how fast it
+    /// would have built if it had been free to.
+    ///
+    /// It has to be reckoned against the drive's own rate rather than set as
+    /// one number for all of them. A flat rate is a different thing to each
+    /// drive: at 0.004 a tick it was four times what Reproduction, Luxury and
+    /// Protection build at and half what Safety builds at, so the slow drives
+    /// were quietly halved. Reproduction is shut out about a tenth of the
+    /// time, which under a flat fade left it climbing at 50.5% of its proper
+    /// rate - and since conception needs that drive over its threshold in both
+    /// parents, that halved the birth rate and with it the population.
+    ///
+    /// At one, a need fades at the pace it would have grown: a drive shut out
+    /// a tenth of the time still climbs at four fifths of its rate, and one
+    /// shut out half the time hovers where it is.
+    const FADES_AS_FAST_AS_IT_BUILDS: f32 = 1.0;
+
+    /// Let this need go, because nothing before it in the chain is answered.
+    ///
+    /// Somebody who has gone hungry for a week is not sitting on a banked-up
+    /// wish for a finer coat, ready to spend it the moment they eat. The wish
+    /// goes while the hunger lasts, and has to build again afterwards.
+    pub fn fall_quiet(&mut self) {
+        let fades = self.drive_type.base_accumulation_rate()
+            * Self::FADES_AS_FAST_AS_IT_BUILDS;
+
+        self.value = (self.value - fades).max(0.0);
+
+        // And it is not being denied while nobody could have answered it: the
+        // pressure of going without is for needs an agent could have met
+        self.denied_ticks = self.denied_ticks.saturating_sub(1);
+    }
+
     /// Update the drive for one tick
     pub fn tick(&mut self) {
         self.tick_at(self.drive_type.base_accumulation_rate());
@@ -636,6 +758,32 @@ impl Drive {
     }
 }
 
+/// How hard a drive is allowed to press on an agent's attention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum DriveRank {
+    /// Goes unanswered long enough and the agent dies of it
+    Primary,
+    /// Decides whether the agent and its people are here in ten years
+    Secondary,
+    /// Decides what sort of place they are living in
+    Tertiary,
+}
+
+impl DriveRank {
+    /// What a drive in this band is worth against one in another.
+    ///
+    /// Wide enough that no amount of wanting a fine coat outweighs being
+    /// thirsty, and narrow enough that a tertiary drive nobody has answered
+    /// for years can still eventually get a turn.
+    pub fn precedence(&self) -> f32 {
+        match self {
+            DriveRank::Primary => 100.0,
+            DriveRank::Secondary => 10.0,
+            DriveRank::Tertiary => 1.0,
+        }
+    }
+}
+
 /// Complete drive state for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DriveState {
@@ -750,6 +898,58 @@ impl DriveState {
         }
     }
 
+    /// How long a drive can have been going short and still count as answered.
+    ///
+    /// A meal missed this morning is not a food problem; three days of missed
+    /// meals is. "Answered" has to mean answered *reliably*, or a settlement
+    /// would start laying in stores on the strength of one good dinner and
+    /// stop again on the next empty afternoon.
+    pub const RELIABLY: u32 = 24;
+
+    /// Whether this need is answered, and looks like staying answered.
+    ///
+    /// A drive nobody has is answered by default, which matters for the
+    /// chains: a drive whose predecessor does not exist should not be locked
+    /// out for ever.
+    pub fn is_answered(&self, drive_type: DriveType) -> bool {
+        // A need that is quiet only because it is itself shut out does not
+        // count as answered for whatever stands after it. Otherwise a chain
+        // unlocks itself from the far end: Preparedness falls quiet while
+        // Sustenance goes unmet, reads as satisfied because it is low, and
+        // opens Luxury on the strength of it.
+        if !self.is_unlocked(drive_type) {
+            return false;
+        }
+
+        self.get(drive_type)
+            .map(|drive| drive.value < drive.threshold && drive.denied_ticks < Self::RELIABLY)
+            .unwrap_or(true)
+    }
+
+    /// Whether everything standing before this drive has been answered.
+    ///
+    /// See [`DriveType::unlocked_by`]. A hungry agent should not be thinking
+    /// about saving food for later, so Preparedness stays shut while Hunger
+    /// and Sustenance are unmet, and opens when they are.
+    pub fn is_unlocked(&self, drive_type: DriveType) -> bool {
+        drive_type
+            .unlocked_by()
+            .iter()
+            .all(|before| self.is_answered(*before))
+    }
+
+    /// What is still standing between this drive and being worth anything.
+    ///
+    /// For explaining an agent to somebody, and for tests.
+    pub fn what_is_still_wanted_before(&self, drive_type: DriveType) -> Vec<DriveType> {
+        drive_type
+            .unlocked_by()
+            .iter()
+            .copied()
+            .filter(|before| !self.is_answered(*before))
+            .collect()
+    }
+
     /// Get a drive by type
     pub fn get(&self, drive_type: DriveType) -> Option<&Drive> {
         self.drives.iter().find(|d| d.drive_type == drive_type)
@@ -801,8 +1001,25 @@ impl DriveState {
             .map(|drive| drive.value)
             .unwrap_or(0.0);
 
-        for drive in &mut self.drives {
-            drive.tick_in(&ctx, secure);
+        // Which chains are open has to be settled before anything moves, or
+        // a drive would be judged against predecessors that had already
+        // shifted under it this same tick
+        let open: Vec<bool> = self
+            .drives
+            .iter()
+            .map(|drive| self.is_unlocked(drive.drive_type))
+            .collect();
+
+        for (drive, open) in self.drives.iter_mut().zip(open) {
+            if open {
+                drive.tick_in(&ctx, secure);
+            } else {
+                // Not merely held where it stands: a need that is out of reach
+                // stops being felt. Somebody who has gone hungry for a week is
+                // not sitting on a banked-up wish for a finer coat, waiting to
+                // spend it the moment they eat.
+                drive.fall_quiet();
+            }
         }
     }
 

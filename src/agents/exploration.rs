@@ -53,6 +53,17 @@ pub struct ExplorationKnowledge {
     pub explored_tiles: HashSet<Position>,
     /// Discovered resource positions (position -> resource type)
     pub known_resources: HashMap<Position, ResourceType>,
+    /// Which of those places this agent was told about rather than saw, who
+    /// said so, and how fresh they said it was.
+    ///
+    /// What an agent has seen and what it has been told went into the same map
+    /// with nothing to tell them apart, so a man who walked to a place he had
+    /// been told about and found bare ground read his own hearsay back off the
+    /// map as confirmation. Keeping the source is what lets the bare ground be
+    /// laid at somebody's door - and keeping the age is what stops it being
+    /// laid there unfairly.
+    #[serde(default)]
+    pub who_told_me: HashMap<Position, Hearsay>,
     /// Discovered building positions (position -> building type)
     pub known_buildings: HashMap<Position, BuildingType>,
     /// Discovered storage positions (position -> (storage type, capacity))
@@ -70,9 +81,62 @@ pub struct ExplorationKnowledge {
     /// Total curiosity satisfaction gained from discoveries
     pub total_curiosity_satisfaction: f32,
     /// Resource discovery tick tracking (position -> tick discovered)
+    ///
+    /// The tick a thing was *first* found, and nothing else. Skill experience
+    /// is paid on this being the current tick, so it must never be touched
+    /// again afterwards - see `last_seen_ticks` for the other question.
     pub resource_discovery_ticks: HashMap<Position, u32>,
+    /// When this agent last laid eyes on each place it knows.
+    ///
+    /// Distinct from the tick of discovery, because they answer different
+    /// questions: discovery is what an agent learns from, and last sighting is
+    /// what an agent can vouch for. Folding the second into the first paid
+    /// somebody Farming experience every tick they stood near a field.
+    #[serde(default)]
+    pub last_seen_ticks: HashMap<Position, u32>,
     /// Building discovery tick tracking (position -> tick discovered)
     pub building_discovery_ticks: HashMap<Position, u32>,
+}
+
+/// Something an agent was told rather than saw.
+///
+/// "An agent saying that they saw a berry patch a week prior should not be
+/// seen as a liar if the patch was found empty. Whereas an agent which says
+/// that a berry patch they just passed was full and another agent finds it
+/// empty should be seen as a liar."
+///
+/// So a claim carries when the man who made it says he saw the thing. A patch
+/// is picked, an animal moves on, a deposit is worked out; none of that makes
+/// the man who reported it last season a liar, and all of it makes the man who
+/// reported it this morning one.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Hearsay {
+    /// Who said it
+    pub who: uuid::Uuid,
+    /// The tick they say they saw it on
+    pub they_saw_it_on: u32,
+    /// The tick they said so
+    pub told_me_on: u32,
+}
+
+impl Hearsay {
+    /// How long ago the sighting was, as the speaker told it.
+    pub fn how_stale(&self, now: u32) -> u32 {
+        now.saturating_sub(self.they_saw_it_on)
+    }
+
+    /// How long a sighting stays fresh enough that finding the place empty
+    /// means somebody was lying.
+    ///
+    /// Two days. Long enough that a man is not called a liar for the walk
+    /// between telling and being checked, short enough that "I passed it this
+    /// morning" is a claim he can be held to.
+    pub const STILL_ANSWERABLE_FOR: u32 = 24;
+
+    /// Whether the man who said this can be held to it.
+    pub fn was_he_answerable_for_it(&self, now: u32) -> bool {
+        self.how_stale(now) <= Self::STILL_ANSWERABLE_FOR
+    }
 }
 
 impl ExplorationKnowledge {
@@ -80,6 +144,7 @@ impl ExplorationKnowledge {
         Self {
             explored_tiles: HashSet::new(),
             known_resources: HashMap::new(),
+            who_told_me: HashMap::new(),
             known_buildings: HashMap::new(),
             known_storage: HashMap::new(),
             encountered_terrains: HashSet::new(),
@@ -89,6 +154,7 @@ impl ExplorationKnowledge {
             curiosity_driven_explorations: 0,
             total_curiosity_satisfaction: 0.0,
             resource_discovery_ticks: HashMap::new(),
+            last_seen_ticks: HashMap::new(),
             building_discovery_ticks: HashMap::new(),
         }
     }
@@ -102,6 +168,96 @@ impl ExplorationKnowledge {
         } else {
             false
         }
+    }
+
+    /// Take somebody's word for it that there is something at a place.
+    ///
+    /// The same as finding it yourself, except that it is remembered as
+    /// hearsay so that being wrong can be laid at the door of whoever said it.
+    pub fn take_their_word_for_it(
+        &mut self,
+        position: Position,
+        resource_type: ResourceType,
+        who_said_so: uuid::Uuid,
+        they_saw_it_on: u32,
+        current_tick: u32,
+    ) -> bool {
+        if self.discover_resource(position, resource_type, current_tick) {
+            self.who_told_me.insert(
+                position,
+                Hearsay {
+                    who: who_said_so,
+                    they_saw_it_on,
+                    told_me_on: current_tick,
+                },
+            );
+            true
+        } else {
+            false
+        }
+    }
+
+    /// The places this agent has seen with its own eyes.
+    ///
+    /// An agent tells people about what it knows, and what it knows is a
+    /// mixture of what it saw and what it was told. Passing on hearsay as
+    /// though it were first hand launders a lie: the man who invented it is
+    /// never blamed, because everybody heard it from somebody honest who
+    /// heard it from somebody honest. Measured with agents repeating what they
+    /// had been told, a hundred and fifty lies produced four thousand
+    /// accusations, nearly all of them against people who had told the truth
+    /// as they understood it.
+    ///
+    /// So an agent passes on only what it has been to and looked at.
+    pub fn seen_for_myself(&self) -> Vec<(Position, ResourceType)> {
+        self.known_resources
+            .iter()
+            .filter(|(where_it_is, _)| !self.who_told_me.contains_key(*where_it_is))
+            .map(|(where_it_is, what)| (*where_it_is, *what))
+            .collect()
+    }
+
+    /// What this agent has been told is here, and by whom, out of everything
+    /// it can see from where it is standing.
+    ///
+    /// Anything on this list that is not really there is a lie somebody told,
+    /// found out at the only moment it can be: with the agent standing on the
+    /// spot.
+    pub fn hearsay_in_view(
+        &self,
+        centre: Position,
+        radius: i32,
+        really_here: &std::collections::HashSet<Position>,
+    ) -> Vec<(Position, Hearsay, ResourceType)> {
+        self.who_told_me
+            .iter()
+            .filter(|(where_it_is, _)| {
+                (where_it_is.x - centre.x).abs() <= radius
+                    && (where_it_is.y - centre.y).abs() <= radius
+            })
+            .filter(|(where_it_is, _)| !really_here.contains(*where_it_is))
+            .filter_map(|(where_it_is, said)| {
+                self.known_resources
+                    .get(where_it_is)
+                    .map(|what| (*where_it_is, *said, *what))
+            })
+            .collect()
+    }
+
+    /// When this agent last saw a place for itself, if it ever did.
+    ///
+    /// What an honest man passes on: not "there is food there" but "there was
+    /// food there when I went past".
+    pub fn when_i_saw_it(&self, where_it_is: &Position) -> Option<u32> {
+        self.last_seen_ticks
+            .get(where_it_is)
+            .or_else(|| self.resource_discovery_ticks.get(where_it_is))
+            .copied()
+    }
+
+    /// Note that this agent has just laid eyes on a place again.
+    pub fn saw_it_again(&mut self, where_it_is: Position, current_tick: u32) {
+        self.last_seen_ticks.insert(where_it_is, current_tick);
     }
 
     /// Discover a resource at a position

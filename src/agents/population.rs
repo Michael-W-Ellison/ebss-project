@@ -127,6 +127,9 @@ pub struct Population {
     /// each is worth to the ground as soft matter and as bone. A population
     /// has no world to put them in, so it holds them here until one does.
     pub bodies_where_they_fell: Vec<((i32, i32, i32), f32, f32)>,
+    /// And what those bodies were carrying, held in the same way and for the
+    /// same reason - see `Simulation::what_the_dead_left_behind`.
+    pub what_the_dead_left: Vec<(super::InventoryItem, (i32, i32, i32))>,
 }
 
 impl Population {
@@ -146,6 +149,7 @@ impl Population {
             technology_registry: registry,
             pending_events: Vec::new(),
             bodies_where_they_fell: Vec::new(),
+            what_the_dead_left: Vec::new(),
         }
     }
 
@@ -166,6 +170,7 @@ impl Population {
             technology_registry: registry,
             pending_events: Vec::new(),
             bodies_where_they_fell: Vec::new(),
+            what_the_dead_left: Vec::new(),
         }
     }
 
@@ -246,6 +251,10 @@ impl Population {
         // nothing about how they spend it.
         agent.drives.lean_towards(&agent.traits);
 
+        // A founder has lived somewhere before this. They arrive with the
+        // hands of a grown person and what they can carry.
+        agent.give_them_a_stone_age_start();
+
         // Give new agents basic starting knowledge
         
         agent.technology_knowledge.add_initial_technology(
@@ -253,6 +262,30 @@ impl Population {
             agent.id,
             self.current_tick as u64
         );
+
+        // And how to put a handle on a stone. Crafting checks a technology as
+        // well as a skill, and a people who arrive knowing how to knap but not
+        // that wood can be shaped never make anything: the commonest single
+        // failure left in the model was twenty-five thousand refusals of
+        // `Cannot craft woodenaxe: missing technology 'wooden_tools'`.
+        // Not wooden tools.
+        //
+        // Crafting checks a technology as well as a skill, and granting
+        // `wooden_tools` at the start clears the commonest remaining failure
+        // in the model at a stroke - twenty-five thousand refusals of
+        // `missing technology 'wooden_tools'` in one world. It was also
+        // measurably bad for the land: a people who can put handles on stones
+        // take a great deal more off it, and the nutrient-loop regression,
+        // which asks that farmed ground not lose half its fertility in ten
+        // thousand ticks, went from passing three times in four to once in
+        // five.
+        //
+        // Which is the right behaviour and the wrong starting point. They are
+        // a stone-age people: they arrive carrying a knapped axe and a knife,
+        // and how to make a hafted one is a thing for them to find out. The
+        // Craft failures it leaves behind are handled by the same mechanism as
+        // everything else - an agent that cannot make an axe stops trying to
+        // quite so often.
 
         self.agents.push(agent);
         self.stats.current_population = self.agents.len();
@@ -286,6 +319,10 @@ impl Population {
         // Update relationships between nearby agents
         self.update_relationships();
 
+        // And what they hold against each other, which until now lived in one
+        // book and the bond in another
+        self.let_grudges_tell_on_the_bond();
+
         // Decay distant relationships (every 100 ticks to reduce overhead)
         if current_tick % 100 == 0 {
             self.decay_relationships();
@@ -317,6 +354,17 @@ impl Population {
 
         // Process exploration for all agents (vision-based discovery)
         self.process_exploration();
+
+        // And whoever has something to say, says it to the room
+        self.say_it_out_loud();
+
+        // What nobody has any use for goes out of their heads again
+        let now = self.current_tick;
+        for agent in self.agents.iter_mut() {
+            if agent.state.is_alive {
+                agent.forget_what_does_not_matter(now);
+            }
+        }
 
         // Share technologies between nearby agents
         self.share_technologies();
@@ -409,19 +457,41 @@ impl Population {
                         );
                     }
 
-                    // Strengthen bonds slightly for nearby agents
+                    // Being about the same place as somebody counts for
+                    // something, and only for something - see
+                    // Relationship::keep_company
+                    let closeness = (11.0 - distance) / 11.0;
+
                     if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&agent2_id) {
-                        // Closer = stronger bond increase (inverse of distance)
-                        let proximity_bonus = (11.0 - distance) / 100.0; // Max 0.10 at distance 0
-                        rel.strengthen(proximity_bonus);
-                        rel.time_together += 1;
+                        rel.keep_company(closeness);
                     }
 
                     if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&agent1_id) {
-                        let proximity_bonus = (11.0 - distance) / 100.0;
-                        rel.strengthen(proximity_bonus);
-                        rel.time_together += 1;
+                        rel.keep_company(closeness);
                     }
+                }
+            }
+        }
+    }
+
+    /// Carry what everybody holds against everybody into what they think of
+    /// each other.
+    ///
+    /// This runs over all of them rather than only over pairs standing near
+    /// each other, because a grudge is an opinion and not a proximity effect.
+    /// Doing it the other way would have left a hole exactly where fear now
+    /// puts one: an agent that resents a man it dare not face keeps away from
+    /// him, and would therefore have gone on counting him a friend.
+    pub(crate) fn let_grudges_tell_on_the_bond(&mut self) {
+        for agent in self.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let held: Vec<(Uuid, f32)> = agent.emotions.anger_at_people();
+            for (who, amount) in held {
+                if let Some(bond) = agent.relationships.get_relationship_mut(&who) {
+                    bond.let_it_tell(amount);
                 }
             }
         }
@@ -783,6 +853,25 @@ impl Population {
                         agent.knowledge.known_information.insert(death_info.id, death_info);
                     }
                 }
+            }
+        }
+
+        // What they were carrying stays in the world. A person dies where they
+        // are standing and their pack falls there: a worn axe beside a man who
+        // drowned is a worn axe the next person along can pick up, and it is
+        // the difference between a people's work outliving them and going into
+        // the ground with whoever happened to be holding it.
+        //
+        // The world is not reachable from here, so it is left in a basket for
+        // the simulation to empty - see `Simulation::what_the_dead_left_behind`.
+        for agent in self.agents.iter().filter(|agent| !agent.state.is_alive) {
+            let where_they_fell = agent.state.position;
+
+            for item in agent.inventory.get_all_items().values() {
+                if item.quantity == 0 {
+                    continue;
+                }
+                self.what_the_dead_left.push((item.clone(), where_they_fell));
             }
         }
 
@@ -1553,6 +1642,94 @@ impl Population {
                 current_tick,
             );
 
+            // Seeing for yourself.
+            //
+            // An agent's map of where things are is fed both by looking and
+            // by being told, and until `who_told_me` existed the two went in
+            // with nothing to tell them apart - so a man walked to the place
+            // he had been told about, found bare ground, and read his own
+            // hearsay back off the map as confirmation. Every lie verified as
+            // true and the whole lie-detection apparatus could not detect
+            // anything.
+            //
+            // This is the moment a lie is found out, and very nearly the only
+            // moment it can be: the agent is looking at the spot and there is
+            // nothing on it.
+            let range = vision_range as i32;
+            // A patch somebody has since picked bare is not a lie - the node
+            // is still standing there and will bear again, which is why
+            // renewable ones are kept when they are emptied. Reading an empty
+            // patch as a lie had agents concluding that four thousand honest
+            // tips were falsehoods and half the settlement liars.
+            let really_here: std::collections::HashSet<crate::world::Position> = world
+                .resources
+                .iter()
+                .map(|resource| resource.position)
+                .filter(|where_it_is| {
+                    (where_it_is.x - agent_pos.x).abs() <= range
+                        && (where_it_is.y - agent_pos.y).abs() <= range
+                })
+                .collect();
+
+            // Walking past a thing again is seeing it again.
+            //
+            // The sighting tick was set once, on first discovery, and never
+            // touched afterwards - so an agent who passed a berry patch every
+            // morning still reported the day it first found it, and "a patch I
+            // just passed" was a claim nobody in the model could make. It is
+            // the whole of the difference between a man who is out of date and
+            // a man who is lying.
+            for where_it_is in really_here.iter() {
+                if agent
+                    .exploration_knowledge
+                    .known_resources
+                    .contains_key(where_it_is)
+                    && !agent
+                        .exploration_knowledge
+                        .who_told_me
+                        .contains_key(where_it_is)
+                {
+                    agent
+                        .exploration_knowledge
+                        .saw_it_again(*where_it_is, current_tick);
+                }
+            }
+
+            let found_out =
+                agent
+                    .exploration_knowledge
+                    .hearsay_in_view(agent_pos, range, &really_here);
+
+            if !found_out.is_empty() {
+                for (where_it_is, _, _) in found_out.iter() {
+                    agent.exploration_knowledge.known_resources.remove(where_it_is);
+                    agent.exploration_knowledge.who_told_me.remove(where_it_is);
+                }
+
+                let me = agent.id;
+                for (_, said, what_they_said) in found_out {
+                    if said.who == me {
+                        continue;
+                    }
+
+                    // "An agent saying that they saw a berry patch a week
+                    // prior should not be seen as a liar if the patch was
+                    // found empty."
+                    //
+                    // A patch gets picked, an animal moves on, a seam is
+                    // worked out. Somebody who reported what was there last
+                    // season told the truth about last season, and the most
+                    // it should cost him is that his word keeps less well
+                    // than a fresh man's.
+                    let subject = format!("{:?}", what_they_said).to_lowercase();
+                    if said.was_he_answerable_for_it(current_tick) {
+                        agent.found_out_i_was_lied_to(said.who, &subject, current_tick);
+                    } else {
+                        agent.found_out_they_were_out_of_date(said.who);
+                    }
+                }
+            }
+
             // Satisfy curiosity drive based on discoveries
             if new_discoveries > 0 {
                 if let Some(drive) = agent.drives.get_mut(DriveType::Curiosity) {
@@ -1562,11 +1739,24 @@ impl Population {
                 }
 
                 // Award Navigation skill XP for exploration
-                agent.skills.gain_experience(super::SkillType::Navigation, new_discoveries as u32 * 2);
+                agent.skills.practise(super::SkillType::Navigation, new_discoveries as u32 * 2, current_tick);
             }
 
-            // Learn skills from newly discovered resources.
-            let newly_seen: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
+            // Learn what there is to learn from a thing on first seeing it,
+            // which is not much.
+            //
+            // This used to pay for looking rather than for doing. The filter
+            // is on the tick a resource was discovered, and this runs every
+            // tick, so a thing seen once paid out on ten consecutive ticks -
+            // fifty Farming experience for walking past a grain field, half a
+            // level, in a settled world holding ninety of them. Skill measured
+            // how much of the map somebody had wandered over: Farming sat at
+            // 9.9 out of 10 across nearly three hundred agents while
+            // Leatherworking, which nothing could be discovered for, sat at
+            // -9.2. Nobody had earned any of it.
+            //
+            // Recognising a plant is worth something and it is worth it once.
+            let just_found: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
                 .exploration_knowledge
                 .known_resources
                 .iter()
@@ -1575,13 +1765,13 @@ impl Population {
                         .exploration_knowledge
                         .resource_discovery_ticks
                         .get(pos)
-                        .map(|&tick| current_tick.saturating_sub(tick) < 10)
+                        .map(|&tick| tick == current_tick)
                         .unwrap_or(false)
                 })
                 .map(|(pos, resource_type)| (*pos, *resource_type))
                 .collect();
 
-            for (_, resource_type) in &newly_seen {
+            for (_, resource_type) in &just_found {
                 for (skill_type, xp) in Self::get_skill_for_resource_discovery(resource_type) {
                     agent.skills.gain_experience(skill_type, xp);
                 }
@@ -1625,11 +1815,11 @@ impl Population {
                     .remember_location(memory_type, (pos.x, pos.y, 0));
             }
 
-            // Learn skills from discovered buildings
+            // Learn skills from discovered buildings, on the tick of finding
+            // them and not on the nine after it - see above
             for (pos, building_type) in &agent.exploration_knowledge.known_buildings {
-                // Only give XP for recently discovered buildings (within last 10 ticks)
                 if let Some(&discover_tick) = agent.exploration_knowledge.building_discovery_ticks.get(pos) {
-                    if current_tick.saturating_sub(discover_tick) < 10 {
+                    if discover_tick == current_tick {
                         let skill_xp = Self::get_skill_for_building_discovery(building_type);
                         for (skill_type, xp) in skill_xp {
                             agent.skills.gain_experience(skill_type, xp);
@@ -1645,27 +1835,31 @@ impl Population {
         use crate::world::ResourceType;
         use super::SkillType;
 
+        // Knowing a thing when you see it is worth a little and no more. What
+        // makes a farmer is a life of farming, not a life of noticing fields:
+        // these are a fraction of what doing the work pays, and they are paid
+        // once.
         match resource_type {
             // Mining resources teach Mining skill
             ResourceType::Stone | ResourceType::Iron | ResourceType::Coal
             | ResourceType::Clay | ResourceType::Sand => {
-                vec![(SkillType::Mining, 5)]
+                vec![(SkillType::Mining, 1)]
             }
             // Wood resources teach Woodcutting
-            ResourceType::Wood => vec![(SkillType::Woodcutting, 5)],
+            ResourceType::Wood => vec![(SkillType::Woodcutting, 1)],
             // Agricultural resources teach Farming/Herbalism
             ResourceType::Grain | ResourceType::Flax | ResourceType::Cotton => {
-                vec![(SkillType::Farming, 5)]
+                vec![(SkillType::Farming, 1)]
             }
-            ResourceType::Herbs => vec![(SkillType::Herbalism, 5)],
+            ResourceType::Herbs => vec![(SkillType::Herbalism, 1)],
             // Animal resources teach Hunting
-            ResourceType::Meat | ResourceType::Hides => vec![(SkillType::Hunting, 5)],
+            ResourceType::Meat | ResourceType::Hides => vec![(SkillType::Hunting, 1)],
             // Fish teaches Fishing
-            ResourceType::Fish => vec![(SkillType::Fishing, 5)],
+            ResourceType::Fish => vec![(SkillType::Fishing, 1)],
             // Food and foraging
-            ResourceType::Food => vec![(SkillType::Herbalism, 3)],
+            ResourceType::Food => vec![(SkillType::Herbalism, 1)],
             // Other resources
-            _ => vec![(SkillType::Navigation, 2)],
+            _ => vec![(SkillType::Navigation, 1)],
         }
     }
 
@@ -1678,6 +1872,11 @@ impl Population {
             // Production buildings teach relevant crafting skills
             BuildingType::Forge | BuildingType::Smithy => {
                 vec![(SkillType::Smelting, 10), (SkillType::Metalworking, 5)]
+            }
+            // A tent is the first thing anybody puts up, and putting one up
+            // teaches the hands that will later raise a house
+            BuildingType::SkinTent => {
+                vec![(SkillType::Construction, 5), (SkillType::Leatherworking, 5)]
             }
             BuildingType::Workshop => vec![(SkillType::Crafting, 10)],
             BuildingType::Farm => vec![(SkillType::Farming, 10)],
@@ -1727,6 +1926,253 @@ impl Population {
                 vec![(SkillType::Herbalism, 10), (SkillType::Cooking, 5)]
             }
         }
+    }
+
+
+
+    /// How lately somebody must have been somewhere to say with any
+    /// confidence what is there now.
+    ///
+    /// A season. Long enough that the people who work a patch of ground can
+    /// speak for it, short enough that a place nobody has visited since spring
+    /// is a place a man can say anything about.
+    const WITHIN_LIVING_MEMORY: u32 = 288;
+
+    /// How far a voice carries.
+    ///
+    /// Telling used to be strictly two-handed: one speaker, one listener, and
+    /// nobody else heard a word of it, however many people were standing
+    /// round. A settlement is not a series of private conversations.
+    const EARSHOT: i32 = 6;
+
+    /// How likely an agent is to say anything at all on a given tick.
+    ///
+    /// Talking out loud reaches everybody near enough at once, where telling
+    /// one person at a time reached one, so the same amount of news spreads
+    /// from far fewer tellings.
+    const HOW_OFTEN_ANYBODY_SPEAKS: f64 = 0.06;
+
+    /// An agent says where something is, and everybody near enough hears it.
+    ///
+    /// Each listener decides for itself whether the speaker is worth believing
+    /// - a man may be taken at his word by his friends and disbelieved by
+    /// everybody else in the same breath - and the speaker decides once, for
+    /// the whole room, whether to tell the truth.
+    fn say_it_out_loud(&mut self) {
+        use crate::core::DriveType;
+        use rand::seq::SliceRandom;
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let current_tick = self.current_tick;
+
+        let standing: Vec<(uuid::Uuid, (i32, i32, i32), bool)> = self
+            .agents
+            .iter()
+            .map(|agent| (agent.id, agent.state.position, agent.state.is_alive))
+            .collect();
+
+        for speaker in 0..self.agents.len() {
+            if !self.agents[speaker].state.is_alive {
+                continue;
+            }
+            if !rng.gen_bool(Self::HOW_OFTEN_ANYBODY_SPEAKS) {
+                continue;
+            }
+
+            let (who_i_am, where_i_stand, _) = standing[speaker];
+
+            // Who is near enough to hear
+            let audience: Vec<usize> = standing
+                .iter()
+                .enumerate()
+                .filter(|(index, (_, _, alive))| *index != speaker && *alive)
+                .filter(|(_, (_, where_they_stand, _))| {
+                    (where_they_stand.0 - where_i_stand.0).abs() <= Self::EARSHOT
+                        && (where_they_stand.1 - where_i_stand.1).abs() <= Self::EARSHOT
+                })
+                .map(|(index, _)| index)
+                .collect();
+
+            if audience.is_empty() {
+                continue;
+            }
+
+            // What there is to say. Only what the speaker has been to and
+            // looked at, so that a lie is laid at the door of whoever invented
+            // it rather than of everybody who repeated it in good faith.
+            let mine = self.agents[speaker].exploration_knowledge.seen_for_myself();
+            if mine.is_empty() {
+                continue;
+            }
+            let places: Vec<_> = mine.choose_multiple(&mut rng, 5).copied().collect();
+
+            // A man does not invent a place that somebody standing next to him
+            // has walked over - he would be contradicted before he finished
+            // speaking. So the ground nobody here has been to is the ground a
+            // lie can be told about, and the rest he can only tell straight.
+            //
+            // What lets a man contradict you is having been there lately.
+            // Testing whether he had *ever* walked the tile abolished lying
+            // outright: over fifteen thousand ticks a settlement walks over
+            // nearly everything, so nearly every place had a witness and four
+            // lies were told in a whole world's life.
+            let nobody_has_walked: Vec<_> = places
+                .iter()
+                .filter(|(where_it_is, _)| {
+                    !audience.iter().any(|listener| {
+                        self.agents[*listener]
+                            .exploration_knowledge
+                            .when_i_saw_it(where_it_is)
+                            .is_some_and(|then| {
+                                current_tick.saturating_sub(then) <= Self::WITHIN_LIVING_MEMORY
+                            })
+                    })
+                })
+                .copied()
+                .collect();
+
+            // The speaker decides once, for the whole room
+            let lying = !nobody_has_walked.is_empty()
+                && self.agents[speaker].would_lie_to_this_room(
+                    &audience
+                        .iter()
+                        .map(|listener| standing[*listener].0)
+                        .collect::<Vec<_>>(),
+                    current_tick,
+                );
+
+            let telling = if lying { &nobody_has_walked } else { &places };
+
+            let mut anybody_listened = false;
+            for listener in audience {
+                let talker_traits = self.agents[speaker].traits.clone();
+                if !self.agents[listener].would_take_their_word(who_i_am, &talker_traits) {
+                    continue;
+                }
+
+                if self.tell_them_where_it_is(speaker, listener, telling, lying, current_tick) > 0 {
+                    anybody_listened = true;
+                }
+            }
+
+            // Being listened to is what the social drive is asking for
+            if anybody_listened {
+                if let Some(drive) = self.agents[speaker].drives.get_mut(DriveType::Social) {
+                    drive.partial_satisfy(0.03);
+                }
+            }
+        }
+    }
+
+    /// How far a liar moves the place he names.
+    ///
+    /// Far enough that the man who goes there finds nothing, which is what
+    /// lets him find out he was lied to.
+    const A_LIE_PUTS_IT_WRONG_BY: i32 = 9;
+
+    /// One agent tells another where something is.
+    ///
+    /// The listener decides whether to take his word for it - see
+    /// `Agent::how_far_i_trust` - and the speaker decides whether it is true.
+    /// Before this the channel that actually carries information between
+    /// agents could do neither: a place-name went straight into
+    /// `exploration_knowledge`, which is what foraging reads, from anybody at
+    /// all, and could not be wrong. No lie had ever been told in a running
+    /// settlement, and no agent had ever declined to believe one.
+    ///
+    /// Returns how many places changed hands.
+    fn tell_them_where_it_is(
+        &mut self,
+        speaker: usize,
+        listener: usize,
+        places: &[(crate::world::Position, crate::world::ResourceType)],
+        a_lie: bool,
+        current_tick: u32,
+    ) -> usize {
+        use crate::agents::gossip::{Information, InformationType};
+
+        let speaker_id = self.agents[speaker].id;
+        let listener_id = self.agents[listener].id;
+        let listener_traits = self.agents[listener].traits.clone();
+
+        let mut told = 0;
+        for (where_it_is, what_it_is) in places {
+            if told >= 3 {
+                break;
+            }
+            if self.agents[listener]
+                .exploration_knowledge
+                .known_resources
+                .contains_key(where_it_is)
+            {
+                continue;
+            }
+
+            // A liar names a place a good walk from the real one, and says he
+            // was there this morning. An honest man says when he was actually
+            // there, which may have been last season - and if the patch has
+            // been picked since, that is the patch's fault and not his.
+            let (named, when_he_saw_it) = if a_lie {
+                (
+                    crate::world::Position::new(
+                        where_it_is.x + Self::A_LIE_PUTS_IT_WRONG_BY,
+                        where_it_is.y + Self::A_LIE_PUTS_IT_WRONG_BY,
+                    ),
+                    current_tick,
+                )
+            } else {
+                (
+                    *where_it_is,
+                    self.agents[speaker]
+                        .exploration_knowledge
+                        .when_i_saw_it(where_it_is)
+                        // A man who cannot say when he saw a thing is not
+                        // claiming to have just passed it, and cannot be held
+                        // to it as though he had
+                        .unwrap_or(0),
+                )
+            };
+
+            let listener_agent = &mut self.agents[listener];
+            listener_agent
+                .exploration_knowledge
+                .take_their_word_for_it(
+                    named,
+                    *what_it_is,
+                    speaker_id,
+                    when_he_saw_it,
+                    current_tick,
+                );
+
+            // And it is remembered as a claim somebody made, so that going
+            // there and finding nothing can be laid at his door. Until now
+            // the two books never met: this channel wrote into exploration
+            // knowledge and the whole lie-detection apparatus read from a
+            // knowledge base nothing was writing to.
+            {
+                let claim = Information::new(
+                    InformationType::ResourceLocation {
+                        resource: format!("{:?}", what_it_is).to_lowercase(),
+                        location: (named.x, named.y, 0),
+                    },
+                    speaker_id,
+                    !a_lie,
+                    current_tick as u64,
+                );
+                listener_agent.knowledge.receive_information(
+                    claim,
+                    speaker_id,
+                    listener_id,
+                    &listener_traits,
+                    current_tick as u64,
+                );
+            }
+
+            told += 1;
+        }
+
+        told
     }
 
     /// Process exploration without world (for standalone population updates)
@@ -1852,41 +2298,9 @@ impl Population {
                         }
                     }
 
-                    // Share resources (important for survival)
-                    if rng.gen_bool((share_probability * 0.8) as f64) {
-                        // Agent i shares resource knowledge with agent j
-                        let resources_i: Vec<_> = self.agents[i].exploration_knowledge
-                            .known_resources.iter()
-                            .map(|(p, t)| (*p, *t))
-                            .collect();
-
-                        if !resources_i.is_empty() {
-                            let mut shared = 0;
-                            for (pos, resource_type) in resources_i.choose_multiple(&mut rng, 5) {
-                                if !self.agents[j].exploration_knowledge.known_resources.contains_key(pos) {
-                                    self.agents[j].exploration_knowledge
-                                        .discover_resource(*pos, *resource_type, current_tick);
-                                    shared += 1;
-                                    if shared >= 3 { break; }
-                                }
-                            }
-                        }
-
-                        // Agent j shares with agent i
-                        let resources_j: Vec<_> = self.agents[j].exploration_knowledge
-                            .known_resources.iter()
-                            .map(|(p, t)| (*p, *t))
-                            .collect();
-
-                        if !resources_j.is_empty() {
-                            for (pos, resource_type) in resources_j.choose_multiple(&mut rng, 5) {
-                                if !self.agents[i].exploration_knowledge.known_resources.contains_key(pos) {
-                                    self.agents[i].exploration_knowledge
-                                        .discover_resource(*pos, *resource_type, current_tick);
-                                }
-                            }
-                        }
-                    }
+                    // Where the food and water are is no longer swapped
+                    // here. It is said out loud, to whoever is near enough to
+                    // hear - see `say_it_out_loud`.
 
                     // Strengthen relationship through gossip interaction
                     let uuid_i = self.agents[i].id;

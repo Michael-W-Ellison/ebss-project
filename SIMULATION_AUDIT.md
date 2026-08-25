@@ -203,14 +203,46 @@ Verified reachable from `Simulation::tick()`.
   as fast in one that is not
 - Behaviour trees with weight-based learning and pruning
 - Goals and multi-step plans, abandoned when no longer relevant
-- Action selection ordered: starvation, emotional response, shelter,
-  perception, plan, goal, drive
+- Drives are ranked primary, secondary and tertiary, and within the primary
+  band the one that would kill this agent soonest wins, computed live from how
+  much it has left rather than from a fixed table. Each drive is gated behind
+  the one it follows in the specification's chains — hunger before
+  preparedness before luxury, safety before shelter before protection, all
+  four primaries before reproduction — so a drive cannot build while the one
+  it depends on is unanswered
+- Action selection: a child in trouble, then freezing with a roof in reach,
+  then the highest-ranked drive this agent has an answer for. Perception,
+  plan, goal and the old fixed ordering follow, for the drives that have no
+  answer to offer
+- Fear and anger are appraisals, not timers. What is in front of the agent is
+  weighed against what the agent can do about it, and what past fights taught
+  it, so the same wolf angers one person and frightens another
+- And they reach the agent's hands. A frightened agent puts ground between
+  itself and the thing; an angry one strikes at what is within arm's reach and
+  closes the last pace or two, but does not cross the map looking for a fight.
+  Grudges against people work the same way: whether an agent squares up to
+  somebody it cannot stand or keeps clear of them is the same appraisal, and
+  nobody raises a hand to a child, to their own parent, or to their own
+  children
 - Obstacle-aware movement (greedy step, then a bounded breadth-first route
   search), committed search legs when looking for something out of range
 
 ### Social
-- Proximity-based relationships and bonds, decay at distance
-- Social interactions, gossip and information spread
+- Relationships and bonds. Being about the same place as somebody takes a
+  season to make them a familiar face and stops there; getting on with them
+  takes a season to make them a friend and stops there. Anything past that is
+  earned by what the two of them have done
+- What one agent holds against another reaches what it thinks of them: a
+  grudge weighs on the bond at eight times what keeping company is worth, a
+  blow costs a quarter of the whole scale at once, and the relationship is
+  renamed to match — a settlement now contains rivals and enemies, which no
+  settlement in this project's history had ever contained
+- Social interactions, gossip and information spread. Whose word an agent
+  takes depends on what the two of them are to each other, whether that one
+  has been right before, and what sort of people the two of them are — and an
+  agent that would rather lie can name a place that is not there. A lie is
+  found out by walking to it, and what it cost the man who was lied to depends
+  on what it was about
 - Observational learning between agents
 - Shared knowledge, technology discovery and spread
 
@@ -277,8 +309,7 @@ agent still eats: rot, a fire, and what the neighbours tell it. The dials are
 
 - **Trading warmth for food.** Clothing halves how often agents are cold and
   costs about three points of the fed population (see **Measured behaviour**).
-  Nothing weighs the two against each other; the ordering in
-  `generate_non_emotional_action` is fixed, and the material an agent will
+  Nothing weighs the two against each other, and the material an agent will
   cross the map for is chosen by warmth over distance, not by what its stores
   can afford.
 - **Seeded world generation.** `World::new` draws from `thread_rng`, so runs
@@ -779,15 +810,543 @@ neither exposure nor attacks accounted for it. It was this: every
 second-generation agent that survived at all did so carrying the damage. A
 settlement now runs at 90-96.
 
+## The drive hierarchy
+
+The specification says what the document's flat list did not: that drives are
+ranked, that the one which will kill fastest has the highest priority, and that
+they lead from one to the next. *An agent will not continue hunting if it will
+die from dehydration, even if it resolves its hunger drive.*
+
+Three things were needed and none of them existed.
+
+**A rank.** `DriveType::rank` puts the five that bear on immediate survival
+(Hunger, Sustenance, Thirst, Rest, Safety) in a primary band, the five that
+bear on longer-term survival and wellbeing (Curiosity, Social, Reproduction,
+Shelter, Preparedness) in a secondary band, and the five that bear on comfort
+and standing (Luxury, Utility, Construction, Industry, Protection) in a
+tertiary one. A drive that is asking outranks every drive in a lower band; a
+drive that is quiet does not, or a primary at 0.05 would outrank a secondary
+at 0.95 and nothing but foraging would ever happen — which is exactly what the
+first attempt did.
+
+**A clock.** Within the primary band, precedence is nearness of death and
+nothing else. `AgentState::ticks_before_this_kills_me` works it out from what
+the agent actually has: ticks without water against the dehydration threshold
+and the rate health falls afterwards, ticks without food against the same for
+starvation, energy against the rate it drains. It returns `None` where death
+is not in prospect — an agent above 25 energy is not dying of tiredness, and
+computing Rest's clock from a full tank put every agent in the settlement
+about 2,800 ticks from death and gave Rest 79.9% of every turn.
+
+**A chain.** `DriveType::unlocked_by` encodes the specification's chains, and
+`DriveState::is_unlocked` walks them. A drive cannot build until the drive it
+follows has been *reliably* answered, which is `RELIABLY = 24` ticks — two
+days — of the earlier drive sitting quiet. The recursion has to test the lock
+before the answer or a chain unlocks itself from the far end: a drive that is
+locked is also quiet, and a quiet drive read as answered would unlock the one
+after it.
+
+Then `generate_non_emotional_action` was turned inside out. It used to be
+thirteen fixed priorities with drives consulted last; it now asks the ranked
+drives first and takes the first one this agent has an answer for. The old
+ladder survives as the fallback for drives with nothing to offer, and two
+things still come before everything: a child in trouble, and freezing with a
+roof within reach.
+
+Measured over agent-samples from three worlds a side, the same runs that
+gave the drive-pegging figures above:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Foraging as a share of all actions | 79% | 25% |
+| Luxury above its threshold | 98.9% | 0.5% |
+| Preparedness above its threshold | 98.2% | 0% |
+| Utility above its threshold | 84.6% | 0.6% |
+| `Action::Build` chosen | 0 in 777 lives | non-zero |
+| `Action::Socialize` chosen | 0 in 777 lives | non-zero |
+
+**And what it cost to find out.** Gating a drive means it has to be able to
+fall quiet, and `fall_quiet` drained every drive at one flat 0.004 a tick.
+Reproduction accumulates at 0.001. An agent spends about 9.9% of its ticks
+with a primary unanswered, and at four times the fill rate that 9.9% cost it
+half of everything it had accumulated — so the birth rate halved and with it
+the settlement. Two four-world samples of *identical* code differed by more
+than the effect being chased (end populations 45.2 and 30.2), which is why
+this was found at eight worlds a side and not at four. A drive now fades at
+the rate it would have grown.
+
+## Emotion as appraisal
+
+The specification asks two questions and they are the same question twice:
+
+> Does a thing threaten my ability to satisfy my drives? Can I combat it? If
+> not, increase fear. If so, increase anger. Does a thing prevent my ability
+> to satisfy my drives? Can I combat it? If not, fear. If so, anger.
+
+`ThreatAssessment` has been able to answer that since it was written. Nothing
+ever asked it about anything except the resolution of a blow that had already
+landed, so a wolf ten paces off and closing produced no feeling at all until
+it bit somebody. Fear, meanwhile, was `calculate_survival_drive_emotion`
+reading how high a survival drive's value stood — which meant a well-fed agent
+with a full larder and a rising appetite was as frightened as a starving one.
+When that was written the survival drives saturated between meals and fear sat
+near 0.8; once they were being answered it inverted to nearly nothing. Over
+three worlds: mean fear 0.01 to 0.06, mean anger exactly 0.00, and not one
+agent in 170 ever above the 0.6 that `should_flee` wants. The branch of
+`generate_action` that lets an agent run or fight was unreachable code.
+
+**The threat question.** `feel_about_what_stands_in_the_way` runs each tick
+over the creatures in sight, scales each one's strength by how near it is —
+nothing beyond ten tiles registers, and a wolf at ten tiles is worth a tenth
+of a wolf at your elbow — and appraises it against `own_strength`: health,
+build, armour, weapon, combat skill and nerve. Because a wolf that stands
+still is one wolf however long it stands, the appraisal *sets* the feeling
+rather than adding to it, and `nothing_is_stalking_me` clears it when the wolf
+is gone. Without the set, anger accumulated a tick at a time to a mean of
+0.644 and 61% of the settlement wanted to fight something; without the
+distance falloff, 24% of it wanted to fight a wolf ten tiles away.
+
+**The prevention question** goes to the drives.
+`calculate_survival_drive_emotion` reads `denied_ticks` — how long the need has
+actually gone unanswered — against how soon it would kill, so a need that keeps
+being met frightens nobody however loudly it asks, and one that has gone
+unanswered frightens in proportion to how close the end is. Eleven days from
+starving is worrying; one day from it is not.
+
+**History decides the marginal cases.** `what_fighting_has_taught_me` reads the
+`Fighting` record and multiplies `own_strength` by it: down to 0.6 for an agent
+beaten every time, up to 1.5 for one that has never lost, 1.0 for one that has
+never fought. Two agents of identical build appraise the same wolf differently,
+and the one that has been beaten runs where the one that has won stands. A
+fight only counts as won if the agent came out of it having lost less than a
+quarter of its health — on the obvious test, *survived at all*, every survivor
+was a winner and the record taught nothing.
+
+Measured over three worlds of eight thousand ticks, 41,556 agent-samples:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Mean fear | 0.01–0.06 | 0.044 |
+| Mean anger | 0.00 | 0.298 |
+| Samples that would flee | 0% | 1.94% |
+| Samples that would fight | 0% | 22.80% |
+| Fights fought | — | 51 |
+
+The lost-a-fight branch is rare in the wild, because most agents that come off
+badly against a predator do not survive to draw the lesson: of 229 survivors,
+11 reckoned themselves better in a fight for what had happened and none worse.
+Both directions are therefore demonstrated deterministically in
+`src/agents/tests/appraisal_tests.rs` rather than left to the sample.
+
+**It does not yet change what a settlement is worth.** Eight worlds a side at
+fifteen thousand ticks, against the commit before the appraisal:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| End population | 86.8 ± 9.5 | 94.1 ± 6.3 | 0.65 se |
+| Peak population | 100.9 ± 6.6 | 108.5 ± 6.3 | 0.83 se |
+| Births | 149.6 ± 14.9 | 162.1 ± 12.4 | 0.64 se |
+| Deaths | 87.9 ± 6.5 | 93.0 ± 8.2 | 0.49 se |
+| Soil fertility | 0.39 | 0.39 | −0.07 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+Every measure drifts upward and not one of them is above a single standard
+error, which at eight worlds a side means nothing has been shown. That was the
+expected result rather than a disappointment: at that point an angry agent was
+one that *would* attack, and nothing read the feeling. Building what reads it
+is the next section.
+
+## Fight or flight
+
+Both branches of action selection that read fear and anger were keyed on
+`recent_attacker` — another agent who has just landed a blow. An agent
+terrified of a wolf ten paces off fell straight through the flight branch and
+went on foraging; an agent furious at a neighbour fell through the attack
+branch and did the same. The appraisal decided what an agent felt and stopped.
+
+**Building the creature half first turned up the more interesting half.** Of
+22,802 samples that read as ready to fight, anger at creatures came to 0.025
+and anger at people to **0.806**. Nearly all the anger in this model is a
+grudge — somebody lied to you, somebody betrayed you, somebody was the cause
+of a death — held against that person for life, decaying at one per cent a
+tick, with nothing whatever downstream of it. Half the time the person
+resented was within ten tiles, and 6.9% of the time within arm's reach.
+
+**Creatures.** `run_from_what_frightens_me` reads the strongest `Creature`
+fear source, finds the nearest of that kind in sight, and heads the other way
+far enough not to arrive back inside the range it started worrying at.
+`round_on_what_angers_me` strikes at one within arm's reach and walks at one
+within five; anything further off is left alone, because the appraisal already
+scales a creature by how near it is, so a thing that angers an agent past the
+threshold is close by anyway.
+
+**People.** `square_up_to_the_people_i_resent` asks the specification's
+question about a person rather than a wolf: this is somebody you cannot stand
+and they are in front of you — can you take them? If you can, the grudge stays
+anger and it may come to blows. If you cannot, the same grudge comes out as
+fear and the agent keeps clear. The grudge itself is never touched, only which
+feeling it turns into, and it is read per person rather than off the total:
+`should_attack` sums every source, so three mild grudges of 0.2 read as a man
+ready to fight nobody in particular. Nobody raises a hand to a child, to their
+own parent, or to their own children.
+
+`Action::Fight` is new and deliberately not `Hunt`. Hunting is how an agent
+goes after food and skins and reads the Hunting skill; standing your ground
+reads MeleeCombat, teaches `Undertaking::Fighting` rather than Hunting, and is
+worth doing on a full stomach. Whether the blow lands is `own_strength`
+against the creature's, on the same scale the appraisal used to decide to be
+there at all — so the record of past fights, which scales `own_strength`,
+decides both whether an agent stands and whether it wins.
+
+Measured over three worlds of eight thousand ticks:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| `Action::Attack` chosen | 216 | 2,192 |
+| `Action::Fight` chosen | — | 335 |
+| Fleeing | 0 | 8,494 (0.80% of all actions) |
+| Fights on the record | 51 | 1,105 |
+| Survivors who reckon themselves better for a fight | 11 | 28 |
+| Survivors who reckon themselves worse | **0** | **23** |
+
+That last row is the one that matters. The history mechanic has always had two
+directions and only ever one of them populated in the wild, because an agent
+that came off badly against a predator usually died before it could draw the
+lesson. Agents that lose fights to each other survive them, so "having been
+beaten makes running look better" is now something a settlement actually
+learns rather than something only a test demonstrates.
+
+**And it costs the settlement a little.** Eight worlds a side at fifteen
+thousand ticks, against the commit before:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| End population | 97.0 ± 7.9 | 82.1 ± 7.6 | −1.36 se |
+| Peak population | 110.3 ± 4.5 | 101.6 ± 6.3 | −1.12 se |
+| Births | 160.9 ± 8.3 | 150.8 ± 12.8 | −0.66 se |
+| Deaths | 88.9 ± 3.1 | 93.6 ± 8.5 | +0.53 se |
+| Soil fertility | 0.40 | 0.39 | −0.93 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+Nothing here clears the bar this project uses — one standard error at eight
+worlds a side shows nothing — but every population measure moves the same way
+and deaths move the other, which is a coherent direction rather than the
+scatter of a null result. If it is real the cost is about fifteen per cent of
+the end population, and it is the expected cost rather than a defect: a
+settlement whose members hit each other and run from each other spends time
+and health on it, and no settlement was lost.
+
+The thing to watch is that the cost stays a cost and does not become a spiral,
+which is a question about the next piece of work rather than this one. A
+grudge currently never reaches the relationship — `Relationship` and
+`EmotionState` keep separate books, so a man who has just been hit still
+counts the man who hit him a close friend — so there is nothing yet that lets
+one blow lead to the next.
+
+## The relationship graph
+
+`EmotionState` and `Relationship` kept separate books. A grudge lived in
+`anger_sources`, was read by action selection and by nothing else, and never
+touched the bond; a blow dealt damage, wrote anger, broke a bone and left the
+relationship exactly where it found it. A man who had just been hit went on
+counting the man who hit him a close friend.
+
+And nothing could have shown through if it had. Measured at fifteen thousand
+ticks before any of this: 82 to 105 relationships apiece, nine in ten of them
+at 0.6 or better, mean bond **0.901**, and `RelationshipType::Rival` and
+`Enemy` constructed nowhere outside a test file in the whole project's
+history — so `get_hostile_relationships` and the inspector's hostile count
+read zero in every run there had ever been, including runs in which eighty-six
+bonds in one settlement stood below zero.
+
+**Two rates were being read as amounts.** `Population::update_relationships`
+added up to 0.10 in proximity bonus to every nearby pair every tick, with no
+ceiling, so a bond saturated within a day of standing beside somebody.
+`Relationship::update_from_trait_interaction` ran on the same schedule and
+moved a bond 0.035 a tick for two people who got on and 0.065 for two who
+clashed — inseparable in three days, sworn enemies in a week, both regardless
+of anything that had happened between them.
+
+Both are dispositions rather than events, and both now have a pace and a
+ceiling. A season of never leaving somebody's side makes them a familiar face
+(0.3) and no more. A season of getting on with them makes them a friend (0.5)
+and no more. Friction keeps its floor at the bottom of the scale, because
+friction is friction. What takes two people past friendship is what they have
+actually done: meals shared, help offered, gifts given, children raised.
+
+**On top of that, the feelings land.** `let_grudges_tell_on_the_bond` runs
+each tick over everybody — not over pairs standing near each other, because a
+grudge is an opinion and not a proximity effect, and doing it the other way
+would leave a hole exactly where fear now puts one: an agent that resents a
+man it dare not face keeps away from him, and would therefore have gone on
+counting him a friend. A blow costs `WHAT_A_BLOW_COSTS` — a quarter of the
+whole scale, at once — with a share of that for the one who threw it.
+
+**And the number gets a name.** `settle_what_we_are` maps the bond onto the
+type: Enemy below −0.6, Rival below −0.2, Friend above 0.5, Acquaintance
+between. Blood is not renamed — a brother you cannot stand is a brother.
+
+Measured over three worlds at fifteen thousand ticks:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Mean bond across a settlement | 0.901 | 0.78–0.83 |
+| Named Rival | 0 | 10–14 |
+| Named Enemy | 0 | 40–83 |
+| Named Friend | 0 | 3,646–5,101 |
+| Bonds below zero | 39–86 | 57–112 |
+
+**The interesting negative.** Setting the grudge weight to zero and running
+again leaves the enemy count where it was, inside the scatter. What makes
+enemies in this settlement is being hit, not being lied to: lies and betrayals
+are rare events, blows are not, and a blow is worth thirty ticks of a
+full-blown grudge in one go. The grudge mechanism is wired and correct per
+grudge — a lie costs about a quarter of the scale over the life of the anger
+it creates — and its contribution to the settlement statistics is not
+resolvable at three worlds. Recorded as measured rather than tuned until the
+number moved.
+
+**At eight worlds a side**, against the commit before, this is one of the few
+changes in this project that clears the bar decisively:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| Relationships named rival or enemy, per agent | **0.00 ± 0.00** | **1.53 ± 0.29** | **5.30 se** |
+| Mean bond across a settlement | 0.90 ± 0.01 | 0.82 ± 0.02 | −3.83 se |
+| Bonds below zero, per agent | 1.09 ± 0.21 | 1.96 ± 0.36 | 2.08 se |
+| Deaths | 84.8 ± 3.7 | 99.0 ± 7.0 | 1.81 se |
+| Relationships per agent | 103.6 ± 8.2 | 107.7 ± 9.9 | 0.32 se |
+| Close relationships per agent | 92.9 ± 7.8 | 85.8 ± 8.9 | −0.60 se |
+| Peak population | 95.8 ± 5.6 | 99.9 ± 7.8 | 0.43 se |
+| End population | 85.3 ± 6.2 | 77.5 ± 9.5 | −0.68 se |
+| Births | 145.0 ± 8.3 | 151.5 ± 16.1 | 0.36 se |
+| Soil fertility | 0.40 | 0.40 | 0.15 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+Every agent now has one or two people it has fallen out with, where in eight
+worlds of fifteen thousand ticks apiece there had previously been not one such
+relationship anywhere. The graph is meaningfully less saturated, and the
+number of soured bonds has nearly doubled.
+
+The cost is deaths, up fourteen at 1.81 se — the clearest downward signal
+these measurements have produced, though still short of the bar. Note what
+does *not* move with it: births are up slightly, peak population is up
+slightly, end population is not clearly down, and no settlement was lost. This
+is a settlement with more turnover rather than one that is failing, which is
+what a society whose members occasionally beat each other should look like.
+
+Close relationships are still the large majority — 86 of 108 per agent — and
+that is the next thread. Proximity and temperament are capped now, so what
+carries a bond past friendship is `positive_interaction` from social acts at
+0.01 to 0.05 apiece, and over fifteen thousand ticks in a settlement where
+everybody is within reach of everybody, that adds up for every pair alike. The
+principle applied to the first two rates has not yet been applied to the
+third.
+
+## Distrust
+
+Trust was kept in three books that never met. `TrustRating` in the knowledge
+base held a verified track record, read when a belief was filed and nowhere
+else. `Relationship::trust_level` mapped the bond onto an enum, read in one
+place, to decide whether a gift would be accepted.
+`TraitSet::combined_trust_modifier` summed every trust-flavoured trait an
+agent had, which mixes two different things — Paranoid is about whether *this*
+agent believes people, Charismatic is about whether people believe *them* — so
+a paranoid charmer trusted everybody slightly less for the wrong reason.
+
+**And the channel that actually carries information consulted none of the
+three.** Resource and building locations pass straight into
+`exploration_knowledge`, which is what foraging reads. They went in from
+anybody at all, including somebody the agent had just named an enemy. And they
+could not be wrong: `would_lie_to` weighs honesty and the relationship, and its
+only caller — `prepare_information_to_share` — was itself never called. **No
+lie had ever been told in a running settlement.** Beside all this sat the
+gossip apparatus, writing into a `known_information` map that changed no
+behaviour whatever.
+
+`Agent::how_far_i_trust` answers it once, from the four things the
+specification names: what the two of them are to each other (weighted
+heaviest — you believe your friends), whether this one has been right before,
+what sort of person is listening, and what sort is talking. The listener
+decides whether to take the word; the speaker decides whether it is true.
+
+**What was lied about decides what the lie costs.**
+`what_a_lie_about_this_costs` reads which need the subject answers and how hard
+that need is pressing on this agent — the same `how_hard_it_presses` the drive
+hierarchy ranks needs by — so a lie about food to a man who is not hungry is a
+small thing and the same lie to one who is starving is not. Then what the two
+of them were to each other, because being deceived by somebody you trusted is
+worse than by somebody you did not; then whether the agent is vengeful,
+forgiving, trusting, or already half expecting it. It had been a flat 0.2
+whatever the lie was about.
+
+**Two things had to be fixed before any of it could work.**
+
+An agent's map of where things are is fed both by looking and by being told,
+and the two went into the same map with nothing to tell them apart. So a man
+walked to the place he had been told about, found bare ground, and read his
+own hearsay back off the map as confirmation: every lie verified as true, and
+the lie-detection apparatus could not detect anything. `who_told_me` keeps the
+source, and a lie is found out at the only moment it can be — the agent
+looking at the spot with nothing on it. Hooking that to `Action::Explore`
+first caught almost nothing, because `Action::Explore` is chosen about never;
+it belongs in the per-tick sight pass, where agents actually look around.
+
+And agents passed on hearsay as though they had seen it, which launders a lie:
+the man who invented a place is never blamed, because everybody heard it from
+somebody honest who heard it from somebody honest. Measured, a hundred and
+fifty lies produced **four thousand** accusations, nearly all against people
+telling the truth as they understood it. An agent now passes on only what it
+has been to and looked at.
+
+**Two more found by measuring rather than reasoning.** Reading an emptied patch
+as a lie had agents calling four thousand honest tips falsehoods — a renewable
+node is kept when picked bare precisely because it will bear again, so an empty
+patch is a stale tip, not a lie. And `known_information` and `beliefs` were
+never pruned, so once agents started telling each other things, a settlement of
+a hundred carried tens of thousands of remembered claims and scanned all of
+them every hundred ticks; it is a rolling window of sixty-four now, which is
+enough to hold a grudge about and not a ledger.
+
+Measured over two worlds of fifteen thousand ticks:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Lies told in a settlement | **0** — impossible | 169–247 |
+| Lies found out | — | 74–113 |
+| A caught-out man's credit with the one he lied to | — | 0.15, from a neutral 0.5 |
+| Pairs who will not take each other's word | **0%** — nothing was consulted | 2.7–6.5% |
+
+Fewer lies are found out than are told, which is right: a lie about a distant
+place stands until somebody walks to it. Switching lying off entirely drops
+detections from four thousand to three, so what is being detected is lies and
+not staleness.
+
+**And at eight worlds a side** it costs a settlement almost nothing:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| Mean trust between any two agents | **0.00** — nothing consulted any | 0.70 ± 0.01 | 49.68 se |
+| Pairs who will not take each other's word | **0.00%** | 7.43% ± 1.75 | 4.24 se |
+| People an agent has caught lying to it | **0.00** | 0.93 ± 0.18 | 5.02 se |
+| Places an agent knows of | 239.9 ± 1.9 | 231.8 ± 3.1 | −2.21 se |
+| End population | 73.5 ± 10.2 | 78.0 ± 9.1 | 0.33 se |
+| Peak population | 97.0 ± 7.2 | 98.6 ± 5.9 | 0.17 se |
+| Births | 137.9 ± 13.8 | 143.9 ± 13.3 | 0.31 se |
+| Deaths | 89.4 ± 5.3 | 90.9 ± 6.2 | 0.18 se |
+| Soil fertility | 0.40 | 0.40 | 0.94 se |
+| Settlements still inhabited | 8 of 8 | 8 of 8 | — |
+
+The whole price of a settlement that does not believe everything it is told is
+eight places in two hundred and forty — three per cent of what an agent knows
+of the map — some refused because the speaker was not credible, some struck off
+after being walked to and found empty. Nothing else moves at all: population,
+births, deaths and the ground are within a standard error either way. Nearly
+every agent has caught somebody out at least once by fifteen thousand ticks.
+
+That the cost is so small is itself the finding. Sight reaches twenty-five
+tiles and smell finds what is close, so being told where things are was never
+what kept a settlement alive — which is precisely why the channel could go
+ungated and unfalsifiable for the project's whole history without anybody
+noticing.
+
+## News: age, room and shelf life
+
+Three things were missing from the way agents tell each other where things
+are, and each was making the trust work behave badly.
+
+**A claim carried who made it and nothing else.** So a man who honestly
+reported a patch he saw last season was called a liar the moment somebody
+found it picked, and there was no way for him not to be. `Hearsay` now carries
+when the speaker says he saw the thing: a liar says he walked past it this
+morning, an honest man says when he actually did, and a man is answerable for
+two days. Being out of date costs a sixth of what a lie costs and no anger at
+all — the difference between a man whose news keeps badly and a man who
+invented a place.
+
+**Walking past a thing again is seeing it again.** The sighting tick was set
+once, on first discovery, and never touched — so "a patch I just passed" was a
+claim nobody in this model could make. It needed a second map rather than a
+refresh of the first: skill experience is paid on the discovery tick being the
+current one, so writing today's tick there paid an agent Farming experience
+every tick it stood near a field, which is the exact defect that map was
+cleaned up for once already. `last_seen_ticks` answers what an agent can vouch
+for; `resource_discovery_ticks` answers what it learned from.
+
+**Telling was strictly two-handed.** One speaker, one listener, and nobody
+else heard a word of it however many people were standing round.
+`say_it_out_loud` reaches everybody within earshot, and each of them decides
+for themselves whether the speaker is worth believing — so a settlement can
+take one man at his word and disbelieve him in the same breath.
+
+**And a liar counts the people who can hear him.** He picks ground nobody
+present has walked lately, because somebody who was there will contradict him
+on the spot; he weighs the room by whoever in it is worth deceiving; and every
+extra pair of ears is another person who may go and look, so a crowd of five
+is about a third as tempting as a private word.
+
+**What an agent keeps is what it has some use for.** Nothing bounded it
+before, which did not matter while the only way to learn a place was to walk
+past it and matters a great deal now that news travels. Ninety-six places, and
+what goes first is what answers no need this agent has — hearsay before
+first-hand, older before newer at equal interest. A thirsty man holds on to
+every waterhole he has heard of and lets the flax go.
+
+**Two things measured rather than reasoned about**, both of which had the
+previous piece of work wrong in ways that were not guessable:
+
+The periodic sweep over remembered claims is retired. Run with lying switched
+off entirely it still made every agent a proven liar to **twenty-seven**
+others — every one of those accusations false — because `verify_resource_claim`
+reads the agent's own map as ground truth and an agent's map holds what it has
+been told. The sight pass, the honest test, fired **not once** in the same run.
+There is one detection path now and it is the one where somebody is standing on
+the spot.
+
+And the first cut of "count the room" abolished lying outright. Vetoing a lie
+when anybody present had *ever* walked the ground meant **four** lies told in a
+whole world's life, because over fifteen thousand ticks a settlement walks over
+nearly everything. Only a sighting inside the last season lets a man contradict
+you.
+
+Eight worlds before, ten after:
+
+| Measure | Before | After | Shift |
+| --- | --- | --- | --- |
+| Places an agent holds in mind | 239.5 ± 1.6 | **96.0 ± 0.0** | −87.86 se |
+| People caught lying, per agent | 1.35 ± 0.35 | 0.16 ± 0.04 | −3.41 se |
+| Mean trust between two agents | 0.70 ± 0.02 | 0.69 ± 0.01 | −0.82 se |
+| Pairs who will not take each other's word | 7.77% ± 2.22 | 7.47% ± 1.68 | −0.11 se |
+| Births | 149.4 ± 7.0 | 130.2 ± 13.6 | −1.26 se |
+| Deaths | 94.6 ± 7.6 | 82.8 ± 5.1 | −1.30 se |
+| End population | 79.8 ± 4.6 | 72.4 ± 10.0 | −0.67 se |
+| Peak population | 100.9 ± 4.7 | 96.7 ± 6.3 | −0.54 se |
+| Soil fertility | 0.40 | 0.40 | 0.75 se |
+| Settlements still inhabited | 8 of 8 | 10 of 10 | — |
+
+Nobody carries the map any more, and accusations fall eightfold — which is the
+point, because nearly all of them were false. What does *not* move is the
+telling detail: mean trust and the share of pairs who will not take each
+other's word are unchanged. Trust was never really being driven by the
+evidence; it was driven by the bond and by disposition, and the accusations
+were noise on top. Now there are eight times fewer of them and they are real.
+
+Births and deaths both fall by about the same amount, neither clearing a
+standard error and neither alone meaning anything, but moving together — a
+slightly smaller, slower settlement rather than a failing one, and every world
+still inhabited. Some of that is the memory cap: an agent that knows ninety-six
+places rather than two hundred and forty walks further to feed itself.
+
 ## Test coverage
 
-1,199 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
+1,279 library tests, 15 integration tests, 21 plugin tests, 1 doc test, plus
 two ignored long-run tests (`a_settlement_lasts_thirty_thousand_ticks` and
 `a_river_settlement_keeps_its_ground`). All
 pass, except the known flaky ones (`test_resource_clustering`,
 `test_minimize_travel_time_from_agent_position`,
-`test_production_building_placed_near_resources`, and now
-`water_is_not_used_up`) that assert on properties a randomly generated world
+`test_production_building_placed_near_resources`,
+`water_is_not_used_up` and `a_cold_agent_ends_up_dressed`) that assert on
+properties a randomly generated world
 does not always have. The third was measured at 4 failures in 120 runs on an
 earlier commit, so it is not new; the fourth has a wider margin after the
 calendar change than before it (98.4% of a world's water still there at six
@@ -800,6 +1359,24 @@ regression tests added for survival, shelter and thirst
 of ticks and assert on the outcome, rather than calling a subsystem directly.
 More tests of that shape would be the single best defence against this class
 of bug.
+
+The suites written against the subsystems this document describes, each of
+which drives a whole `Simulation` or a fully-built `Agent` rather than a
+function in isolation:
+
+| Suite | Covers |
+| --- | --- |
+| `src/analytics/tests/nutrient_loop_tests.rs` | what a body passes, what spoils and what dies going back into the ground |
+| `src/analytics/tests/fishery_tests.rs` | fish running on the season, a fished-out reach filling again, offal on a field |
+| `src/analytics/tests/personality_tests.rs` | founders drawn with compatible traits, newborns taking after both parents |
+| `src/core/tests/drive_leaning_tests.rs` | a trait scaling a drive's weight and moving its threshold |
+| `src/analytics/tests/specialisation_tests.rs` | mastery costing more the higher it goes, unused skills rusting, a practised hand producing more |
+| `src/core/tests/drive_hierarchy_tests.rs` | rank, nearness of death deciding among the primaries, a drive gated behind the one before it |
+| `src/agents/tests/appraisal_tests.rs` | the same wolf angering one agent and frightening another, and what past fights change about that |
+| `src/analytics/tests/fight_or_flight_tests.rs` | running from what you are afraid of, striking at what is in reach, and a grudge deciding between the two |
+| `src/analytics/tests/relationship_graph_tests.rs` | a grudge weighing on a bond, a blow landing on it, and what two people are following what they think of each other |
+| `src/analytics/tests/distrust_tests.rs` | whose word an agent takes, what a lie costs by what it was about, and a lie being found out by walking to it |
+| `src/analytics/tests/news_tests.rs` | a week-old sighting not being a lie, a crowd making a man think twice, and a thirsty man keeping the waterholes |
 
 ---
 

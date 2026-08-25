@@ -672,6 +672,22 @@ impl TrustRating {
         }
     }
 
+    /// What this man told you was true once and is not any more.
+    ///
+    /// A patch gets picked, a seam is worked out, a herd moves on. Somebody
+    /// who honestly reported what he saw last season told the truth about last
+    /// season, and finding the place bare proves nothing against him except
+    /// that his news keeps badly. It is not a wrong answer, so it does not go
+    /// in the wrong column - it is a sixth of the weight of a lie on the trust
+    /// itself, and it stops there.
+    ///
+    /// Treating this the same as a lie made every agent in a settlement a
+    /// proven liar to two dozen others inside fifteen thousand ticks, which is
+    /// what "should not be seen as a liar" is there to prevent.
+    pub fn update_on_stale_news(&mut self) {
+        self.trust = (self.trust - 0.025).max(0.0);
+    }
+
     /// Get reliability factor
     pub fn reliability(&self) -> f32 {
         self.trust
@@ -717,13 +733,44 @@ impl KnowledgeBase {
         let trait_modifier = receiver_traits.combined_trust_modifier();
         let confidence = (base_confidence + trait_modifier).clamp(0.0, 1.0);
 
-        // Store information
+        // Store information, making room for it first
         let info_id = info.id;
+        self.forget_the_oldest_claim();
         self.known_information.insert(info_id, info);
 
         // Create belief
         let belief = Belief::new(info_id, receiver, source, confidence, timestamp);
         self.beliefs.push(belief);
+    }
+
+    /// The most claims an agent keeps well enough to check later.
+    ///
+    /// Neither `known_information` nor `beliefs` was ever pruned, and once
+    /// agents started telling each other where things are - which is the
+    /// point of the whole apparatus - a settlement of a hundred was carrying
+    /// tens of thousands of remembered claims and scanning all of them every
+    /// hundred ticks. Enough to hold a grudge about, not a ledger.
+    pub const WHAT_A_MAN_CAN_KEEP_TRACK_OF: usize = 64;
+
+    /// Forget the oldest claim, so that what is remembered is what is recent.
+    ///
+    /// A fixed cap that simply stopped accepting would be worse than useless:
+    /// an agent would remember its first sixty-four claims for life and never
+    /// notice a thing it was told afterwards.
+    pub fn forget_the_oldest_claim(&mut self) {
+        while self.known_information.len() >= Self::WHAT_A_MAN_CAN_KEEP_TRACK_OF {
+            let Some(oldest) = self
+                .known_information
+                .values()
+                .min_by_key(|info| info.timestamp)
+                .map(|info| info.id)
+            else {
+                return;
+            };
+
+            self.known_information.remove(&oldest);
+            self.beliefs.retain(|belief| belief.info_id != oldest);
+        }
     }
 
     /// Check if agent believes specific information

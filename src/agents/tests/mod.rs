@@ -11,3 +11,4 @@ mod job_happiness_integration_tests;
 mod religious_effects_integration_tests;
 mod nutrition_integration_tests;
 mod gossip_spreading_tests;
+pub mod appraisal_tests;

@@ -20,7 +20,7 @@ pub mod spatial;
 mod tests;
 
 pub use behavior_tree::{BehaviorTree, BehaviorNode, NodeType, ExecutionResult, BehaviorContext, DefaultBehaviorContext};
-pub use drives::{Drive, DriveType, DriveState, DriveContext, Surroundings};
+pub use drives::{Drive, DriveType, DriveState, DriveContext, DriveRank, Surroundings};
 pub use learning::{ObservableEvent, ObservableEventType, LearningResult, LearningExposure, observe_and_learn, process_population_learning};
 pub use memory::{Memory, SpatialMemoryType, KnowledgeMemory};
 pub use episodic_memory::{EpisodicMemory, Episode, EpisodeType, EpisodicMemoryStats};

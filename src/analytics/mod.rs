@@ -82,6 +82,28 @@ pub struct Simulation {
     last_autosave_tick: u32,
     /// Nutritional data for food items, used when agents forage and eat
     food_database: FoodDatabase,
+    /// A tally of every action any agent has chosen, by name.
+    ///
+    /// "Seventy-nine per cent of everything a settlement does is foraging" is
+    /// the kind of claim this project keeps needing and kept answering by
+    /// patching a counter in by hand and throwing it away afterwards. Kept
+    /// here so the answer is reproducible and costs one hash lookup a tick.
+    pub actions_taken: std::collections::HashMap<String, u64>,
+    /// And how many of those came to nothing.
+    ///
+    /// An action chosen is not an action that worked. Counting only the
+    /// choosing hides the case where a settlement spends a sixth of its life
+    /// attempting something that almost never succeeds, which is exactly what
+    /// it turned out to be doing.
+    pub actions_failed: std::collections::HashMap<String, u64>,
+    /// And what they said when they did.
+    ///
+    /// A count of failures tells you a settlement is wasting its time; the
+    /// reasons tell you what on. Both are one hash lookup on a path that only
+    /// runs when something has already gone wrong, and between them they turn
+    /// "the drives ask for things that do not happen" into a list of named
+    /// defects.
+    pub actions_failed_because: std::collections::HashMap<String, u64>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -243,6 +265,9 @@ impl Simulation {
             autosave_config: None,
             last_autosave_tick: 0,
             food_database: FoodDatabase::default(),
+            actions_taken: std::collections::HashMap::new(),
+            actions_failed: std::collections::HashMap::new(),
+            actions_failed_because: std::collections::HashMap::new(),
         }
     }
 
@@ -303,10 +328,34 @@ impl Simulation {
         // can happen - and until it did, agents found food by smell alone.
         self.population.process_exploration_with_world(&mut self.world);
 
+        // Looking around fills a head faster than talking does, so what
+        // nobody has a use for goes out of it again after the looking rather
+        // than before
+        {
+            let now = self.current_tick;
+            for agent in self.population.agents.iter_mut() {
+                if agent.state.is_alive {
+                    agent.forget_what_does_not_matter(now);
+                }
+            }
+        }
+
         // World systems - climate, fauna, flora - are ticked by World::tick
         // further down this function. Ticking them here as well ran the whole
         // living world at double speed: animals aged, starved, bred and grazed
         // twice for every tick an agent lived through.
+
+        // A man sitting at a fire with a bright stone in his hand may notice
+        // what the fire does to it
+        self.somebody_notices_something();
+
+        // And the ground they fouled last season comes up in berries
+        self.what_was_dropped_comes_up();
+
+        // Grain carried through a wet season starts growing in the pack, and
+        // what is dropped out of a pack takes root where it falls
+        self.what_got_wet_sprouts();
+        self.what_was_dropped_takes_root();
 
         // Let hungry predators try their luck with the people
         self.process_predator_attacks();
@@ -321,6 +370,10 @@ impl Simulation {
 
         // Put back on the ground what came off it
         self.return_what_the_living_and_the_dead_leave();
+
+        // And feel about whatever is standing in the way
+        self.feel_about_what_stands_in_the_way();
+        self.square_up_to_the_people_i_resent();
 
         debug!("=== Tick {} ===", self.current_tick);
 
@@ -504,6 +557,10 @@ impl Simulation {
 
                 // Generate action based on priority:
                 // starvation > emotions > shelter > percepts > plan > goals > drives
+                //
+                // Running away comes out as an ordinary Move, so without a
+                // note of why it was chosen it is invisible in the tally
+                let mut running_away = false;
                 let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
 
@@ -518,10 +575,30 @@ impl Simulation {
                         );
                         (survival_action, false)
                     }
-                    // PRIORITY 0: Check emotional overrides (fear/anger from being attacked)
+                    // PRIORITY 0: Check emotional overrides (fear/anger from
+                    // what is in front of the agent, or from being attacked)
                     else if agent.emotions.should_flee() {
+                        // Frightened of something that is actually there: put
+                        // ground between the two of you. This is the branch
+                        // the appraisal feeds; the attacker branches below it
+                        // are for agents, who are not creatures.
+                        if let Some(away) = self
+                            .run_from_what_frightens_me(agent, agent_position)
+                            .or_else(|| {
+                                self.run_from_whoever_frightens_me(agent, agent_position)
+                            })
+                        {
+                            debug!(
+                                "Agent {} RUNNING from {:?} (fear={:.2})",
+                                agent_id,
+                                agent.emotions.what_frightens_me_most().map(|(k, _)| k),
+                                agent.emotions.fear
+                            );
+                            running_away = true;
+                            (away, false)
+                        }
                         // High fear - flee from attacker or danger
-                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                        else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
                             // Find attacker position and flee away from them
                             if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
                                 let attacker_pos = attacker.state.position;
@@ -556,8 +633,24 @@ impl Simulation {
                             self.generate_non_emotional_action(agent, agent_position)
                         }
                     } else if agent.emotions.should_attack() {
+                        // Angry at something within arm's reach: turn on it.
+                        // An angry agent stands its ground - it does not walk
+                        // across the map after a wolf it can see, which is
+                        // what keeps this from eating a settlement's whole day.
+                        if let Some(strike) = self
+                            .round_on_whoever_angers_me(agent, agent_position)
+                            .or_else(|| self.round_on_what_angers_me(agent, agent_position))
+                        {
+                            debug!(
+                                "Agent {} STANDING GROUND against {:?} (anger={:.2})",
+                                agent_id,
+                                agent.emotions.what_angers_me_most().map(|(k, _)| k),
+                                agent.emotions.anger
+                            );
+                            (strike, false)
+                        }
                         // High anger, low fear - retaliate against attacker
-                        if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                        else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
                             debug!(
                                 "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
                                 agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
@@ -587,8 +680,29 @@ impl Simulation {
                 // Drop travel plans toward places the agent cannot reach
                 let action = self.retarget_unreachable_move(agent_index, action);
 
+                // What the settlement spends its days doing
+                let did = if running_away {
+                    "Flee".to_string()
+                } else {
+                    Self::name_of(&action)
+                };
+                *self.actions_taken.entry(did).or_insert(0) += 1;
+
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
+
+                if !action_result.success {
+                    *self
+                        .actions_failed
+                        .entry(Self::name_of(&action))
+                        .or_insert(0) += 1;
+                    if let Some(why) = action_result.message.as_ref() {
+                        *self
+                            .actions_failed_because
+                            .entry(format!("{}: {}", Self::name_of(&action), why))
+                            .or_insert(0) += 1;
+                    }
+                }
 
                 debug!(
                     "Agent {} - Action result: {} (satisfaction: {:.2})",
@@ -622,6 +736,13 @@ impl Simulation {
                 // And note how it went, so the agent does more of what pays
                 // and less of what does not
                 agent.learn_from(&action, action_result.success);
+
+                // Then join the doing to the need it answered and the ground
+                // it was answered on, which is what lets a thirsty man walk
+                // back to the bank he drank from yesterday
+                let where_it_was = agent.state.position;
+                let now = self.current_tick;
+                agent.link_what_worked(&action, &action_result, drive_type, where_it_was, now);
 
                 // Apply trait-based happiness rewards for successful actions
                 if action_result.success {
@@ -787,11 +908,19 @@ impl Simulation {
             self.process_building_maintenance();
         }
 
-        // Process information verification and lie detection (every 100 ticks)
-        // Agents verify information they've received against their knowledge
-        if self.current_tick % 100 == 0 {
-            self.process_information_verification();
-        }
+        // Lies are found out by walking to the place - see the sight pass in
+        // `Population::process_exploration_with_world`.
+        //
+        // There used to be a second path here: a sweep every hundred ticks
+        // over remembered claims, checking each with `verify_resource_claim`.
+        // That reads the agent's own map as though it were ground truth, and
+        // an agent's map holds what it has been told as well as what it has
+        // seen, so the check confirmed hearsay against itself. Measured with
+        // lying switched off entirely, it still accused every agent of being
+        // a proven liar to twenty-seven others - every one of those
+        // accusations false, and none of them from the sight pass, which
+        // fired not once. It is retired rather than repaired: standing on the
+        // spot is the honest test and the sweep cannot be made into one.
         // Process pregnancies and births
         self.process_pregnancies_and_births();
 
@@ -912,6 +1041,15 @@ impl Simulation {
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
+            Action::TendField => Some(ActionType::Farming),
+            Action::Examine { .. } => Some(ActionType::Crafting),
+            Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),
+            Action::Trade { .. } | Action::GiveTo { .. } => Some(ActionType::Social),
+            Action::Work { .. } => Some(ActionType::Crafting),
+            Action::Taste => Some(ActionType::Farming),
+            Action::TrySwapping { .. } => Some(ActionType::Crafting),
+            Action::TakeCutting => Some(ActionType::Farming),
+            Action::PlantCutting => Some(ActionType::Farming),
             Action::SpreadMuck => Some(ActionType::Farming),
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
@@ -990,14 +1128,11 @@ impl Simulation {
             DriveType::Hunger => Action::Eat { food_type: "generic".to_string() },
             DriveType::Thirst => Action::Gather { resource_type: "water".to_string() },
             DriveType::Rest => Action::Sleep { duration: 10 },
-            DriveType::Shelter => Action::Build {
-                structure_type: "shelter".to_string(),
-                position
-            },
-            DriveType::Construction => Action::Build {
-                structure_type: "structure".to_string(),
-                position
-            },
+            DriveType::Shelter => Action::Gather { resource_type: "hides".to_string() },
+            // Building with nothing to build from is the commonest wasted
+            // turn in the model - the drive path above checks the pack first.
+            // A trip out for timber is what this falls back to.
+            DriveType::Construction => Action::Gather { resource_type: "wood".to_string() },
             DriveType::Industry => Action::Gather { resource_type: "generic".to_string() },
             // Answered by going to the children, which needs to know where
             // they are - see `protective_action`. On its own it comes to
@@ -1017,8 +1152,11 @@ impl Simulation {
                     Action::Socialize { target_agent_id: uuid::Uuid::nil() }
                 }
             },
-            DriveType::Utility => Action::Craft { item_type: "woodenaxe".to_string() },
-            DriveType::Preparedness => Action::Store { item_type: "resource".to_string(), amount: 1 },
+            DriveType::Utility => Action::Craft { item_type: "spear".to_string() },
+            // Putting something by needs something to put by, which this
+            // ladder cannot see - the drive path above names a real thing out
+            // of the agent's own pack. A trip out is the honest fallback.
+            DriveType::Preparedness => Action::Gather { resource_type: "wood".to_string() },
             DriveType::Sustenance => Action::Gather { resource_type: "food".to_string() },
             DriveType::Safety => {
                 // Move to a random nearby safe location
@@ -1026,7 +1164,11 @@ impl Simulation {
                 let target_y = position.1 + rng.gen_range(-5..=5);
                 Action::Move { target: (target_x, target_y, position.2) }
             },
-            DriveType::Reproduction => Action::Mate { target_agent_id: uuid::Uuid::nil() },
+            // Proposing to whoever is nearest is how Mate came to be a fifth
+            // of everything a settlement did and to fail 99.9% of the time.
+            // The drive path above finds somebody who could actually have a
+            // child and whom this agent trusts.
+            DriveType::Reproduction => Action::Wait,
             DriveType::Luxury => Action::Gather { resource_type: "luxury".to_string() },
         }
     }
@@ -1146,7 +1288,7 @@ impl Simulation {
                     })
                 },
                 ExternalGoal::EnsureToolsAvailable(_count) => {
-                    Some(Action::Craft { item_type: "woodenaxe".to_string() })
+                    Some(Action::Craft { item_type: "spear".to_string() })
                 },
             }
         } else {
@@ -1230,7 +1372,12 @@ impl Simulation {
         // A drink from the waterskin, or from a spring within reach. Both go
         // through the same action: it prefers open water and falls back to
         // whatever the agent is carrying.
-        let carrying_water = agent.inventory.available_water() > 0.0;
+        // Enough for a swallow, not a dribble. `Gather` drinks from a
+        // waterskin when there is no source about, but only in whole units -
+        // so an agent with half a mouthful left kept choosing to drink and
+        // being told there was no water anywhere, which was the largest single
+        // failure in the simulation.
+        let carrying_water = agent.inventory.available_water() >= 1.0;
         let water_in_reach = self
             .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
                 resource.resource_type == ResourceType::Water
@@ -1256,6 +1403,24 @@ impl Simulation {
             }
 
             return Some(Action::Gather { resource_type: "water".to_string() });
+        }
+
+        // Nowhere known to drink by sight or smell, but somewhere that has
+        // answered this before.
+        //
+        // This was aimed at `Gather: No water sources nearby`, the largest
+        // single failure in the simulation, on the theory that nothing joined
+        // the drink an agent had yesterday to the bank it drank from. Measured
+        // over eight worlds a side it did not move that failure at all - the
+        // rate is 3.7% of all actions without this and 4.7% with it, which is
+        // noise - so whatever is producing those refusals is not an agent
+        // being unable to remember where water is. See ISSUES_FOUND #2. It is
+        // kept because it is the answer of last resort before striking out
+        // blind, and because it costs nothing.
+        if let Some(there) =
+            agent.somewhere_that_answered(DriveType::Thirst, agent_position, self.current_tick)
+        {
+            return Some(Action::Move { target: there });
         }
 
         // Nowhere known to drink: go looking, if it has come to that
@@ -1332,8 +1497,21 @@ impl Simulation {
         // go somewhere else. This is above the local search below because
         // walking twelve tiles and back is what an agent does when it has
         // mislaid its dinner, not when the ground has stopped producing one.
+        // A need that keeps going unanswered is a reason to live somewhere
+        // else, not a reason to walk further today
+        if let Some(action) = self.go_and_live_where_it_is(agent, agent_position) {
+            return Some(action);
+        }
+
         if let Some(action) = self.migration_action(agent, agent_position) {
             return Some(action);
+        }
+
+        // Ground that has fed this agent before, when nothing nearer will.
+        if let Some(there) =
+            agent.somewhere_that_answered(DriveType::Hunger, agent_position, self.current_tick)
+        {
+            return Some(Action::Move { target: there });
         }
 
         // Starving with nowhere known to go: search rather than stand still
@@ -1439,6 +1617,273 @@ impl Simulation {
     /// that is far enough away to be different country; failing any memory,
     /// it strikes out on a bearing of its own and keeps going, which is what
     /// turns a starving settlement into a scattering one.
+
+    /// How long a need has to keep going unanswered before an agent stops
+    /// walking back and forth to it and goes to live beside it.
+    const ASKED_FOR_IT_ONCE_TOO_OFTEN: u32 = 96;
+
+    /// How near counts as camped on a thing.
+    ///
+    /// Wide enough that a people spread out along a river rather than piling
+    /// onto the one tile of it. At four tiles they concentrated hard enough to
+    /// work the ground out under themselves: the nutrient-loop regression,
+    /// which asks that farmed ground not lose half its fertility in ten
+    /// thousand ticks, started failing about one run in three.
+    const CAMPED_ON_IT: i32 = 4;
+
+    /// The need this agent keeps having and keeps not getting.
+    ///
+    /// `denied_ticks` counts how long a drive has gone unanswered, and until
+    /// now only hunger was ever read for the purpose of moving house. Thirst
+    /// was the largest single failure in the whole simulation - a hundred and
+    /// thirty-one thousand refusals of `Gather: No water sources nearby` in
+    /// one pair of worlds - because an agent that could not find water walked
+    /// to it, drank, wandered off about its business, and was thirsty again
+    /// half a day later in the same dry place.
+    fn what_i_keep_going_short_of(agent: &crate::agents::Agent) -> Option<DriveType> {
+        // Water only, and deliberately.
+        //
+        // Water is a fixed point on the map: it is in one place, it does not
+        // run out, and camping beside it answers the need for good. Food is
+        // not - it is spread about and it is *consumed*, so a people who move
+        // house towards it concentrate their foraging on whatever ground they
+        // land on and work it out from under themselves. Measured, letting
+        // hunger move a settlement took the nutrient-loop regression from
+        // passing three times in three to twice in five: farmed ground losing
+        // more than half its fertility inside ten thousand ticks.
+        //
+        // Ranging for food and settling by water is the division the land
+        // itself makes.
+        [DriveType::Thirst]
+            .into_iter()
+            .filter(|need| {
+                agent
+                    .drives
+                    .get(*need)
+                    .map(|drive| drive.denied_ticks() >= Self::ASKED_FOR_IT_ONCE_TOO_OFTEN)
+                    .unwrap_or(false)
+            })
+            .max_by_key(|need| {
+                agent
+                    .drives
+                    .get(*need)
+                    .map(|drive| drive.denied_ticks())
+                    .unwrap_or(0)
+            })
+    }
+
+    /// Go and live where the thing you keep needing is.
+    ///
+    /// "The agents must anticipate their future drive demands. If they
+    /// consistently need water, they should camp or colonize near water."
+    ///
+    /// Answering a need where you stand is what every other path here does.
+    /// This is the one that reads the *pattern* of a need instead of the need
+    /// itself: a man who has been short of water for eight days does not want
+    /// a drink, he wants to be somewhere else.
+    ///
+    /// It fires only once a need has been going unanswered for days, and stops
+    /// the moment the agent is camped on the answer, so it moves a settlement
+    /// rather than keeping it walking.
+    fn go_and_live_where_it_is(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::ResourceType;
+
+        // Whether to move house is a question worth asking once a day, not
+        // eight times: it walks the whole resource list at sixty tiles, and a
+        // people do not reconsider where they live every two hours.
+        if self.current_tick % crate::environment::seasons::TICKS_PER_DAY != 0 {
+            return None;
+        }
+
+        let short_of = Self::what_i_keep_going_short_of(agent)?;
+
+        let wanted = match short_of {
+            DriveType::Thirst => ResourceType::Water,
+            _ => ResourceType::Food,
+        };
+
+        // The nearest place that answers it, however far off - this is a
+        // decision to move house, so the ordinary foraging radius does not
+        // apply
+        let there = self.nearest_resource_within(agent_position, Self::HOW_FAR_A_PEOPLE_WILL_MOVE, |resource| {
+            resource.resource_type == wanted
+                || (wanted == ResourceType::Food
+                    && Self::edible_item_for(resource.resource_type).is_some())
+        })?;
+
+        let paces = (there.x - agent_position.0)
+            .abs()
+            .max((there.y - agent_position.1).abs());
+
+        // Already living on it: nothing to do, and importantly nothing that
+        // keeps the agent walking in circles round the thing it wanted
+        if paces <= Self::CAMPED_ON_IT {
+            return None;
+        }
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
+    }
+
+    /// How far a people will pick up and move for water they can count on.
+    const HOW_FAR_A_PEOPLE_WILL_MOVE: u32 = 60;
+
+    /// What one person wants standing within reach of the camp before the
+    /// ground counts as feeding them.
+    ///
+    /// Wild food regrows about four times slower than a settlement eats it, so
+    /// a camp of any size strips its own ground and the number here is what
+    /// "stripped" means. A nomad moves while there is still something to eat,
+    /// because a nomad that waits until there is nothing has to walk on an
+    /// empty stomach.
+    ///
+    /// The first cut of this was 25 a head, which is about what a person
+    /// eats in a season and reads as the right number until you notice that
+    /// no ground anywhere in the world carries that much for a grown
+    /// settlement. It fired every tick of every life. Over eight worlds
+    /// foraging fell forty per cent, the food standing on the map went up
+    /// four and a half times because nobody was eating it, the camp did not
+    /// end up any further from where it started, and it cost about twelve
+    /// people.
+    const WHAT_A_CAMP_WANTS_STANDING: u32 = 4;
+
+    /// And how much better somewhere else has to be before it is worth
+    /// picking the camp up.
+    ///
+    /// This is the half that stops the walking. An absolute standard for good
+    /// ground is a standard nowhere meets, so a camp held to one walks for
+    /// ever; a camp that moves because somewhere is three times better stops
+    /// the moment it gets there, because it is now standing on the best ground
+    /// it knows of.
+    const WORTH_PICKING_THE_CAMP_UP_FOR: u32 = 3;
+
+    /// Moving camp, for a people that has no other way of making food happen.
+    ///
+    /// "Until there is a method of producing food through farming, the agents
+    /// should likely stick to a nomadic way of life."
+    ///
+    /// This is the Sustenance answer for anybody who cannot farm: you cannot
+    /// make this ground carry more, so you go where the ground already does.
+    /// An agent that has worked farming out does not do this - a field is a
+    /// reason to stay, and the whole of what settling down is.
+    ///
+    /// It is not the same thing as `migration_action`, which fires on an agent
+    /// that has already been going hungry for a hundred and twenty ticks. This
+    /// fires while there is still food here, on the strength of there not
+    /// being much of it, which is the difference between moving camp and
+    /// fleeing.
+    fn moving_on(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Practice;
+
+        // A farmer stays. So does anybody standing beside a field with
+        // something in it, farmer or not: whatever is growing there is a
+        // better answer than a fortnight's walk.
+        if agent.practices.is_established(Practice::Farming) {
+            return None;
+        }
+
+        if self.crop_standing_on_fields_within(agent_position, Self::FIELD_WALK_RADIUS) > 0 {
+            return None;
+        }
+
+        // Enough hands here to strip the place, and enough standing to feed
+        // them. Both are counted within the distance somebody actually walks
+        // to forage.
+        let mouths = self.how_many_camped_within(agent_position, Self::FORAGE_RADIUS);
+        let standing = self.edible_standing_within(agent_position, Self::FORAGE_RADIUS);
+
+        if standing >= mouths * Self::WHAT_A_CAMP_WANTS_STANDING {
+            return None;
+        }
+
+        // Somewhere better, far enough off to be a move rather than a stroll.
+        // The best ground within the distance a people will shift for, not the
+        // nearest: this is a decision about where to spend a season.
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+
+        let (there, carrying) = self
+            .world
+            .resources
+            .iter()
+            .filter(|resource| resource.amount > 0)
+            .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
+            .map(|resource| (resource.position, here.distance_to(&resource.position), resource.amount))
+            .filter(|(_, distance, _)| {
+                *distance >= Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK as u32
+                    && *distance <= Self::HOW_FAR_A_PEOPLE_WILL_MOVE
+            })
+            .max_by_key(|(_, _, amount)| *amount)
+            .map(|(where_it_is, _, amount)| (where_it_is, amount))?;
+
+        // And it has to be worth the walk. Without this the camp sets out for
+        // whatever is furthest, arrives, finds the same thin ground, and sets
+        // out again: it walks for ever and forages a great deal less than a
+        // people that stayed put.
+        if carrying < standing.max(1) * Self::WORTH_PICKING_THE_CAMP_UP_FOR {
+            return None;
+        }
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
+    }
+
+    /// How many people are living within reach of this spot
+    fn how_many_camped_within(&self, position: (i32, i32, i32), radius: u32) -> u32 {
+        let reach = radius as i32;
+
+        self.population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .filter(|agent| {
+                (agent.state.position.0 - position.0).abs() <= reach
+                    && (agent.state.position.1 - position.1).abs() <= reach
+            })
+            .count() as u32
+    }
+
+    /// How much there is to eat standing within reach of this spot
+    fn edible_standing_within(&self, position: (i32, i32, i32), radius: u32) -> u32 {
+        let here = crate::world::Position::new(position.0, position.1);
+
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
+            .filter(|resource| here.distance_to(&resource.position) <= radius)
+            .map(|resource| resource.amount)
+            .sum()
+    }
+
+    /// And how much of that is standing on ground somebody has broken
+    fn crop_standing_on_fields_within(&self, position: (i32, i32, i32), radius: u32) -> u32 {
+        let here = crate::world::Position::new(position.0, position.1);
+
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| here.distance_to(&resource.position) <= radius)
+            .filter(|resource| {
+                self.world
+                    .grid
+                    .get_tile(&resource.position)
+                    .map(|tile| tile.terrain.is_cultivated())
+                    .unwrap_or(false)
+            })
+            .map(|resource| resource.amount)
+            .sum()
+    }
+
     fn migration_action(
         &self,
         agent: &crate::agents::Agent,
@@ -1554,115 +1999,62 @@ impl Simulation {
     /// 8. carry on with a plan
     /// 9. work towards a goal
     /// 10. whatever its most pressing drive suggests
+    /// What an agent does, when nothing has frightened or angered it.
+    ///
+    /// This used to be thirteen fixed priorities with the drives consulted at
+    /// the thirteenth, which meant the drives decided almost nothing: seventy-
+    /// nine per cent of everything a settlement did was foraging chosen off
+    /// the ladder before a drive was ever asked, and `Action::Build` and
+    /// `Action::Socialize` were chosen zero times in seven hundred and
+    /// seventy-seven agent-lives. Giving every agent a personality changed
+    /// nothing measurable for the same reason: personality reaches the drives,
+    /// and the drives reached nothing.
+    ///
+    /// It is the other way round now. Two things pre-empt, because they are
+    /// emergencies rather than wants; after that the needs are ranked by how
+    /// hard each is pressing - see `Agent::how_hard_it_presses` - and the
+    /// first that can actually be answered here and now takes the turn.
     fn generate_non_emotional_action(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> (Action, bool) {
-        // PRIORITY 1: Survival needs override perception, plans and goals
-        if let Some(action) = self.survival_action(agent, agent_position, false) {
-            return (action, false);
-        }
-
-        // PRIORITY 2: Go to a child of one's own that has strayed, or that
-        // something is stalking.
-        //
-        // Above the agent's own coat and its own roof: a parent sees to the
-        // children first. Below PRIORITY 1 because an agent starving to death
-        // is no use to anybody.
+        // A child of one's own in trouble. Not a want: a parent goes, and the
+        // Protection *drive* underneath is a tertiary disposition that waits
+        // its turn like anything else.
         if let Some(action) = self.protective_action(agent, agent_position) {
             return (action, false);
         }
 
-        // PRIORITY 3: Put on or make clothing, if that can be done on the spot.
-        //
-        // This comes before sheltering because a coat is the durable answer to
-        // cold and a roof is the temporary one: an agent that walks to shelter
-        // every time it feels the wind never gets around to dressing itself,
-        // which is why insulation used to sit at zero for whole lifetimes.
-        // Only what can be done where it stands outranks shelter; going off to
-        // cut flax waits until PRIORITY 3.
-        if let Some(action) = self.clothing_action(agent, agent_position, true) {
-            return (action, false);
-        }
-
-        // PRIORITY 4: Check if agent needs shelter due to exposure
-        //
-        // Triggered on what the agent is suffering right now, not on the
-        // running total of damage taken: that total only ever rises, so once
-        // it passed the threshold an agent sought shelter forever, whatever
-        // the weather had done since.
+        // And freezing, where there is a roof within reach. Exposure is
+        // already doing damage by the time this fires, so it is not a matter
+        // of how much the agent wants to be warm.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }
 
-        // PRIORITY 5: Cook the raw food the agent is carrying.
-        //
-        // Anything reaching this point is fed, watered and warm - survival
-        // answered first - so this is an agent with raw meat and time on its
-        // hands, which is when cooking happens. It sits above goals and
-        // percepts because it does not otherwise happen at all: a plan or a
-        // steady stream of percepts wins every tie, and cooking placed below
-        // them was reached in four decisions in a thousand.
-        //
-        // It ends by itself. Cooking the food takes it off the list, so the
-        // agent goes back to whatever it was doing until it catches something
-        // else.
-        if let Some(action) = self.cooking_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 6: Tip the spoiled contents of the pack onto a field, if
-        // this agent has come to believe in that, or is curious enough to find
-        // out. Sits with the other things an agent does when nothing presses.
-        if let Some(action) = self.muck_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 7: Break ground for a field.
-        //
-        // Sits with cooking and hunting, among the things an agent does when
-        // nothing is pressing on it, and above them in the sense that it
-        // outlasts them: a meal feeds one person once and a field feeds the
-        // settlement every year after.
-        if let Some(action) = self.farming_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 8: Stand in the river.
-        //
-        // Above hunting because a river in the run is a surer thing than a
-        // deer, and below farming because a field feeds the settlement every
-        // year and a catch feeds one person once. What makes it worth its own
-        // slot rather than folding into foraging is what comes off it: the
-        // guts of a fish are the only muck in the world that was not grown on
-        // the settlement's own ground.
-        if let Some(action) = self.fishing_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 9: Go after an animal, for the meat or for the skin.
-        //
-        // Below cooking for the same reason gathering flax is: what an agent
-        // already has in its pack is worth more than what it might catch.
-        if let Some(action) = self.hunting_action(agent, agent_position) {
-            return (action, false);
-        }
-
-        // PRIORITY 9: Go and get what the agent needs to clothe itself.
-        //
-        // Below cooking, because a meal is worth more than a coat: cooking
-        // nearly trebles what a piece of food is worth, and an agent that went
-        // for flax first ate worse for it.
-        if let Some(action) = self.clothing_action(agent, agent_position, false) {
-            return (action, false);
-        }
-
-        // PRIORITY 10: Check for high-salience percepts (danger, resources, social opportunities)
-        let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> = agent.recent_percepts
-            .iter()
-            .cloned()
+        // Everything else the agent wants, in the order it wants it
+        let mut ranked: Vec<(DriveType, f32)> = DriveType::all()
+            .into_iter()
+            .map(|drive_type| (drive_type, agent.how_hard_it_presses(drive_type)))
+            .filter(|(_, pressing)| *pressing > 0.0)
             .collect();
+
+        ranked.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for (drive_type, _) in ranked {
+            if let Some(action) = self.how_this_agent_answers(drive_type, agent, agent_position) {
+                return (action, false);
+            }
+        }
+
+        // Nothing is pressing and nothing is wanted, which is when an agent
+        // gets to follow its own nose: what it has just noticed, then what it
+        // had planned, then what it was working towards.
+        let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> =
+            agent.recent_percepts.iter().cloned().collect();
 
         if let Some(percept_action) = Self::generate_action_from_percepts(
             &recent_percepts,
@@ -1672,34 +2064,342 @@ impl Simulation {
             return (percept_action, false);
         }
 
-        // PRIORITY 11: Execute current plan step (if agent has an active plan)
         if agent.should_execute_plan() {
             if let Some(plan_action) = agent.get_plan_action() {
                 return (plan_action, true);
             }
         }
 
-        // PRIORITY 12: Check active goals and generate goal-directed action
         if let Some(goal) = agent.goals.highest_priority_goal() {
-            // Get most urgent drive for fallback
-            let fallback_drive = agent.drives.most_urgent()
-                .map(|d| d.drive_type)
+            let fallback_drive = agent
+                .what_presses_hardest()
                 .unwrap_or(DriveType::Curiosity);
 
-            if let Some(goal_action) = Self::generate_action_for_goal(&goal, agent_position, fallback_drive) {
+            if let Some(goal_action) =
+                Self::generate_action_for_goal(&goal, agent_position, fallback_drive)
+            {
                 return (goal_action, false);
             }
         }
 
-        // PRIORITY 13: Use drive-based action as fallback
-        let drive_type = agent.select_drive_with_happiness()
-            .or_else(|| agent.drives.most_urgent().map(|d| d.drive_type))
-            .unwrap_or(DriveType::Curiosity);
-
-        (Self::generate_action_for_drive(drive_type, agent_position), false)
+        (Action::Wait, false)
     }
 
+    /// How this agent would go about answering that need, if it can at all.
+    ///
+    /// `None` means this particular need has no answer available here and now -
+    /// a wish to build with nowhere to build, a wish for company with nobody
+    /// about - and the turn passes to whatever is pressing next. That is the
+    /// part the old ladder could not do: it had one fixed order for everybody
+    /// and no way for a need to stand aside.
+    fn how_this_agent_answers(
+        &self,
+        drive_type: DriveType,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        // "When an action fails to satisfy a drive, its odds of repeating
+        // should decrease. Inversely, when an action satisfies a drive, its
+        // odds of repeating should increase."
+        //
+        // Every attempt has been recorded against the particular thing tried
+        // since `Lessons` was written, and nothing but hunting ever read it
+        // back. So a settlement that could not put a roof up went on trying
+        // to for fifteen thousand ticks, and one whose thirsty men were
+        // nowhere near water asked for it a hundred and thirty thousand times.
+        //
+        // A drive that offers something this agent has learned does not work
+        // stands aside and lets the next drive have the turn. It is a
+        // slackening rather than a ban - see `Lessons::NEVER_QUITE_GIVES_UP` -
+        // so a man who has failed at something forty times still tries it now
+        // and again, which is how he finds out the world has changed.
+        let answer = self.what_this_drive_offers(drive_type, agent, agent_position)?;
+
+        if agent
+            .lessons
+            .will_try_this_again(&crate::agents::Agent::what_was_tried(&answer))
+        {
+            Some(answer)
+        } else {
+            None
+        }
+    }
+
+    fn what_this_drive_offers(
+        &self,
+        drive_type: DriveType,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        match drive_type {
+            // Water first of the two, always, because it runs out first - but
+            // that is now decided by the clocks in `how_hard_it_presses`
+            // rather than written down here
+            DriveType::Thirst => {
+                self.water_action(agent, agent_position, agent.state.is_dehydrated())
+            }
+
+            // Eat what is carried, go and get what is not, and failing both
+            // stand in a river or go after an animal
+            DriveType::Hunger => {
+                let starving = agent.state.is_starving() || agent.nutrition.is_starving();
+                self.food_action(agent, agent_position, starving)
+                    .or_else(|| self.fishing_action(agent, agent_position))
+                    .or_else(|| self.hunting_action(agent, agent_position))
+            }
+
+            DriveType::Rest => {
+                if agent.fatigue.is_sleeping {
+                    None
+                } else if let Some(clean) = self.somewhere_that_does_not_stink(agent_position) {
+                    // "Waste should smell unpleasant and repulse the agents."
+                    // Nobody lies down in it. This is the repulsion: a man who
+                    // wants to sleep and is standing on a midden moves off it
+                    // first, which over a settlement's life is what puts the
+                    // midden at the edge of the camp rather than in it.
+                    Some(Action::Move { target: clean })
+                } else {
+                    Some(Action::Sleep { duration: 10 })
+                }
+            }
+
+            // Being out of harm's way, and only while there is harm about
+            DriveType::Safety => {
+                let threatened = agent.surroundings.predator_near
+                    || agent.surroundings.recently_hurt;
+
+                if threatened && self.nearest_shelter_from(agent_position).is_some() {
+                    Some(Action::SeekShelter)
+                } else {
+                    None
+                }
+            }
+
+            // Everything that puts food on next year's table
+            DriveType::Sustenance => self
+                .cooking_action(agent, agent_position)
+                .or_else(|| self.muck_action(agent, agent_position))
+                .or_else(|| self.farming_action(agent, agent_position))
+                .or_else(|| self.transplanting_action(agent, agent_position))
+                .or_else(|| self.moving_on(agent, agent_position))
+                .or_else(|| self.fishing_action(agent, agent_position)),
+
+            // A coat is shelter you carry, and it comes before walking to a
+            // roof: an agent that goes indoors every time it feels the wind
+            // never gets around to dressing itself. Walking to a roof is worth
+            // a turn only when the weather is actually doing something.
+            DriveType::Shelter => self
+                .clothing_action(agent, agent_position, true)
+                .or_else(|| {
+                    let worth_going_in = agent.needs_shelter()
+                        || agent.body_temperature.is_too_cold()
+                        || agent.surroundings.foul_weather;
+
+                    if worth_going_in && !agent.surroundings.under_shelter {
+                        self.nearest_shelter_from(agent_position)
+                            .map(|_| Action::SeekShelter)
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| self.clothing_action(agent, agent_position, false)),
+
+            // A roof, when there is anything to make one from
+            DriveType::Construction => self.raising_a_roof(agent, agent_position),
+
+            // Looking after somebody of your own
+            DriveType::Protection => self.protective_action(agent, agent_position),
+
+            // Children, and only when this agent could actually have one and
+            // expects to be able to feed it. Without this an agent proposes to
+            // the empty air a third of every life - it was the single
+            // commonest thing anybody did.
+            DriveType::Reproduction => {
+                if !agent.should_attempt_reproduction() {
+                    return None;
+                }
+                self.somebody_to_have_a_child_with(agent, agent_position)
+                    .map(|them| Action::Mate {
+                        target_agent_id: them,
+                    })
+            }
+
+            // Making a thing needs something to make it out of, and a step
+            // that the makings in the pack will actually carry. Asking for a
+            // wooden axe was asking for a technology these people have not
+            // got: every one of those turns came back
+            // `missing technology 'wooden_tools'`.
+            // Reducing first, then assembling: a core has to be broken before
+            // there is a flake to haft. What each of these wants in the hand
+            // is the matrix's business and is enforced before it runs.
+            DriveType::Utility => agent
+                .what_i_would_work_on()
+                .map(|(verb, to)| Action::Work { verb, to })
+                .or_else(|| agent.what_i_would_make().map(|item_type| Action::Craft { item_type }))
+                .or_else(|| {
+                    // Somebody standing here with the thing, who wants what is
+                    // going spare. A trade is quicker than a walk.
+                    self.somebody_to_trade_with(agent, agent_position)
+                        .map(|with| Action::Trade { with })
+                })
+                // And a thing already lying on the ground is quicker than
+                // either: stooping is where scavenging belongs, beside going
+                // out to fetch a thing rather than ahead of making one out of
+                // what is already in the pack.
+                .or_else(|| self.something_worth_stooping_for(agent, agent_position))
+                .or_else(|| {
+                    agent
+                        .what_i_must_find()
+                        .map(|resource_type| Action::Gather { resource_type })
+                }),
+
+            // Putting something by needs something to put by
+            DriveType::Preparedness => {
+                if let Some((what, how_many)) = agent.what_i_can_spare() {
+                    Some(Action::Store {
+                        item_type: what,
+                        amount: how_many,
+                    })
+                } else {
+                    None
+                }
+            }
+            // Nothing in the world is fine enough to want yet - see
+            // ISSUES_FOUND.md #5. Until something is, this need has no answer
+            // and stands aside rather than spending the turn walking after a
+            // resource that does not exist.
+            DriveType::Luxury => None,
+
+            // A curious man picks up the bright stone he walked past.
+            //
+            // Nothing else in the model ever puts iron in a pack: no drive
+            // asks for it, because nobody yet knows what it is for. It gets
+            // picked up because it glitters, which is the only way anybody
+            // ever came to be holding one at a fire.
+            DriveType::Curiosity => {
+                // First, doing again the thing he has just worked out how to
+                // do. There is no use in mind for what comes out of it; that
+                // is the point. Nobody can want a metal knife until somebody
+                // has held a metal blade, and nobody holds one until somebody
+                // does the trick a second time for its own sake.
+                // Something growing underfoot that nobody has ever tried.
+                // This is where a people's larder comes from and where some
+                // of its people go: the only way to find out whether a plant
+                // is food is for somebody to eat one.
+                if let Some(action) = self.tasting_action(agent, agent_position) {
+                    return Some(action);
+                }
+
+                // Turning over something in the pack that might be for
+                // something. Cheaper than any other experiment - it costs the
+                // turn and nothing else.
+                if let Some(what) = agent.what_i_would_look_at() {
+                    return Some(Action::Examine { what });
+                }
+
+                // Doing something to a thing to see what it turns into. The
+                // cheapest kind of experiment there is: the materials are in
+                // the pack and the tool is in the hand either way.
+                if let Some((verb, to)) = agent.what_working_i_would_try_out() {
+                    return Some(Action::Work { verb, to });
+                }
+
+                // And putting the wrong thing where a part goes, which is
+                // how a people gets past the things it already knows how to
+                // make. Rare, because it costs the materials whether or not
+                // anything comes of it.
+                let feeling_experimental = {
+                    use rand::Rng;
+                    rand::thread_rng().gen_bool(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP)
+                };
+
+                if feeling_experimental {
+                    if let Some((instead_of_making, instead_of, put_in)) =
+                        agent.what_i_would_swap()
+                    {
+                        return Some(Action::TrySwapping {
+                            instead_of_making,
+                            instead_of,
+                            put_in,
+                        });
+                    }
+                }
+
+                if let Some(what) = agent.what_i_would_try_out() {
+                    // The conditions are checked here and not only in the
+                    // executor, because an agent that keeps asking for a thing
+                    // it cannot do here learns not to ask for it at all - see
+                    // `Lessons::will_try_this_again` - and would give up on
+                    // metalworking after a dozen turns spent away from a fire.
+                    let wants_a_fire = crate::environment::making::how_to_make(&what)
+                        .is_some_and(|step| step.over_a_fire);
+
+                    let can_do_it_here = !wants_a_fire
+                        || self
+                            .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+                            .is_some();
+
+                    if can_do_it_here {
+                        return Some(Action::Craft { item_type: what });
+                    }
+                }
+
+                let agent_has_none = agent.how_many_i_have("iron") < 2;
+                if agent_has_none && agent.have_i_seen("iron") {
+                    Some(Action::Gather {
+                        resource_type: "iron".to_string(),
+                    })
+                } else {
+                    Some(Self::generate_action_for_drive(drive_type, agent_position))
+                }
+            }
+
+            // Company needs somebody to keep it
+            DriveType::Social => {
+                if !agent.surroundings.company {
+                    return None;
+                }
+
+                // Handing somebody something they need is the plainest sociable
+                // act there is, and it costs the giver, which is what makes it
+                // one. It comes before talking because a gift says more.
+                if let Some(to) = self.somebody_to_give_to(agent, agent_position) {
+                    return Some(Action::GiveTo { to });
+                }
+
+                Some(Self::generate_action_for_drive(drive_type, agent_position))
+            }
+
+            // The rest keep the simple mapping they had
+            other => Some(Self::generate_action_for_drive(other, agent_position)),
+        }
+    }
+
+
     /// Execute an action in the environment and return the result
+    /// Which trade a thing taken off the land belongs to.
+    ///
+    /// The same split the experience grants already used, in one place, so
+    /// that what a hand is worth at a job and what the job teaches it are
+    /// never allowed to drift apart.
+    fn trade_for_gathering(
+        resource_type: crate::world::ResourceType,
+    ) -> crate::agents::skills::SkillType {
+        use crate::agents::skills::SkillType;
+        use crate::world::ResourceType;
+
+        match resource_type {
+            ResourceType::Wood => SkillType::Woodcutting,
+            ResourceType::Stone | ResourceType::Iron | ResourceType::Coal
+            | ResourceType::Clay | ResourceType::Sand => SkillType::Mining,
+            ResourceType::Grain => SkillType::Farming,
+            ResourceType::Food | ResourceType::Herbs => SkillType::Herbalism,
+            ResourceType::Flax | ResourceType::Cotton => SkillType::Farming,
+            ResourceType::Fish => SkillType::Fishing,
+            _ => SkillType::Herbalism,
+        }
+    }
+
     /// How far an agent will walk to reach a resource while foraging, in
     /// walking (Manhattan) distance
     const FORAGE_RADIUS: u32 = 25;
@@ -1767,6 +2467,653 @@ impl Simulation {
             format!("cooked_{}", base)
         } else {
             format!("burnt_{}", base)
+        }
+    }
+
+    /// How often a man in exactly the right position works out what he is
+    /// looking at.
+    ///
+    /// Set so that finding out is a thing that happens to a settlement over
+    /// seasons rather than to an individual over an afternoon: a curious agent
+    /// with the makings in his hands and a fire in front of him needs of the
+    /// order of a hundred turns of standing there.
+    const HOW_OFTEN_ANYBODY_WORKS_IT_OUT: f64 = 0.01;
+
+    /// Nobody works anything out while they are frightened or starving.
+    const CURIOUS_ENOUGH_TO_NOTICE: f32 = 0.25;
+
+    /// Somebody, somewhere, finds out how to do something new.
+    ///
+    /// This is the specification's "rock + fire = ?": the outcome of putting
+    /// two things together is not apparent until the conditions are right, and
+    /// then it is apparent all at once. Nothing here is a plan - an agent
+    /// cannot want a metal knife before anybody has seen metal - it is the
+    /// accident of standing in the right place holding the right things while
+    /// curious enough to be paying attention.
+    fn somebody_notices_something(&mut self) {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let mut found: Vec<(usize, &'static str)> = Vec::new();
+
+        for (index, agent) in self.population.agents.iter().enumerate() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let curiosity = agent
+                .drives
+                .get(crate::core::DriveType::Curiosity)
+                .map(|drive| drive.value)
+                .unwrap_or(0.0);
+            if curiosity < Self::CURIOUS_ENOUGH_TO_NOTICE {
+                continue;
+            }
+
+            let holding = |what: &str| agent.how_many_i_have(what);
+
+            for step in crate::environment::making::everything_to_find_out() {
+                if agent.knows_how_to(step) || !step.makings_to_hand(&holding) {
+                    continue;
+                }
+                if let Some(wanted) = step.wants_in_hand {
+                    if agent.how_many_i_have(wanted) == 0 {
+                        continue;
+                    }
+                }
+                if step.over_a_fire
+                    && self
+                        .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
+                        .is_none()
+                {
+                    continue;
+                }
+
+                // A practised hand notices sooner, because it knows what it
+                // is looking at.
+                let odds = Self::HOW_OFTEN_ANYBODY_WORKS_IT_OUT
+                    * curiosity as f64
+                    * agent.skills.hand_for(step.hands) as f64;
+
+                if rng.gen_bool(odds.clamp(0.0, 1.0)) {
+                    found.push((index, step.makes));
+                    break;
+                }
+            }
+        }
+
+        for (index, what) in found {
+            if self.population.agents[index].found_out_how_to(what) {
+                debug!(
+                    "Agent {} worked out how to make {what}",
+                    self.population.agents[index].id
+                );
+            }
+        }
+    }
+
+    /// How far a man will walk to get off fouled ground.
+    ///
+    /// Not far. The point is to step off the midden, not to leave the country.
+    const OFF_THE_MIDDEN: i32 = 3;
+
+    /// Clean ground within a step or two, for somebody standing on a midden.
+    ///
+    /// `None` when the ground underfoot is fine, which is the ordinary case
+    /// and costs one lookup.
+    fn somewhere_that_does_not_stink(
+        &self,
+        from: (i32, i32, i32),
+    ) -> Option<(i32, i32, i32)> {
+        use crate::world::Position;
+
+        let here = Position::new(from.0, from.1);
+        let underfoot = self.world.grid.get_tile(&here)?;
+        if !underfoot.soil.is_foul() {
+            return None;
+        }
+
+        let mut best: Option<((i32, i32, i32), f32)> = None;
+
+        for dy in -Self::OFF_THE_MIDDEN..=Self::OFF_THE_MIDDEN {
+            for dx in -Self::OFF_THE_MIDDEN..=Self::OFF_THE_MIDDEN {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+
+                let there = Position::new(from.0 + dx, from.1 + dy);
+                let Some(tile) = self.world.grid.get_tile(&there) else {
+                    continue;
+                };
+                if tile.soil.is_foul() || !tile.terrain.is_walkable() {
+                    continue;
+                }
+
+                // The nearest clean tile, so that this is a step aside rather
+                // than a march.
+                let how_far = (dx.abs() + dy.abs()) as f32;
+                if best.is_none_or(|(_, best_so_far)| how_far < best_so_far) {
+                    best = Some(((there.x, there.y, from.2), how_far));
+                }
+            }
+        }
+
+        best.map(|(where_it_is, _)| where_it_is)
+    }
+
+    /// What a midden turns into, once it has stopped being a midden.
+    ///
+    /// "If the agents are expelling their waste and piling it away from their
+    /// tents, then over time the waste should break down and seeds from the
+    /// plants they have eaten should sprout."
+    ///
+    /// Everything it needs is already on the tile: the seeds that came through
+    /// whole, the nutrient the rot released, and enough time for the smell to
+    /// go. When all three line up something comes up, and it is food, and
+    /// nobody planted it.
+    fn what_was_dropped_comes_up(&mut self) {
+        use crate::world::{Position, ResourceNode, ResourceType};
+
+        let mut came_up: Vec<Position> = Vec::new();
+
+        for (y, row) in self.world.grid.tiles.iter().enumerate() {
+            for (x, tile) in row.iter().enumerate() {
+                if tile.soil.ready_to_sprout() {
+                    came_up.push(Position::new(x as i32, y as i32));
+                }
+            }
+        }
+
+        for where_it_is in came_up {
+            // Not on top of something already growing there.
+            if self
+                .world
+                .resources
+                .iter()
+                .any(|resource| resource.position == where_it_is)
+            {
+                continue;
+            }
+
+            let seed = match self.world.grid.get_tile_mut(&where_it_is) {
+                Some(tile) => tile.soil.it_came_up(),
+                None => continue,
+            };
+
+            // What comes up is a volunteer, not a field: a few plants off one
+            // midden, and no bigger for a bigger midden.
+            let how_much = ((seed * Self::WHAT_A_MIDDEN_COMES_UP_IN).round() as u32).clamp(1, 8);
+
+            let mut volunteer =
+                ResourceNode::new(ResourceType::Food, where_it_is, how_much);
+            volunteer.amount = how_much;
+            self.world.resources.push(volunteer);
+
+            debug!("Something came up on the midden at {where_it_is:?}");
+
+            // And whoever is close enough to see it takes the lesson: what
+            // they threw away last season is standing here as food. This is
+            // the only thing in the world that teaches farming outright -
+            // everything else is somebody breaking ground on a hunch.
+            for agent in self
+                .population
+                .agents
+                .iter_mut()
+                .filter(|agent| agent.body.is_alive())
+            {
+                let apart = (agent.state.position.0 - where_it_is.x).abs()
+                    + (agent.state.position.1 - where_it_is.y).abs();
+
+                if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                    agent
+                        .practices
+                        .saw_it_work(crate::agents::practices::Practice::Farming);
+                }
+            }
+        }
+    }
+
+    /// What a fair trade is worth to a bond, and what a gift is.
+    ///
+    /// A gift is worth more, which is the whole difference between the two:
+    /// a trade leaves both parties square and a gift leaves one of them owing.
+    const WHAT_A_FAIR_TRADE_IS_WORTH: f32 = 0.15;
+    const WHAT_A_GIFT_IS_WORTH: f32 = 0.4;
+
+    /// How near two people have to be standing to hand anything over.
+    const CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER: i32 = 3;
+
+    /// What these two would swap, if anything: what the first has spare and
+    /// the second wants, and the other way round.
+    ///
+    /// "The agents should also use a barter system if they have an abundance
+    /// of something another agent wants and that agent has an abundance of
+    /// something they want." Both halves, and it returns `None` unless both
+    /// hold.
+    fn what_the_two_of_them_would_swap(
+        &self,
+        me: usize,
+        them: usize,
+    ) -> Option<((String, u32), (String, u32))> {
+        let mine = self.what_i_would_hand_over(me, them)?;
+        let theirs = self.what_i_would_hand_over(them, me)?;
+
+        if mine.0 == theirs.0 {
+            return None;
+        }
+
+        Some((mine, theirs))
+    }
+
+    /// What the first of these would hand the second, if anything.
+    ///
+    /// One-sided on purpose: it is what a gift is, and it is half of what a
+    /// trade is. Abundance is measured against the other pack rather than
+    /// against a number — what makes a thing worth handing over is that they
+    /// have much less of it than you do, which is a comparison and not a
+    /// threshold. The first cut of this asked for six of a thing on one side
+    /// and fewer than six on the other, and over eight worlds of ten thousand
+    /// ticks a settlement traded once.
+    fn what_i_would_hand_over(&self, me: usize, them: usize) -> Option<(String, u32)> {
+        let mine = self.population.agents[me].what_i_can_spare()?;
+
+        let they_have = self.population.agents[them].how_many_i_have(&mine.0);
+        let i_have = self.population.agents[me].how_many_i_have(&mine.0);
+
+        // They want it if they have markedly less of it than I do. A man with
+        // forty sticks and a man with thirty-eight are not trading partners.
+        if they_have * Self::WHAT_MAKES_IT_WORTH_HAVING >= i_have {
+            return None;
+        }
+
+        Some(mine)
+    }
+
+    /// How many times more of a thing you have to have before it is worth
+    /// somebody else's while to take it off you.
+    const WHAT_MAKES_IT_WORTH_HAVING: u32 = 2;
+
+    /// Somebody within reach worth trading with.
+    ///
+    /// Trust matters: you do not put a thing in the hands of somebody you
+    /// think would take it. What decides that is the same judgement that
+    /// decides whether to take their word - see `Agent::would_take_their_word`.
+    fn somebody_to_trade_with(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        let me = self
+            .population
+            .agents
+            .iter()
+            .position(|other| other.id == agent.id)?;
+
+        self.population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
+            .filter(|(_, them)| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            .filter(|(_, them)| agent.would_take_their_word(them.id, &them.traits))
+            .find(|(them, _)| self.what_the_two_of_them_would_swap(me, *them).is_some())
+            .map(|(_, them)| them.id)
+    }
+
+    /// How often turning a thing over in your hands tells you what it is for.
+    ///
+    /// Low, and scaled by the hand doing the turning. It has to be low: this
+    /// costs a turn and no materials, so if it were generous it would collapse
+    /// the whole chain into an afternoon spent looking at things.
+    const WHAT_LOOKING_CLOSELY_IS_WORTH: f32 = 0.06;
+
+    /// How far somebody will walk for a thing they can see lying on the ground.
+    const WORTH_WALKING_OVER_FOR: u32 = 12;
+
+    /// Something lying about that this agent has a use for.
+    ///
+    /// A thing on the ground is a thing somebody else made and did not take
+    /// with them: a worn axe beside a man who drowned, a spear thrown and not
+    /// recovered, whatever fell out of a full pack. Picking it up is the
+    /// cheapest way there is to get a tool, and it is why what a people makes
+    /// outlives the people who made it.
+    fn something_worth_stooping_for(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let short_of = agent.what_i_am_short_of();
+
+        // Worth having: something the chain wants that this pack is short of,
+        // or any tool at all - a spare axe is never wasted
+        let worth_it = |what: &str| {
+            short_of.contains(&what)
+                || crate::environment::making::EVERY_TOOL
+                    .iter()
+                    .any(|tool| tool.called == what)
+        };
+
+        // Underfoot first
+        if let Some(left) = self
+            .world
+            .what_is_lying_at(&here)
+            .into_iter()
+            .find(|left| worth_it(&left.item.item_id))
+        {
+            return Some(Action::PickUp {
+                what: left.item.item_id.clone(),
+            });
+        }
+
+        // Then anything close enough to be worth the walk
+        let there = self
+            .world
+            .dropped
+            .iter()
+            .filter(|left| worth_it(&left.item.item_id))
+            .map(|left| (left.where_it_is, here.distance_to(&left.where_it_is)))
+            .filter(|(_, apart)| *apart <= Self::WORTH_WALKING_OVER_FOR)
+            .min_by_key(|(_, apart)| *apart)
+            .map(|(where_it_is, _)| where_it_is)?;
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
+    }
+
+    /// How generous somebody has to feel about a person before handing them
+    /// anything for nothing.
+    ///
+    /// Higher than the bar for trading with them: a trade is square and a gift
+    /// is not, so it goes to people you actually think well of.
+    const WELL_ENOUGH_OF_THEM_TO_GIVE: f32 = 0.4;
+
+    /// Somebody within reach worth giving something to.
+    fn somebody_to_give_to(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        let me = self
+            .population
+            .agents
+            .iter()
+            .position(|other| other.id == agent.id)?;
+
+        let spare = agent.what_i_can_spare()?;
+
+        self.population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
+            .filter(|(_, them)| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            .filter(|(_, them)| {
+                agent.how_far_i_trust(them.id, &them.traits) >= Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+            })
+            .filter(|(_, them)| them.what_i_am_short_of().contains(&spare.0.as_str()))
+            .find(|(them, _)| self.what_i_would_hand_over(me, *them).is_some())
+            .map(|(_, them)| them.id)
+    }
+
+    /// How near you have to be standing to notice that the midden is growing.
+    const CLOSE_ENOUGH_TO_SEE_IT_COME_UP: i32 = 6;
+
+    /// What a mouthful of a strange plant that turns out to be food is worth.
+    const WHAT_ONE_MOUTHFUL_IS_WORTH: f32 = 60.0;
+
+    /// And what one that turns out not to be costs, in health.
+    ///
+    /// A person carries a hundred. The low end is a bad afternoon; the high
+    /// end kills somebody who was not in good condition to start with, which
+    /// is what makes tasting a thing a people does carefully and rarely.
+    const WHAT_A_BAD_PLANT_DOES: (f32, f32) = (12.0, 55.0);
+
+    /// Everything an agent might put in the ground, by what a pack calls it.
+    ///
+    /// Seed is not a separate thing an agent carries: a handful of the grain
+    /// in the pack is next year's field, which is exactly the choice a hungry
+    /// people has to make.
+    fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 6] {
+        use crate::world::ResourceType;
+
+        // The flag is whether it is worth breaking ground for when the thing
+        // driving you is hunger. Sprouted grain comes first because it is the
+        // one thing in the list that is visibly already doing what a field is
+        // for - a man holding it does not have to be told.
+        [
+            ("sproutedgrain", ResourceType::Grain, true),
+            ("grain", ResourceType::Grain, true),
+            ("food", ResourceType::Food, true),
+            ("flax", ResourceType::Flax, false),
+            ("cotton", ResourceType::Cotton, false),
+            ("herbs", ResourceType::Herbs, false),
+        ]
+    }
+
+    /// What this agent puts in the ground, given what it is carrying and what
+    /// it has come to think of each.
+    ///
+    /// Of the sowable things in the pack it picks the one its own record rates
+    /// best - which for an agent that has never farmed is whichever comes
+    /// first, and for one that has walked back to a field of berries three
+    /// autumns running is emphatically not berries. An agent carrying nothing
+    /// sowable puts in what it has been eating, and learns from that too.
+    fn what_this_one_would_sow(agent: &crate::agents::Agent) -> crate::world::ResourceType {
+        use crate::world::ResourceType;
+
+        let mut best: Option<(ResourceType, f32)> = None;
+
+        for (called, crop, feeds_anybody) in Self::what_can_be_sown() {
+            // A field is broken to answer hunger, so what goes in it is
+            // something a person can eat. The first cut of this let an agent
+            // sow whatever was in the pack, and over eight worlds the people
+            // put in flax and cotton and starved beside their own linen.
+            if !feeds_anybody {
+                continue;
+            }
+
+            if agent.how_many_i_have(called) == 0 {
+                continue;
+            }
+
+            let believed = agent
+                .lessons
+                .how_likely_to_try_this(&format!("sow:{called}"));
+
+            if best.map(|(_, so_far)| believed > so_far).unwrap_or(true) {
+                best = Some((crop, believed));
+            }
+        }
+
+        best.map(|(crop, _)| crop).unwrap_or(ResourceType::Food)
+    }
+
+    /// How much comes up off one tile's worth of seed.
+    const WHAT_A_MIDDEN_COMES_UP_IN: f32 = 8.0;
+
+    /// How wet it has to be under a pack before grain in it starts moving.
+    ///
+    /// Set against `Soil::humidity`, which reads the country and the sky
+    /// together: a wetland or a riverbank is wet enough standing still, a
+    /// forest floor is on the line, and open plains only get there when it is
+    /// actually raining. Dry ground under a clear sky never does.
+    const WET_ENOUGH_TO_START_IT: f32 = 0.7;
+
+    /// And how readily it goes, per tick, at that wetness.
+    ///
+    /// Slow: a handful of grain that gets rained on does not come up the same
+    /// afternoon. Over a wet season most of what a person is carrying will
+    /// have started, which is the point - the seed spoils as food and becomes
+    /// something else.
+    const HOW_READILY_GRAIN_TAKES: f32 = 0.01;
+
+    /// Grain carried in the wet stops being grain.
+    ///
+    /// "Something like grain getting wet should result in the grains
+    /// sprouting." Nobody does this on purpose. It is a thing that happens to
+    /// a pack in the rain, and it is the plainest lesson in the world about
+    /// what seed does, because it happens in the owner's hands.
+    fn what_got_wet_sprouts(&mut self) {
+        use crate::agents::InventoryItem;
+        use rand::Rng;
+
+        let raining = self
+            .world
+            .climate
+            .weather
+            .weather_type
+            .precipitation_intensity();
+
+        let mut rng = rand::thread_rng();
+
+        for index in 0..self.population.agents.len() {
+            if !self.population.agents[index].state.is_alive {
+                continue;
+            }
+
+            let where_it_stands = self.population.agents[index].state.position;
+
+            // Rain on the pack, or the wet of the ground it is set down on.
+            // A camp beside a river is a wet camp whatever the sky is doing.
+            let wet = self
+                .world
+                .grid
+                .get_tile(&crate::world::Position::new(where_it_stands.0, where_it_stands.1))
+                .map(|tile| {
+                    crate::world::Soil::humidity(tile.terrain.terrain_type, raining)
+                })
+                .unwrap_or(0.0);
+
+            if wet < Self::WET_ENOUGH_TO_START_IT {
+                continue;
+            }
+
+            let agent = &mut self.population.agents[index];
+
+            if agent.how_many_i_have("grain") == 0 {
+                continue;
+            }
+
+            if !rng.gen_bool((wet * Self::HOW_READILY_GRAIN_TAKES).clamp(0.0, 1.0) as f64) {
+                continue;
+            }
+
+            agent.inventory.remove_item("grain", 1);
+            agent.inventory.add_item(InventoryItem::new_with_weight(
+                "sproutedgrain".to_string(),
+                1,
+                0.5,
+            ));
+
+            debug!("Agent {} found the grain in its pack coming up", agent.id);
+        }
+    }
+
+    /// How readily a sprouted grain works its way out of a pack, per tick.
+    const WHAT_FALLS_OUT_OF_A_PACK: f64 = 0.02;
+
+    /// And what a plant grown from one carries when it is full grown.
+    const WHAT_ONE_SEED_COMES_TO: u32 = 30;
+
+    /// A sprouted grain dropped where it can grow, grows.
+    ///
+    /// "If sprouted grains are thrown out or dropped, they could grow into
+    /// adult plants." Nobody plants this. It falls out of a pack onto ground
+    /// somebody happened to be standing on, and the next time anybody walks
+    /// past there is a plant. Whoever is near enough to see it takes the
+    /// lesson, the same as with the midden - this is the second of the two
+    /// accidents that teach a people what seed is for.
+    fn what_was_dropped_takes_root(&mut self) {
+        use crate::world::{Position, ResourceNode, ResourceType};
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let mut took_root: Vec<Position> = Vec::new();
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            if agent.how_many_i_have("sproutedgrain") == 0 {
+                continue;
+            }
+
+            if !rng.gen_bool(Self::WHAT_FALLS_OUT_OF_A_PACK) {
+                continue;
+            }
+
+            agent.inventory.remove_item("sproutedgrain", 1);
+            took_root.push(Position::new(
+                agent.state.position.0,
+                agent.state.position.1,
+            ));
+        }
+
+        for where_it_fell in took_root {
+            // Not on rock, not in a river, and not on top of something already
+            // growing there
+            let can_grow = self
+                .world
+                .grid
+                .get_tile(&where_it_fell)
+                .map(|tile| {
+                    tile.terrain.can_be_tilled() || tile.terrain.is_cultivated()
+                })
+                .unwrap_or(false);
+
+            if !can_grow {
+                continue;
+            }
+
+            if self
+                .world
+                .resources
+                .iter()
+                .any(|resource| resource.position == where_it_fell)
+            {
+                continue;
+            }
+
+            let mut plant = ResourceNode::new(
+                ResourceType::Grain,
+                where_it_fell,
+                Self::WHAT_ONE_SEED_COMES_TO,
+            );
+            plant.amount = 1;
+            self.world.resources.push(plant);
+
+            debug!("A dropped grain took root at {where_it_fell:?}");
+
+            for agent in self
+                .population
+                .agents
+                .iter_mut()
+                .filter(|agent| agent.state.is_alive)
+            {
+                let apart = (agent.state.position.0 - where_it_fell.x).abs()
+                    + (agent.state.position.1 - where_it_fell.y).abs();
+
+                if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                    agent
+                        .practices
+                        .saw_it_work(crate::agents::practices::Practice::Farming);
+                }
+            }
         }
     }
 
@@ -2067,6 +3414,201 @@ impl Simulation {
     /// line of sight across the valley
     const HUNT_REACH: i32 = 2;
 
+
+
+    /// How far apart two people can be and still come to anything.
+    const CLOSE_ENOUGH_TO_COURT: i32 = 3;
+
+    /// Somebody worth having a child with.
+    ///
+    /// `resolve_action_target` filled a nil Mate target with whoever happened
+    /// to be nearest, which is neither a courtship nor a plan. Measured, Mate
+    /// was 19.7% of everything a settlement did and failed 99.9% of the time:
+    /// the target could not reproduce, or was too far off, or one of the two
+    /// was barely fertile. One birth per thousand-odd attempts.
+    ///
+    /// Three things decide it, and trust is the first of them. Somebody an
+    /// agent has not built up any confidence in is not somebody it will have a
+    /// child with, however close they are standing - and trust here is the
+    /// whole of what one agent thinks of another: the bond, whether they have
+    /// been straight with it before, and what sort of people they both are.
+    ///
+    /// Then the plain facts of the matter, so the attempt can actually come to
+    /// something: near enough, and a pair who could have a child at all.
+    fn somebody_to_have_a_child_with(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        use crate::agents::reproduction::{can_mate, MateSelectionCriteria};
+
+        let criteria = MateSelectionCriteria::default();
+
+        self.population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| {
+                let paces = (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs());
+                paces <= Self::CLOSE_ENOUGH_TO_COURT
+            })
+            .filter(|them| agent.would_take_their_word(them.id, &them.traits))
+            .filter(|them| can_mate(agent, them, &criteria))
+            .max_by(|a, b| {
+                let trust = |them: &&crate::agents::Agent| {
+                    agent.how_far_i_trust(them.id, &them.traits)
+                };
+                trust(a)
+                    .partial_cmp(&trust(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|them| them.id)
+    }
+
+    /// Putting a roof up, or going to fetch what it needs.
+    ///
+    /// Building was chosen without ever looking at what the agent was
+    /// carrying, so the Construction drive spent an eighth of a settlement's
+    /// life restating that it was short of materials. Measured, `Build` failed
+    /// 100.0% of the time and the commonest single reason was being
+    /// twenty-six wood and all thirty stone short of a house.
+    ///
+    /// An agent that has what a tent takes puts one up. An agent that does not
+    /// goes and gets the thing it is shortest of, which is the same answer a
+    /// person would give and turns a wasted turn into a useful one.
+    fn raising_a_roof(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::BuildingType;
+
+        // A tent is what a stone-age people can raise. Anything grander needs
+        // stone they have no way to quarry.
+        let wanted = BuildingType::SkinTent.requirements();
+
+        let short_of = wanted
+            .iter()
+            .filter_map(|needed| {
+                let name = format!("{:?}", needed.resource_type).to_lowercase();
+                let have = agent
+                    .inventory
+                    .get_item(&name)
+                    .map(|item| item.quantity)
+                    .unwrap_or(0);
+                if have >= needed.amount {
+                    None
+                } else {
+                    Some((name, needed.amount - have))
+                }
+            })
+            .max_by_key(|(_, missing)| *missing);
+
+        match short_of {
+            None => Some(Action::Build {
+                structure_type: "tent".to_string(),
+                position: agent_position,
+            }),
+
+            // Hides do not grow on bushes. Sending an agent to forage for them
+            // is a wild goose chase, and a measured one: eighteen thousand
+            // refusals of `No hides sources nearby` in a single world before
+            // this told the difference between what the ground gives and what
+            // has to be taken off an animal.
+            Some((what, _)) if what.contains("hide") || what.contains("leather") => {
+                self.hunting_action(agent, agent_position)
+            }
+
+            Some((what, _)) => Some(Action::Gather { resource_type: what }),
+        }
+    }
+
+    /// The bare name of an action, without whatever it is aimed at.
+    ///
+    /// `Gather { resource_type: "berries" }` and `Gather { resource_type:
+    /// "wood" }` are the same kind of day's work for counting purposes.
+    fn name_of(action: &Action) -> String {
+        let full = format!("{:?}", action);
+        match full.find(|c: char| c == ' ' || c == '{' || c == '(') {
+            Some(at) => full[..at].to_string(),
+            None => full,
+        }
+    }
+
+    /// Turn what a carcass drops into things an agent can actually use.
+    ///
+    /// A kill drops names from the fauna model - mutton, deer_meat, thick_hide
+    /// - that nothing downstream knows about, so meat that was never renamed
+    /// could not be cooked or eaten. This is where a carcass becomes food with
+    /// nutrition in it and skins that can become a coat.
+    ///
+    /// `with_a_knife` is what the tool in the butcher's hand multiplies the
+    /// carcass by - see `Agent::how_much_my_tools_help`. Taking a deer apart
+    /// with a sharp flake and taking it apart with your hands are not the
+    /// same job, and until now they were.
+    fn butcher(
+        &self,
+        dropped: &[crate::environment::ItemStack],
+        with_a_knife: f32,
+    ) -> Vec<crate::agents::InventoryItem> {
+        use crate::agents::InventoryItem;
+
+        let current_tick = self.current_tick;
+
+        // And how much there was on it to begin with, which is a question
+        // about the time of year - see `Climate::how_fat_the_beasts_are`.
+        let condition = self.world.climate.how_fat_the_beasts_are();
+
+        dropped
+            .iter()
+            .map(|stack| {
+                let off_the_carcass = ((stack.quantity as f32 * with_a_knife * condition).round()
+                    as u32)
+                    .max(1);
+                let item_id =
+                    crate::agents::storage_integration::butchered_item_id(&stack.material_id)
+                        .to_string();
+                let food_data = crate::agents::storage_integration::id_to_item_type(&item_id)
+                    .filter(|item_type| item_type.is_consumable())
+                    .and_then(|item_type| {
+                        self.food_database.create_food_data(&item_type, current_tick)
+                    });
+
+                // Two kilos is what an animal drop weighs unless something
+                // else says otherwise
+                let mut item = InventoryItem::new_with_weight(item_id, off_the_carcass, 2.0);
+                item.food_data = food_data;
+                item
+            })
+            .collect()
+    }
+
+    /// How often a throw tells, for somebody with no skill and no spear.
+    ///
+    /// Everything else - the hand, the shaft, being up on a horse - is added
+    /// to this. It was six in ten, which made hunting a matter of finding an
+    /// animal rather than of killing one.
+    const A_THROW_THAT_TELLS: f32 = 0.3;
+
+    /// What a throw that tells takes out of an animal.
+    const WHAT_ONE_THROW_TAKES_OUT_OF_IT: f32 = 0.35;
+
+    /// How often a throw that misses puts the shaft somewhere you have to go
+    /// and get it.
+    ///
+    /// Half. A spear is not spent by being thrown, it is mislaid by it, and
+    /// the difference between those two is a walk.
+    const HOW_OFTEN_A_MISS_LOSES_THE_SHAFT: f64 = 0.5;
+
+    /// What a throw costs, whether or not it lands.
+    ///
+    /// Hunting is walking, waiting, and throwing, and most of it comes to
+    /// nothing. Three or four throws to bring a deer down at twenty-two apiece
+    /// is a morning's work for a morning's meat.
+    const WHAT_A_THROW_COSTS: f32 = 22.0;
+
     /// How far an agent will go after prey it has spotted.
     ///
     /// Short on purpose. Crossing the map for a sheep costs more than the
@@ -2228,7 +3770,18 @@ impl Simulation {
     const A_GOOD_REACH: f32 = 60.0;
 
     /// What comes out of the water on a cast that works
-    const FISH_PER_CAST: u32 = 3;
+    const FISH_PER_CAST: u32 = 2;
+
+    /// How often a thrust tells in an empty reach, for somebody with nothing
+    /// in his hands.
+    ///
+    /// Everything worth having is added to this: the thickness of the run, the
+    /// hand, a rod, a spear. On its own it is a man standing in a river
+    /// hoping.
+    const A_THRUST_THAT_TELLS: f32 = 0.15;
+
+    /// What standing in the water costs, whether or not anything takes.
+    const WHAT_A_THRUST_COSTS: f32 = 8.0;
 
     /// What share of a fish is guts, heads and bone rather than meat.
     ///
@@ -2373,7 +3926,8 @@ impl Simulation {
         for (position, waste) in leavings {
             let here = Position::new(position.0, position.1);
             if let Some(tile) = self.world.grid.get_tile_mut(&here) {
-                tile.soil.add_leaf_litter(waste);
+                // Not just litter: a midden also has a smell and seeds in it.
+                tile.soil.somebody_voided_here(waste);
             }
         }
 
@@ -2385,6 +3939,404 @@ impl Simulation {
             if let Some(tile) = self.world.grid.get_tile_mut(&here) {
                 tile.soil.add_leaf_litter(soft);
                 tile.soil.add_woody_litter(bone);
+            }
+        }
+
+        self.what_the_dead_left_behind();
+    }
+
+    /// What a person was carrying stays where they fell.
+    ///
+    /// Everything a people makes used to go into the ground with whoever
+    /// happened to be holding it: an axe was a thing that existed for exactly
+    /// as long as its owner did. A pack falls where its owner does, and the
+    /// next person along can pick it up - which is most of how a stone-age
+    /// people ever accumulates anything at all.
+    fn what_the_dead_left_behind(&mut self) {
+        use crate::world::Position;
+
+        let left = std::mem::take(&mut self.population.what_the_dead_left);
+        let now = self.current_tick;
+
+        for (item, position) in left {
+            self.world
+                .somebody_left_this(item, Position::new(position.0, position.1), now);
+        }
+    }
+
+    /// How far off something has to be before it stops being this agent's
+    /// problem
+    const CLOSE_ENOUGH_TO_WORRY_ABOUT: i32 = 10;
+
+    /// How far a frightened agent puts between itself and the thing
+    ///
+    /// Far enough to be out of the range at which it would appraise the thing
+    /// again, or it runs one pace, looks round, and runs one pace again.
+    const FAR_ENOUGH_AWAY: i32 = Self::CLOSE_ENOUGH_TO_WORRY_ABOUT + 5;
+
+    /// How far an angry agent will go to reach the thing it is angry at
+    const WITHIN_A_STEP_OR_TWO: i32 = 5;
+
+    /// The nearest living animal of a named kind, and how far off it is.
+    ///
+    /// An agent's fear and anger are held against a species name rather than
+    /// against a particular animal - it is afraid of wolves, not of wolf #4 -
+    /// so acting on the feeling means finding which wolf it can see.
+    fn nearest_of_kind(
+        &self,
+        kind: &str,
+        from: (i32, i32, i32),
+    ) -> Option<(uuid::Uuid, (i32, i32), i32)> {
+        self.world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated)
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                if species.name != kind {
+                    return None;
+                }
+
+                let paces = (animal.position.0 - from.0)
+                    .abs()
+                    .max((animal.position.1 - from.1).abs());
+                if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                    return None;
+                }
+
+                Some((animal.id, animal.position, paces))
+            })
+            .min_by_key(|(_, _, paces)| *paces)
+    }
+
+    /// Go, and put the thing behind you.
+    ///
+    /// The flight branch of action selection was keyed on `last_attacker`,
+    /// which is only ever another agent, so an agent frightened of a wolf fell
+    /// straight through it and carried on foraging with the wolf at its elbow.
+    /// Fear of a creature now moves the agent directly away from it.
+    fn run_from_what_frightens_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (kind, _) = agent.emotions.what_frightens_me_most()?;
+        let (_, where_it_is, _) = self.nearest_of_kind(kind, agent_position)?;
+
+        Some(Self::put_ground_between(agent_position, (where_it_is.0, where_it_is.1)))
+    }
+
+    /// Head off in the opposite direction, far enough not to arrive back where
+    /// you started worrying.
+    fn put_ground_between(from: (i32, i32, i32), away_from: (i32, i32)) -> Action {
+        let dx = from.0 - away_from.0;
+        let dy = from.1 - away_from.1;
+
+        // Standing on top of it, which should not happen, is still a reason to
+        // be somewhere else
+        let span = ((dx * dx + dy * dy) as f32).sqrt();
+        let (dx, dy, span) = if span < 1.0 { (1, 0, 1.0) } else { (dx, dy, span) };
+
+        let far = Self::FAR_ENOUGH_AWAY as f32;
+        Action::Move {
+            target: (
+                from.0 + (dx as f32 / span * far) as i32,
+                from.1 + (dy as f32 / span * far) as i32,
+                from.2,
+            ),
+        }
+    }
+
+
+    /// How much an agent has to resent one particular person before it will do
+    /// anything about it.
+    ///
+    /// Read per person rather than off the total, because `should_attack` sums
+    /// every source: three mild grudges of 0.2 read as a man ready to fight,
+    /// and there is nobody he is actually ready to fight.
+    const ENOUGH_TO_ROUND_ON_SOMEBODY: f32 = 0.5;
+
+    /// Square up to the people you resent, or shrink from them.
+    ///
+    /// A grudge is the reason; whether it comes out as standing up or backing
+    /// down is the same appraisal a wolf gets. Measured before this existed,
+    /// anger at people ran at 0.806 for every agent that read as ready to
+    /// fight and anger at creatures at 0.025 - so nearly all the anger in the
+    /// model was a grudge against somebody, held against them for life,
+    /// decaying at one per cent a tick and with no way to be acted on at all.
+    ///
+    /// The grudge itself is not touched. Only which feeling it comes out as.
+    fn square_up_to_the_people_i_resent(&mut self) {
+        let standing: Vec<(uuid::Uuid, (i32, i32, i32), f32, bool)> = self
+            .population
+            .agents
+            .iter()
+            .map(|agent| {
+                (
+                    agent.id,
+                    agent.state.position,
+                    agent.own_strength(),
+                    agent.state.is_alive,
+                )
+            })
+            .collect();
+
+        for index in 0..self.population.agents.len() {
+            let (mine, from) = {
+                let agent = &self.population.agents[index];
+                if !agent.state.is_alive {
+                    continue;
+                }
+                (agent.own_strength(), agent.state.position)
+            };
+
+            let resented: Vec<(uuid::Uuid, f32)> = {
+                let agent = &self.population.agents[index];
+                agent
+                    .emotions
+                    .anger_at_people()
+                    .into_iter()
+                    .filter(|(_, held)| *held >= Self::ENOUGH_TO_ROUND_ON_SOMEBODY)
+                    .collect()
+            };
+
+            for (who, held) in resented {
+                let Some((_, where_they_are, theirs, alive)) =
+                    standing.iter().copied().find(|(id, ..)| *id == who)
+                else {
+                    continue;
+                };
+                if !alive {
+                    continue;
+                }
+
+                let paces = (where_they_are.0 - from.0)
+                    .abs()
+                    .max((where_they_are.1 - from.1).abs());
+
+                let agent = &mut self.population.agents[index];
+
+                // Out of sight is not out of mind - the grudge stands - but
+                // there is nothing to shrink from, and leaving the fear
+                // standing would keep the agent running from an empty field
+                // and keep it below the bar for ever squaring up to anybody.
+                if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                    agent
+                        .emotions
+                        .set_fear(crate::agents::EmotionSource::Agent(who), 0.0);
+                    continue;
+                }
+
+                if theirs > mine {
+                    // You cannot take them. What you feel about them is the
+                    // same; what you will do about it is get out of the way.
+                    let nearness = 1.0
+                        - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
+                    agent.emotions.set_fear(
+                        crate::agents::EmotionSource::Agent(who),
+                        held * nearness,
+                    );
+                } else {
+                    // You can, so it stays anger and stays where it was
+                    agent
+                        .emotions
+                        .set_fear(crate::agents::EmotionSource::Agent(who), 0.0);
+                }
+            }
+        }
+    }
+
+    /// Turn on the person you resent, if they are within arm's reach.
+    ///
+    /// Gated on the grudge against that one person rather than on total anger,
+    /// and on the agent reckoning it can take them - which the appraisal above
+    /// has already decided by turning the hopeless cases into fear.
+    fn round_on_whoever_angers_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (who, held) = agent.emotions.who_angers_me_most()?;
+        if held < Self::ENOUGH_TO_ROUND_ON_SOMEBODY {
+            return None;
+        }
+
+        let them = self
+            .population
+            .agents
+            .iter()
+            .find(|other| other.id == who && other.state.is_alive)?;
+
+        // Nobody raises a hand to a child, and nobody to their own parent
+        if them.state.life_stage == crate::agents::LifeStage::Infant
+            || them.state.life_stage == crate::agents::LifeStage::Child
+            || them.parent_ids.contains(&agent.id)
+            || agent.parent_ids.contains(&who)
+        {
+            return None;
+        }
+
+        let paces = (them.state.position.0 - agent_position.0)
+            .abs()
+            .max((them.state.position.1 - agent_position.1).abs());
+        if paces > Self::HUNT_REACH {
+            return None;
+        }
+
+        Some(Action::Attack {
+            target_agent_id: who,
+            weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+        })
+    }
+
+    /// Get away from the person you are afraid of.
+    fn run_from_whoever_frightens_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (who, _) = agent.emotions.who_frightens_me_most()?;
+        let them = self
+            .population
+            .agents
+            .iter()
+            .find(|other| other.id == who && other.state.is_alive)?;
+
+        let where_they_are = them.state.position;
+        let paces = (where_they_are.0 - agent_position.0)
+            .abs()
+            .max((where_they_are.1 - agent_position.1).abs());
+        if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+            return None;
+        }
+
+        Some(Self::put_ground_between(
+            agent_position,
+            (where_they_are.0, where_they_are.1),
+        ))
+    }
+
+    /// Turn on the thing, if it is close enough to hit.
+    ///
+    /// An angry agent stands its ground; it does not cross the map looking for
+    /// a fight. Anything out of arm's reach is left alone and the agent gets on
+    /// with its day, which is also what keeps a settlement from spending a
+    /// quarter of its life walking towards wolves.
+    fn round_on_what_angers_me(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let (kind, _) = agent.emotions.what_angers_me_most()?;
+        let (which, where_it_is, paces) = self.nearest_of_kind(kind, agent_position)?;
+
+        if paces <= Self::HUNT_REACH {
+            return Some(Action::Fight {
+                animal_id: which,
+                weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+            });
+        }
+
+        // Close the last pace or two, but no further. The appraisal already
+        // scales a creature's strength by how near it is, so anything that
+        // angers an agent past the threshold is close by anyway - this is for
+        // the wolf that is nearly in reach, not the one across the field.
+        if paces <= Self::WITHIN_A_STEP_OR_TWO {
+            return Some(Action::Move {
+                target: (where_it_is.0, where_it_is.1, agent_position.2),
+            });
+        }
+
+        None
+    }
+
+    /// What share of what an agent has left counts as having got off lightly
+    const A_SCRATCH: f32 = 0.25;
+
+    /// Feel about whatever is standing between an agent and what it needs.
+    ///
+    /// The specification, in two questions. Does a thing threaten my ability
+    /// to satisfy my drives - and if so, can I fight it? Did a thing prevent
+    /// it - and if so, can I fight *that*? Where the answer is yes it comes
+    /// out as anger and the agent stands its ground; where it is no it comes
+    /// out as fear and the agent goes.
+    ///
+    /// `ThreatAssessment` has always turned coping potential into one or the
+    /// other, and `respond_to_threat` has always called it. What was missing
+    /// was anything to call `respond_to_threat` except the resolution of a
+    /// blow that had already landed: a wolf ten paces off and closing
+    /// produced no feeling at all until it bit somebody. Measured over three
+    /// worlds, mean fear ran at 0.01 to 0.06 and mean anger at exactly zero,
+    /// and not one agent in a hundred and seventy ever reached the 0.6 that
+    /// `should_flee` wants - so the branch of `generate_action` that lets an
+    /// agent run or fight never once fired.
+    fn feel_about_what_stands_in_the_way(&mut self) {
+        // What is out there, and how much of a match each one is
+        let hunters: Vec<((i32, i32), f32, String)> = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated)
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                if species.attack_damage <= 0.0 {
+                    return None;
+                }
+
+                // What it is worth in a fight, on the same scale an agent
+                // reckons itself on: a healthy body, and what it can do with it
+                let condition = (animal.current_health / species.health.max(1.0)).clamp(0.0, 1.0);
+                let menace = (species.attack_damage / 20.0).clamp(0.1, 2.0);
+
+                Some((
+                    (animal.position.0, animal.position.1),
+                    condition * menace,
+                    species.name.clone(),
+                ))
+            })
+            .collect();
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let (x, y, _) = agent.state.position;
+
+            // The worst thing within sight of this agent, if anything
+            let worst = hunters
+                .iter()
+                .filter_map(|((hx, hy), strength, what)| {
+                    let paces = (hx - x).abs().max((hy - y).abs());
+                    if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                        return None;
+                    }
+
+                    // A wolf across the field is not the wolf at your elbow.
+                    // Without this an agent felt the full weight of anything
+                    // within ten paces, and spent a third of its life angry at
+                    // something it could barely see.
+                    let nearness = 1.0
+                        - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
+
+                    Some((strength * nearness, what))
+                })
+                .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+            match worst {
+                Some((strength, what)) => {
+                    agent.appraise_what_is_there(
+                        strength,
+                        crate::agents::EmotionSource::Creature(what.clone()),
+                    );
+                }
+                None => {
+                    // Nothing is stalking this one, so whatever it was
+                    // frightened of has gone
+                    agent.emotions.nothing_is_stalking_me();
+                }
             }
         }
     }
@@ -2819,8 +4771,46 @@ impl Simulation {
             return None;
         }
 
+        // A standing field that has gone over to weeds is worth more than a
+        // new one. "Farmers should not just drop seeds and get crops" - a
+        // field neglected for a season carries almost nothing, and going round
+        // it pulling weeds and picking pests off is most of what growing a
+        // crop consists of.
+        if let Some(field) = self.field_wanting_work(agent_position) {
+            if field.x == agent_position.0 && field.y == agent_position.1 {
+                return Some(Action::TendField);
+            }
+
+            return Some(Action::Move {
+                target: (field.x, field.y, agent_position.2),
+            });
+        }
+
         // Enough fields around here already
         if self.fields_within(agent_position, Self::FIELD_WALK_RADIUS) >= Self::FIELDS_WANTED {
+            return None;
+        }
+
+        // And breaking new ground is a thing that has to be worked out first.
+        // Until an agent has seen food come up out of ground somebody put seed
+        // in, spending a day digging grass over is a strange way to answer
+        // hunger, and it does it only out of curiosity.
+        let curiosity = agent
+            .drives
+            .get(DriveType::Curiosity)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0);
+
+        let roll = {
+            use rand::Rng;
+            rand::thread_rng().gen::<f32>()
+        };
+
+        if !agent.practices.would_try(
+            crate::agents::practices::Practice::Farming,
+            curiosity,
+            roll,
+        ) {
             return None;
         }
 
@@ -2833,6 +4823,303 @@ impl Simulation {
         Some(Action::Move {
             target: (ground.x, ground.y, agent_position.2),
         })
+    }
+
+    /// How near the camp a plant has to stand before nobody would bother
+    /// moving it, and how near a cutting has to be put in for the move to have
+    /// been worth making.
+    const A_SHORT_WALK: u32 = 6;
+
+    /// How many people standing together make a camp, when there is no roof up
+    /// yet to mark one.
+    const ENOUGH_PEOPLE_TO_BE_A_CAMP: u32 = 3;
+
+    /// How much of a plant comes away as a cutting, and how much the slip
+    /// grows into once it is in.
+    ///
+    /// The first cut of this took three units off the parent and grew into a
+    /// plant carrying forty, and left the parent as big as it was. Over eight
+    /// worlds the people planted two hundred slips apiece and the food
+    /// standing on the map went up six times: transplanting was not moving
+    /// food about, it was manufacturing it out of nothing.
+    ///
+    /// A slip is a piece of the plant. It comes off the parent's carrying
+    /// capacity and not only off this year's crop, and what it grows into is
+    /// somewhat more than what it cost - because a plant put in open ground
+    /// with nobody's roots against it does better than one more stem on a
+    /// crowded patch. Somewhat, not thirteen times.
+    const WHAT_A_CUTTING_TAKES: u32 = 8;
+    const WHAT_A_CUTTING_STARTS_WITH: u32 = 2;
+    const WHAT_A_MOVED_PLANT_COMES_TO: u32 = 20;
+
+    /// And how small a patch has to be before nobody digs any more out of it.
+    const TOO_THIN_TO_DIG: u32 = 12;
+
+    /// Where the camp is, from where this agent is standing.
+    ///
+    /// There is no settlement object in this model - see ISSUES_FOUND #11 -
+    /// so a camp is the nearest roof, and failing that the middle of whatever
+    /// knot of people the agent is standing in. Both are rough and both are
+    /// good enough to answer "is this plant near where I live".
+    fn where_the_camp_is(&self, position: (i32, i32, i32)) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        // The people first, and the roof only when there are not enough of
+        // them about to make a camp. `nearest_shelter_from` searches out from
+        // wherever the agent is standing, so for a man twenty tiles out on the
+        // moor it answers "the nearest cave to the moor", which is not his
+        // home and is exactly the wrong answer to what this asks.
+        let reach = Self::FORAGE_RADIUS as i32;
+
+        let neighbours: Vec<(i32, i32)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| (agent.state.position.0, agent.state.position.1))
+            .filter(|(x, y)| {
+                (x - position.0).abs() <= reach && (y - position.1).abs() <= reach
+            })
+            .collect();
+
+        if (neighbours.len() as u32) >= Self::ENOUGH_PEOPLE_TO_BE_A_CAMP {
+            return Some(Position::new(
+                neighbours.iter().map(|(x, _)| x).sum::<i32>() / neighbours.len() as i32,
+                neighbours.iter().map(|(_, y)| y).sum::<i32>() / neighbours.len() as i32,
+            ));
+        }
+
+        self.nearest_shelter_from(position)
+    }
+
+    /// Moving a plant that is known to be good to ground beside the camp.
+    ///
+    /// This is the third way into farming and the one that needs no seed and
+    /// no theory at all. A person who walks half a morning to the same berry
+    /// bush every day, and who has already dug up plants for one reason or
+    /// another, eventually digs up that one and puts it in beside the tents.
+    /// It is not an idea about agriculture. It is an idea about the walk.
+    ///
+    /// Two halves: lift a piece of something growing a long way off, and put
+    /// it in the ground where you live. What it teaches is taught by the
+    /// plant standing there afterwards, which is `record_outcome` on the
+    /// harvest like any other crop.
+    fn transplanting_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let camp = self.where_the_camp_is(agent_position)?;
+
+        // Carrying one already: get it in the ground somewhere near home
+        if let Some(cutting) = Self::a_cutting_in_the_pack(agent) {
+            let _ = cutting;
+
+            if camp.distance_to(&here) > Self::A_SHORT_WALK {
+                return Some(Action::Move {
+                    target: (camp.x, camp.y, agent_position.2),
+                });
+            }
+
+            let can_carry_it = self
+                .world
+                .grid
+                .get_tile(&here)
+                .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+                .unwrap_or(false);
+
+            let taken = self
+                .world
+                .resources
+                .iter()
+                .any(|resource| resource.position == here);
+
+            if can_carry_it && !taken {
+                return Some(Action::PlantCutting);
+            }
+
+            // Standing on the wrong tile at home: step to one that will do
+            let spot = self.ground_to_break((camp.x, camp.y, agent_position.2))?;
+            if spot != here {
+                return Some(Action::Move {
+                    target: (spot.x, spot.y, agent_position.2),
+                });
+            }
+
+            return None;
+        }
+
+        // Nothing carried: lift a piece of whatever is standing here, if it is
+        // worth lifting - which means it is a long way from home and there is
+        // something growing here that is known to be good
+        if camp.distance_to(&here) <= Self::A_SHORT_WALK {
+            return None;
+        }
+
+        // The first thing growing here that is worth lifting - not the first
+        // thing growing here. A tile can carry more than one, and a strange
+        // plant nobody has tried standing on the same ground as a berry bush
+        // was enough to hide the bush.
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| {
+                resource.position == here
+                    && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                    && resource.max_amount > Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
+            })
+            .find(|resource| {
+                Self::what_can_be_sown()
+                    .into_iter()
+                    .any(|(_, crop, _)| crop == resource.resource_type)
+            })
+            .map(|_| Action::TakeCutting)
+    }
+
+    /// How often a curious man with a pack full of parts tries putting the
+    /// wrong one in the right place.
+    ///
+    /// Low, and it is meant to be. Each try costs the makings of a spear, and
+    /// the great majority of them come to nothing at all.
+    const HOW_OFTEN_ANYBODY_TRIES_A_SWAP: f64 = 0.04;
+
+    /// How willing somebody has to be before they put a strange plant in
+    /// their mouth.
+    ///
+    /// Set against the Curiosity drive rather than a trait, because this is a
+    /// thing done on an idle afternoon by somebody with nothing pressing on
+    /// them - never by a man with a wolf behind him, and only rarely by
+    /// anybody.
+    const CURIOUS_ENOUGH_TO_EAT_IT: f32 = 0.55;
+
+    /// And how often even a curious man actually does it, per chance.
+    ///
+    /// Low. A person who walks past a strange plant every day for years
+    /// eventually tries one; a person who tries every plant he passes does not
+    /// get to be a person for long.
+    ///
+    /// This is the chance of setting out towards one, not of eating it: a man
+    /// who has walked to the plant eats it. Rolling again on arrival, which is
+    /// what the first cut did, compounded a small chance against itself once
+    /// per tick of the walk and meant nobody in eight worlds ever arrived.
+    const HOW_OFTEN_ANYBODY_RISKS_IT: f64 = 0.06;
+
+    /// Trying an unknown plant.
+    fn tasting_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::{Position, ResourceType};
+        use rand::Rng;
+
+        // Not while anything is actually wrong. A hungry man eating a strange
+        // plant is a different story and a worse one; this is the idle
+        // curiosity that finds things out cheaply.
+        if !agent.immediate_needs_met() {
+            return None;
+        }
+
+        let curious = agent
+            .drives
+            .get(DriveType::Curiosity)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0);
+
+        if curious < Self::CURIOUS_ENOUGH_TO_EAT_IT {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        // The nearest one of a sort nobody here has an opinion about. The
+        // first cut of this asked the agent to be standing exactly on the
+        // plant, and over eight worlds of ten thousand ticks not one person
+        // ever tried anything: sixteen tiles in ten thousand is not a thing
+        // that happens by accident.
+        let strange = self
+            .world
+            .resources
+            .iter()
+            .filter(|resource| {
+                resource.resource_type == ResourceType::StrangePlant && resource.amount > 0
+            })
+            .filter(|resource| !agent.have_i_tried_that_plant(resource.kind))
+            .map(|resource| (resource.position, here.distance_to(&resource.position)))
+            .filter(|(_, apart)| *apart <= Self::FORAGE_RADIUS)
+            .min_by_key(|(_, apart)| *apart)
+            .map(|(where_it_is, _)| where_it_is)?;
+
+        // Standing on it already: the walk was the deciding, and re-deciding
+        // on arrival is what kept anybody from ever getting there. The roll is
+        // made once, to set out.
+        if strange == here {
+            return Some(Action::Taste);
+        }
+
+        if !rand::thread_rng().gen_bool(Self::HOW_OFTEN_ANYBODY_RISKS_IT) {
+            return None;
+        }
+
+        Some(Action::Move {
+            target: (strange.x, strange.y, agent_position.2),
+        })
+    }
+
+    /// What a cutting of a named crop is called in a pack
+    fn a_cutting_of(called: &str) -> String {
+        format!("{called}cutting")
+    }
+
+    /// The cutting this agent is carrying, if any
+    fn a_cutting_in_the_pack(
+        agent: &crate::agents::Agent,
+    ) -> Option<(&'static str, crate::world::ResourceType)> {
+        Self::what_can_be_sown()
+            .into_iter()
+            .find(|(called, _, _)| agent.how_many_i_have(&Self::a_cutting_of(called)) > 0)
+            .map(|(called, crop, _)| (called, crop))
+    }
+
+    /// The nearest field within reach that has gone over to weeds and pests
+    fn field_wanting_work(
+        &self,
+        position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        let from = Position::new(position.0, position.1);
+        let reach = Self::FIELD_WALK_RADIUS as i32;
+
+        let mut best: Option<(Position, u32)> = None;
+
+        for dx in -reach..=reach {
+            for dy in -reach..=reach {
+                let candidate = Position::new(from.x + dx, from.y + dy);
+
+                let Some(tile) = self.world.grid.get_tile(&candidate) else {
+                    continue;
+                };
+
+                if !tile.terrain.is_cultivated() || !tile.soil.wants_working() {
+                    continue;
+                }
+
+                let distance = from.distance_to(&candidate);
+                if distance > Self::FIELD_WALK_RADIUS {
+                    continue;
+                }
+
+                if best.map(|(_, apart)| distance < apart).unwrap_or(true) {
+                    best = Some((candidate, distance));
+                }
+            }
+        }
+
+        best.map(|(where_it_is, _)| where_it_is)
     }
 
     /// Getting dressed, in whatever order the situation needs: put on what is
@@ -3206,6 +5493,24 @@ impl Simulation {
             }
         }
 
+        // A midden. "Waste should smell unpleasant and repulse the agents":
+        // this is the smell of it. It reaches further than a berry does and
+        // nowhere near as far as a cooking fire, which is about right for
+        // something you notice when you are nearly standing in it.
+        for (y, row) in self.world.grid.tiles.iter().enumerate() {
+            for (x, tile) in row.iter().enumerate() {
+                if !tile.soil.is_foul() {
+                    continue;
+                }
+
+                let here = (x as i32, y as i32, 0);
+                let strength = (tile.soil.fouling
+                    / crate::world::soil::Soil::AS_FOUL_AS_IT_GETS)
+                    .clamp(0.0, 1.0);
+                sources.push((here, ScentType::Decay, strength));
+            }
+        }
+
         // A lit fire with food in it: the strongest smell there is, and the one
         // a nose is really for.
         //
@@ -3411,12 +5716,66 @@ impl Simulation {
             .unwrap_or(false)
     }
 
+    /// Whether the hands doing this have what the verb wants in them.
+    ///
+    /// Returns what is missing, or `None` when the action can go ahead. The
+    /// requirement comes from the matrix rather than from here: this function
+    /// knows how to ask an agent what it is holding and nothing else about
+    /// which verbs want what.
+    fn what_these_hands_are_short_of(
+        &self,
+        action: &Action,
+        agent_index: usize,
+    ) -> Option<String> {
+        use crate::environment::verbs;
+
+        let agent = &self.population.agents[agent_index];
+
+        // The action's bare name, which is how the matrix refers to it:
+        // "gather:wood" is a gather
+        let tried = crate::agents::Agent::what_was_tried(action);
+        let named = tried.split(':').next().unwrap_or(&tried);
+
+        let wanted = verbs::what_this_action_cannot_do_without(named);
+        if wanted.is_empty() {
+            return None;
+        }
+
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let helped_by = |trade| agent.what_i_have_to_work_with(trade).is_some();
+        let a_hand_to_spare = agent.a_hand_to_spare();
+
+        wanted
+            .into_iter()
+            .find(|wants| !wants.satisfied_by(&holding, &helped_by, a_hand_to_spare))
+            .map(|wants| match wants {
+                verbs::Wants::ThisInHand(what) => format!("No {what} in hand for that"),
+                verbs::Wants::AToolFor(trade) => {
+                    format!("Nothing in hand that is any use for {}", trade.name())
+                }
+                verbs::Wants::AFreeHand => "Both hands full".to_string(),
+                verbs::Wants::BareHands => "Nothing wanting".to_string(),
+            })
+    }
+
     fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
         use rand::Rng;
         use crate::world::nutrition::CookingOutcome;
         use crate::world::Position;
 
         let mut rng = rand::thread_rng();
+
+        // Doing the work is what keeps a hand in it - see
+        // `Skills::let_unused_skills_rust`
+        let tick_now = self.current_tick;
+
+        // What the verb matrix says this cannot be done without. One check
+        // here, from one table, rather than thirty arms each deciding for
+        // themselves whether a man needs a knife to skin something - see
+        // `environment::verbs`.
+        if let Some(missing) = self.what_these_hands_are_short_of(action, agent_index) {
+            return ActionResult::failure(missing);
+        }
 
         match action {
             Action::Eat { food_type } => {
@@ -3583,6 +5942,13 @@ impl Simulation {
                     "stone" => Some(ResourceType::Stone),
                     "iron" => Some(ResourceType::Iron),
                     "food" => Some(ResourceType::Food),
+                    // Wild grain stands in the world and there was no way to
+                    // ask for it by name: a request for grain fell through to
+                    // "unknown resource type" and failed. It came back only as
+                    // an edible substitute for a request for food, which is
+                    // how a people that had never handled grain came to have
+                    // none of it to sow.
+                    "grain" => Some(ResourceType::Grain),
                     "water" => Some(ResourceType::Water),
                     // Clothing materials. Flax and cotton grow in patches an
                     // agent can walk to; hides and wool come off animals, so
@@ -3614,9 +5980,19 @@ impl Simulation {
                 let gathering_food = resource_type_enum == ResourceType::Food;
 
                 let mut nearest_resource: Option<(usize, u32)> = None;
+                // What this particular person will accept as food. Everybody
+                // takes berries; only somebody who has seen a strange plant
+                // eaten and survived will pick one.
+                let knows_it_is_food = |resource: &crate::world::ResourceNode| {
+                    resource.resource_type == ResourceType::StrangePlant
+                        && self.population.agents[agent_index].is_that_plant_food(resource.kind)
+                };
+
                 for (i, resource) in self.world.resources.iter().enumerate() {
                     let matches_request = resource.resource_type == resource_type_enum
-                        || (gathering_food && Self::edible_item_for(resource.resource_type).is_some());
+                        || (gathering_food
+                            && (Self::edible_item_for(resource.resource_type).is_some()
+                                || knows_it_is_food(resource)));
 
                     if matches_request && resource.amount > 0 {
                         let distance = agent_pos.distance_to(&resource.position);
@@ -3634,11 +6010,18 @@ impl Simulation {
 
                 if let Some((resource_index, _)) = nearest_resource {
                     // The harvested node may be an edible substitute for a
-                    // generic food request, so classify by what was found
-                    let resource_type_enum = self.world.resources[resource_index].resource_type;
+                    // generic food request, so classify by what was found.
+                    // A strange plant somebody has established is food is
+                    // food from here on: it goes in the pack and feeds people
+                    // like anything else that grows.
+                    let resource_type_enum = match self.world.resources[resource_index].resource_type
+                    {
+                        ResourceType::StrangePlant => ResourceType::Food,
+                        found => found,
+                    };
 
-                    // Determine harvest amount based on resource type and skill
-                    let harvest_amount = match resource_type_enum {
+                    // What an ordinary pair of hands brings back in a trip
+                    let ordinary = match resource_type_enum {
                         ResourceType::Wood => rng.gen_range(1..=3),
                         // An armful at a time, like wood: a garment's worth of
                         // flax one stem per trip is a week's work
@@ -3649,8 +6032,79 @@ impl Simulation {
                         _ => 1,
                     };
 
+                    // And what these particular hands make of it. The comment
+                    // here used to say "based on resource type and skill" and
+                    // the skill was not consulted: a lifetime of farming
+                    // brought back exactly what a first day did. A practised
+                    // hand knows which plants are worth stripping and how to
+                    // take a crop without ruining what is left, and brings
+                    // back up to twice what a beginner does.
+                    let trade = Self::trade_for_gathering(resource_type_enum);
+                    let hand = self.population.agents[agent_index].skills.hand_for(trade);
+
+                    // And what he has in his hands while he does it. A stone
+                    // axe was, until now, a thing an agent counted and nothing
+                    // else: a man carrying one felled timber at exactly the
+                    // rate of a man with his bare hands.
+                    let tool = self.population.agents[agent_index].how_much_my_tools_help(trade);
+
+                    let worth = ordinary as f32 * hand * tool;
+
+                    // Carry the fraction as a chance rather than rounding it
+                    // away, so that a small difference in skill still tells
+                    // over a season of trips
+                    let whole = worth.floor();
+                    let harvest_amount =
+                        (whole as u32) + u32::from(rng.gen::<f32>() < worth - whole);
+                    let harvest_amount = harvest_amount.max(1);
+
                     // Harvest resource
+                    let where_it_grew = self.world.resources[resource_index].position;
                     let harvested = self.world.resources[resource_index].harvest(harvest_amount);
+
+                    // What a crop off broken ground teaches. Nobody is born
+                    // believing that seed put in the ground on purpose comes
+                    // back as food; carrying an armful home off a field is the
+                    // evidence that settles it.
+                    if harvested > 0
+                        && self
+                            .world
+                            .grid
+                            .get_tile(&where_it_grew)
+                            .map(|tile| tile.terrain.is_cultivated())
+                            .unwrap_or(false)
+                    {
+                        let agent = &mut self.population.agents[agent_index];
+                        agent
+                            .practices
+                            .record_outcome(crate::agents::practices::Practice::Farming, true);
+
+                        // And which plant it was that repaid the work. This is
+                        // the whole of how a people finds out that grain is
+                        // worth sowing and a berry bush is not: it sowed both
+                        // and kept count of what it carried home.
+                        if let Some((called, _, _)) = Self::what_can_be_sown()
+                            .into_iter()
+                            .find(|(_, crop, _)| *crop == resource_type_enum)
+                        {
+                            agent
+                                .lessons
+                                .record_particular(&format!("sow:{called}"), true);
+                        }
+                    }
+
+                    // Stone and wood go quickly, and a trip out for timber is
+                    // one more trip an axe will not make again.
+                    if harvested > 0 && tool > 1.0 {
+                        if let Some(broke) =
+                            self.population.agents[agent_index].wear_what_i_worked_with(trade)
+                        {
+                            debug!(
+                                "Agent {} wore out a {broke}",
+                                self.population.agents[agent_index].id
+                            );
+                        }
+                    }
 
                     if harvested > 0 {
                         // Water is consumed immediately (drinking), not stored
@@ -3719,13 +6173,11 @@ impl Simulation {
                         let agent = &mut self.population.agents[agent_index];
                         if agent.inventory.add_item(item) {
                             // Grant skill XP based on resource type
-                            let skill_type = match resource_type_enum {
-                                ResourceType::Wood => crate::agents::skills::SkillType::Woodcutting,
-                                ResourceType::Stone | ResourceType::Iron => crate::agents::skills::SkillType::Mining,
-                                ResourceType::Food | ResourceType::Grain => crate::agents::skills::SkillType::Herbalism,
-                                _ => crate::agents::skills::SkillType::Mining,
-                            };
-                            agent.skills.gain_experience(skill_type, 2);
+                            let skill_type = Self::trade_for_gathering(resource_type_enum);
+                            // A trip out is the commonest thing anybody does
+                            // and the whole of some people's trade, so it is
+                            // what the climb is sized against
+                            agent.skills.practise(skill_type, 8, tick_now);
 
                             debug!(
                                 "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
@@ -3781,14 +6233,21 @@ impl Simulation {
 
                 // Map structure string to BuildingType
                 let building_type = match structure_type.as_str() {
-                    "shelter" | "smallhouse" => BuildingType::SmallHouse,
+                    // What "put up a shelter" means to people who have hides
+                    // and poles and no quarry. Every house in the list needs
+                    // stone, the cheapest of them thirty, and a settlement
+                    // that has never had a single block of it spent an eighth
+                    // of its life saying so.
+                    "tent" | "skintent" => BuildingType::SkinTent,
+                    "shelter" => BuildingType::SkinTent,
+                    "smallhouse" => BuildingType::SmallHouse,
                     "mediumhouse" => BuildingType::MediumHouse,
                     "largehouse" => BuildingType::LargeHouse,
                     "workshop" => BuildingType::Workshop,
                     "storehouse" => BuildingType::Storehouse,
                     "farm" => BuildingType::Farm,
-                    "structure" => BuildingType::SmallHouse, // Default
-                    _ => BuildingType::SmallHouse, // Default fallback
+                    "structure" => BuildingType::SkinTent,
+                    _ => BuildingType::SkinTent,
                 };
 
                 // Get resource requirements for this building
@@ -3894,7 +6353,7 @@ impl Simulation {
                     _ => 5,
                 };
                 let agent = &mut self.population.agents[agent_index];
-                agent.skills.gain_experience(crate::agents::skills::SkillType::Construction, construction_xp);
+                agent.skills.practise(crate::agents::skills::SkillType::Construction, construction_xp, tick_now);
 
                 debug!(
                     "Agent {} started construction of {:?} at ({}, {})",
@@ -4049,9 +6508,74 @@ impl Simulation {
                     );
                 }
 
+                // And what it does to what the two of them are to each other.
+                //
+                // The executor dealt damage, wrote anger and broke a bone, and
+                // never touched the relationship, so a man who had just been
+                // hit went on counting the man who hit him a close friend and
+                // the settlement graph had no hostile edge anywhere in it.
+                {
+                    use crate::agents::Relationship;
+
+                    let current_tick = self.current_tick;
+
+                    let struck = self.population.agents[target_index]
+                        .relationships
+                        .get_or_create_relationship(attacker_id, current_tick);
+                    struck.weaken(Relationship::WHAT_A_BLOW_COSTS);
+                    struck.settle_what_we_are();
+
+                    // You do not warm to somebody you have just hit either
+                    let striking = self.population.agents[agent_index]
+                        .relationships
+                        .get_or_create_relationship(target_id, current_tick);
+                    striking.weaken(Relationship::WHAT_THROWING_ONE_COSTS);
+                    striking.settle_what_we_are();
+                }
+
                 // Check if target died from the attack
                 let target_alive = self.population.agents[target_index].body.is_alive()
                     && self.population.agents[target_index].state.health > 0.0;
+
+                // What each of them takes away from it.
+                //
+                // "If an agent has fought back and won, then fighting becomes
+                // a more attractive option. If an agent has fought back and
+                // lost, then running away becomes a more attractive option."
+                // The record is kept in the same place every other lesson is,
+                // and it moves what the agent reckons itself worth the next
+                // time something comes at it - see `Agent::own_strength`.
+                {
+                    use crate::agents::practices::Undertaking;
+
+                    let attacker_standing = self.population.agents[agent_index]
+                        .state
+                        .health;
+                    let target_standing = self.population.agents[target_index]
+                        .state
+                        .health;
+
+                    // The attacker has won if the other one is down, and is
+                    // losing if it is the worse off of the two
+                    let attacker_won = !target_alive || attacker_standing > target_standing;
+
+                    self.population.agents[agent_index]
+                        .lessons
+                        .record(Undertaking::Fighting, attacker_won);
+
+                    // And the one being set upon learns from standing there
+                    // just as much. Being alive at the end of it is the whole
+                    // of winning, from that side.
+                    if target_alive {
+                        self.population.agents[target_index]
+                            .lessons
+                            .record(Undertaking::Fighting, !attacker_won);
+                    } else {
+                        self.population.agents[target_index]
+                            .lessons
+                            .record(Undertaking::Fighting, false);
+                    }
+                }
 
                 let attacker_mounted = self.population.agents[agent_index].transport.is_mounted();
 
@@ -4088,7 +6612,7 @@ impl Simulation {
                 let attacker = &mut self.population.agents[agent_index];
                 let combat_xp = if !target_alive { 5 } else { 2 };
                 // TODO: Check weapon type for Archery vs MeleeCombat
-                attacker.skills.gain_experience(crate::agents::skills::SkillType::MeleeCombat, combat_xp);
+                attacker.skills.practise(crate::agents::skills::SkillType::MeleeCombat, combat_xp, tick_now);
 
                 if !target_alive {
                     ActionResult::success()
@@ -4110,6 +6634,145 @@ impl Simulation {
             },
 
             Action::Craft { item_type } => {
+                // The stone-age chain comes first. These steps take named
+                // things and turn out named things, so what one step produces
+                // the next can pick up; the table below it cannot express that,
+                // because its inputs are only ever things dug out of the ground.
+                if crate::environment::making::is_made_not_found(item_type) {
+                    let step = {
+                        let agent = &self.population.agents[agent_index];
+                        let holding = |what: &str| agent.how_many_i_have(what);
+
+                        // A step nobody has found out is not a step this
+                        // agent can take, whatever is in his pack.
+                        if !agent.knows_how_to_make(item_type) {
+                            return ActionResult::failure(format!(
+                                "Nobody here knows how to make a {}",
+                                item_type
+                            ));
+                        }
+
+                        match crate::environment::making::every_way_to_make(item_type)
+                            .filter(|step| agent.knows_how_to(step))
+                            .filter(|step| {
+                                step.wants_in_hand.is_none_or(|wanted| {
+                                    agent.how_many_i_have(wanted) > 0
+                                })
+                            })
+                            .find(|step| step.makings_to_hand(&holding))
+                        {
+                            Some(step) => *step,
+                            None => {
+                                // Say what is missing rather than that it cannot
+                                // be done: the shortfall is the next job.
+                                let short = crate::environment::making::every_way_to_make(item_type)
+                                    .filter(|step| agent.knows_how_to(step))
+                                    .filter_map(|step| step.short_of(&holding))
+                                    .min_by_key(|(_, missing)| *missing);
+
+                                return match short {
+                                    Some((what, how_many)) => ActionResult::failure(format!(
+                                        "Cannot make {}: short {} {}",
+                                        item_type, how_many, what
+                                    )),
+                                    None => {
+                                        // Everything is in the pack, so what
+                                        // is missing is the thing to do it
+                                        // with.
+                                        let wanted = crate::environment::making::every_way_to_make(
+                                            item_type,
+                                        )
+                                        .filter(|step| agent.knows_how_to(step))
+                                        .find_map(|step| step.wants_in_hand);
+
+                                        match wanted {
+                                            Some(tool) => ActionResult::failure(format!(
+                                                "Cannot make {}: nothing to do it with, wants a {}",
+                                                item_type, tool
+                                            )),
+                                            None => ActionResult::failure(format!(
+                                                "Cannot make {}",
+                                                item_type
+                                            )),
+                                        }
+                                    }
+                                };
+                            }
+                        }
+                    };
+
+                    if step.over_a_fire {
+                        let where_he_is = self.population.agents[agent_index].state.position;
+                        if self
+                            .nearest_fire_from(where_he_is, Self::FIRE_REACH, true)
+                            .is_none()
+                        {
+                            return ActionResult::failure(format!(
+                                "Cannot make {}: no fire burning here",
+                                item_type
+                            ));
+                        }
+                    }
+
+                    // What the work is done with is worn by the doing of it,
+                    // and is not part of what comes out.
+                    if let Some(wanted) = step.wants_in_hand {
+                        if let Some(tool) = crate::environment::making::EVERY_TOOL
+                            .iter()
+                            .find(|tool| tool.called == wanted)
+                        {
+                            self.population.agents[agent_index]
+                                .wear_what_i_worked_with(tool.helps);
+                        }
+                    }
+
+                    let agent = &mut self.population.agents[agent_index];
+                    for (what, how_many) in step.needs {
+                        agent.inventory.remove_item(what, *how_many);
+                    }
+
+                    // A thing that took more doing is the heavier thing to
+                    // carry, and a thing made by a better hand is a better
+                    // thing: it lasts longer and it works better.
+                    // A worn-through one of the same thing is thrown away
+                    // rather than stacked with the new one: stacking would
+                    // hand the fresh tool the broken one's durability.
+                    if agent
+                        .inventory
+                        .get_item(step.makes)
+                        .is_some_and(|carried| carried.durability_percentage() <= 0.0)
+                    {
+                        let had = agent.inventory.count_item(step.makes);
+                        agent.inventory.remove_item(step.makes, had);
+                    }
+
+                    let made = agent.a_tool_fresh_from_these_hands(
+                        step.makes,
+                        step.how_many,
+                        step.effort / 4.0,
+                    );
+                    if !agent.inventory.add_item(made) {
+                        debug!(
+                            "Agent {} made {} but had nowhere to put it",
+                            agent.id, step.makes
+                        );
+                    }
+
+                    {
+                        // A spear teaches more than a length of cordage does,
+                        // in the proportion the two cost to do.
+                        let learned = (step.effort / 4.0).round().max(1.0) as u32;
+                        let skill = agent.skills.get_skill_mut(step.hands);
+                        skill.gain_experience(learned);
+                        skill.last_used = tick_now;
+                    }
+
+                    return ActionResult::success()
+                        .with_drive_change(DriveType::Utility, -0.2)
+                        .with_energy_cost(step.effort)
+                        .with_message(format!("Made {} {}", step.how_many, step.makes));
+                }
+
                 use crate::world::production::{Quality as ProductionQuality, Recipe, ResourceRequirement, ProductionOutput};
                 use crate::world::{ItemType, ResourceType};
                 use crate::agents::skills::SkillType;
@@ -4388,7 +7051,11 @@ impl Simulation {
                     ProductionQuality::Masterwork => 5,
                 };
 
-                agent.skills.get_skill_mut(SkillType::Crafting).gain_experience(experience_gained);
+                {
+                    let skill = agent.skills.get_skill_mut(SkillType::Crafting);
+                    skill.gain_experience(experience_gained);
+                    skill.last_used = tick_now;
+                }
 
                 debug!(
                     "Agent {} crafted {} (quality: {:?}, skill: {}, exp: +{})",
@@ -4767,22 +7434,41 @@ impl Simulation {
                         .get_skill_if_exists(crate::agents::skills::SkillType::Hunting)
                         .map(|s| s.level)
                         .unwrap_or(-10);
-                    let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
+                    // A spear in the hand, which is the whole of stone-age
+                    // hunting. `weapon` is the older flag and still counts;
+                    // what is in the pack counts for more, and counts for
+                    // less as it wears.
+                    let spear = agent.how_much_my_tools_help(crate::agents::skills::SkillType::Hunting);
+                    let carried_flag: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
+                    let weapon_bonus = carried_flag.max((spear - 1.0) * 0.25);
 
                     // Get mounted combat bonus (hunting from horseback is advantageous!)
                     let mount_bonus = agent.transport.mounted_combat_bonus();
 
-                    let success_prob = (0.6 + (hunting_skill as f32 * 0.03) + weapon_bonus
+                    // Hunting is slow work. It used to land six throws in ten
+                    // for anybody at all, which made a deer a thing you walked
+                    // up to rather than a thing you stalked; a stone-age hunt
+                    // is mostly missing. What makes the difference is the
+                    // spear and the hand that throws it, not the walking up.
+                    let success_prob = (Self::A_THROW_THAT_TELLS
+                        + (hunting_skill as f32 * 0.03)
+                        + weapon_bonus
                         + mount_bonus)
-                        .clamp(0.2_f32, 0.95_f32);
+                        .clamp(0.1_f32, 0.9_f32);
 
                     if rng.gen_bool(success_prob as f64) {
-                        // Successful hunt - damage the animal
-                        // Base damage is 70% of max health, modified by mount bonus
-                        let base_damage = species.health * 0.7;
+                        // Successful hunt - damage the animal.
+                        //
+                        // A third of what it can take, not two thirds: one
+                        // clean throw did not kill a bull, and a hunt that
+                        // ends on the first hit is not a hunt.
+                        let base_damage = species.health * Self::WHAT_ONE_THROW_TAKES_OUT_OF_IT;
                         let combat_multiplier = 1.0 + mount_bonus;
                         let damage = base_damage * combat_multiplier;
                         animal.take_damage(damage);
+                        // A throw at a deer is one more throw the shaft will
+                        // not take. Twenty-five or so, and it is firewood.
+                        let wore_out = spear > 1.0;
 
                         // If killed, get drops
                         let mut items_gained = Vec::new();
@@ -4797,48 +7483,39 @@ impl Simulation {
                                 }
                             }
 
-                            // Butcher what was killed into things an agent can
-                            // actually use: meat that carries nutrition and can
-                            // go on a fire, skins that can become a coat
-                            let current_tick = self.current_tick;
-                            let butchered: Vec<_> = items_gained
-                                .iter()
-                                .map(|stack| {
-                                    let item_id = crate::agents::storage_integration::
-                                        butchered_item_id(&stack.material_id)
-                                        .to_string();
-                                    let food_data = crate::agents::storage_integration::
-                                        id_to_item_type(&item_id)
-                                        .filter(|item_type| item_type.is_consumable())
-                                        .and_then(|item_type| {
-                                            self.food_database
-                                                .create_food_data(&item_type, current_tick)
-                                        });
-                                    (item_id, stack.quantity, food_data)
-                                })
-                                .collect();
-
-                            let agent = &mut self.population.agents[agent_index];
-                            for (item_id, quantity, food_data) in butchered {
-                                use crate::agents::InventoryItem;
-                                let mut item = InventoryItem::new_with_weight(
-                                    item_id,
-                                    quantity,
-                                    2.0, // Default weight for animal drops
+                            let knife = self.population.agents[agent_index]
+                                .how_much_my_tools_help(
+                                    crate::agents::skills::SkillType::Leatherworking,
                                 );
-                                item.food_data = food_data;
+                            let butchered = self.butcher(&items_gained, knife);
+                            let agent = &mut self.population.agents[agent_index];
+                            for item in butchered {
                                 agent.inventory.add_item(item);
+                            }
+
+                            // Both tools are one job further through their
+                            // lives: the spear that was thrown and the flake
+                            // that took the carcass apart.
+                            if wore_out {
+                                agent.wear_what_i_worked_with(
+                                    crate::agents::skills::SkillType::Hunting,
+                                );
+                            }
+                            if knife > 1.0 {
+                                agent.wear_what_i_worked_with(
+                                    crate::agents::skills::SkillType::Leatherworking,
+                                );
                             }
 
                             // Increase hunting skill
                             let agent = &mut self.population.agents[agent_index];
                             agent
                                 .skills
-                                .gain_experience(crate::agents::skills::SkillType::Hunting, 30);
+                                .practise(crate::agents::skills::SkillType::Hunting, 30, tick_now);
 
                             let mut result = ActionResult::success()
                                 .with_drive_change(DriveType::Hunger, -0.4)
-                                .with_energy_cost(20.0)
+                                .with_energy_cost(Self::WHAT_A_THROW_COSTS)
                                 .with_experience(5.0)
                                 .with_message(format!("Successfully hunted {} and obtained materials", species.name));
 
@@ -4849,20 +7526,63 @@ impl Simulation {
                             result
                         } else {
                             let agent = &mut self.population.agents[agent_index];
+                            if wore_out {
+                                agent.wear_what_i_worked_with(
+                                    crate::agents::skills::SkillType::Hunting,
+                                );
+                            }
                             agent
                                 .skills
-                                .gain_experience(crate::agents::skills::SkillType::Hunting, 10);
+                                .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
 
+                            // A wounded animal is not a meal. It used to
+                            // answer a tenth of a hunger for nothing at all,
+                            // which is a hunt that pays whether or not it
+                            // works.
                             ActionResult::success()
-                                .with_drive_change(DriveType::Hunger, -0.1)
-                                .with_energy_cost(15.0)
+                                .with_energy_cost(Self::WHAT_A_THROW_COSTS)
                                 .with_message(format!("Wounded {} but it escaped", species.name))
                         }
                     } else {
                         // You learn something from the ones that get away
                         self.population.agents[agent_index]
                             .skills
-                            .gain_experience(crate::agents::skills::SkillType::Hunting, 10);
+                            .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
+
+                        // And a throw that misses is a spear on the ground
+                        // somewhere out past where the animal was. Half the
+                        // time it is close enough to walk over and pick up
+                        // and half the time it is in the bracken; either way
+                        // it is not in the hand any more, which is what makes
+                        // a missed throw cost something besides the walk.
+                        //
+                        // This is the state-change half of `throw` in the verb
+                        // matrix: what leaves the hand goes somewhere.
+                        if spear > 1.0 && rng.gen_bool(Self::HOW_OFTEN_A_MISS_LOSES_THE_SHAFT) {
+                            let stood = self.population.agents[agent_index].state.position;
+                            let fell = crate::world::Position::new(
+                                stood.0 + rng.gen_range(-3..=3),
+                                stood.1 + rng.gen_range(-3..=3),
+                            );
+
+                            let thrown = self.population.agents[agent_index]
+                                .inventory
+                                .get_item("spear")
+                                .cloned();
+
+                            if let Some(mut thrown) = thrown {
+                                thrown.quantity = 1;
+                                self.population.agents[agent_index]
+                                    .inventory
+                                    .remove_item("spear", 1);
+                                self.world.somebody_left_this(thrown, fell, tick_now);
+
+                                debug!(
+                                    "Agent {} threw and missed; the spear is at {fell:?}",
+                                    self.population.agents[agent_index].id
+                                );
+                            }
+                        }
 
                         // A rabbit runs. A boar turns round.
                         let fights_back = matches!(
@@ -4880,14 +7600,146 @@ impl Simulation {
                                 "{} turned on the hunter ({:.0} damage)",
                                 species.name, species.attack_damage
                             ))
-                            .with_energy_cost(10.0);
+                            .with_energy_cost(Self::WHAT_A_THROW_COSTS);
                         }
 
                         ActionResult::failure(format!("{} escaped", species.name))
-                            .with_energy_cost(5.0)
+                            .with_energy_cost(Self::WHAT_A_THROW_COSTS)
                     }
                 } else {
                     ActionResult::failure("Animal not found".to_string())
+                }
+            },
+            Action::Fight { animal_id, weapon } => {
+                // Standing your ground. The agent is not after this thing's
+                // skin - it is here because the thing is close enough to be a
+                // problem and the agent reckons it can be driven off.
+                let (species, animal_position) = {
+                    let Some(animal) = self.world.animals.get(animal_id) else {
+                        return ActionResult::failure("Nothing there to fight".to_string());
+                    };
+                    if !animal.is_alive() {
+                        return ActionResult::failure("It is already dead".to_string());
+                    }
+
+                    let species_id = animal.species_id.clone();
+                    let position = animal.position;
+                    match self.world.animals.get_species(&species_id) {
+                        Some(found) => (found.clone(), position),
+                        None => return ActionResult::failure("Unknown creature".to_string()),
+                    }
+                };
+
+                // You cannot fight what you cannot reach, and an agent that
+                // stands its ground does not go looking - if the thing has
+                // moved off, that is the fight over.
+                let standing = self.population.agents[agent_index].state.position;
+                let reach = (animal_position.0 - standing.0)
+                    .abs()
+                    .max((animal_position.1 - standing.1).abs());
+                if reach > Self::HUNT_REACH {
+                    return ActionResult::failure(format!(
+                        "{} is {} tiles off",
+                        species.name, reach
+                    ));
+                }
+
+                // Whether the blow lands is what the agent is worth against
+                // what the creature is worth, on the same scale the appraisal
+                // used to decide to be here at all.
+                let mine = self.population.agents[agent_index].own_strength();
+                let condition = {
+                    let animal = self.world.animals.get(animal_id);
+                    animal
+                        .map(|a| (a.current_health / species.health.max(1.0)).clamp(0.0, 1.0))
+                        .unwrap_or(1.0)
+                };
+                let theirs = condition * (species.attack_damage / 20.0).clamp(0.1, 2.0);
+                let odds = (mine / (mine + theirs).max(0.01)).clamp(0.1, 0.9);
+
+                let landed = rng.gen_bool(odds as f64);
+
+                // A blow struck in a fight teaches the arm that struck it,
+                // whichever way the fight goes
+                self.population.agents[agent_index].skills.practise(
+                    crate::agents::skills::SkillType::MeleeCombat,
+                    if landed { 25 } else { 10 },
+                    tick_now,
+                );
+
+                if landed {
+                    let hurt = 25.0 + mine * 25.0;
+                    let killed = {
+                        let Some(animal) = self.world.animals.get_mut(animal_id) else {
+                            return ActionResult::failure("Nothing there to fight".to_string());
+                        };
+                        animal.take_damage(hurt);
+                        !animal.is_alive()
+                    };
+
+                    // Winning without a mark on you is what teaches an agent
+                    // that fighting is worth doing
+                    self.population.agents[agent_index]
+                        .lessons
+                        .record(crate::agents::practices::Undertaking::Fighting, true);
+
+                    if !killed {
+                        return ActionResult::success()
+                            .with_energy_cost(12.0)
+                            .with_experience(3.0)
+                            .with_message(format!("Beat {} back", species.name));
+                    }
+
+                    // What is killed in a fight is still worth butchering -
+                    // a wolf driven off is a wolf, a wolf killed is a hide
+                    let mut items_gained = Vec::new();
+                    for drop in &species.drops {
+                        if rng.gen_bool(drop.drop_chance as f64) {
+                            let quantity =
+                                rng.gen_range(drop.min_quantity..=drop.max_quantity);
+                            items_gained.push(crate::environment::ItemStack {
+                                material_id: drop.material_id.clone(),
+                                quantity,
+                            });
+                        }
+                    }
+
+                    let knife = self.population.agents[agent_index]
+                        .how_much_my_tools_help(
+                            crate::agents::skills::SkillType::Leatherworking,
+                        );
+                    let butchered = self.butcher(&items_gained, knife);
+                    {
+                        let agent = &mut self.population.agents[agent_index];
+                        for item in butchered {
+                            agent.inventory.add_item(item);
+                        }
+                    }
+
+                    let mut result = ActionResult::success()
+                        .with_drive_change(DriveType::Safety, -0.3)
+                        .with_energy_cost(20.0)
+                        .with_experience(6.0)
+                        .with_message(format!("Killed {}", species.name));
+                    for item in items_gained {
+                        result = result.with_item_gained(item);
+                    }
+                    result
+                } else {
+                    // It got the better of the exchange
+                    let damage = species.attack_damage.max(1.0);
+                    let agent = &mut self.population.agents[agent_index];
+                    let came_off_well = damage < agent.state.health * Self::A_SCRATCH;
+                    agent.take_damage(damage);
+                    agent
+                        .lessons
+                        .record(crate::agents::practices::Undertaking::Fighting, came_off_well);
+
+                    ActionResult::failure(format!(
+                        "{} got the better of it ({:.0} damage)",
+                        species.name, damage
+                    ))
+                    .with_energy_cost(12.0)
                 }
             },
 
@@ -4943,7 +7795,7 @@ impl Simulation {
 
                         // Increase social skill
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
+                        agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
 
                         // Add transport to agent's inventory if applicable
                         if let Some(t_type) = transport_type {
@@ -5029,7 +7881,7 @@ impl Simulation {
 
                         // Practice animal husbandry (Farming skill)
                         let agent = &mut self.population.agents[agent_index];
-                        agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
+                        agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
 
                         let products_str = collected_products.iter()
                             .map(|p| format!("{} {}", p.quantity, p.material_id))
@@ -5108,9 +7960,9 @@ impl Simulation {
                         // Practice farming skill if cultivated, gathering otherwise
                         let agent = &mut self.population.agents[agent_index];
                         if plant.is_cultivated {
-                            agent.skills.gain_experience(crate::agents::skills::SkillType::Farming, 2);
+                            agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
                         } else {
-                            agent.skills.gain_experience(crate::agents::skills::SkillType::Mining, 2);
+                            agent.skills.practise(crate::agents::skills::SkillType::Mining, 2, tick_now);
                         }
 
                         let items_str = items_gained.iter()
@@ -5430,7 +8282,7 @@ impl Simulation {
                 if success {
                     // Grant Social skill XP
                     let initiator = &mut self.population.agents[agent_index];
-                    initiator.skills.gain_experience(crate::agents::skills::SkillType::Social, 1);
+                    initiator.skills.practise(crate::agents::skills::SkillType::Social, 1, tick_now);
 
                     // Record that this agent satisfied our social drive
                     let tick = self.current_tick;
@@ -5797,8 +8649,15 @@ impl Simulation {
                     .nearest_fire_from(agent_pos, Self::FIRE_REACH, false)
                     .map(|(id, _)| id);
 
+                // Shavings catch where a log will not, so a hearth laid with
+                // tinder under it takes half the timber to get going. This is
+                // what scraping a stick is for - see `making::SCRAPE_A_STICK`.
+                let has_tinder = self.population.agents[agent_index].how_many_i_have("tinder") > 0;
+
                 let wood_needed = if existing.is_some() {
                     Self::FIRE_FUEL_WOOD
+                } else if has_tinder {
+                    (Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD).div_ceil(2)
                 } else {
                     Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
                 };
@@ -6023,6 +8882,44 @@ impl Simulation {
                 // different hands comes out as something that keeps the cold
                 // off or as something that falls apart in a week. Quality
                 // carries into both warmth and durability.
+                //
+                // And a beginner does not merely make a worse coat - a good
+                // many of their attempts come to nothing at all, with the
+                // material spoiled in the trying. `Skill::perform_check` had
+                // been built to say exactly this and had no callers anywhere,
+                // so every attempt succeeded and a first-day tailor turned out
+                // garments as fast as a master. Half of a raw beginner's
+                // attempts fail; a master's never do. That is what makes a
+                // dedicated tailor quicker as well as better, without anything
+                // in the model needing a notion of how long a job takes.
+                let attempt = agent
+                    .skills
+                    .get_skill_mut(SkillType::Leatherworking)
+                    .perform_check(None);
+
+                // Cuts and needle-stabs, which are a beginner's other tax
+                if let Some(hurt) = attempt.injury {
+                    let harm = match hurt {
+                        crate::agents::skills::InjuryType::Small => 2.0,
+                        crate::agents::skills::InjuryType::Large => 8.0,
+                    };
+                    agent.state.health = (agent.state.health - harm).max(1.0);
+                }
+
+                if !attempt.success {
+                    // The material is spoiled in the trying, and something is
+                    // learned from having spoiled it
+                    agent
+                        .inventory
+                        .remove_item(recipe.material_item, recipe.material_amount);
+                    agent.skills.practise(SkillType::Leatherworking, 8, tick_now);
+
+                    return ActionResult::failure(format!(
+                        "Spoiled the {} in the making",
+                        recipe.name
+                    ));
+                }
+
                 let quality = Self::expected_garment_quality(agent);
 
                 let made = match crate::agents::equipment::ClothingTemplate::from_id(
@@ -6038,7 +8935,7 @@ impl Simulation {
                     .inventory
                     .remove_item(recipe.material_item, recipe.material_amount);
 
-                agent.skills.gain_experience(SkillType::Leatherworking, 25);
+                agent.skills.practise(SkillType::Leatherworking, 25, tick_now);
 
                 // Making a coat and putting it on is one act.
                 //
@@ -6178,9 +9075,30 @@ impl Simulation {
                     tile.terrain = crate::world::Terrain::new(TerrainType::Farmland);
                 }
 
+                // What goes in the ground is what the agent has to put in it,
+                // and of what it has, whatever it has come to believe is worth
+                // sowing. Nobody hands out grain seed: an agent that has only
+                // ever stripped berry bushes sows berries, works the field all
+                // season, and finds out what a berry bush thinks of a plough.
+                let sown = Self::what_this_one_would_sow(&self.population.agents[agent_index]);
+
+                // The seed itself goes in the ground. Sowing was free before
+                // this, which made a field a thing you got for a day's digging
+                // rather than for a day's digging and a meal you did not eat.
+                for (called, crop, _) in Self::what_can_be_sown() {
+                    if crop != sown {
+                        continue;
+                    }
+                    let agent = &mut self.population.agents[agent_index];
+                    if agent.how_many_i_have(called) > 0 {
+                        agent.inventory.remove_item(called, 1);
+                        break;
+                    }
+                }
+
                 // A newly sown field starts empty and fills as it grows
                 let mut field = ResourceNode::new(
-                    ResourceType::Grain,
+                    sown,
                     tile_position,
                     Self::FIELD_YIELD,
                 );
@@ -6190,14 +9108,713 @@ impl Simulation {
                 let agent = &mut self.population.agents[agent_index];
                 agent
                     .skills
-                    .gain_experience(crate::agents::SkillType::Farming, 25);
+                    .practise(crate::agents::SkillType::Farming, 25, tick_now);
 
-                debug!("Agent {} broke ground at {:?}", agent.id, tile_position);
+                debug!(
+                    "Agent {} broke ground at {:?} and sowed {:?}",
+                    agent.id, tile_position, sown
+                );
 
                 ActionResult::success()
                     .with_drive_change(DriveType::Sustenance, -0.4)
                     .with_energy_cost(12.0)
                     .with_message("Broke ground and sowed a field".to_string())
+            },
+
+            Action::TrySwapping {
+                instead_of_making,
+                instead_of,
+                put_in,
+            } => {
+                use crate::environment::making;
+
+                let Some(step) = making::how_to_make(instead_of_making) else {
+                    return ActionResult::failure("No such job".to_string());
+                };
+
+                // The parts have to be to hand: everything the step wants
+                // except the one left out, and one of whatever is going in
+                // instead.
+                {
+                    let agent = &self.population.agents[agent_index];
+
+                    let short = step.needs.iter().any(|(what, how_many)| {
+                        *what != instead_of.as_str()
+                            && agent.how_many_i_have(what) < *how_many
+                    }) || agent.how_many_i_have(put_in) == 0;
+
+                    if short {
+                        return ActionResult::failure(
+                            "Not the makings for that, either way".to_string(),
+                        );
+                    }
+                }
+
+                let outcome = making::what_comes_of_swapping(
+                    instead_of_making,
+                    instead_of,
+                    put_in,
+                );
+
+                // The materials go whether it works or not. That is the whole
+                // cost of trying things: a man who puts a lump of iron where
+                // the flake goes has spent a stick and a length of cord and
+                // has a lump of iron tied to a stick.
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    for (what, how_many) in step.needs {
+                        if *what == instead_of.as_str() {
+                            continue;
+                        }
+                        agent.inventory.remove_item(what, *how_many);
+                    }
+                    agent.inventory.remove_item(put_in, 1);
+                }
+
+                let worked = outcome.is_some();
+
+                if let Some(swap) = outcome {
+                    let made = self.population.agents[agent_index]
+                        .a_tool_fresh_from_these_hands(swap.makes, swap.how_many, 2.0);
+
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.add_item(made);
+
+                    // And he knows how to do it now, which is what makes it a
+                    // discovery rather than an accident
+                    agent.found_out_how_to(swap.makes);
+                    agent.skills.practise(step.hands, 20, tick_now);
+
+                    debug!(
+                        "Agent {} put {put_in} where the {instead_of} goes and got a {}",
+                        agent.id, swap.makes
+                    );
+                }
+
+                let called = making::what_that_swap_is_called(
+                    instead_of_making,
+                    instead_of,
+                    put_in,
+                );
+                self.population.agents[agent_index]
+                    .lessons
+                    .record_particular(&called, worked);
+
+                if worked {
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Curiosity, -0.5)
+                        .with_drive_change(DriveType::Utility, -0.3)
+                        .with_energy_cost(step.effort)
+                        .with_message(format!("Put {put_in} in and got something new"))
+                } else {
+                    ActionResult::failure(format!(
+                        "{put_in} where the {instead_of} goes comes to nothing"
+                    ))
+                    .with_drive_change(DriveType::Curiosity, -0.3)
+                    .with_energy_cost(step.effort)
+                }
+            },
+
+            Action::Examine { what } => {
+                use crate::environment::making;
+
+                if self.population.agents[agent_index].how_many_i_have(what) == 0 {
+                    return ActionResult::failure(format!("No {what} in hand to look at"));
+                }
+
+                // What this thing goes into that nobody here has worked out.
+                // Looking closely at a lump of something you are already
+                // carrying is the cheapest experiment there is - it costs a
+                // turn and no materials - and it is the third road into the
+                // chain, beside doing a thing twice to see it again and
+                // putting the wrong thing where a part goes.
+                if making::is_a_familiar_thing(what) {
+                    return ActionResult::failure(format!(
+                        "A {what} is a {what}; there is nothing to see in one"
+                    ))
+                    .with_energy_cost(1.0);
+                }
+
+                let could_be_for: Vec<&'static str> = making::everything_to_find_out()
+                    .filter(|step| step.needs.iter().any(|(needs, _)| needs == what))
+                    .map(|step| step.makes)
+                    .chain(
+                        making::every_working_to_find_out()
+                            .filter(|working| working.to == *what)
+                            .map(|working| working.makes),
+                    )
+                    .filter(|makes| {
+                        !self.population.agents[agent_index]
+                            .what_i_found_out()
+                            .contains(*makes)
+                    })
+                    .collect();
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.practise(crate::agents::SkillType::Crafting, 4, tick_now);
+
+                let Some(worth_a_look) = could_be_for.first().copied() else {
+                    return ActionResult::failure(format!("Nothing new about a {what}"))
+                        .with_drive_change(DriveType::Curiosity, -0.1)
+                        .with_energy_cost(1.0);
+                };
+
+                // Turning it over in your hands is not the same as knowing.
+                // Most of the time it tells you nothing, which is why this
+                // does not collapse the chain into an afternoon's inspection.
+                let hand = agent.skills.hand_for(crate::agents::SkillType::Crafting);
+                let odds = (Self::WHAT_LOOKING_CLOSELY_IS_WORTH * hand).clamp(0.0, 0.5);
+
+                if !rng.gen_bool(odds as f64) {
+                    return ActionResult::failure(format!("Turned the {what} over, none the wiser"))
+                        .with_drive_change(DriveType::Curiosity, -0.2)
+                        .with_energy_cost(1.0);
+                }
+
+                agent.found_out_how_to(worth_a_look);
+
+                debug!(
+                    "Agent {} looked at a {what} and saw what it is for ({worth_a_look})",
+                    agent.id
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Curiosity, -0.5)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Looked at a {what}: it is for a {worth_a_look}"))
+            },
+
+            Action::PickUp { what } => {
+                use crate::world::Position;
+
+                let here = {
+                    let at = self.population.agents[agent_index].state.position;
+                    Position::new(at.0, at.1)
+                };
+
+                let Some(item) = self.world.take_off_the_ground(&here, what) else {
+                    return ActionResult::failure(format!("No {what} lying here"));
+                };
+
+                let how_many = item.quantity;
+                let agent = &mut self.population.agents[agent_index];
+
+                // A full pack cannot take it, and it stays where it was
+                if agent.inventory.weight_capacity_remaining()
+                    < item.weight_per_unit * how_many as f32
+                {
+                    self.world.somebody_left_this(item, here, tick_now);
+                    return ActionResult::failure("No room for it".to_string());
+                }
+
+                agent.inventory.add_item(item);
+
+                debug!("Agent {} picked up {how_many} {what} at {here:?}", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.2)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Picked up {how_many} {what}"))
+            },
+
+            Action::PutDown { what } => {
+                use crate::world::Position;
+
+                let here = {
+                    let at = self.population.agents[agent_index].state.position;
+                    Position::new(at.0, at.1)
+                };
+
+                let Some(item) = self.population.agents[agent_index]
+                    .inventory
+                    .get_item(what)
+                    .cloned()
+                else {
+                    return ActionResult::failure(format!("No {what} to put down"));
+                };
+
+                if item.quantity == 0 {
+                    return ActionResult::failure(format!("No {what} to put down"));
+                }
+
+                let how_many = item.quantity;
+                self.population.agents[agent_index]
+                    .inventory
+                    .remove_item(what, how_many);
+                self.world.somebody_left_this(item, here, tick_now);
+
+                debug!(
+                    "Agent {} put down {how_many} {what} at {here:?}",
+                    self.population.agents[agent_index].id
+                );
+
+                ActionResult::success()
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Put down {how_many} {what}"))
+            },
+
+            Action::Trade { with } => {
+                let Some(them) = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == *with && other.state.is_alive)
+                else {
+                    return ActionResult::failure("Nobody there to trade with".to_string());
+                };
+
+                let Some((mine, theirs)) = self.what_the_two_of_them_would_swap(agent_index, them)
+                else {
+                    return ActionResult::failure(
+                        "Nothing between us that either of us wants".to_string(),
+                    );
+                };
+
+                // Half of what each has spare, so a trade leaves both better
+                // off and neither stripped
+                let how_much = |spare: u32| (spare / 2).max(1);
+                let i_hand_over = how_much(mine.1);
+                let they_hand_over = how_much(theirs.1);
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(&mine.0, i_hand_over);
+                    agent.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            theirs.0.clone(),
+                            they_hand_over,
+                            1.0,
+                        ),
+                    );
+                    agent.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
+                }
+
+                let me = self.population.agents[agent_index].id;
+                let them_id = self.population.agents[them].id;
+
+                {
+                    let other = &mut self.population.agents[them];
+                    other.inventory.remove_item(&theirs.0, they_hand_over);
+                    other.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            mine.0.clone(),
+                            i_hand_over,
+                            1.0,
+                        ),
+                    );
+                    other.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
+
+                    // A good trade is a good turn on both sides, and both
+                    // remember who it was with
+                    other.they_did_me_a_good_turn(me, Self::WHAT_A_FAIR_TRADE_IS_WORTH);
+                }
+
+                self.population.agents[agent_index]
+                    .they_did_me_a_good_turn(them_id, Self::WHAT_A_FAIR_TRADE_IS_WORTH);
+
+                debug!(
+                    "Agent {me} gave {them_id} {i_hand_over} {} for {they_hand_over} {}",
+                    mine.0, theirs.0
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.35)
+                    .with_drive_change(DriveType::Social, -0.15)
+                    .with_energy_cost(2.0)
+                    .with_message(format!(
+                        "Traded {i_hand_over} {} for {they_hand_over} {}",
+                        mine.0, theirs.0
+                    ))
+            },
+
+            Action::GiveTo { to } => {
+                let Some(them) = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == *to && other.state.is_alive)
+                else {
+                    return ActionResult::failure("Nobody there to give to".to_string());
+                };
+
+                // Something they are short of that I have too much of. A gift
+                // is one-sided: what the other has is nothing to do with it.
+                let Some(mine) = self.what_i_would_hand_over(agent_index, them) else {
+                    return ActionResult::failure(
+                        "Nothing of mine they have any use for".to_string(),
+                    );
+                };
+
+                let handed_over = (mine.1 / 2).max(1);
+                let me = self.population.agents[agent_index].id;
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(&mine.0, handed_over);
+                    agent.skills.practise(crate::agents::SkillType::Social, 10, tick_now);
+                }
+
+                {
+                    let other = &mut self.population.agents[them];
+                    other.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            mine.0.clone(),
+                            handed_over,
+                            1.0,
+                        ),
+                    );
+                    other.they_did_me_a_good_turn(me, Self::WHAT_A_GIFT_IS_WORTH);
+                }
+
+                debug!("Agent {me} gave away {handed_over} {}", mine.0);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Social, -0.4)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Gave away {handed_over} {}", mine.0))
+            },
+
+            Action::Work { verb, to } => {
+                use crate::environment::making;
+
+                let Some(working) = making::how_to_work(verb, to) else {
+                    return ActionResult::failure(format!("Nothing comes of {verb} a {to}"));
+                };
+
+                if self.population.agents[agent_index].how_many_i_have(to) < working.how_much {
+                    return ActionResult::failure(format!("Not enough {to} to {verb}"));
+                }
+
+                // What comes off it, and how much of it these hands get. A
+                // practised hand wastes less of the core.
+                let hand = self.population.agents[agent_index]
+                    .skills
+                    .hand_for(working.hands);
+                let tool = self.population.agents[agent_index]
+                    .how_much_my_tools_help(working.hands);
+
+                let worth = working.how_many as f32 * hand.min(2.0) * tool.min(2.0);
+                let whole = worth.floor();
+                let came_off = (whole as u32)
+                    + u32::from(rng.gen::<f32>() < worth - whole);
+                let came_off = came_off.max(1);
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(to, working.how_much);
+                    agent.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            working.makes.to_string(),
+                            came_off,
+                            1.0,
+                        ),
+                    );
+                    agent.skills.practise(working.hands, 12, tick_now);
+
+                    // Having done it once he can do it on purpose. For the
+                    // obvious ones this is a formality; for the rest it is the
+                    // whole of the discovery - somebody with a scraper in his
+                    // hand and a fire that will not light finds out what
+                    // shavings are for by making some.
+                    agent.found_out_how_to(working.makes);
+                }
+
+                // And the edge that did it is the worse for it
+                if let Some(broke) = self.population.agents[agent_index]
+                    .wear_what_i_worked_with(working.hands)
+                {
+                    debug!(
+                        "Agent {} wore out a {broke}",
+                        self.population.agents[agent_index].id
+                    );
+                }
+
+                debug!(
+                    "Agent {} {verb} {} {to} into {came_off} {}",
+                    self.population.agents[agent_index].id,
+                    working.how_much,
+                    working.makes
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.25)
+                    .with_energy_cost(working.effort)
+                    .with_message(format!("{verb} {to} into {came_off} {}", working.makes))
+            },
+
+            Action::Taste => {
+                use crate::world::Position;
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let here = Position::new(agent_position.0, agent_position.1);
+
+                let Some(index) = self.world.resources.iter().position(|resource| {
+                    resource.position == here
+                        && resource.resource_type == crate::world::ResourceType::StrangePlant
+                        && resource.amount > 0
+                }) else {
+                    return ActionResult::failure("Nothing here to try".to_string());
+                };
+
+                let kind = self.world.resources[index].kind;
+                let feeds_you = self.world.does_this_one_feed_you(kind);
+
+                self.world.resources[index].harvest(1);
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.now_i_know_that_plant(kind, feeds_you);
+
+                let result = if feeds_you {
+                    // It is food. Not much of a meal - one mouthful of a
+                    // strange plant is a mouthful - but the man is no worse for
+                    // it and the people have one more thing to eat.
+                    agent
+                        .nutrition
+                        .consume(&crate::world::nutrition::NutritionalContent {
+                            energy: Self::WHAT_ONE_MOUTHFUL_IS_WORTH,
+                            protein: 1.0,
+                            micronutrients: 2.0,
+                            water_content: 5.0,
+                        });
+
+                    debug!("Agent {} found that plant {kind} is food", agent.id);
+
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Curiosity, -0.4)
+                        .with_drive_change(DriveType::Hunger, -0.05)
+                        .with_energy_cost(1.0)
+                        .with_message(format!("Tried plant {kind}: it is food"))
+                } else {
+                    // It is not. What that costs runs from a bad afternoon to
+                    // everything, which is what makes the trying a real choice
+                    // rather than a free lookup.
+                    let harm = rng.gen_range(
+                        Self::WHAT_A_BAD_PLANT_DOES.0..=Self::WHAT_A_BAD_PLANT_DOES.1,
+                    );
+                    agent.take_damage(harm);
+
+                    debug!(
+                        "Agent {} was poisoned by plant {kind} ({harm:.0} damage, {:.0} health left)",
+                        agent.id, agent.state.health
+                    );
+
+                    ActionResult::failure(format!("Tried plant {kind}: it is poison"))
+                        .with_drive_change(DriveType::Curiosity, -0.4)
+                        .with_energy_cost(6.0)
+                };
+
+                // And whoever was standing about learns it too, without paying
+                // for it. This is the whole value of other people: one man is
+                // ill and forty know not to eat that.
+                for onlooker in self
+                    .population
+                    .agents
+                    .iter_mut()
+                    .filter(|agent| agent.state.is_alive)
+                {
+                    let apart = (onlooker.state.position.0 - here.x).abs()
+                        + (onlooker.state.position.1 - here.y).abs();
+
+                    if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                        onlooker.now_i_know_that_plant(kind, feeds_you);
+                    }
+                }
+
+                result
+            },
+
+            Action::TakeCutting => {
+                use crate::agents::InventoryItem;
+                use crate::world::Position;
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let here = Position::new(agent_position.0, agent_position.1);
+
+                let Some(index) = self.world.resources.iter().position(|resource| {
+                    resource.position == here
+                        && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                        && Self::what_can_be_sown()
+                            .into_iter()
+                            .any(|(_, sowable, _)| sowable == resource.resource_type)
+                }) else {
+                    return ActionResult::failure("Nothing here worth lifting".to_string());
+                };
+
+                let crop = self.world.resources[index].resource_type;
+
+                let Some((called, _, _)) = Self::what_can_be_sown()
+                    .into_iter()
+                    .find(|(_, sowable, _)| *sowable == crop)
+                else {
+                    return ActionResult::failure(format!("{crop:?} does not move"));
+                };
+
+                if self.world.resources[index].max_amount
+                    <= Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
+                {
+                    return ActionResult::failure("Too thin to dig out of".to_string());
+                }
+
+                // Taking a cutting costs the plant it came off, permanently: a
+                // slip is a piece of the plant and not a piece of this year's
+                // crop. A patch dug over for slips carries less from now on.
+                self.world.resources[index].harvest(Self::WHAT_A_CUTTING_TAKES);
+                self.world.resources[index].max_amount = self.world.resources[index]
+                    .max_amount
+                    .saturating_sub(Self::WHAT_A_CUTTING_TAKES);
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.inventory.add_item(InventoryItem::new_with_weight(
+                    Self::a_cutting_of(called),
+                    1,
+                    1.5,
+                ));
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Farming, 8, tick_now);
+
+                debug!("Agent {} lifted a slip of {called} at {here:?}", agent.id);
+
+                ActionResult::success()
+                    .with_energy_cost(5.0)
+                    .with_message(format!("Lifted a slip of {called}"))
+            },
+
+            Action::PlantCutting => {
+                use crate::world::{Position, ResourceNode};
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let here = Position::new(agent_position.0, agent_position.1);
+
+                let Some((called, crop)) =
+                    Self::a_cutting_in_the_pack(&self.population.agents[agent_index])
+                else {
+                    return ActionResult::failure("Nothing to plant".to_string());
+                };
+
+                let will_take = self
+                    .world
+                    .grid
+                    .get_tile(&here)
+                    .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+                    .unwrap_or(false);
+
+                if !will_take {
+                    return ActionResult::failure("Nothing will take here".to_string());
+                }
+
+                if self
+                    .world
+                    .resources
+                    .iter()
+                    .any(|resource| resource.position == here)
+                {
+                    return ActionResult::failure("Something already grows here".to_string());
+                }
+
+                let mut moved = ResourceNode::new(crop, here, Self::WHAT_A_MOVED_PLANT_COMES_TO);
+                moved.amount = Self::WHAT_A_CUTTING_STARTS_WITH;
+                self.world.resources.push(moved);
+
+                let agent = &mut self.population.agents[agent_index];
+                agent
+                    .inventory
+                    .remove_item(&Self::a_cutting_of(called), 1);
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Farming, 15, tick_now);
+
+                debug!("Agent {} put a slip of {called} in at {here:?}", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Sustenance, -0.3)
+                    .with_energy_cost(8.0)
+                    .with_message(format!("Put a slip of {called} in beside the camp"))
+            },
+
+            Action::TendField => {
+                use crate::world::Position;
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let tile_position = Position::new(agent_position.0, agent_position.1);
+
+                let Some(tile) = self.world.grid.get_tile(&tile_position) else {
+                    return ActionResult::failure("Nowhere to work".to_string());
+                };
+
+                if !tile.terrain.is_cultivated() {
+                    return ActionResult::failure("No field here to work".to_string());
+                }
+
+                let before = tile.soil.weeds + tile.soil.pests;
+
+                if before <= 0.0 {
+                    return ActionResult::failure("Nothing wants doing here".to_string());
+                }
+
+                // A walk out to a field that is still bare after all this work
+                // is what teaches an agent that it sowed the wrong thing.
+                let standing = self
+                    .world
+                    .resources
+                    .iter()
+                    .find(|resource| resource.position == tile_position)
+                    .map(|resource| (resource.resource_type, resource.amount));
+
+                if let Some((crop, amount)) = standing {
+                    if let Some((called, _, _)) = Self::what_can_be_sown()
+                        .into_iter()
+                        .find(|(_, sowable, _)| *sowable == crop)
+                    {
+                        self.population.agents[agent_index]
+                            .lessons
+                            .record_particular(&format!("sow:{called}"), amount > 0);
+                    }
+
+                    // And whether the whole business is worth anybody's day.
+                    // A man standing in his own field can see whether there is
+                    // anything in it; he does not have to wait until he is
+                    // carrying it home. This is where farming is mostly either
+                    // confirmed or given up on.
+                    self.population.agents[agent_index]
+                        .practices
+                        .record_outcome(crate::agents::practices::Practice::Farming, amount > 0);
+                }
+
+                // What a practised hand gets through in a turn. Somebody who
+                // has done it for years knows a weed from a seedling and takes
+                // the whole field; somebody who has not clears half of it and
+                // treads on the rest.
+                let hand = self.population.agents[agent_index]
+                    .skills
+                    .hand_for(crate::agents::SkillType::Farming);
+
+                let cleared = {
+                    let Some(tile) = self.world.grid.get_tile_mut(&tile_position) else {
+                        return ActionResult::failure("Nowhere to work".to_string());
+                    };
+
+                    for _ in 0..(hand.round() as u32).clamp(1, 3) {
+                        tile.soil.somebody_worked_this_field();
+                    }
+
+                    before - (tile.soil.weeds + tile.soil.pests)
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Farming, 12, tick_now);
+
+                debug!(
+                    "Agent {} worked the field at {:?} (weeds and pests down {:.2})",
+                    agent.id, tile_position, cleared
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Sustenance, -0.2)
+                    .with_energy_cost(7.0)
+                    .with_message(format!("Worked the field, clearing {cleared:.2}"))
             },
 
             Action::SpreadMuck => {
@@ -6280,7 +9897,7 @@ impl Simulation {
                 agent.practices.record_outcome(Practice::SpreadingMuck, worked);
                 agent
                     .skills
-                    .gain_experience(crate::agents::SkillType::Farming, 10);
+                    .practise(crate::agents::SkillType::Farming, 10, tick_now);
 
                 debug!(
                     "Agent {} tipped {} spoiled units onto {:?} (ground {:.2} -> {:.2})",
@@ -6332,16 +9949,35 @@ impl Simulation {
                 // How thick the water is decides most of it. A run is a run:
                 // anybody standing in it comes out with something, which is
                 // exactly why a fishery is worth building a life beside and a
-                // deer is not.
+                // deer is not. It is still slow: standing in cold water
+                // waiting for something to come within reach of a thrust is
+                // most of a morning for a couple of fish.
                 let thickness = (standing as f32 / Self::A_GOOD_REACH).clamp(0.0, 1.0);
-                let hand = (skill / 10.0).clamp(0.0, 0.5) + if rod { 0.2 } else { 0.0 };
-                let odds = (0.35 + 0.4 * thickness + hand).clamp(0.0, 0.95);
 
-                if rng.gen::<f32>() > odds {
-                    return ActionResult::failure("Nothing took".to_string());
+                // A spear is what a people with no line fishes with, and it
+                // is slow work: standing in the shallows waiting for
+                // something to come within reach of a thrust.
+                let spear = self.population.agents[agent_index]
+                    .how_much_my_tools_help(crate::agents::SkillType::Fishing);
+
+                let hand = (skill / 10.0).clamp(0.0, 0.5)
+                    + if rod { 0.2 } else { 0.0 }
+                    + (spear - 1.0) * 0.3;
+                let odds = (Self::A_THRUST_THAT_TELLS + 0.4 * thickness + hand).clamp(0.0, 0.9);
+
+                if spear > 1.0 {
+                    self.population.agents[agent_index]
+                        .wear_what_i_worked_with(crate::agents::SkillType::Fishing);
                 }
 
-                let caught = Self::FISH_PER_CAST + if rod { 1 } else { 0 };
+                if rng.gen::<f32>() > odds {
+                    return ActionResult::failure("Nothing took".to_string())
+                        .with_energy_cost(Self::WHAT_A_THRUST_COSTS);
+                }
+
+                let caught = Self::FISH_PER_CAST
+                    + u32::from(rod)
+                    + u32::from(spear > 1.3);
 
                 let taken = {
                     let resource = self
@@ -6380,14 +10016,14 @@ impl Simulation {
                     taken as f32 * crate::world::Soil::NUTRIENT_PER_FISH * Self::OFFAL_SHARE;
                 agent
                     .skills
-                    .gain_experience(crate::agents::SkillType::Fishing, 12);
+                    .practise(crate::agents::SkillType::Fishing, 12, tick_now);
 
                 debug!("Agent {} took {} fish from {:?}", agent.id, taken, reach);
 
                 ActionResult::success()
                     .with_drive_change(DriveType::Hunger, -0.15)
                     .with_drive_change(DriveType::Sustenance, -0.2)
-                    .with_energy_cost(5.0)
+                    .with_energy_cost(Self::WHAT_A_THRUST_COSTS)
                     .with_message(format!("Took {} fish out of the water", taken))
             },
 
@@ -6415,9 +10051,7 @@ impl Simulation {
 
             Action::Explore { direction } => {
                 // Exploration action - move and discover new areas
-                let agent = &mut self.population.agents[agent_index];
-                let agent_id = agent.id;
-                let current_pos = agent.state.position;
+                let current_pos = self.population.agents[agent_index].state.position;
 
                 // Calculate target position in exploration direction
                 let target_x = current_pos.0 + direction.0;
@@ -6425,12 +10059,29 @@ impl Simulation {
                 let target_z = current_pos.2 + direction.2;
                 let target_pos = (target_x, target_y, target_z);
 
+                // What is really out here, before anybody's opinion of it
+                let exploration_radius = 3; // Can see 3 tiles in each direction
+                let really_here: std::collections::HashSet<crate::world::Position> = self
+                    .world
+                    .resources
+                    .iter()
+                    .filter(|resource| {
+                        (resource.position.x - target_x).abs() <= exploration_radius
+                            && (resource.position.y - target_y).abs() <= exploration_radius
+                    })
+                    .map(|resource| {
+                        crate::world::Position::new(resource.position.x, resource.position.y)
+                    })
+                    .collect();
+
+                let agent = &mut self.population.agents[agent_index];
+                let agent_id = agent.id;
+
                 // Move agent to new position
                 agent.state.position = target_pos;
 
                 // Mark tiles as explored in a radius around new position
                 let mut newly_explored_count = 0;
-                let exploration_radius = 3; // Can see 3 tiles in each direction
 
                 for dx in -exploration_radius..=exploration_radius {
                     for dy in -exploration_radius..=exploration_radius {
@@ -6442,6 +10093,59 @@ impl Simulation {
                         if agent.exploration_knowledge.explore_tile(explore_pos, self.current_tick) {
                             newly_explored_count += 1;
                         }
+                    }
+                }
+
+                // Seeing for yourself.
+                //
+                // An agent's knowledge of where things are is fed both by
+                // looking and by being told, and the two went into the same
+                // map with nothing to tell them apart. So a man walked to the
+                // place he had been told about, found bare ground, and read
+                // his own hearsay back off the map as confirmation - which
+                // made every lie verify as true and left the whole
+                // lie-detection apparatus unable to detect anything.
+                //
+                // This is the moment a lie is found out, and the only moment
+                // it can be: the agent is standing on the spot and there is
+                // nothing there. Sweeping a buffer of remembered claims every
+                // hundred ticks caught almost none of them, because a claim
+                // had to survive the buffer *and* the agent had to happen to
+                // walk to it inside the same window.
+                let centre = crate::world::Position::new(target_x, target_y);
+                let found_out = agent.exploration_knowledge.hearsay_in_view(
+                    centre,
+                    exploration_radius,
+                    &really_here,
+                );
+
+                // What is not there when you are standing on it is not there
+                agent
+                    .exploration_knowledge
+                    .known_resources
+                    .retain(|where_it_is, _| {
+                        let in_view = (where_it_is.x - centre.x).abs() <= exploration_radius
+                            && (where_it_is.y - centre.y).abs() <= exploration_radius;
+                        !in_view || really_here.contains(where_it_is)
+                    });
+                agent
+                    .exploration_knowledge
+                    .who_told_me
+                    .retain(|where_it_is, _| {
+                        let in_view = (where_it_is.x - centre.x).abs() <= exploration_radius
+                            && (where_it_is.y - centre.y).abs() <= exploration_radius;
+                        !in_view || really_here.contains(where_it_is)
+                    });
+
+                for (_, said, what_they_said) in found_out {
+                    if said.who == agent_id {
+                        continue;
+                    }
+                    let subject = format!("{:?}", what_they_said).to_lowercase();
+                    if said.was_he_answerable_for_it(self.current_tick) {
+                        agent.found_out_i_was_lied_to(said.who, &subject, self.current_tick);
+                    } else {
+                        agent.found_out_they_were_out_of_date(said.who);
                     }
                 }
 
@@ -6485,7 +10189,7 @@ impl Simulation {
                 // Grant Navigation XP for exploration (more for new discoveries)
                 let agent = &mut self.population.agents[agent_index];
                 let nav_xp = if newly_explored_count > 0 { 2 } else { 1 };
-                agent.skills.gain_experience(crate::agents::skills::SkillType::Navigation, nav_xp);
+                agent.skills.practise(crate::agents::skills::SkillType::Navigation, nav_xp, tick_now);
 
                 // Exploration is rewarding
                 let curiosity_satisfaction = if newly_explored_count > 0 { 0.3 } else { 0.1 };
@@ -7145,14 +10849,51 @@ impl Simulation {
         }
 
         for (animal_id, agent_index, damage, fed) in strikes {
+            // Standing there while something bites you is a fight, and how it
+            // goes is what the agent takes away from it. This is where the
+            // record mostly comes from: agents seldom set upon one another,
+            // but the country is full of things that will try them.
             {
+                use crate::agents::practices::Undertaking;
+
+                // Winning is driving the thing off with a scratch; losing is
+                // being mauled and living. Reckoning it as "did the blow kill
+                // me" made every survivor a winner, which is half a lesson:
+                // nobody ever learned that running was the better idea,
+                // because everyone who learned it was dead.
                 let agent = &mut self.population.agents[agent_index];
-                agent.take_damage(damage);
+                let came_off_well = damage < agent.state.health * Self::A_SCRATCH;
+                agent.lessons.record(Undertaking::Fighting, came_off_well);
+            }
+
+            {
+                // What is in the hand when the thing comes at you. A man who
+                // gets a spear between himself and a wolf takes a good deal
+                // less of it than a man who gets an arm up, and this is the
+                // whole of what the matrix means by a verb that wants a tool:
+                // `defend with` cannot be done bare-handed, so a man with
+                // nothing in his hands simply does not do it.
+                let landed = self.population.agents[agent_index].what_a_blow_costs_me(damage);
+                let turned = damage - landed;
+
+                let agent = &mut self.population.agents[agent_index];
+
+                // And putting a shaft in the way of something is hard on the
+                // shaft
+                if turned > 0.0 {
+                    if let Some(broke) =
+                        agent.wear_what_i_worked_with(crate::agents::SkillType::MeleeCombat)
+                    {
+                        debug!("Agent {} broke a {broke} keeping it off", agent.id);
+                    }
+                }
+
+                agent.take_damage(landed);
                 agent.emotions.record_attack(animal_id, current_tick);
 
                 debug!(
-                    "Agent {} was attacked by a hungry animal ({:.0} damage)",
-                    agent.id, damage
+                    "Agent {} was attacked by a hungry animal ({landed:.0} of {damage:.0} damage got through)",
+                    agent.id
                 );
             }
 
@@ -7370,6 +11111,10 @@ impl Simulation {
             autosave_config: None,
             last_autosave_tick: 0,
             food_database: FoodDatabase::default(),
+            // A tally of this run, not of the saved one
+            actions_taken: std::collections::HashMap::new(),
+            actions_failed: std::collections::HashMap::new(),
+            actions_failed_because: std::collections::HashMap::new(),
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);
