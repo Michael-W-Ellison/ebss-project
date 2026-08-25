@@ -420,6 +420,12 @@ impl Inventory {
         &self.items
     }
 
+    /// The same, to be changed rather than read. Draining a vessel is the
+    /// caller this was wanting.
+    pub fn get_all_items_mut(&mut self) -> &mut HashMap<String, InventoryItem> {
+        &mut self.items
+    }
+
     /// Recalculate total weight from all items
     pub fn recalculate_weight(&mut self) {
         self.current_weight = self.items.values()
@@ -1458,6 +1464,7 @@ impl Agent {
             .iter()
             .filter(|working| working.obvious || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
+            .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
             .filter(|working| self.how_many_i_have(working.makes) < making::A_FEW_SPARE)
             .find(|working| {
                 self.lessons
@@ -1474,13 +1481,29 @@ impl Agent {
     pub fn what_working_i_would_try_out(&self) -> Option<(String, String)> {
         use crate::environment::making;
 
-        making::every_working_to_find_out()
+        let could: Vec<&'static making::Working> = making::every_working_to_find_out()
             .filter(|working| !self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
-            .find(|working| {
+            .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
+            .filter(|working| {
                 self.lessons
                     .will_try_this_again(&format!("{}:{}", working.verb, working.to))
             })
+            .collect();
+
+        if could.is_empty() {
+            return None;
+        }
+
+        // Which of them this particular person is the one to try. Taking the
+        // first of the list meant the order of the table decided what a whole
+        // people ever found out: retting flax sits above fermenting fruit, so
+        // over eight worlds nobody ever fermented anything, because somebody
+        // always had flax. Where a man starts in the list is his own business.
+        let mine = (self.id.as_u128() % could.len() as u128) as usize;
+
+        could
+            .get(mine)
             .map(|working| (working.verb.to_string(), working.to.to_string()))
     }
 
@@ -1642,6 +1665,41 @@ impl Agent {
     pub fn what_a_blow_costs_me(&self, coming: f32) -> f32 {
         let turned = self.how_much_my_tools_help(super::SkillType::MeleeCombat);
         coming / turned.max(1.0)
+    }
+
+    /// How much liquid this agent is carrying in vessels.
+    ///
+    /// What the fluid family runs on. Nobody could carry any of it until
+    /// somebody worked out how to hollow out a bowl.
+    pub fn how_much_water_i_carry(&self) -> f32 {
+        self.inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.is_container())
+            .filter_map(|item| item.fill_level)
+            .sum()
+    }
+
+    /// Take that much liquid out of what is being carried, and say how much
+    /// actually came out.
+    pub fn draw_from_what_i_carry(&mut self, wanted: f32) -> f32 {
+        let mut still_wanting = wanted;
+        let mut got = 0.0;
+
+        for item in self.inventory.get_all_items_mut().values_mut() {
+            if still_wanting <= 0.0 {
+                break;
+            }
+            if !item.is_container() {
+                continue;
+            }
+
+            let came = item.drain(still_wanting);
+            still_wanting -= came;
+            got += came;
+        }
+
+        got
     }
 
     /// Whether there is a hand free to take hold of something with.

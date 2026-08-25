@@ -96,6 +96,21 @@ pub const LASHING: Making = Making {
     wants_in_hand: None,
 };
 
+/// And from flax that has been left in water until the stem let go of it.
+///
+/// Three times the cordage out of the same field, which is what retting is
+/// for - see `SOAK_FLAX`.
+pub const LASHING_FROM_RETTED: Making = Making {
+    makes: "lashing",
+    how_many: 3,
+    needs: &[("rettedflax", 1)],
+    hands: SkillType::Crafting,
+    effort: 3.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
 /// The same, from the other fibrous thing that grows here.
 pub const LASHING_FROM_COTTON: Making = Making {
     makes: "lashing",
@@ -254,6 +269,14 @@ pub struct Working {
     /// the eating, and it keeps rather less well, which is the whole reason to
     /// grind it when you mean to eat it rather than when you harvest it.
     pub feeds: Option<crate::world::ItemType>,
+    /// How much liquid out of a carried vessel it takes.
+    ///
+    /// The whole fluid family wants water, and water has to be carried to
+    /// where the work is - which is why nothing in this family could be built
+    /// until somebody could hollow out a bowl.
+    pub wants_water: f32,
+    /// Whether it wants a fire burning where the work is done
+    pub over_a_fire: bool,
 }
 
 /// A core broken down into flakes. Half the work of a stone tool, and the
@@ -269,6 +292,8 @@ pub const SMASH_A_CORE: Working = Working {
     obvious: true,
     holds: None,
     feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
 };
 
 /// A hide cut down into workable leather.
@@ -283,6 +308,8 @@ pub const CUT_A_HIDE: Working = Working {
     obvious: true,
     holds: None,
     feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
 };
 
 /// Shavings off a stick, which catch where a log will not.
@@ -301,6 +328,8 @@ pub const SCRAPE_A_STICK: Working = Working {
     obvious: false,
     holds: None,
     feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
 };
 
 /// Grain between two stones. A third more of what is in it comes out in the
@@ -319,6 +348,8 @@ pub const CRUSH_GRAIN: Working = Working {
     obvious: false,
     holds: None,
     feeds: Some(crate::world::ItemType::Flour),
+    wants_water: 0.0,
+    over_a_fire: false,
 };
 
 /// Flax worked into a basket, which is how a person carries more than their
@@ -334,6 +365,8 @@ pub const WEAVE_A_BASKET: Working = Working {
     obvious: true,
     holds: None,
     feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
 };
 
 /// A block of wood hollowed out, which is how water travels.
@@ -352,6 +385,71 @@ pub const CARVE_A_BOWL: Working = Working {
     obvious: false,
     holds: Some(4.0),
     feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// Flax left in water until the stem lets go of the fibre.
+///
+/// Retting: the first real step of making linen, and the one that turns a
+/// handful of stalks into three times the cordage they would otherwise give.
+/// It wants a vessel of water, which is why nobody could do it until somebody
+/// had carved a bowl.
+pub const SOAK_FLAX: Working = Working {
+    verb: "soak",
+    to: "flax",
+    how_much: 2,
+    makes: "rettedflax",
+    how_many: 3,
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 2.0,
+    over_a_fire: false,
+};
+
+/// Fruit and water left alone until it turns into something that keeps.
+///
+/// "The agents will need to plant, care for, harvest, and store crops to have
+/// a steady food supply." This is the storing: berries go over in hours and
+/// what they ferment into keeps a fortnight.
+pub const FERMENT_FRUIT: Working = Working {
+    verb: "ferment",
+    to: "food",
+    how_much: 4,
+    makes: "ale",
+    how_many: 3,
+    hands: SkillType::Cooking,
+    effort: 5.0,
+    obvious: false,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Ale),
+    wants_water: 3.0,
+    over_a_fire: false,
+};
+
+/// A pot of flour and water over a fire.
+///
+/// Flour is one of the things a fire on its own ruins - see
+/// `ItemType::cooking_outcome`, where whole grain improves and ground grain
+/// does not - so until there was a vessel there was no way to cook it at all.
+/// This is the last link of a chain that starts at a seed: grain, crushed
+/// between two stones, boiled in a pot, is bread.
+pub const BOIL_FLOUR: Working = Working {
+    verb: "boil",
+    to: "flour",
+    how_much: 3,
+    makes: "bread",
+    how_many: 3,
+    hands: SkillType::Cooking,
+    effort: 6.0,
+    obvious: false,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Bread),
+    wants_water: 2.0,
+    over_a_fire: true,
 };
 
 /// Everything that can be done to a thing to make it another thing.
@@ -362,6 +460,9 @@ pub const EVERY_WORKING: &[Working] = &[
     CRUSH_GRAIN,
     WEAVE_A_BASKET,
     CARVE_A_BOWL,
+    SOAK_FLAX,
+    FERMENT_FRUIT,
+    BOIL_FLOUR,
 ];
 
 /// The working of that verb on that thing, if there is one.
@@ -499,6 +600,7 @@ pub const METAL_SPEAR: Making = Making {
 pub const EVERY_STEP: &[Making] = &[
     LASHING,
     LASHING_FROM_COTTON,
+    LASHING_FROM_RETTED,
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
     SPEAR,

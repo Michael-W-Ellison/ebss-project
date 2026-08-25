@@ -5744,16 +5744,25 @@ impl Simulation {
         let holding = |what: &str| agent.how_many_i_have(what);
         let helped_by = |trade| agent.what_i_have_to_work_with(trade).is_some();
         let a_hand_to_spare = agent.a_hand_to_spare();
+        let carrying_liquid = agent.how_much_water_i_carry();
 
         wanted
             .into_iter()
-            .find(|wants| !wants.satisfied_by(&holding, &helped_by, a_hand_to_spare))
+            .find(|wants| {
+                !wants.satisfied_by_hands(
+                    &holding,
+                    &helped_by,
+                    a_hand_to_spare,
+                    carrying_liquid,
+                )
+            })
             .map(|wants| match wants {
                 verbs::Wants::ThisInHand(what) => format!("No {what} in hand for that"),
                 verbs::Wants::AToolFor(trade) => {
                     format!("Nothing in hand that is any use for {}", trade.name())
                 }
                 verbs::Wants::AFreeHand => "Both hands full".to_string(),
+                verbs::Wants::AVessel => "Nothing to hold water in".to_string(),
                 verbs::Wants::BareHands => "Nothing wanting".to_string(),
             })
     }
@@ -9485,6 +9494,25 @@ impl Simulation {
                     return ActionResult::failure(format!("Not enough {to} to {verb}"));
                 }
 
+                // Water has to be carried to where the work is, which is the
+                // whole reason a vessel matters
+                if working.wants_water > 0.0
+                    && self.population.agents[agent_index].how_much_water_i_carry()
+                        < working.wants_water
+                {
+                    return ActionResult::failure(format!("Not enough water to {verb} {to}"));
+                }
+
+                if working.over_a_fire {
+                    let stood = self.population.agents[agent_index].state.position;
+                    if self
+                        .nearest_fire_from(stood, Self::FIRE_REACH, true)
+                        .is_none()
+                    {
+                        return ActionResult::failure(format!("No fire here to {verb} {to} over"));
+                    }
+                }
+
                 // What comes off it, and how much of it these hands get. A
                 // practised hand wastes less of the core.
                 let hand = self.population.agents[agent_index]
@@ -9522,6 +9550,11 @@ impl Simulation {
                 {
                     let agent = &mut self.population.agents[agent_index];
                     agent.inventory.remove_item(to, working.how_much);
+
+                    if working.wants_water > 0.0 {
+                        agent.draw_from_what_i_carry(working.wants_water);
+                    }
+
                     agent.inventory.add_item(made);
                     agent.skills.practise(working.hands, 12, tick_now);
 

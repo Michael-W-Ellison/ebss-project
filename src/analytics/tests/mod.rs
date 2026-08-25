@@ -43,3 +43,4 @@ pub mod barter_tests;
 pub mod ground_tests;
 pub mod combat_verb_tests;
 pub mod examine_tests;
+pub mod fluid_tests;

@@ -76,6 +76,14 @@ pub enum Wants {
     AToolFor(SkillType),
     /// One particular thing, by name, held and not used up
     ThisInHand(&'static str),
+    /// Something that holds a liquid, with something in it.
+    ///
+    /// The whole fluid family wants one, and none of the fluid family could
+    /// exist until somebody could hollow out a bowl - which is what the
+    /// container machinery in this codebase had been waiting for since it was
+    /// written. A verb that wants a vessel wants a full one: an empty bowl is
+    /// a bowl and not a means.
+    AVessel,
 }
 
 impl Wants {
@@ -89,11 +97,23 @@ impl Wants {
         helped_by: &impl Fn(SkillType) -> bool,
         a_hand_to_spare: bool,
     ) -> bool {
+        self.satisfied_by_hands(holding, helped_by, a_hand_to_spare, 0.0)
+    }
+
+    /// The same, for hands that may be carrying a vessel with something in it.
+    pub fn satisfied_by_hands(
+        &self,
+        holding: &impl Fn(&str) -> u32,
+        helped_by: &impl Fn(SkillType) -> bool,
+        a_hand_to_spare: bool,
+        carrying_liquid: f32,
+    ) -> bool {
         match self {
             Wants::BareHands => true,
             Wants::AFreeHand => a_hand_to_spare,
             Wants::AToolFor(trade) => helped_by(*trade),
             Wants::ThisInHand(what) => holding(what) > 0,
+            Wants::AVessel => carrying_liquid > 0.0,
         }
     }
 }
@@ -514,9 +534,9 @@ pub const SOAK: Verb = verb(
     "soak",
     Family::Fluid,
     Targets::Water,
-    Wants::BareHands,
+    Wants::AVessel,
     &[Changes::WhatAThingIs],
-    None,
+    Some("soak"),
 );
 
 pub const COAT: Verb = verb(
@@ -532,9 +552,9 @@ pub const BOIL: Verb = verb(
     "boil",
     Family::Fluid,
     Targets::AFire,
-    Wants::ThisInHand("waterskin"),
+    Wants::AVessel,
     &[Changes::WhatAThingIs],
-    None,
+    Some("boil"),
 );
 
 pub const LEACH: Verb = verb(
@@ -550,9 +570,9 @@ pub const FERMENT: Verb = verb(
     "ferment",
     Family::Fluid,
     Targets::AThingHeld,
-    Wants::BareHands,
+    Wants::AVessel,
     &[Changes::WhatAThingIs],
-    None,
+    Some("ferment"),
 );
 
 // ---------------------------------------------------------------------------

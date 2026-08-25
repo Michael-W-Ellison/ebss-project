@@ -64,6 +64,14 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ Things done with a vessel of water, which is the family that was entirely
+  declaration until somebody could hollow out a bowl. Flax left in water lets
+  go of its fibre and gives three times the cordage — cordage carried per
+  settlement went from 31 to 46. Fruit and water left alone turn into
+  something that keeps a fortnight where berries keep hours, which is the
+  storing the specification asked for. And a pot of flour and water over a
+  fire is bread: whole grain improves in the embers and ground grain turns to
+  ash, a distinction the food tables already drew and nothing had ever used
 - ✅ A basket, a bowl and a handful of flour. Flax woven into a basket is how a
   person carries more than their arms hold. A block of wood hollowed out is
   how water travels — and it is what the container machinery in this codebase

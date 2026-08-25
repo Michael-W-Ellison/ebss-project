@@ -851,6 +851,31 @@ Crushing grain into flour is built, tested and idle, and idle for the reason
 already recorded in #10: grain barely reaches a pack in this world, so
 nobody has three of it to grind. Population 67.5 to 71.3.
 
+**And then the fluid family**, which was entirely declaration until there was
+something to hold water in. Soaking, fermenting and boiling all want a vessel
+with something in it, and the order those things had to come in is why that
+family sat idle in the matrix while every other family got built.
+
+Flax left in water lets go of its fibre and gives three times the cordage: the
+cordage a settlement carries went from 31 to 46 over eight worlds, and about
+eighteen agents a world work out how to ret. Fruit and water left alone turn
+into something that keeps a fortnight where berries keep hours, and a pot of
+flour and water over a fire is bread — whole grain improves in the embers and
+ground grain turns to ash, a distinction the food tables already drew and
+nothing had ever used. Population 66.6 to 79.0, a difference of 12.4 at a
+standard error of 9.8.
+
+Fermenting fires about twice across eight worlds and the whole grain branch —
+crush, then boil — not at all, both for reasons already recorded: berries are
+eaten as fast as they are picked, and grain barely reaches a pack. Grain
+scarcity now blocks three verbs rather than one.
+
+**The order of a table was deciding what a whole people ever found out.**
+Curiosity offered the first unknown working whose materials were to hand, and
+retting sits above fermenting in the list, so as long as anybody had flax
+nobody ever fermented anything. Where a man starts in that list is his own
+business now, drawn off his own name.
+
 Three of my own tests turned out to be asserting deterministic outcomes from
 random gates, and only failed in full-suite runs where the seeds differ:
 whether two strangers trust each other enough to trade is drawn with their

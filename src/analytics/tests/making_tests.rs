@@ -142,9 +142,18 @@ fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
 #[test]
 fn there_is_more_than_one_way_to_make_a_lashing() {
     let ways: Vec<_> = making::every_way_to_make("lashing").collect();
-    assert_eq!(ways.len(), 2, "flax and cotton should both do");
+    assert_eq!(
+        ways.len(),
+        3,
+        "flax, cotton, and flax that has been left in water"
+    );
     assert!(ways.iter().any(|w| w.needs == LASHING.needs));
     assert!(ways.iter().any(|w| w.needs == LASHING_FROM_COTTON.needs));
+    assert!(
+        ways.iter()
+            .any(|w| w.needs.iter().any(|(what, _)| *what == "rettedflax")),
+        "and retting is what gets three times as much out of the same field"
+    );
 }
 
 // --- working back from a thing wanted ---------------------------------------

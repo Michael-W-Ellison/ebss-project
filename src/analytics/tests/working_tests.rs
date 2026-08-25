@@ -85,20 +85,31 @@ fn every_working_is_done_with_a_verb_in_the_matrix() {
         assert!(
             matches!(
                 verb.family,
-                verbs::Family::Disruption | verbs::Family::Assembly
+                verbs::Family::Disruption | verbs::Family::Assembly | verbs::Family::Fluid
             ),
-            "{} does something to a thing, so it belongs to one of those two \
+            "{} does something to a thing, so it belongs to one of those three \
              families and not {:?}",
             one.verb,
             verb.family
         );
 
-        // Most of them want an edge or a hammer. Weaving is fingers, and the
-        // matrix is where that difference is written down.
+        // Most of them want an edge or a hammer, and the ones done with water
+        // want a vessel. Weaving is fingers, and the matrix is where that
+        // difference is written down.
         if one.verb != "weave" {
             assert!(
                 verb.wants_something_in_hand(),
                 "{} takes something in the hand, and the matrix should say so",
+                one.verb
+            );
+        }
+
+        // What wants water says so in both places, and they agree
+        if one.wants_water > 0.0 {
+            assert_eq!(
+                verb.wants,
+                verbs::Wants::AVessel,
+                "{} is done with water, so the matrix should want a vessel",
                 one.verb
             );
         }
@@ -317,12 +328,14 @@ fn doing_it_once_is_what_makes_it_a_thing_you_do() {
         "nobody sets out to make shavings before they know what shavings are"
     );
 
-    // Curiosity offers it, though
+    // Curiosity offers something to do with the stick. Which of the things
+    // that can be done to a stick is this particular man's own business - see
+    // `what_working_i_would_try_out`, where taking the first of the list meant
+    // the order of the table decided what a whole people ever found out.
     let curious = simulation.population.agents[0].what_working_i_would_try_out();
-    assert_eq!(
-        curious,
-        Some(("scrape".to_string(), "wood".to_string())),
-        "a man with a stick and a scraper has an idle afternoon's question"
+    assert!(
+        matches!(curious, Some((_, ref to)) if to == "wood"),
+        "a man with a stick and a scraper has an idle afternoon's question: {curious:?}"
     );
 
     simulation.execute_action(&work("scrape", "wood"), 0);

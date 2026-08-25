@@ -156,6 +156,8 @@ fn every_verb_is_performed_by_something_real() {
         // Working a thing down into another thing: `Action::Work` carries the
         // verb in it, so the verb's own name is what the action is called
         "smash", "crush", "cut", "scrape", "drill", "split", "weave", "carve",
+        // And the ones done with a vessel of water
+        "soak", "ferment", "boil",
         // Handing things over
         "trade", "giveto",
         // And putting things down and taking them up
@@ -219,13 +221,14 @@ fn the_matrix_admits_what_nothing_does_yet() {
     // The families that are all declaration and no mechanism yet are worth
     // being able to name
     let untouched: Vec<&str> = verbs::everything_still_to_build()
-        .filter(|verb| verb.family == Family::Fluid)
+        .filter(|verb| verb.family == Family::Subterranean)
         .map(|verb| verb.called)
         .collect();
 
     assert!(
         !untouched.is_empty(),
-        "the fluid family is not built; the matrix should not pretend it is"
+        "digging is the whole of the subterranean family so far; the matrix \
+         should not pretend otherwise"
     );
 }
 
