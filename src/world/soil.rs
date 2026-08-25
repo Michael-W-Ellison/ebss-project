@@ -51,6 +51,19 @@ pub struct Soil {
     /// rather than muck, and then come up.
     #[serde(default)]
     pub seeds_dropped: f32,
+
+    /// What is growing in a field that nobody wanted there.
+    ///
+    /// "Farmers should not just drop seeds and get crops. They need to
+    /// maintain the fields, clearing weeds and removing pests." Broken ground
+    /// is the best ground there is and everything else knows it: a field left
+    /// alone goes back to being a meadow, and what it carries goes with it.
+    #[serde(default)]
+    pub weeds: f32,
+
+    /// And what is eating it.
+    #[serde(default)]
+    pub pests: f32,
 }
 
 impl Soil {
@@ -193,6 +206,8 @@ impl Soil {
             },
             fouling: 0.0,
             seeds_dropped: 0.0,
+            weeds: 0.0,
+            pests: 0.0,
         }
     }
 
@@ -353,5 +368,62 @@ impl Soil {
 impl Default for Soil {
     fn default() -> Self {
         Self::for_terrain(TerrainType::Plains)
+    }
+}
+
+impl Soil {
+    /// How thick weed and vermin get before there is nothing left worth
+    /// harvesting.
+    pub const OVERRUN: f32 = 1.0;
+
+    /// How fast a field goes back to meadow, per tick of growing weather.
+    ///
+    /// A season of neglect takes a field most of the way. Nothing comes in on
+    /// ground that is not broken - a meadow cannot get any weedier than it
+    /// already is.
+    pub const WHAT_A_FIELD_LOSES_TO_NEGLECT: f32 = 0.004;
+
+    /// And how much of it one visit from a farmer puts right.
+    ///
+    /// Not all of it. Weeding is a thing you do again next week.
+    pub const WHAT_ONE_VISIT_PUTS_RIGHT: f32 = 0.45;
+
+    /// Let a season of nobody looking after it tell on a field.
+    ///
+    /// `growing` is how good the weather is for growing anything at all, which
+    /// is the same weather the crop wants: weeds do best exactly when the
+    /// wheat does.
+    pub fn nobody_weeded_this(&mut self, growing: f32, ticks: f32) {
+        let coming_on = growing.clamp(0.0, 1.0) * Self::WHAT_A_FIELD_LOSES_TO_NEGLECT * ticks;
+
+        self.weeds = (self.weeds + coming_on).clamp(0.0, Self::OVERRUN);
+        // Vermin follow the crop rather than the weather, and are slower to
+        // find a field than the weeds in it are.
+        self.pests = (self.pests + coming_on * 0.6).clamp(0.0, Self::OVERRUN);
+    }
+
+    /// Somebody spent a turn in the field pulling things up and picking things
+    /// off.
+    pub fn somebody_worked_this_field(&mut self) {
+        self.weeds = (self.weeds - Self::WHAT_ONE_VISIT_PUTS_RIGHT).max(0.0);
+        self.pests = (self.pests - Self::WHAT_ONE_VISIT_PUTS_RIGHT).max(0.0);
+    }
+
+    /// Whether this field is worth a farmer's turn.
+    pub fn wants_working(&self) -> bool {
+        self.weeds + self.pests >= Self::WORTH_A_TURN
+    }
+
+    /// How far gone a field has to be before somebody walks over to it.
+    pub const WORTH_A_TURN: f32 = 0.3;
+
+    /// What share of what a field would carry actually comes off it.
+    ///
+    /// Weeds take the ground's share, vermin take the crop's. Both together,
+    /// left alone, come to nearly nothing - which is the difference between
+    /// dropping seed and farming.
+    pub fn what_the_crop_keeps(&self) -> f32 {
+        let taken = (self.weeds + self.pests) / (2.0 * Self::OVERRUN);
+        (1.0 - taken.clamp(0.0, 1.0) * 0.9).clamp(0.1, 1.0)
     }
 }

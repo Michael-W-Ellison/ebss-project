@@ -209,19 +209,28 @@ fn nobody_farms_on_an_empty_stomach() {
         "a starving agent has more pressing business than next year's grain"
     );
 
-    // Fed, it goes to work
-    if let Some(drive) = simulation.population.agents[0]
-        .drives
-        .get_mut(DriveType::Hunger)
+    // Fed, and knowing what a field is for, it goes to work. Breaking ground
+    // is a practice now rather than something every founder is born knowing -
+    // see `farming_tests` - so the agent has to have seen it work before it
+    // will spend a day on it as a matter of course.
     {
-        drive.value = 0.0;
+        let agent = &mut simulation.population.agents[0];
+        if let Some(drive) = agent.drives.get_mut(DriveType::Hunger) {
+            drive.value = 0.0;
+        }
+        agent
+            .practices
+            .saw_it_work(crate::agents::practices::Practice::Farming);
+        agent
+            .practices
+            .saw_it_work(crate::agents::practices::Practice::Farming);
     }
 
     assert!(
         simulation
             .farming_action(&simulation.population.agents[0], position)
             .is_some(),
-        "a fed agent with the drive on it should go and break ground"
+        "a fed agent that knows what a field is for should go and break ground"
     );
 }
 

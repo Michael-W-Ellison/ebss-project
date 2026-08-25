@@ -226,6 +226,9 @@ pub enum Action {
     WearClothing { garment: String },
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
+    /// Go over a standing field pulling weeds out of it and picking pests off
+    /// it, which is most of what growing a crop actually consists of
+    TendField,
     /// Tip whatever is spoiling in the pack onto the ground here
     SpreadMuck,
     /// Take what the run is carrying, from the reach the agent is standing at
@@ -262,6 +265,7 @@ impl Action {
             Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
+            Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::SpreadMuck => Some(DriveType::Sustenance),
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),

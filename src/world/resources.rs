@@ -63,6 +63,26 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
+    /// How well this crop repays being sown rather than found.
+    ///
+    /// "They need to discover which plants are suitable for farming." Not every
+    /// plant is. Grain was made out of a grass by people who kept putting the
+    /// heaviest heads back in the ground, and it answers a plough with several
+    /// times what it gives wild. A berry bush set in rows is still a berry
+    /// bush. A stand of herbs is worth nothing more for being weeded.
+    ///
+    /// Nobody is told which is which. An agent sows what it has in its pack,
+    /// walks back at harvest, and finds out.
+    pub fn takes_to_the_plough(&self) -> f32 {
+        match self {
+            ResourceType::Grain => 3.0,
+            ResourceType::Flax | ResourceType::Cotton => 1.6,
+            ResourceType::Food => 1.15,
+            ResourceType::Herbs => 1.0,
+            _ => 1.0,
+        }
+    }
+
     /// The kind of thing a name asks for.
     ///
     /// The names are the ones an inventory carries and an `Action::Gather`
@@ -498,6 +518,27 @@ impl ResourceNode {
     /// plant living off what blows in, and not a crop.
     const MIN_YIELD_SHARE: f32 = 0.05;
 
+    /// The same, for ground that has been broken and sown.
+    ///
+    /// Breaking ground buys uptake and it buys this, and nothing else: a field
+    /// of grain stands far thicker than the same ground would carry wild,
+    /// because it is all one plant and all of it wanted. What it does not buy
+    /// is speed - a crop grows at the pace its kind grows at, worked or not.
+    ///
+    /// How much thicker depends on what was sown. This is where suitability
+    /// tells: a field of grain carries three times what the ground would
+    /// otherwise, a field of berry bushes barely more than the hedge it came
+    /// out of. See [`ResourceType::takes_to_the_plough`].
+    pub fn how_heavy_a_crop_it_carries(&self, fertility: f32, cultivated: bool) -> u32 {
+        let standing = self.standing_capacity(fertility) as f32;
+
+        if !cultivated {
+            return standing.round() as u32;
+        }
+
+        (standing * self.resource_type.takes_to_the_plough()).round() as u32
+    }
+
     /// How fast this water refills, given the ground it sits on and the
     /// weather over it.
     ///
@@ -672,7 +713,7 @@ impl ResourceNode {
         cultivated: bool,
         soil: &mut Soil,
     ) -> u32 {
-        if self.amount >= self.standing_capacity(soil.fertility()) {
+        if self.amount >= self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated) {
             return 0; // As heavy a crop as this ground will carry
         }
 
@@ -795,9 +836,24 @@ impl ResourceNode {
             return 0;
         }
 
+        // And what is taking it before the farmer does. A field is the best
+        // ground there is and everything else knows it: what a crop keeps is
+        // what the weeds and the vermin leave. On unbroken ground this is one -
+        // a meadow cannot get any weedier than it already is.
+        let kept = if cultivated {
+            soil.what_the_crop_keeps()
+        } else {
+            1.0
+        };
+
+
         // Calculate total regeneration
-        let regen_amount =
-            base_rate * temp_modifier * precip_modifier * season_modifier * nutrient_factor;
+        let regen_amount = base_rate
+            * temp_modifier
+            * precip_modifier
+            * season_modifier
+            * nutrient_factor
+            * kept;
 
         // Carry the fraction over rather than rounding it away: wild food
         // regrows slowly enough that rounding to whole units each pass loses most
@@ -807,7 +863,7 @@ impl ResourceNode {
         self.inflow_carried -= regen_units;
 
         // Add regenerated amount, capped at what this ground will carry
-        let capacity = self.standing_capacity(soil.fertility());
+        let capacity = self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated);
         let headroom = capacity.saturating_sub(self.amount);
         let actual_regen = (regen_units as u32).min(headroom);
         self.amount += actual_regen;

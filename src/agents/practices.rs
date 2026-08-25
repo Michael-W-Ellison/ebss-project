@@ -23,6 +23,15 @@ pub enum Practice {
     /// Carrying spoiled food, bones and refuse onto a field, on the theory
     /// that it does the ground good
     SpreadingMuck,
+    /// Breaking ground and putting seed in it on purpose, rather than walking
+    /// to wherever food happens to be growing.
+    ///
+    /// Nobody starts out knowing this. What teaches it is the midden: a people
+    /// that eats fruit and voids the pips in one place walks past, one season
+    /// on, the same plants coming up out of their own refuse. Seeing that is
+    /// what connects "seed in ground" to "food later", and until somebody has
+    /// seen it, breaking ground is a strange thing to do with a day.
+    Farming,
 }
 
 /// What an agent believes about the practices it knows of
@@ -109,6 +118,21 @@ impl Practices {
         let belief = self.confidence.entry(practice).or_insert(0.0);
         *belief = (*belief + 0.06).min(1.0);
     }
+
+    /// Seeing the thing itself happen, rather than seeing somebody do it.
+    ///
+    /// There is a difference between watching a man tip a basket of refuse on
+    /// a field and walking past that field a season later to find it thick
+    /// with what he threw away. The second is the outcome, not the gesture,
+    /// and it moves an agent a great deal further than hearsay does: two such
+    /// sights and the thing is settled practice.
+    pub fn saw_it_work(&mut self, practice: Practice) {
+        let belief = self.confidence.entry(practice).or_insert(0.0);
+        *belief = (*belief + Self::WHAT_SEEING_IT_IS_WORTH).min(1.0);
+    }
+
+    /// How far one sighting of the outcome moves an agent
+    const WHAT_SEEING_IT_IS_WORTH: f32 = 0.3;
 
     /// Every practice this agent has an opinion about
     pub fn known(&self) -> impl Iterator<Item = (&Practice, &f32)> {

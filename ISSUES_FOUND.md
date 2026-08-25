@@ -651,14 +651,68 @@ slow and inefficient", "wood and stone tools should wear out quickly" — but it
 means the multipliers are only worth having if a people can keep a stock of
 tools, and nothing yet makes one ahead of needing it.
 
-### 10. Agents still cannot hear anything
+### 10. Farming is learned now, and the plant nobody can reach
+
+Breaking ground used to be something every founder was born knowing, and a
+field was sown and then forgotten: nothing came on in it, nothing took it, and
+what it grew was the same whether anybody went near it again. Three things
+changed and were measured over eight worlds of ten thousand ticks each,
+against `44f7019`.
+
+**A field goes over if nobody works it.** Weeds and vermin come on in ground
+that is growing something, at a rate that takes an unattended field to about
+half overrun in a season and right over in three. What they leave is what the
+farmer gets, down to a tenth of the crop. Going round the field is an action
+with a cost and a skill behind it; a practised hand gets round three times as
+much of it in a turn as a beginner. Over eight worlds the settlements worked
+their fields 388 times each on average — an action that did not exist before —
+and held cultivated ground at 0.15 of overrun.
+
+**Nobody is born believing in it.** Farming is a `Practice` now, like spreading
+muck: an agent breaks ground out of curiosity until something proves it works,
+and two things prove it. One is standing in your own field and seeing a crop in
+it. The other is the midden — a people that voids the pips of what it eats in
+one place walks past a season later to find the same plants standing in its own
+refuse, and whoever is within six tiles takes the lesson. At ten thousand ticks
+about 45% of a living settlement (mean 31 of 69) has farming as settled
+practice and about 70% have some opinion of it, where before the number was
+not defined because everybody simply farmed.
+
+**Population did not move.** 60.9 people at ten thousand ticks before (se 8.3),
+68.8 after (se 8.9): a difference of 7.9 at a standard error of 12.2, which is
+noise. Fields broken went 81 to 91. What is standing on broken ground at any
+moment went the other way, 743 to 392, for the reason in the next paragraph.
+
+**The plant nobody can reach.** What goes in the ground is what is in the pack,
+and of what is in the pack the crop the agent's own record rates best. Grain
+carries three times what the ground would otherwise and a berry bush in rows
+is still a berry bush, so this is the mechanism by which a people finds out
+which plants are worth sowing — and in eight worlds it never fired. Every field
+in every world was sown with berries. A default world places six wild grain
+patches against twenty-five of generic food, foraging takes the nearest edible,
+and grain therefore almost never reaches a pack at all. The suitability
+machinery is built, tested and idle. Making it fire means putting more wild
+grain in the world, which is a world-generation change with its own measurement
+to do, not a line to tune here.
+
+The first cut of the sowing rule let an agent sow anything in its pack. Over
+eight worlds the people put in flax and cotton — they carry it for clothing —
+and the food standing on the map fell by ninety per cent while they farmed
+linen. A field broken to answer hunger now only takes something a person can
+eat.
+
+Also found on the way: `Gather { resource_type: "grain" }` was not a request
+the executor understood. It fell through to "unknown resource type" and failed.
+Grain only ever arrived as an edible substitute for a request for food.
+
+### 11. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 11. Zoning and territory are never established
+### 12. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -666,7 +720,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 12. Agents carry food they will never eat
+### 13. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -676,7 +730,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 13. Personality exists and reaches the drives, and still decides nothing
+### 14. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -858,7 +912,7 @@ within reach of everybody, that adds up for every pair alike. It is the same
 shape of defect as the two that were fixed — an unbounded accumulator over a
 long run — and the principle has not yet been applied to it.
 
-### 14. Skill measured how far you had walked, and bought nothing
+### 15. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
 
@@ -914,16 +968,16 @@ matching the eight-world baseline exactly.
 
 ## Housekeeping
 
-### 15. Committed backup file
+### 16. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 16. Build warnings
+### 17. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 17. Placeholder package metadata
+### 18. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

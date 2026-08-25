@@ -58,6 +58,21 @@ original specifications.
 - ✅ Farming: agents break open grass into fields and sow them. A field gets at
   more of what the soil holds and carries a heavier crop — it does not grow
   anything faster than that plant's kind can grow
+- ✅ Farming is worked out, and then worked at. Nobody starts out believing that
+  seed put in the ground on purpose comes back as food; breaking ground is a
+  hunch an agent follows out of curiosity until something proves it. Two things
+  prove it: an armful carried home off broken ground, and a walk past the
+  midden a season after the people voided the pips of what they ate, to find
+  the same plants standing in their own refuse. A field is not sown and
+  forgotten either — weeds and vermin come on in it every tick it is growing,
+  and what they leave is what the farmer gets, down to a tenth of the crop on
+  ground nobody has been near. Going round a field pulling weeds and picking
+  pests off it is an action with a cost, chosen because the field wants it, and
+  a practised hand gets round more of it in a turn. What goes in the ground is
+  what is in the pack: an agent that has only ever stripped berry bushes sows
+  berries, works the field all season and finds out what a berry bush thinks of
+  a plough. Grain carries three times what the ground would otherwise; a berry
+  bush in rows is still a berry bush
 - ✅ Learned practices: nobody tells an agent that muck does a field good. It
   tries it, watches what happens, keeps or drops the idea, and the neighbours
   who saw it take something from that too
@@ -69,7 +84,7 @@ original specifications.
   back more than a casual one, and a dedicated tailor makes better coats and
   wastes fewer. Skill used to measure how much of the map somebody had walked
   over: everybody was a master farmer, nobody had farmed, and none of it did
-  anything. See ISSUES_FOUND.md #13
+  anything. See ISSUES_FOUND.md #15
 - ✅ Everybody is somebody: a founder is drawn with three to five compatible
   traits out of sixty-odd, and everybody born afterwards takes after their two
   parents. Forty founders are forty different people
@@ -78,7 +93,7 @@ original specifications.
   pushing before starting work and a coward starts running at a smaller wolf.
   Measured against the old action ladder it changed almost nothing; both things
   that blocked it have since been rebuilt, and whether it now tells has not
-  been re-measured. See ISSUES_FOUND.md #11
+  been re-measured. See ISSUES_FOUND.md #14
 - ✅ Drives that know which of them matters: they are ranked primary, secondary
   and tertiary, and among the primaries the one that would kill soonest wins —
   a thirsty man stops hunting. Each drive waits on the one before it in the

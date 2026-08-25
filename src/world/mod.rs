@@ -1316,6 +1316,14 @@ impl World {
                 None => continue,
             };
 
+            // A field nobody has been near comes on in weeds and vermin. This
+            // runs on the same weather the crop wants, because weeds do best
+            // exactly when the wheat does.
+            if cultivated {
+                let growing = (season_modifier * ground_water).clamp(0.0, 1.0);
+                soil.nobody_weeded_this(growing, 1.0);
+            }
+
             let _regen_amount = resource.regenerate_in_ground(
                 temperature,
                 ground_water,

@@ -1036,6 +1036,7 @@ impl Simulation {
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
+            Action::TendField => Some(ActionType::Farming),
             Action::SpreadMuck => Some(ActionType::Farming),
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
@@ -2418,7 +2419,87 @@ impl Simulation {
             self.world.resources.push(volunteer);
 
             debug!("Something came up on the midden at {where_it_is:?}");
+
+            // And whoever is close enough to see it takes the lesson: what
+            // they threw away last season is standing here as food. This is
+            // the only thing in the world that teaches farming outright -
+            // everything else is somebody breaking ground on a hunch.
+            for agent in self
+                .population
+                .agents
+                .iter_mut()
+                .filter(|agent| agent.body.is_alive())
+            {
+                let apart = (agent.state.position.0 - where_it_is.x).abs()
+                    + (agent.state.position.1 - where_it_is.y).abs();
+
+                if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                    agent
+                        .practices
+                        .saw_it_work(crate::agents::practices::Practice::Farming);
+                }
+            }
         }
+    }
+
+    /// How near you have to be standing to notice that the midden is growing.
+    const CLOSE_ENOUGH_TO_SEE_IT_COME_UP: i32 = 6;
+
+    /// Everything an agent might put in the ground, by what a pack calls it.
+    ///
+    /// Seed is not a separate thing an agent carries: a handful of the grain
+    /// in the pack is next year's field, which is exactly the choice a hungry
+    /// people has to make.
+    fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 5] {
+        use crate::world::ResourceType;
+
+        // The flag is whether it is worth breaking ground for when the thing
+        // driving you is hunger
+        [
+            ("grain", ResourceType::Grain, true),
+            ("food", ResourceType::Food, true),
+            ("flax", ResourceType::Flax, false),
+            ("cotton", ResourceType::Cotton, false),
+            ("herbs", ResourceType::Herbs, false),
+        ]
+    }
+
+    /// What this agent puts in the ground, given what it is carrying and what
+    /// it has come to think of each.
+    ///
+    /// Of the sowable things in the pack it picks the one its own record rates
+    /// best - which for an agent that has never farmed is whichever comes
+    /// first, and for one that has walked back to a field of berries three
+    /// autumns running is emphatically not berries. An agent carrying nothing
+    /// sowable puts in what it has been eating, and learns from that too.
+    fn what_this_one_would_sow(agent: &crate::agents::Agent) -> crate::world::ResourceType {
+        use crate::world::ResourceType;
+
+        let mut best: Option<(ResourceType, f32)> = None;
+
+        for (called, crop, feeds_anybody) in Self::what_can_be_sown() {
+            // A field is broken to answer hunger, so what goes in it is
+            // something a person can eat. The first cut of this let an agent
+            // sow whatever was in the pack, and over eight worlds the people
+            // put in flax and cotton and starved beside their own linen.
+            if !feeds_anybody {
+                continue;
+            }
+
+            if agent.how_many_i_have(called) == 0 {
+                continue;
+            }
+
+            let believed = agent
+                .lessons
+                .how_likely_to_try_this(&format!("sow:{called}"));
+
+            if best.map(|(_, so_far)| believed > so_far).unwrap_or(true) {
+                best = Some((crop, believed));
+            }
+        }
+
+        best.map(|(crop, _)| crop).unwrap_or(ResourceType::Food)
     }
 
     /// How much comes up off one tile's worth of seed.
@@ -4050,8 +4131,46 @@ impl Simulation {
             return None;
         }
 
+        // A standing field that has gone over to weeds is worth more than a
+        // new one. "Farmers should not just drop seeds and get crops" - a
+        // field neglected for a season carries almost nothing, and going round
+        // it pulling weeds and picking pests off is most of what growing a
+        // crop consists of.
+        if let Some(field) = self.field_wanting_work(agent_position) {
+            if field.x == agent_position.0 && field.y == agent_position.1 {
+                return Some(Action::TendField);
+            }
+
+            return Some(Action::Move {
+                target: (field.x, field.y, agent_position.2),
+            });
+        }
+
         // Enough fields around here already
         if self.fields_within(agent_position, Self::FIELD_WALK_RADIUS) >= Self::FIELDS_WANTED {
+            return None;
+        }
+
+        // And breaking new ground is a thing that has to be worked out first.
+        // Until an agent has seen food come up out of ground somebody put seed
+        // in, spending a day digging grass over is a strange way to answer
+        // hunger, and it does it only out of curiosity.
+        let curiosity = agent
+            .drives
+            .get(DriveType::Curiosity)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0);
+
+        let roll = {
+            use rand::Rng;
+            rand::thread_rng().gen::<f32>()
+        };
+
+        if !agent.practices.would_try(
+            crate::agents::practices::Practice::Farming,
+            curiosity,
+            roll,
+        ) {
             return None;
         }
 
@@ -4064,6 +4183,44 @@ impl Simulation {
         Some(Action::Move {
             target: (ground.x, ground.y, agent_position.2),
         })
+    }
+
+    /// The nearest field within reach that has gone over to weeds and pests
+    fn field_wanting_work(
+        &self,
+        position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        let from = Position::new(position.0, position.1);
+        let reach = Self::FIELD_WALK_RADIUS as i32;
+
+        let mut best: Option<(Position, u32)> = None;
+
+        for dx in -reach..=reach {
+            for dy in -reach..=reach {
+                let candidate = Position::new(from.x + dx, from.y + dy);
+
+                let Some(tile) = self.world.grid.get_tile(&candidate) else {
+                    continue;
+                };
+
+                if !tile.terrain.is_cultivated() || !tile.soil.wants_working() {
+                    continue;
+                }
+
+                let distance = from.distance_to(&candidate);
+                if distance > Self::FIELD_WALK_RADIUS {
+                    continue;
+                }
+
+                if best.map(|(_, apart)| distance < apart).unwrap_or(true) {
+                    best = Some((candidate, distance));
+                }
+            }
+        }
+
+        best.map(|(where_it_is, _)| where_it_is)
     }
 
     /// Getting dressed, in whatever order the situation needs: put on what is
@@ -4836,6 +4993,13 @@ impl Simulation {
                     "stone" => Some(ResourceType::Stone),
                     "iron" => Some(ResourceType::Iron),
                     "food" => Some(ResourceType::Food),
+                    // Wild grain stands in the world and there was no way to
+                    // ask for it by name: a request for grain fell through to
+                    // "unknown resource type" and failed. It came back only as
+                    // an edible substitute for a request for food, which is
+                    // how a people that had never handled grain came to have
+                    // none of it to sow.
+                    "grain" => Some(ResourceType::Grain),
                     "water" => Some(ResourceType::Water),
                     // Clothing materials. Flax and cotton grow in patches an
                     // agent can walk to; hides and wool come off animals, so
@@ -4929,7 +5093,39 @@ impl Simulation {
                     let harvest_amount = harvest_amount.max(1);
 
                     // Harvest resource
+                    let where_it_grew = self.world.resources[resource_index].position;
                     let harvested = self.world.resources[resource_index].harvest(harvest_amount);
+
+                    // What a crop off broken ground teaches. Nobody is born
+                    // believing that seed put in the ground on purpose comes
+                    // back as food; carrying an armful home off a field is the
+                    // evidence that settles it.
+                    if harvested > 0
+                        && self
+                            .world
+                            .grid
+                            .get_tile(&where_it_grew)
+                            .map(|tile| tile.terrain.is_cultivated())
+                            .unwrap_or(false)
+                    {
+                        let agent = &mut self.population.agents[agent_index];
+                        agent
+                            .practices
+                            .record_outcome(crate::agents::practices::Practice::Farming, true);
+
+                        // And which plant it was that repaid the work. This is
+                        // the whole of how a people finds out that grain is
+                        // worth sowing and a berry bush is not: it sowed both
+                        // and kept count of what it carried home.
+                        if let Some((called, _, _)) = Self::what_can_be_sown()
+                            .into_iter()
+                            .find(|(_, crop, _)| *crop == resource_type_enum)
+                        {
+                            agent
+                                .lessons
+                                .record_particular(&format!("sow:{called}"), true);
+                        }
+                    }
 
                     // Stone and wood go quickly, and a trip out for timber is
                     // one more trip an axe will not make again.
@@ -7871,9 +8067,16 @@ impl Simulation {
                     tile.terrain = crate::world::Terrain::new(TerrainType::Farmland);
                 }
 
+                // What goes in the ground is what the agent has to put in it,
+                // and of what it has, whatever it has come to believe is worth
+                // sowing. Nobody hands out grain seed: an agent that has only
+                // ever stripped berry bushes sows berries, works the field all
+                // season, and finds out what a berry bush thinks of a plough.
+                let sown = Self::what_this_one_would_sow(&self.population.agents[agent_index]);
+
                 // A newly sown field starts empty and fills as it grows
                 let mut field = ResourceNode::new(
-                    ResourceType::Grain,
+                    sown,
                     tile_position,
                     Self::FIELD_YIELD,
                 );
@@ -7885,12 +8088,100 @@ impl Simulation {
                     .skills
                     .practise(crate::agents::SkillType::Farming, 25, tick_now);
 
-                debug!("Agent {} broke ground at {:?}", agent.id, tile_position);
+                debug!(
+                    "Agent {} broke ground at {:?} and sowed {:?}",
+                    agent.id, tile_position, sown
+                );
 
                 ActionResult::success()
                     .with_drive_change(DriveType::Sustenance, -0.4)
                     .with_energy_cost(12.0)
                     .with_message("Broke ground and sowed a field".to_string())
+            },
+
+            Action::TendField => {
+                use crate::world::Position;
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let tile_position = Position::new(agent_position.0, agent_position.1);
+
+                let Some(tile) = self.world.grid.get_tile(&tile_position) else {
+                    return ActionResult::failure("Nowhere to work".to_string());
+                };
+
+                if !tile.terrain.is_cultivated() {
+                    return ActionResult::failure("No field here to work".to_string());
+                }
+
+                let before = tile.soil.weeds + tile.soil.pests;
+
+                if before <= 0.0 {
+                    return ActionResult::failure("Nothing wants doing here".to_string());
+                }
+
+                // A walk out to a field that is still bare after all this work
+                // is what teaches an agent that it sowed the wrong thing.
+                let standing = self
+                    .world
+                    .resources
+                    .iter()
+                    .find(|resource| resource.position == tile_position)
+                    .map(|resource| (resource.resource_type, resource.amount));
+
+                if let Some((crop, amount)) = standing {
+                    if let Some((called, _, _)) = Self::what_can_be_sown()
+                        .into_iter()
+                        .find(|(_, sowable, _)| *sowable == crop)
+                    {
+                        self.population.agents[agent_index]
+                            .lessons
+                            .record_particular(&format!("sow:{called}"), amount > 0);
+                    }
+
+                    // And whether the whole business is worth anybody's day.
+                    // A man standing in his own field can see whether there is
+                    // anything in it; he does not have to wait until he is
+                    // carrying it home. This is where farming is mostly either
+                    // confirmed or given up on.
+                    self.population.agents[agent_index]
+                        .practices
+                        .record_outcome(crate::agents::practices::Practice::Farming, amount > 0);
+                }
+
+                // What a practised hand gets through in a turn. Somebody who
+                // has done it for years knows a weed from a seedling and takes
+                // the whole field; somebody who has not clears half of it and
+                // treads on the rest.
+                let hand = self.population.agents[agent_index]
+                    .skills
+                    .hand_for(crate::agents::SkillType::Farming);
+
+                let cleared = {
+                    let Some(tile) = self.world.grid.get_tile_mut(&tile_position) else {
+                        return ActionResult::failure("Nowhere to work".to_string());
+                    };
+
+                    for _ in 0..(hand.round() as u32).clamp(1, 3) {
+                        tile.soil.somebody_worked_this_field();
+                    }
+
+                    before - (tile.soil.weeds + tile.soil.pests)
+                };
+
+                let agent = &mut self.population.agents[agent_index];
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Farming, 12, tick_now);
+
+                debug!(
+                    "Agent {} worked the field at {:?} (weeds and pests down {:.2})",
+                    agent.id, tile_position, cleared
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Sustenance, -0.2)
+                    .with_energy_cost(7.0)
+                    .with_message(format!("Worked the field, clearing {cleared:.2}"))
             },
 
             Action::SpreadMuck => {
