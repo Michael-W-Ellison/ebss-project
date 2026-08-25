@@ -66,8 +66,10 @@ fn they_carry_tools_and_not_a_stockpile() {
     population.spawn_agent(AgentConfig::default());
     let founder = &population.agents[0];
 
+    // The name changed with the making chain: what they carry is now the
+    // same named thing their own hands can turn out again.
     assert!(
-        founder.inventory.get_item("stoneaxe").is_some(),
+        founder.inventory.get_item("handaxe").is_some(),
         "a stone-age people have stone tools"
     );
 

@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Seven tests fail intermittently
+### 1. Eight tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -23,6 +23,7 @@ and running the project.
     analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
     analytics::tests::longevity_tests::water_is_not_used_up
     analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
+    analytics::tests::news_tests::honest_agents_do_not_end_up_accused
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -35,7 +36,11 @@ narrower, and the tail is simply thin. The seventh was found while checking
 whether a change had broken it: it fails about one run in six *and does so on
 the commit before the change too*, so it was an undocumented flake rather than
 a regression — the test itself says a random world does not always let an agent
-reach the flax it can see. All seven build a world through
+reach the flax it can see. The eighth was found the same way: it failed once
+in a full-suite run and then passed ten times running on its own, and what it
+asserts — that no honest agent is ever accused of lying — depends on where a
+random world happens to put its resources and who happens to walk over them.
+All eight build a world through
 `World::new`, which draws from `thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
@@ -43,7 +48,7 @@ the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
-which is corrosive: check whether the failing test is one of these seven before
+which is corrosive: check whether the failing test is one of these eight before
 assuming a regression.
 
 ### 2. Three fifths of everything a settlement does fails — mostly fixed
@@ -115,6 +120,19 @@ agent's own pack instead of a placeholder; mating chooses somebody who could
 actually bear a child and whom the agent trusts; building is not attempted with
 an empty pack; and, generally, an action that keeps failing gets chosen less
 often, per particular thing tried rather than per kind of undertaking.
+
+**Craft now never fails.** The recipe chain finished the job. Measured over
+eight worlds a side of ten thousand ticks against commit `ec9399a`: craft was
+attempted 17,724 times a world and failed 17,577 of them — 99.2%, every one of
+them `Cannot craft woodenaxe`, either a missing technology or a skill gate. It
+is now attempted 529 times a world and **fails none of them**, because Utility
+asks for a step the pack will actually carry rather than for a named end
+product. All actions failing fell from 11.6% (se 0.9) to 6.0% (se 0.5), and
+stayed at 6.0% (se 0.8) once tools began wearing out.
+
+The largest remaining failure is the one this entry opened with: `Gather: No
+water sources nearby`, 12,000-20,000 a world, which is now roughly two thirds
+of everything that still fails.
 
 | Measure | Before | After |
 | --- | --- | --- |
@@ -521,6 +539,30 @@ Hunting is the same shape. Over forty worlds it puts 44 agents of 862 into
 fur, hide or leather — which nothing else can — at two points of the fed
 population and about eight percent of the population itself. A world starts
 with under a dozen animals, so most agents never find one.
+
+**Tools now cost and return something, and a settlement cannot keep up with
+them.** Until recently a tool was a thing an agent counted: `Inventory` had
+carried durability fields since the beginning, only clothing used them, and a
+man with a stone axe felled timber at exactly the rate of a man with his bare
+hands. An axe is now worth up to 1.8x on timber and 1.5x on stone, a spear
+counts in a hunt and in the shallows, a knife nearly doubles what comes off a
+carcass — and each of them wears out in twenty-five to forty pieces of work,
+sooner if the hand that made it was clumsy.
+
+Measured over eight worlds of ten thousand ticks, the settlement works with
+tools that are visibly used up: the mean condition of every tool held is 0.72
+of new (se 0.02) and about one living agent in three is carrying something
+worn through (21.3 a world, se 6.5). Toolmaking rises by a quarter to keep up —
+529 crafts a world without the wear, 668 with it (se 60) — which is the
+replacement cycle running.
+
+It buys nothing measurable yet. Population is 80.0 alive at the baseline (se
+4.8) and 70.2 across the sixteen worlds run with the chain and the tools (se
+4.6): a difference of 9.8 at 6.6, which is noise with a hint of a decline in
+it. That is roughly what the specification asks for — "everything should be
+slow and inefficient", "wood and stone tools should wear out quickly" — but it
+means the multipliers are only worth having if a people can keep a stock of
+tools, and nothing yet makes one ahead of needing it.
 
 ### 10. Agents still cannot hear anything
 

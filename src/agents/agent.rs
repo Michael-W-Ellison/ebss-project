@@ -1205,8 +1205,200 @@ impl Agent {
     /// So they arrive knowing how to raise a tent and having to gather the
     /// hides for it, which is a stone-age start rather than a stone-age
     /// stockpile.
+    ///
+    /// They are the same named things the chain in `environment::making`
+    /// turns out, so that what a founder wears through is a thing his people
+    /// know how to replace.
     const WHAT_THEY_CARRY: [(&'static str, u32, f32); 2] =
-        [("stoneaxe", 1, 2.0), ("stoneknife", 1, 0.5)];
+        [("handaxe", 1, 2.0), ("stoneknife", 1, 0.5)];
+
+    /// What a pair of hands wants to have about it, in the order it wants them.
+    ///
+    /// A spear first: it is the difference between eating meat and not. Then
+    /// something to cut wood with, then something to cut meat with.
+    pub const WHAT_A_PAIR_OF_HANDS_WANTS: [&'static str; 3] = ["spear", "handaxe", "stoneknife"];
+
+    /// The thing this agent would put its hands to now, if anything.
+    ///
+    /// Not the thing it wants - the step towards it that today's pack allows.
+    /// A man who wants a spear and holds flax and stone is told to twist
+    /// cordage, and holds a spear three turns later. Nothing here asks for a
+    /// thing already carried: two spears are no better than one until the
+    /// first one breaks.
+    pub fn what_i_would_make(&self) -> Option<String> {
+        let holding = |what: &str| self.how_many_i_have(what);
+
+        Self::WHAT_A_PAIR_OF_HANDS_WANTS
+            .iter()
+            .filter(|want| holding(want) == 0)
+            .find_map(|want| crate::environment::making::what_to_do_first(want, &holding))
+            .map(|step| step.makes.to_string())
+    }
+
+    /// How many usable ones of a named thing are in the pack.
+    ///
+    /// A worn-through tool does not count. A broken axe is not an axe: it is
+    /// carried about as a reason to make another one, and every question of
+    /// the form "have I got one of these" should answer no.
+    pub fn how_many_i_have(&self, what: &str) -> u32 {
+        self.inventory
+            .get_item(what)
+            .filter(|item| item.durability_percentage() > 0.0)
+            .map(|item| item.quantity)
+            .unwrap_or(0)
+    }
+
+    /// The tool in this agent's pack that helps most with a kind of work.
+    ///
+    /// A worn-through tool is no tool: it stays in the pack as a reminder
+    /// that a new one is wanted - see the `broken` count in `read_the_room` -
+    /// but it does no work.
+    pub fn what_i_have_to_work_with(
+        &self,
+        trade: super::SkillType,
+    ) -> Option<&'static crate::environment::making::Tool> {
+        crate::environment::making::what_helps_with(trade)
+            .filter(|tool| {
+                self.inventory
+                    .get_item(tool.called)
+                    .is_some_and(|item| item.quantity > 0 && item.durability_percentage() > 0.0)
+            })
+            .max_by(|a, b| {
+                a.how_much_better
+                    .partial_cmp(&b.how_much_better)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    }
+
+    /// What having the right tool multiplies a piece of work by.
+    ///
+    /// One if there is nothing to hand, which is what a pair of bare hands
+    /// gets. A tool most of the way through its life is most of the way back
+    /// towards bare hands.
+    pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
+        let Some(tool) = self.what_i_have_to_work_with(trade) else {
+            return 1.0;
+        };
+
+        let left = self
+            .inventory
+            .get_item(tool.called)
+            .map(|item| item.durability_percentage())
+            .unwrap_or(0.0);
+
+        // A blunt axe is still an axe, so half the gain survives to the end
+        // of its life and the other half wears away with it.
+        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left)
+    }
+
+    /// Wear the tool used for a piece of work, and say if it broke.
+    ///
+    /// Stone and wood go quickly. A spear is twenty-five or so hunts and a
+    /// handaxe forty trips out for timber, less if it was badly made, which
+    /// is why a people that cannot make tools well stays a people that cannot
+    /// do very much.
+    pub fn wear_what_i_worked_with(&mut self, trade: super::SkillType) -> Option<String> {
+        let tool = *self.what_i_have_to_work_with(trade)?;
+        let hand = self.skills.hand_for(tool.helps);
+
+        let (left, how_many) = {
+            let item = self.inventory.get_item(tool.called)?;
+            (item.current_durability.unwrap_or(0.0) - 1.0, item.quantity)
+        };
+
+        if left > 0.0 {
+            self.inventory.get_item_mut(tool.called)?.current_durability = Some(left);
+            return None;
+        }
+
+        // One of them is finished. If there is another in the pack it comes
+        // out fresh; if there is not, what is left is a broken tool. The
+        // finished one goes through `remove_item` rather than having its
+        // count knocked down in place, so that what the agent is carrying
+        // gets lighter along with it.
+        if how_many > 1 {
+            self.inventory.remove_item(tool.called, 1);
+            let fresh = crate::environment::making::how_long_this_one_lasts(&tool, hand);
+            if let Some(item) = self.inventory.get_item_mut(tool.called) {
+                item.current_durability = Some(fresh);
+                item.max_durability = Some(fresh);
+            }
+            None
+        } else {
+            self.inventory.get_item_mut(tool.called)?.current_durability = Some(0.0);
+            Some(tool.called.to_string())
+        }
+    }
+
+    /// A newly made tool, as good as the hands that made it.
+    ///
+    /// "Repeating the action increases the quality of the outcome and the
+    /// skill of the agent accomplishing the action": the same man's tenth
+    /// spear outlasts his first, because he is better at making spears.
+    pub fn a_tool_fresh_from_these_hands(
+        &self,
+        called: &str,
+        how_many: u32,
+        weight: f32,
+    ) -> super::InventoryItem {
+        let mut made = super::InventoryItem::new_with_weight(called.to_string(), how_many, weight);
+
+        if let Some(tool) = crate::environment::making::EVERY_TOOL
+            .iter()
+            .find(|tool| tool.called == called)
+        {
+            let hand = self.skills.hand_for(tool.helps);
+            let lasts = crate::environment::making::how_long_this_one_lasts(tool, hand);
+            made.current_durability = Some(lasts);
+            made.max_durability = Some(lasts);
+            made.quality = Some(super::skills::Quality::from_hand(hand));
+        }
+
+        made
+    }
+
+    /// Whether this agent has seen a named thing anywhere with its own eyes.
+    ///
+    /// Hearsay does not count here: it is about deciding to walk somewhere,
+    /// and a man walks to a meadow he remembers.
+    pub fn have_i_seen(&self, what: &str) -> bool {
+        let Some(kind) = crate::world::ResourceType::called(what) else {
+            return false;
+        };
+
+        self.exploration_knowledge
+            .known_resources
+            .iter()
+            .any(|(where_it_is, found)| {
+                *found == kind && !self.exploration_knowledge.who_told_me.contains_key(where_it_is)
+            })
+    }
+
+    /// The raw thing this agent would go out and fetch, if anything.
+    ///
+    /// The other half of `what_i_would_make`. A man who wants a spear and can
+    /// take no step towards one is not stuck: he is short of wood, or stone,
+    /// or something fibrous, and the ground has all three on it.
+    ///
+    /// Which of them he goes after is decided by what he has actually seen.
+    /// Taking the first thing the table named instead sent a whole people
+    /// after flax whether or not any grew here: two thirds of every failed
+    /// action in a settlement was `No flax sources nearby`.
+    pub fn what_i_must_find(&self) -> Option<String> {
+        let holding = |what: &str| self.how_many_i_have(what);
+
+        let wanting: Vec<&'static str> = Self::WHAT_A_PAIR_OF_HANDS_WANTS
+            .iter()
+            .filter(|want| holding(want) == 0)
+            .flat_map(|want| crate::environment::making::everything_wanting(want, &holding))
+            .collect();
+
+        wanting
+            .iter()
+            .find(|what| self.have_i_seen(what))
+            .or_else(|| wanting.first())
+            .map(|what| what.to_string())
+    }
 
     /// Set a founder up as somebody who has lived a life before this one.
     pub fn give_them_a_stone_age_start(&mut self) {
@@ -1226,11 +1418,8 @@ impl Agent {
         }
 
         for (what, how_many, each) in Self::WHAT_THEY_CARRY {
-            self.inventory.add_item(InventoryItem::new_with_weight(
-                what.to_string(),
-                how_many,
-                each,
-            ));
+            let carried = self.a_tool_fresh_from_these_hands(what, how_many, each);
+            self.inventory.add_item(carried);
         }
     }
 
@@ -1239,8 +1428,8 @@ impl Agent {
     ];
 
     /// What counts as a tool
-    const TOOLS: [&'static str; 8] = [
-        "axe", "pick", "hoe", "shovel", "spade", "knife", "hammer", "tool",
+    const TOOLS: [&'static str; 9] = [
+        "axe", "pick", "hoe", "shovel", "spade", "knife", "hammer", "tool", "spear",
     ];
 
     /// What counts as a fine or decorative thing

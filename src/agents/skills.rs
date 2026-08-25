@@ -141,6 +141,24 @@ pub enum Quality {
 }
 
 impl Quality {
+    /// The quality a given pair of hands turns out.
+    ///
+    /// `hand` is the multiplier from [`Skill::hand`]: 0.5 for the clumsiest
+    /// possible, 1.25 for an untrained adult, 2.0 for the best there is. The
+    /// bands are set so that a founder - who arrives four or five levels
+    /// below untrained, having lived a life but no more than that - makes
+    /// crude things. None of them are experts at making anything.
+    pub fn from_hand(hand: f32) -> Self {
+        match hand {
+            h if h < 0.8 => Quality::Pathetic,
+            h if h < 1.1 => Quality::Crude,
+            h if h < 1.4 => Quality::Basic,
+            h if h < 1.65 => Quality::Moderate,
+            h if h < 1.85 => Quality::Advanced,
+            _ => Quality::Expert,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Quality::Pathetic => "Pathetic",

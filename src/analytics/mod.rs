@@ -1124,7 +1124,7 @@ impl Simulation {
                     Action::Socialize { target_agent_id: uuid::Uuid::nil() }
                 }
             },
-            DriveType::Utility => Action::Craft { item_type: "woodenaxe".to_string() },
+            DriveType::Utility => Action::Craft { item_type: "spear".to_string() },
             // Putting something by needs something to put by, which this
             // ladder cannot see - the drive path above names a real thing out
             // of the agent's own pack. A trip out is the honest fallback.
@@ -1260,7 +1260,7 @@ impl Simulation {
                     })
                 },
                 ExternalGoal::EnsureToolsAvailable(_count) => {
-                    Some(Action::Craft { item_type: "woodenaxe".to_string() })
+                    Some(Action::Craft { item_type: "spear".to_string() })
                 },
             }
         } else {
@@ -2011,20 +2011,19 @@ impl Simulation {
                     })
             }
 
-            // Making a thing needs something to make it out of
-            DriveType::Utility => {
-                if agent.inventory.get_all_items().values().any(|item| {
-                    item.quantity > 0 && crate::agents::Agent::MATERIALS
-                        .iter()
-                        .any(|kind| item.item_id.contains(kind))
-                }) {
-                    Some(Action::Craft {
-                        item_type: "woodenaxe".to_string(),
-                    })
-                } else {
-                    None
-                }
-            }
+            // Making a thing needs something to make it out of, and a step
+            // that the makings in the pack will actually carry. Asking for a
+            // wooden axe was asking for a technology these people have not
+            // got: every one of those turns came back
+            // `missing technology 'wooden_tools'`.
+            DriveType::Utility => agent
+                .what_i_would_make()
+                .map(|item_type| Action::Craft { item_type })
+                .or_else(|| {
+                    agent
+                        .what_i_must_find()
+                        .map(|resource_type| Action::Gather { resource_type })
+                }),
 
             // Putting something by needs something to put by
             DriveType::Preparedness => {
@@ -2578,9 +2577,15 @@ impl Simulation {
     /// - that nothing downstream knows about, so meat that was never renamed
     /// could not be cooked or eaten. This is where a carcass becomes food with
     /// nutrition in it and skins that can become a coat.
+    ///
+    /// `with_a_knife` is what the tool in the butcher's hand multiplies the
+    /// carcass by - see `Agent::how_much_my_tools_help`. Taking a deer apart
+    /// with a sharp flake and taking it apart with your hands are not the
+    /// same job, and until now they were.
     fn butcher(
         &self,
         dropped: &[crate::environment::ItemStack],
+        with_a_knife: f32,
     ) -> Vec<crate::agents::InventoryItem> {
         use crate::agents::InventoryItem;
 
@@ -2588,6 +2593,8 @@ impl Simulation {
         dropped
             .iter()
             .map(|stack| {
+                let off_the_carcass =
+                    ((stack.quantity as f32 * with_a_knife).round() as u32).max(1);
                 let item_id =
                     crate::agents::storage_integration::butchered_item_id(&stack.material_id)
                         .to_string();
@@ -2599,7 +2606,7 @@ impl Simulation {
 
                 // Two kilos is what an animal drop weighs unless something
                 // else says otherwise
-                let mut item = InventoryItem::new_with_weight(item_id, stack.quantity, 2.0);
+                let mut item = InventoryItem::new_with_weight(item_id, off_the_carcass, 2.0);
                 item.food_data = food_data;
                 item
             })
@@ -4576,11 +4583,16 @@ impl Simulation {
                     // hand knows which plants are worth stripping and how to
                     // take a crop without ruining what is left, and brings
                     // back up to twice what a beginner does.
-                    let hand = self.population.agents[agent_index]
-                        .skills
-                        .hand_for(Self::trade_for_gathering(resource_type_enum));
+                    let trade = Self::trade_for_gathering(resource_type_enum);
+                    let hand = self.population.agents[agent_index].skills.hand_for(trade);
 
-                    let worth = ordinary as f32 * hand;
+                    // And what he has in his hands while he does it. A stone
+                    // axe was, until now, a thing an agent counted and nothing
+                    // else: a man carrying one felled timber at exactly the
+                    // rate of a man with his bare hands.
+                    let tool = self.population.agents[agent_index].how_much_my_tools_help(trade);
+
+                    let worth = ordinary as f32 * hand * tool;
 
                     // Carry the fraction as a chance rather than rounding it
                     // away, so that a small difference in skill still tells
@@ -4592,6 +4604,19 @@ impl Simulation {
 
                     // Harvest resource
                     let harvested = self.world.resources[resource_index].harvest(harvest_amount);
+
+                    // Stone and wood go quickly, and a trip out for timber is
+                    // one more trip an axe will not make again.
+                    if harvested > 0 && tool > 1.0 {
+                        if let Some(broke) =
+                            self.population.agents[agent_index].wear_what_i_worked_with(trade)
+                        {
+                            debug!(
+                                "Agent {} wore out a {broke}",
+                                self.population.agents[agent_index].id
+                            );
+                        }
+                    }
 
                     if harvested > 0 {
                         // Water is consumed immediately (drinking), not stored
@@ -5121,6 +5146,84 @@ impl Simulation {
             },
 
             Action::Craft { item_type } => {
+                // The stone-age chain comes first. These steps take named
+                // things and turn out named things, so what one step produces
+                // the next can pick up; the table below it cannot express that,
+                // because its inputs are only ever things dug out of the ground.
+                if crate::environment::making::is_made_not_found(item_type) {
+                    let step = {
+                        let agent = &self.population.agents[agent_index];
+                        let holding = |what: &str| agent.how_many_i_have(what);
+
+                        match crate::environment::making::every_way_to_make(item_type)
+                            .find(|step| step.makings_to_hand(&holding))
+                        {
+                            Some(step) => *step,
+                            None => {
+                                // Say what is missing rather than that it cannot
+                                // be done: the shortfall is the next job.
+                                let short = crate::environment::making::every_way_to_make(item_type)
+                                    .filter_map(|step| step.short_of(&holding))
+                                    .min_by_key(|(_, missing)| *missing);
+
+                                return match short {
+                                    Some((what, how_many)) => ActionResult::failure(format!(
+                                        "Cannot make {}: short {} {}",
+                                        item_type, how_many, what
+                                    )),
+                                    None => ActionResult::failure(format!(
+                                        "Cannot make {}",
+                                        item_type
+                                    )),
+                                };
+                            }
+                        }
+                    };
+
+                    let agent = &mut self.population.agents[agent_index];
+                    for (what, how_many) in step.needs {
+                        agent.inventory.remove_item(what, *how_many);
+                    }
+
+                    // A thing that took more doing is the heavier thing to
+                    // carry, and a thing made by a better hand is a better
+                    // thing: it lasts longer and it works better.
+                    // A worn-through one of the same thing is thrown away
+                    // rather than stacked with the new one: stacking would
+                    // hand the fresh tool the broken one's durability.
+                    if agent
+                        .inventory
+                        .get_item(step.makes)
+                        .is_some_and(|carried| carried.durability_percentage() <= 0.0)
+                    {
+                        let had = agent.inventory.count_item(step.makes);
+                        agent.inventory.remove_item(step.makes, had);
+                    }
+
+                    let made = agent.a_tool_fresh_from_these_hands(
+                        step.makes,
+                        step.how_many,
+                        step.effort / 4.0,
+                    );
+                    if !agent.inventory.add_item(made) {
+                        debug!(
+                            "Agent {} made {} but had nowhere to put it",
+                            agent.id, step.makes
+                        );
+                    }
+
+                    {
+                        let skill = agent.skills.get_skill_mut(step.hands);
+                        skill.gain_experience(1);
+                        skill.last_used = tick_now;
+                    }
+
+                    return ActionResult::success()
+                        .with_drive_change(DriveType::Utility, -0.2)
+                        .with_energy_cost(step.effort)
+                        .with_message(format!("Made {} {}", step.how_many, step.makes));
+                }
+
                 use crate::world::production::{Quality as ProductionQuality, Recipe, ResourceRequirement, ProductionOutput};
                 use crate::world::{ItemType, ResourceType};
                 use crate::agents::skills::SkillType;
@@ -5782,7 +5885,13 @@ impl Simulation {
                         .get_skill_if_exists(crate::agents::skills::SkillType::Hunting)
                         .map(|s| s.level)
                         .unwrap_or(-10);
-                    let weapon_bonus = if weapon.is_some() { 0.2 } else { 0.0 };
+                    // A spear in the hand, which is the whole of stone-age
+                    // hunting. `weapon` is the older flag and still counts;
+                    // what is in the pack counts for more, and counts for
+                    // less as it wears.
+                    let spear = agent.how_much_my_tools_help(crate::agents::skills::SkillType::Hunting);
+                    let carried_flag: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
+                    let weapon_bonus = carried_flag.max((spear - 1.0) * 0.25);
 
                     // Get mounted combat bonus (hunting from horseback is advantageous!)
                     let mount_bonus = agent.transport.mounted_combat_bonus();
@@ -5798,6 +5907,9 @@ impl Simulation {
                         let combat_multiplier = 1.0 + mount_bonus;
                         let damage = base_damage * combat_multiplier;
                         animal.take_damage(damage);
+                        // A throw at a deer is one more throw the shaft will
+                        // not take. Twenty-five or so, and it is firewood.
+                        let wore_out = spear > 1.0;
 
                         // If killed, get drops
                         let mut items_gained = Vec::new();
@@ -5812,10 +5924,28 @@ impl Simulation {
                                 }
                             }
 
-                            let butchered = self.butcher(&items_gained);
+                            let knife = self.population.agents[agent_index]
+                                .how_much_my_tools_help(
+                                    crate::agents::skills::SkillType::Leatherworking,
+                                );
+                            let butchered = self.butcher(&items_gained, knife);
                             let agent = &mut self.population.agents[agent_index];
                             for item in butchered {
                                 agent.inventory.add_item(item);
+                            }
+
+                            // Both tools are one job further through their
+                            // lives: the spear that was thrown and the flake
+                            // that took the carcass apart.
+                            if wore_out {
+                                agent.wear_what_i_worked_with(
+                                    crate::agents::skills::SkillType::Hunting,
+                                );
+                            }
+                            if knife > 1.0 {
+                                agent.wear_what_i_worked_with(
+                                    crate::agents::skills::SkillType::Leatherworking,
+                                );
                             }
 
                             // Increase hunting skill
@@ -5837,6 +5967,11 @@ impl Simulation {
                             result
                         } else {
                             let agent = &mut self.population.agents[agent_index];
+                            if wore_out {
+                                agent.wear_what_i_worked_with(
+                                    crate::agents::skills::SkillType::Hunting,
+                                );
+                            }
                             agent
                                 .skills
                                 .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
@@ -5972,7 +6107,11 @@ impl Simulation {
                         }
                     }
 
-                    let butchered = self.butcher(&items_gained);
+                    let knife = self.population.agents[agent_index]
+                        .how_much_my_tools_help(
+                            crate::agents::skills::SkillType::Leatherworking,
+                        );
+                    let butchered = self.butcher(&items_gained, knife);
                     {
                         let agent = &mut self.population.agents[agent_index];
                         for item in butchered {
@@ -7488,14 +7627,30 @@ impl Simulation {
                 // exactly why a fishery is worth building a life beside and a
                 // deer is not.
                 let thickness = (standing as f32 / Self::A_GOOD_REACH).clamp(0.0, 1.0);
-                let hand = (skill / 10.0).clamp(0.0, 0.5) + if rod { 0.2 } else { 0.0 };
+
+                // A spear is what a people with no line fishes with, and it
+                // is slow work: standing in the shallows waiting for
+                // something to come within reach of a thrust.
+                let spear = self.population.agents[agent_index]
+                    .how_much_my_tools_help(crate::agents::SkillType::Fishing);
+
+                let hand = (skill / 10.0).clamp(0.0, 0.5)
+                    + if rod { 0.2 } else { 0.0 }
+                    + (spear - 1.0) * 0.3;
                 let odds = (0.35 + 0.4 * thickness + hand).clamp(0.0, 0.95);
+
+                if spear > 1.0 {
+                    self.population.agents[agent_index]
+                        .wear_what_i_worked_with(crate::agents::SkillType::Fishing);
+                }
 
                 if rng.gen::<f32>() > odds {
                     return ActionResult::failure("Nothing took".to_string());
                 }
 
-                let caught = Self::FISH_PER_CAST + if rod { 1 } else { 0 };
+                let caught = Self::FISH_PER_CAST
+                    + u32::from(rod)
+                    + u32::from(spear > 1.3);
 
                 let taken = {
                     let resource = self

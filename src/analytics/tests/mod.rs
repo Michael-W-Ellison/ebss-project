@@ -25,3 +25,5 @@ pub mod relationship_graph_tests;
 pub mod distrust_tests;
 pub mod news_tests;
 pub mod stone_age_tests;
+pub mod making_tests;
+pub mod tool_wear_tests;

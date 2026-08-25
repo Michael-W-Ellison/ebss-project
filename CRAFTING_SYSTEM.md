@@ -11,6 +11,54 @@ The crafting system enables agents to:
 - Progress from wooden tools → stone tools → iron tools
 - Convert raw resources into finished goods
 
+## The stone-age chain
+
+**Location**: `src/environment/making.rs`
+
+Everything below this section takes its inputs as `ResourceType` — things dug
+or picked out of the ground — and its outputs as `ItemType`. That is a table of
+one-step recipes and it cannot express a chain: there is no way to say that the
+thing you made last is what you need for the thing you are making now.
+Everything a people could do therefore had to be reachable in a single move
+from raw material, which is why the whole of their toolmaking was three logs
+into an axe.
+
+`making.rs` takes named things and makes a named thing, so what one step
+produces the next can consume:
+
+```text
+flax or cotton                  -> lashing
+stone                           -> a knapped tip
+stick + tip + lashing           -> spear
+stick + tip + lashing           -> hand axe
+tip + lashing                   -> stone knife
+```
+
+`what_to_do_first` works back from the thing wanted through what it is short
+of and returns the first step whose makings are actually in the pack: a man who
+wants a spear and holds flax is told to twist cordage. `what_is_wanting` is the
+other half — when no step can be taken, it names the raw thing to go and fetch.
+`Agent::what_i_would_make` and `Agent::what_i_must_find` are what the Utility
+drive asks; `Action::Craft` resolves a named step here before falling through
+to the table below.
+
+A tool made this way is as good as the hands that made it: `Quality::from_hand`
+and `how_long_this_one_lasts` set what it is worth and how long it lasts, so
+the same man's tenth spear outlasts his first. `Making::obvious` marks what a
+stone-age people arrives already knowing — everything in the table today, with
+the field there for the things they will have to find out.
+
+### What a tool is for
+
+`making::EVERY_TOOL` says which work each tool helps with and by how much: an
+axe is up to 1.8x on timber and 1.5x on stone, a spear 2.0x in a hunt and 1.6x
+in the shallows, a knife 1.8x on a carcass and 1.3x at the bench. Half the gain
+survives to the end of the tool's life and the other half wears away with it.
+`Agent::how_much_my_tools_help` is what the gathering, hunting, butchering and
+fishing paths multiply by; `Agent::wear_what_i_worked_with` is what takes a
+piece of work out of the tool afterwards. Twenty-five to forty pieces of work
+is a stone-age tool's whole life.
+
 ## System Components
 
 ### 1. Recipe System

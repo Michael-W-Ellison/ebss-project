@@ -63,6 +63,26 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
+    /// The kind of thing a name asks for.
+    ///
+    /// The names are the ones an inventory carries and an `Action::Gather`
+    /// asks by, so that a chain of makings can say "flax" and have the
+    /// gathering path go and find some.
+    pub fn called(name: &str) -> Option<Self> {
+        Some(match name {
+            "wood" => ResourceType::Wood,
+            "stone" => ResourceType::Stone,
+            "iron" => ResourceType::Iron,
+            "food" => ResourceType::Food,
+            "water" => ResourceType::Water,
+            "flax" => ResourceType::Flax,
+            "cotton" => ResourceType::Cotton,
+            "hides" => ResourceType::Hides,
+            "wool" => ResourceType::Wool,
+            _ => return None,
+        })
+    }
+
     /// How strongly this gives itself away by smell where it lies untouched,
     /// as a fraction of an agent's full smelling range.
     ///
