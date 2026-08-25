@@ -103,7 +103,7 @@ fn a_spear_is_made_of_something_that_was_itself_made() {
 fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
     // What the ground offers, by the names `Action::Gather` answers to.
     let out_of_the_ground = ["wood", "stone", "iron", "food", "water", "flax", "cotton",
-                             "hides", "wool"];
+                             "hides", "wool", "grain"];
 
     // And what comes off a thing that is worked down rather than assembled -
     // a flake off a core, leather off a hide, shavings off a stick

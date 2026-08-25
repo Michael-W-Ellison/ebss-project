@@ -9499,16 +9499,30 @@ impl Simulation {
                     + u32::from(rng.gen::<f32>() < worth - whole);
                 let came_off = came_off.max(1);
 
+                // What comes out. A bowl is a thing you can put water in and a
+                // handful of flour is a meal, and neither is a lump of stuff
+                // with a name on it - see `Working::holds` and `Working::feeds`.
+                let mut made = match working.holds {
+                    Some(capacity) => crate::agents::InventoryItem::new_container(
+                        working.makes.to_string(),
+                        came_off,
+                        capacity,
+                    ),
+                    None => crate::agents::InventoryItem::new_with_weight(
+                        working.makes.to_string(),
+                        came_off,
+                        1.0,
+                    ),
+                };
+
+                if let Some(as_food) = working.feeds {
+                    made.food_data = self.food_database.create_food_data(&as_food, tick_now);
+                }
+
                 {
                     let agent = &mut self.population.agents[agent_index];
                     agent.inventory.remove_item(to, working.how_much);
-                    agent.inventory.add_item(
-                        crate::agents::InventoryItem::new_with_weight(
-                            working.makes.to_string(),
-                            came_off,
-                            1.0,
-                        ),
-                    );
+                    agent.inventory.add_item(made);
                     agent.skills.practise(working.hands, 12, tick_now);
 
                     // Having done it once he can do it on purpose. For the

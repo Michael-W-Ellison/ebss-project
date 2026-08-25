@@ -15,6 +15,8 @@ use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
 use crate::environment::making;
 use crate::environment::verbs::{self, Wants};
+#[allow(unused_imports)]
+use crate::world::ItemType;
 use crate::environment::Action;
 use crate::world::{World, WorldConfig};
 
@@ -80,17 +82,26 @@ fn every_working_is_done_with_a_verb_in_the_matrix() {
         let verb = verbs::what_that_verb_is(one.verb)
             .unwrap_or_else(|| panic!("{} is not in the matrix", one.verb));
 
-        assert_eq!(
-            verb.family,
-            verbs::Family::Disruption,
-            "{} is a reducing verb and should be in the disruption family",
-            one.verb
-        );
         assert!(
-            verb.wants_something_in_hand(),
-            "{} takes an edge or a hammer, and the matrix should say so",
-            one.verb
+            matches!(
+                verb.family,
+                verbs::Family::Disruption | verbs::Family::Assembly
+            ),
+            "{} does something to a thing, so it belongs to one of those two \
+             families and not {:?}",
+            one.verb,
+            verb.family
         );
+
+        // Most of them want an edge or a hammer. Weaving is fingers, and the
+        // matrix is where that difference is written down.
+        if one.verb != "weave" {
+            assert!(
+                verb.wants_something_in_hand(),
+                "{} takes something in the hand, and the matrix should say so",
+                one.verb
+            );
+        }
         assert_eq!(
             verb.done_by,
             Some(one.verb),
@@ -399,5 +410,157 @@ fn tinder_halves_the_wood_a_fire_wants() {
     assert!(
         lit_with(2, 6),
         "six sticks and a handful of shavings will"
+    );
+}
+
+// --------------------------------------------------------------------------
+// What the later workings are for
+// --------------------------------------------------------------------------
+
+/// Grain between two stones is worth more than grain.
+#[test]
+fn ground_grain_feeds_better_than_whole_grain() {
+    let mut simulation = a_person();
+    empty_the_pack(&mut simulation);
+    give(&mut simulation, "grain", 6);
+    give_a_tool(&mut simulation, "handaxe");
+
+    // A discovery, so it has to be found before it can be done on purpose
+    simulation.population.agents[0].found_out_how_to("flour");
+
+    let result = simulation.execute_action(&work("crush", "grain"), 0);
+    assert!(result.success, "grain grinds: {:?}", result.message);
+
+    let flour = simulation.population.agents[0]
+        .inventory
+        .get_item("flour")
+        .expect("there is flour in the pack");
+
+    let grain_worth = simulation
+        .food_database
+        .create_food_data(&crate::world::ItemType::Grain, 0)
+        .expect("grain is food")
+        .base_nutrition
+        .energy;
+
+    let flour_worth = flour
+        .food_data
+        .as_ref()
+        .expect("and flour is food")
+        .base_nutrition
+        .energy;
+
+    assert!(
+        flour_worth > grain_worth,
+        "opening the seed gets more out of it: {flour_worth} against {grain_worth}"
+    );
+}
+
+/// And keeps rather less well, which is why you grind it when you mean to eat
+/// it.
+#[test]
+fn ground_grain_keeps_less_well_than_whole_grain() {
+    let simulation = a_person();
+
+    let keeps = |what: crate::world::ItemType| {
+        simulation
+            .food_database
+            .create_food_data(&what, 0)
+            .expect("food")
+            .base_spoilage_ticks
+    };
+
+    assert!(
+        keeps(crate::world::ItemType::Flour) < keeps(crate::world::ItemType::Grain),
+        "a sack of flour does not keep like a sack of seed"
+    );
+}
+
+/// A basket is how a person carries more than their arms hold.
+#[test]
+fn a_basket_carries_what_the_arms_cannot() {
+    let mut simulation = a_person();
+    empty_the_pack(&mut simulation);
+
+    let bare_arms = simulation.population.agents[0]
+        .inventory
+        .effective_max_weight();
+
+    give(&mut simulation, "flax", 6);
+    let result = simulation.execute_action(&work("weave", "flax"), 0);
+    assert!(result.success, "flax weaves: {:?}", result.message);
+
+    assert!(
+        simulation.population.agents[0].how_many_i_have("basket") > 0,
+        "there is a basket in the pack"
+    );
+    assert!(
+        simulation.population.agents[0]
+            .inventory
+            .effective_max_weight()
+            > bare_arms,
+        "and the pack holds more for it"
+    );
+}
+
+/// Weaving is fingers. It is the one reducing verb that wants nothing in the
+/// hand.
+#[test]
+fn weaving_wants_nothing_in_the_hand() {
+    assert!(
+        verbs::what_this_action_cannot_do_without("weave").is_empty(),
+        "you weave with your fingers"
+    );
+
+    let mut simulation = a_person();
+    empty_the_pack(&mut simulation);
+    give(&mut simulation, "flax", 6);
+
+    let result = simulation.execute_action(&work("weave", "flax"), 0);
+    assert!(result.success, "empty-handed and still weaving");
+}
+
+/// A carved bowl is a thing you can put water in.
+#[test]
+fn a_carved_bowl_holds_water() {
+    let mut simulation = a_person();
+    empty_the_pack(&mut simulation);
+    give(&mut simulation, "wood", 6);
+    give_a_tool(&mut simulation, "stoneknife");
+    simulation.population.agents[0].found_out_how_to("bowl");
+
+    let result = simulation.execute_action(&work("carve", "wood"), 0);
+    assert!(result.success, "wood carves: {:?}", result.message);
+
+    let bowl = simulation.population.agents[0]
+        .inventory
+        .get_item("bowl")
+        .expect("there is a bowl in the pack");
+
+    assert!(bowl.is_container(), "and it is a thing that holds something");
+
+    // And it fills at the water like any other vessel
+    let filled = simulation.population.agents[0]
+        .inventory
+        .fill_containers(10.0);
+
+    assert!(
+        filled > 0.0,
+        "a bowl held under a river comes up with water in it"
+    );
+}
+
+/// Nothing in the world made a container before this.
+#[test]
+fn something_in_the_world_now_makes_a_vessel() {
+    let vessels: Vec<&str> = making::EVERY_WORKING
+        .iter()
+        .filter(|working| working.holds.is_some())
+        .map(|working| working.makes)
+        .collect();
+
+    assert!(
+        !vessels.is_empty(),
+        "the container machinery was written long ago and nothing ever made one"
     );
 }

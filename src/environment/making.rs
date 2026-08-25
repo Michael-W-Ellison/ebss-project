@@ -242,6 +242,18 @@ pub struct Working {
     pub effort: f32,
     /// Whether a people arriving here already know it
     pub obvious: bool,
+    /// How much liquid what comes out will hold, if it holds any.
+    ///
+    /// A carved bowl is not a lump of wood with a name; it is a thing you can
+    /// put water in and walk away from the river with. The container machinery
+    /// was written long ago and nothing in the world ever made one.
+    pub holds: Option<f32>,
+    /// What comes out, as the food tables know it, if it is food.
+    ///
+    /// Ground grain is not grain. A third more of what is in it comes out in
+    /// the eating, and it keeps rather less well, which is the whole reason to
+    /// grind it when you mean to eat it rather than when you harvest it.
+    pub feeds: Option<crate::world::ItemType>,
 }
 
 /// A core broken down into flakes. Half the work of a stone tool, and the
@@ -255,6 +267,8 @@ pub const SMASH_A_CORE: Working = Working {
     hands: SkillType::Mining,
     effort: 5.0,
     obvious: true,
+    holds: None,
+    feeds: None,
 };
 
 /// A hide cut down into workable leather.
@@ -267,6 +281,8 @@ pub const CUT_A_HIDE: Working = Working {
     hands: SkillType::Leatherworking,
     effort: 6.0,
     obvious: true,
+    holds: None,
+    feeds: None,
 };
 
 /// Shavings off a stick, which catch where a log will not.
@@ -283,10 +299,70 @@ pub const SCRAPE_A_STICK: Working = Working {
     hands: SkillType::Leatherworking,
     effort: 3.0,
     obvious: false,
+    holds: None,
+    feeds: None,
+};
+
+/// Grain between two stones. A third more of what is in it comes out in the
+/// eating, and it keeps rather less well.
+///
+/// Not obvious. That a seed can be opened rather than swallowed whole is a
+/// thing somebody works out with a hammerstone in his hand.
+pub const CRUSH_GRAIN: Working = Working {
+    verb: "crush",
+    to: "grain",
+    how_much: 3,
+    makes: "flour",
+    how_many: 3,
+    hands: SkillType::Mining,
+    effort: 7.0,
+    obvious: false,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Flour),
+};
+
+/// Flax worked into a basket, which is how a person carries more than their
+/// arms hold.
+pub const WEAVE_A_BASKET: Working = Working {
+    verb: "weave",
+    to: "flax",
+    how_much: 3,
+    makes: "basket",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 8.0,
+    obvious: true,
+    holds: None,
+    feeds: None,
+};
+
+/// A block of wood hollowed out, which is how water travels.
+///
+/// Not obvious, and the thing the whole container machinery was waiting for:
+/// an agent with a bowl fills it at the river and drinks from it a day's walk
+/// away.
+pub const CARVE_A_BOWL: Working = Working {
+    verb: "carve",
+    to: "wood",
+    how_much: 2,
+    makes: "bowl",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 10.0,
+    obvious: false,
+    holds: Some(4.0),
+    feeds: None,
 };
 
 /// Everything that can be done to a thing to make it another thing.
-pub const EVERY_WORKING: &[Working] = &[SMASH_A_CORE, CUT_A_HIDE, SCRAPE_A_STICK];
+pub const EVERY_WORKING: &[Working] = &[
+    SMASH_A_CORE,
+    CUT_A_HIDE,
+    SCRAPE_A_STICK,
+    CRUSH_GRAIN,
+    WEAVE_A_BASKET,
+    CARVE_A_BOWL,
+];
 
 /// The working of that verb on that thing, if there is one.
 pub fn how_to_work(verb: &str, to: &str) -> Option<&'static Working> {

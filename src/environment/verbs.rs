@@ -382,7 +382,7 @@ pub const CRUSH: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
-    None,
+    Some("crush"),
 );
 
 pub const CUT: Verb = verb(
@@ -574,7 +574,7 @@ pub const WEAVE: Verb = verb(
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatAThingIs],
-    None,
+    Some("weave"),
 );
 
 pub const CARVE: Verb = verb(
@@ -583,7 +583,7 @@ pub const CARVE: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Crafting),
     &[Changes::WhatAThingIs],
-    None,
+    Some("carve"),
 );
 
 pub const MOLD: Verb = verb(

@@ -64,6 +64,13 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ A basket, a bowl and a handful of flour. Flax woven into a basket is how a
+  person carries more than their arms hold. A block of wood hollowed out is
+  how water travels — and it is what the container machinery in this codebase
+  had been waiting for since it was written, because nothing in the world had
+  ever made one. Grain between two stones gets a third more out of the seed
+  and keeps rather less well, which is why you grind it when you mean to eat
+  it rather than when you bring it in
 - ✅ Looking closely at a strange thing you are already carrying. The third
   road into the chain, beside doing a thing twice to see it happen again and
   putting the wrong thing where a part goes — and the cheapest, a turn and no

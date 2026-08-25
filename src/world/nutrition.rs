@@ -375,6 +375,17 @@ impl FoodDatabase {
             default_preparation: PreparationState::Raw,
         });
 
+        // Flour - grain opened up between two stones. A third more of what is
+        // in a seed comes out in the eating once the husk is off it, and it
+        // keeps rather less well than the whole seed does, which is the whole
+        // reason to grind it when you mean to eat it rather than when you
+        // bring it in.
+        self.entries.insert(ItemType::Flour, FoodTemplate {
+            base_nutrition: NutritionalContent::new(80.0, 16.0, 14.0, 0.1),
+            base_spoilage_ticks: 7200, // 5 days, against grain's 10
+            default_preparation: PreparationState::Raw,
+        });
+
         // Bread - processed grain, already cooked
         self.entries.insert(ItemType::Bread, FoodTemplate {
             base_nutrition: NutritionalContent::new(55.0, 12.0, 10.0, 0.3),

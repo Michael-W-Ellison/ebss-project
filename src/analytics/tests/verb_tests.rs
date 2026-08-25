@@ -155,7 +155,7 @@ fn every_verb_is_performed_by_something_real() {
         "collectanimalproduct", "harvestplant",
         // Working a thing down into another thing: `Action::Work` carries the
         // verb in it, so the verb's own name is what the action is called
-        "smash", "crush", "cut", "scrape", "drill", "split",
+        "smash", "crush", "cut", "scrape", "drill", "split", "weave", "carve",
         // Handing things over
         "trade", "giveto",
         // And putting things down and taking them up

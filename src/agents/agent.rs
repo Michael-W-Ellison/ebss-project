@@ -271,7 +271,7 @@ impl Inventory {
 
         // Check weight limit
         let item_weight = item.total_weight();
-        if self.current_weight + item_weight > self.max_weight {
+        if self.current_weight + item_weight > self.effective_max_weight() {
             return false; // Too heavy
         }
 
@@ -429,12 +429,30 @@ impl Inventory {
 
     /// Check if inventory is overweight
     pub fn is_overweight(&self) -> bool {
-        self.current_weight > self.max_weight
+        self.current_weight > self.effective_max_weight()
     }
+
+    /// How much this pack can hold, baskets and all.
+    ///
+    /// A person carries what their arms hold. A person with a basket carries
+    /// what their arms hold and what the basket holds, which is most of the
+    /// reason anybody ever wove one - see `making::WEAVE_A_BASKET`.
+    pub fn effective_max_weight(&self) -> f32 {
+        let baskets = self
+            .items
+            .get("basket")
+            .map(|item| item.quantity)
+            .unwrap_or(0);
+
+        self.max_weight + baskets as f32 * Self::WHAT_A_BASKET_HOLDS
+    }
+
+    /// What one basket adds, in the units a pack is weighed in.
+    pub const WHAT_A_BASKET_HOLDS: f32 = 20.0;
 
     /// Get weight capacity remaining
     pub fn weight_capacity_remaining(&self) -> f32 {
-        (self.max_weight - self.current_weight).max(0.0)
+        (self.effective_max_weight() - self.current_weight).max(0.0)
     }
 
     /// Get weight as percentage of max (0.0 to 1.0+)

@@ -832,6 +832,25 @@ reaching. A thing that is already part of something everybody understands
 raises no questions, however much else it goes into; only something outside
 all of that does.
 
+**A basket, a bowl and a handful of flour** finished the reducing verbs.
+Weaving is the one of them that wants nothing in the hand, which is a thing
+the matrix is the right place to say. A basket raises what a pack holds;
+carried weight went from 61 to 68 over eight worlds, and settlements finished
+with 59 baskets apiece.
+
+The bowl is the more interesting one. `Inventory::fill_containers`,
+`InventoryItem::new_container` and the whole business of drinking from what
+you are carrying were written long ago, and nothing in the world had ever
+made a container — so an agent could only ever drink where the water was.
+Settlements now finish with 84 bowls between them, and twenty to fifty
+agents a world have worked out how to hollow one. Whether it shows in thirst
+is not yet clear: agents going dry sat at 51 before and 49 after, which is
+noise.
+
+Crushing grain into flour is built, tested and idle, and idle for the reason
+already recorded in #10: grain barely reaches a pack in this world, so
+nobody has three of it to grind. Population 67.5 to 71.3.
+
 Three of my own tests turned out to be asserting deterministic outcomes from
 random gates, and only failed in full-suite runs where the seeds differ:
 whether two strangers trust each other enough to trade is drawn with their
