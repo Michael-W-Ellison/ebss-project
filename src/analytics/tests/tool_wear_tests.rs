@@ -40,6 +40,14 @@ fn every_tool_is_a_thing_these_people_can_make() {
             "{} should be better than bare hands",
             tool.called
         );
+    }
+
+    // Everything a people arrives knowing how to make is stone or wood, and
+    // stone and wood go quickly.
+    for tool in making::EVERY_TOOL {
+        if !making::how_to_make(tool.called).is_some_and(|step| step.obvious) {
+            continue;
+        }
         assert!(
             tool.how_long_it_lasts <= 50.0,
             "{} lasts {} pieces of work, which is not stone-age",
@@ -47,6 +55,20 @@ fn every_tool_is_a_thing_these_people_can_make() {
             tool.how_long_it_lasts
         );
     }
+}
+
+/// Metal is worth finding out about: it outlasts stone and it works better.
+#[test]
+fn a_metal_edge_beats_a_stone_one() {
+    let stone = making::KNIFE_FOR_BUTCHERING;
+    let metal = making::METAL_KNIFE_FOR_BUTCHERING;
+
+    assert!(metal.how_much_better > stone.how_much_better);
+    assert!(metal.how_long_it_lasts > stone.how_long_it_lasts * 2.0);
+    assert!(
+        !making::how_to_make("metalknife").unwrap().obvious,
+        "and it is not something anybody arrives knowing"
+    );
 }
 
 /// A founder carries tools that have a life in them.

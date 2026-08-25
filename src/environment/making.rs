@@ -47,6 +47,17 @@ pub struct Making {
     /// The things a stone-age people bring with them: cordage, knapping, a
     /// hafted tool, a tent. Everything else is a thing to find out.
     pub obvious: bool,
+    /// Whether it wants a fire burning where the work is done.
+    ///
+    /// This is the condition half of "rock + fire = ?": a man holding a bright
+    /// stone learns nothing from it until he is sitting at a fire, and then he
+    /// learns it all at once.
+    pub over_a_fire: bool,
+    /// A tool that must be in hand to do it, and is not used up by it.
+    ///
+    /// A hammerstone is not part of the blade; it is what the blade is beaten
+    /// out with, and it wears like anything else that gets used.
+    pub wants_in_hand: Option<&'static str>,
 }
 
 impl Making {
@@ -81,6 +92,8 @@ pub const LASHING: Making = Making {
     hands: SkillType::Crafting,
     effort: 4.0,
     obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
 };
 
 /// The same, from the other fibrous thing that grows here.
@@ -91,6 +104,8 @@ pub const LASHING_FROM_COTTON: Making = Making {
     hands: SkillType::Crafting,
     effort: 4.0,
     obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
 };
 
 /// A flake struck off a core: the edge that every stone tool is built round.
@@ -101,6 +116,8 @@ pub const KNAPPED_TIP: Making = Making {
     hands: SkillType::Crafting,
     effort: 6.0,
     obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
 };
 
 /// Stick, tip, lashing.
@@ -111,6 +128,8 @@ pub const SPEAR: Making = Making {
     hands: SkillType::Crafting,
     effort: 8.0,
     obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
 };
 
 /// The same three things, put together the other way.
@@ -121,6 +140,8 @@ pub const HAND_AXE: Making = Making {
     hands: SkillType::Crafting,
     effort: 8.0,
     obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
 };
 
 /// A knife wants no handle to speak of.
@@ -131,9 +152,53 @@ pub const STONE_KNIFE: Making = Making {
     hands: SkillType::Crafting,
     effort: 5.0,
     obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
 };
 
-/// Everything a stone-age people can put together.
+/// A bright stone, held in a fire long enough, stops being a stone.
+///
+/// The specification's "rock + fire = ?": nothing an agent can work out by
+/// looking at it, and obvious the moment the conditions are right. Iron is
+/// what the ground here offers that glitters, and it is picked up because it
+/// glitters, not because anybody yet knows what it is for.
+pub const SHINY_LUMP: Making = Making {
+    makes: "shinylump",
+    how_many: 1,
+    needs: &[("iron", 2)],
+    hands: SkillType::Crafting,
+    effort: 10.0,
+    obvious: false,
+    over_a_fire: true,
+    wants_in_hand: None,
+};
+
+/// Shiny lump + hammer = a crude blade.
+pub const METAL_BLADE: Making = Making {
+    makes: "metalblade",
+    how_many: 1,
+    needs: &[("shinylump", 1)],
+    hands: SkillType::Crafting,
+    effort: 12.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: Some("handaxe"),
+};
+
+/// And a blade wants a handle, like every other blade these people make.
+pub const METAL_KNIFE: Making = Making {
+    makes: "metalknife",
+    how_many: 1,
+    needs: &[("metalblade", 1), ("lashing", 1)],
+    hands: SkillType::Crafting,
+    effort: 6.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// Everything a stone-age people can put together, and the three steps beyond
+/// it that they have to find out for themselves.
 pub const EVERY_STEP: &[Making] = &[
     LASHING,
     LASHING_FROM_COTTON,
@@ -141,7 +206,15 @@ pub const EVERY_STEP: &[Making] = &[
     SPEAR,
     HAND_AXE,
     STONE_KNIFE,
+    SHINY_LUMP,
+    METAL_BLADE,
+    METAL_KNIFE,
 ];
+
+/// The steps nobody arrives knowing.
+pub fn everything_to_find_out() -> impl Iterator<Item = &'static Making> {
+    EVERY_STEP.iter().filter(|step| !step.obvious)
+}
 
 /// The step that makes a named thing, if there is one.
 pub fn how_to_make(what: &str) -> Option<&'static Making> {
@@ -172,12 +245,26 @@ const AS_FAR_BACK_AS_ANYBODY_PLANS: usize = 4;
 /// back from the thing wanted through what it is short of, and returns the
 /// first step along the way whose makings are actually in the pack.
 pub fn what_to_do_first(what: &str, holding: &impl Fn(&str) -> u32) -> Option<&'static Making> {
-    step_towards(what, holding, 0)
+    what_to_do_first_knowing(what, holding, &|step: &Making| step.obvious)
+}
+
+/// The same, for somebody who knows more than he was born knowing.
+///
+/// `knows` says whether this particular person can do a step at all. A man
+/// who has never seen a bright stone come out of a fire cannot plan a metal
+/// knife, and cannot see that the lump in his pack is a step towards one.
+pub fn what_to_do_first_knowing(
+    what: &str,
+    holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
+) -> Option<&'static Making> {
+    step_towards(what, holding, knows, 0)
 }
 
 fn step_towards(
     what: &str,
     holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
     how_far_back: usize,
 ) -> Option<&'static Making> {
     if how_far_back >= AS_FAR_BACK_AS_ANYBODY_PLANS {
@@ -186,7 +273,7 @@ fn step_towards(
 
     // Anything that can be done right now is done right now, unless there
     // are already plenty of them in the pack.
-    for step in every_way_to_make(what) {
+    for step in every_way_to_make(what).filter(|step| knows(step)) {
         if step.makings_to_hand(holding) && holding(step.makes) < A_FEW_SPARE {
             return Some(step);
         }
@@ -194,12 +281,12 @@ fn step_towards(
 
     // Otherwise the thing wanted is short of something. If that something is
     // itself made rather than found, the making of it is the job in hand.
-    for step in every_way_to_make(what) {
+    for step in every_way_to_make(what).filter(|step| knows(step)) {
         for (needed, how_many) in step.needs {
             if holding(needed) >= *how_many || *needed == what || !is_made_not_found(needed) {
                 continue;
             }
-            if let Some(earlier) = step_towards(needed, holding, how_far_back + 1) {
+            if let Some(earlier) = step_towards(needed, holding, knows, how_far_back + 1) {
                 return Some(earlier);
             }
         }
@@ -223,19 +310,20 @@ pub const A_FEW_SPARE: u32 = 4;
 /// spear with an empty pack it answers wood, then stone, then flax, in the
 /// order the spear needs them.
 pub fn what_is_wanting(what: &str, holding: &impl Fn(&str) -> u32) -> Option<&'static str> {
-    wanting(what, holding, 0)
+    wanting(what, holding, &|step: &Making| step.obvious, 0)
 }
 
 fn wanting(
     what: &str,
     holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
     how_far_back: usize,
 ) -> Option<&'static str> {
     if how_far_back >= AS_FAR_BACK_AS_ANYBODY_PLANS {
         return None;
     }
 
-    for step in every_way_to_make(what) {
+    for step in every_way_to_make(what).filter(|step| knows(step)) {
         for (needed, how_many) in step.needs {
             if holding(needed) >= *how_many {
                 continue;
@@ -246,7 +334,7 @@ fn wanting(
             if *needed == what {
                 continue;
             }
-            if let Some(further_back) = wanting(needed, holding, how_far_back + 1) {
+            if let Some(further_back) = wanting(needed, holding, knows, how_far_back + 1) {
                 return Some(further_back);
             }
         }
@@ -322,6 +410,22 @@ pub const KNIFE_FOR_CRAFTING: Tool = Tool {
     how_long_it_lasts: 30.0,
 };
 
+/// A metal edge holds where a stone one chips.
+pub const METAL_KNIFE_FOR_BUTCHERING: Tool = Tool {
+    called: "metalknife",
+    helps: SkillType::Leatherworking,
+    how_much_better: 2.4,
+    how_long_it_lasts: 90.0,
+};
+
+/// The same edge, at the bench.
+pub const METAL_KNIFE_FOR_CRAFTING: Tool = Tool {
+    called: "metalknife",
+    helps: SkillType::Crafting,
+    how_much_better: 1.7,
+    how_long_it_lasts: 90.0,
+};
+
 /// Every tool these people have, and what each is for.
 pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_WOOD,
@@ -330,6 +434,8 @@ pub const EVERY_TOOL: &[Tool] = &[
     SPEAR_FOR_FISHING,
     KNIFE_FOR_BUTCHERING,
     KNIFE_FOR_CRAFTING,
+    METAL_KNIFE_FOR_BUTCHERING,
+    METAL_KNIFE_FOR_CRAFTING,
 ];
 
 /// The tools that are any use for a kind of work.
@@ -355,14 +461,24 @@ pub fn how_long_this_one_lasts(tool: &Tool, hand: f32) -> f32 {
 /// be had from flax or from cotton and a man standing in a meadow of the
 /// second should not spend his life walking after the first.
 pub fn everything_wanting(what: &str, holding: &impl Fn(&str) -> u32) -> Vec<&'static str> {
+    everything_wanting_knowing(what, holding, &|step: &Making| step.obvious)
+}
+
+/// The same, for somebody who knows more than he was born knowing.
+pub fn everything_wanting_knowing(
+    what: &str,
+    holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
+) -> Vec<&'static str> {
     let mut wanting = Vec::new();
-    gather_wanting(what, holding, 0, &mut wanting);
+    gather_wanting(what, holding, knows, 0, &mut wanting);
     wanting
 }
 
 fn gather_wanting(
     what: &str,
     holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
     how_far_back: usize,
     into: &mut Vec<&'static str>,
 ) {
@@ -370,7 +486,7 @@ fn gather_wanting(
         return;
     }
 
-    for step in every_way_to_make(what) {
+    for step in every_way_to_make(what).filter(|step| knows(step)) {
         for (needed, how_many) in step.needs {
             if holding(needed) >= *how_many {
                 continue;
@@ -380,7 +496,7 @@ fn gather_wanting(
                     into.push(needed);
                 }
             } else if *needed != what {
-                gather_wanting(needed, holding, how_far_back + 1, into);
+                gather_wanting(needed, holding, knows, how_far_back + 1, into);
             }
         }
     }

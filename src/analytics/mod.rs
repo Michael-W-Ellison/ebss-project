@@ -345,6 +345,10 @@ impl Simulation {
         // living world at double speed: animals aged, starved, bred and grazed
         // twice for every tick an agent lived through.
 
+        // A man sitting at a fire with a bright stone in his hand may notice
+        // what the fire does to it
+        self.somebody_notices_something();
+
         // Let hungry predators try their luck with the people
         self.process_predator_attacks();
 
@@ -2042,6 +2046,47 @@ impl Simulation {
             // resource that does not exist.
             DriveType::Luxury => None,
 
+            // A curious man picks up the bright stone he walked past.
+            //
+            // Nothing else in the model ever puts iron in a pack: no drive
+            // asks for it, because nobody yet knows what it is for. It gets
+            // picked up because it glitters, which is the only way anybody
+            // ever came to be holding one at a fire.
+            DriveType::Curiosity => {
+                // First, doing again the thing he has just worked out how to
+                // do. There is no use in mind for what comes out of it; that
+                // is the point. Nobody can want a metal knife until somebody
+                // has held a metal blade, and nobody holds one until somebody
+                // does the trick a second time for its own sake.
+                if let Some(what) = agent.what_i_would_try_out() {
+                    // The conditions are checked here and not only in the
+                    // executor, because an agent that keeps asking for a thing
+                    // it cannot do here learns not to ask for it at all - see
+                    // `Lessons::will_try_this_again` - and would give up on
+                    // metalworking after a dozen turns spent away from a fire.
+                    let wants_a_fire = crate::environment::making::how_to_make(&what)
+                        .is_some_and(|step| step.over_a_fire);
+
+                    let can_do_it_here = !wants_a_fire
+                        || self
+                            .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+                            .is_some();
+
+                    if can_do_it_here {
+                        return Some(Action::Craft { item_type: what });
+                    }
+                }
+
+                let agent_has_none = agent.how_many_i_have("iron") < 2;
+                if agent_has_none && agent.have_i_seen("iron") {
+                    Some(Action::Gather {
+                        resource_type: "iron".to_string(),
+                    })
+                } else {
+                    Some(Self::generate_action_for_drive(drive_type, agent_position))
+                }
+            }
+
             // Company needs somebody to keep it
             DriveType::Social => {
                 if agent.surroundings.company {
@@ -2148,6 +2193,88 @@ impl Simulation {
             format!("cooked_{}", base)
         } else {
             format!("burnt_{}", base)
+        }
+    }
+
+    /// How often a man in exactly the right position works out what he is
+    /// looking at.
+    ///
+    /// Set so that finding out is a thing that happens to a settlement over
+    /// seasons rather than to an individual over an afternoon: a curious agent
+    /// with the makings in his hands and a fire in front of him needs of the
+    /// order of a hundred turns of standing there.
+    const HOW_OFTEN_ANYBODY_WORKS_IT_OUT: f64 = 0.01;
+
+    /// Nobody works anything out while they are frightened or starving.
+    const CURIOUS_ENOUGH_TO_NOTICE: f32 = 0.25;
+
+    /// Somebody, somewhere, finds out how to do something new.
+    ///
+    /// This is the specification's "rock + fire = ?": the outcome of putting
+    /// two things together is not apparent until the conditions are right, and
+    /// then it is apparent all at once. Nothing here is a plan - an agent
+    /// cannot want a metal knife before anybody has seen metal - it is the
+    /// accident of standing in the right place holding the right things while
+    /// curious enough to be paying attention.
+    fn somebody_notices_something(&mut self) {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let mut found: Vec<(usize, &'static str)> = Vec::new();
+
+        for (index, agent) in self.population.agents.iter().enumerate() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let curiosity = agent
+                .drives
+                .get(crate::core::DriveType::Curiosity)
+                .map(|drive| drive.value)
+                .unwrap_or(0.0);
+            if curiosity < Self::CURIOUS_ENOUGH_TO_NOTICE {
+                continue;
+            }
+
+            let holding = |what: &str| agent.how_many_i_have(what);
+
+            for step in crate::environment::making::everything_to_find_out() {
+                if agent.knows_how_to(step) || !step.makings_to_hand(&holding) {
+                    continue;
+                }
+                if let Some(wanted) = step.wants_in_hand {
+                    if agent.how_many_i_have(wanted) == 0 {
+                        continue;
+                    }
+                }
+                if step.over_a_fire
+                    && self
+                        .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
+                        .is_none()
+                {
+                    continue;
+                }
+
+                // A practised hand notices sooner, because it knows what it
+                // is looking at.
+                let odds = Self::HOW_OFTEN_ANYBODY_WORKS_IT_OUT
+                    * curiosity as f64
+                    * agent.skills.hand_for(step.hands) as f64;
+
+                if rng.gen_bool(odds.clamp(0.0, 1.0)) {
+                    found.push((index, step.makes));
+                    break;
+                }
+            }
+        }
+
+        for (index, what) in found {
+            if self.population.agents[index].found_out_how_to(what) {
+                debug!(
+                    "Agent {} worked out how to make {what}",
+                    self.population.agents[index].id
+                );
+            }
         }
     }
 
@@ -5155,7 +5282,22 @@ impl Simulation {
                         let agent = &self.population.agents[agent_index];
                         let holding = |what: &str| agent.how_many_i_have(what);
 
+                        // A step nobody has found out is not a step this
+                        // agent can take, whatever is in his pack.
+                        if !agent.knows_how_to_make(item_type) {
+                            return ActionResult::failure(format!(
+                                "Nobody here knows how to make a {}",
+                                item_type
+                            ));
+                        }
+
                         match crate::environment::making::every_way_to_make(item_type)
+                            .filter(|step| agent.knows_how_to(step))
+                            .filter(|step| {
+                                step.wants_in_hand.is_none_or(|wanted| {
+                                    agent.how_many_i_have(wanted) > 0
+                                })
+                            })
                             .find(|step| step.makings_to_hand(&holding))
                         {
                             Some(step) => *step,
@@ -5163,6 +5305,7 @@ impl Simulation {
                                 // Say what is missing rather than that it cannot
                                 // be done: the shortfall is the next job.
                                 let short = crate::environment::making::every_way_to_make(item_type)
+                                    .filter(|step| agent.knows_how_to(step))
                                     .filter_map(|step| step.short_of(&holding))
                                     .min_by_key(|(_, missing)| *missing);
 
@@ -5171,14 +5314,56 @@ impl Simulation {
                                         "Cannot make {}: short {} {}",
                                         item_type, how_many, what
                                     )),
-                                    None => ActionResult::failure(format!(
-                                        "Cannot make {}",
-                                        item_type
-                                    )),
+                                    None => {
+                                        // Everything is in the pack, so what
+                                        // is missing is the thing to do it
+                                        // with.
+                                        let wanted = crate::environment::making::every_way_to_make(
+                                            item_type,
+                                        )
+                                        .filter(|step| agent.knows_how_to(step))
+                                        .find_map(|step| step.wants_in_hand);
+
+                                        match wanted {
+                                            Some(tool) => ActionResult::failure(format!(
+                                                "Cannot make {}: nothing to do it with, wants a {}",
+                                                item_type, tool
+                                            )),
+                                            None => ActionResult::failure(format!(
+                                                "Cannot make {}",
+                                                item_type
+                                            )),
+                                        }
+                                    }
                                 };
                             }
                         }
                     };
+
+                    if step.over_a_fire {
+                        let where_he_is = self.population.agents[agent_index].state.position;
+                        if self
+                            .nearest_fire_from(where_he_is, Self::FIRE_REACH, true)
+                            .is_none()
+                        {
+                            return ActionResult::failure(format!(
+                                "Cannot make {}: no fire burning here",
+                                item_type
+                            ));
+                        }
+                    }
+
+                    // What the work is done with is worn by the doing of it,
+                    // and is not part of what comes out.
+                    if let Some(wanted) = step.wants_in_hand {
+                        if let Some(tool) = crate::environment::making::EVERY_TOOL
+                            .iter()
+                            .find(|tool| tool.called == wanted)
+                        {
+                            self.population.agents[agent_index]
+                                .wear_what_i_worked_with(tool.helps);
+                        }
+                    }
 
                     let agent = &mut self.population.agents[agent_index];
                     for (what, how_many) in step.needs {

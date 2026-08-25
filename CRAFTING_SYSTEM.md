@@ -53,6 +53,38 @@ spear is worth two flakes of practice. `Making::obvious` marks what a
 stone-age people arrives already knowing — everything in the table today, with
 the field there for the things they will have to find out.
 
+### What a people has to find out
+
+`Making::obvious` marks what a stone-age people arrives already knowing. Three
+steps are not obvious, and they are the specification's "rock + fire = ?":
+
+```text
+iron (a bright stone) + a fire   -> a shiny lump
+shiny lump + a hammerstone       -> a metal blade
+metal blade + lashing            -> a metal knife
+```
+
+Nothing about a bright stone tells anybody what it is for. `Making::over_a_fire`
+and `Making::wants_in_hand` are the conditions half: a man learns nothing from
+the stone until he is sitting at a burning fire holding it, and then he learns
+it all at once. `Simulation::somebody_notices_something` runs once a tick and
+rolls for exactly that — ingredients in the pack, conditions met, curiosity
+above `CURIOUS_ENOUGH_TO_NOTICE`, at odds scaled by the hand at the trade.
+
+Knowledge is one person's, kept in `Agent::found_out`. `Agent::knows_how_to`
+gates both the doing and the planning: `what_to_do_first_knowing` will not
+route a chain through a step this agent has never seen, so a pack full of iron
+is not a step towards a knife nobody has seen made.
+
+Two things close the loop. `Agent::what_i_would_try_out` makes a curious agent
+repeat a trick it has just learned with no use in mind for what comes out —
+without it nobody would ever hold a shiny lump, because nothing in a settlement
+wants one, and the blade could never be found out. And what a pair of hands
+wants is stated as the *work* it wants to be equipped for
+(`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`) rather than as a named tool, so a man who
+has seen metal wants a metal knife and a man who has not wants a stone one,
+from the same line of code.
+
 ### What a tool is for
 
 `making::EVERY_TOOL` says which work each tool helps with and by how much: an

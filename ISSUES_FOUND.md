@@ -559,6 +559,17 @@ worn through (21.3 a world, se 6.5). Toolmaking rises by a quarter to keep up �
 529 crafts a world without the wear, 668 with it (se 60) — which is the
 replacement cycle running.
 
+**And there is now something past the stone age to find out.** Three steps —
+a bright stone held in a fire, a lump beaten out with a hammerstone, a blade
+given a handle — are marked as things nobody arrives knowing, and are found out
+only by an agent who happens to be holding the makings in the right conditions
+while curious enough to notice. Measured over four worlds of ten thousand
+ticks: iron reached agents' packs in all four (36 to 55 of them carrying some),
+two worlds worked out what a fire does to it, two got as far as a metal blade,
+and one finished a metal knife. So metalworking is a thing that happens to some
+settlements and not others, which is what it should be, but it is rare enough
+that a run has to be watched for it rather than expected.
+
 It buys nothing measurable yet. Population is 80.0 alive at the baseline (se
 4.8) and 70.2 across the sixteen worlds run with the chain and the tools (se
 4.6): a difference of 9.8 at 6.6, which is noise with a hint of a decline in

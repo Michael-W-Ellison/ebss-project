@@ -851,6 +851,10 @@ pub struct Agent {
     pub transport: TransportSystem,
     pub technology_knowledge: TechnologyKnowledge,
     pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
+    /// The steps this agent has found out how to do that it was not born
+    /// knowing - see `environment::making::Making::obvious`.
+    #[serde(default)]
+    found_out: std::collections::HashSet<String>,
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
 
@@ -930,6 +934,7 @@ impl Agent {
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
+            found_out: std::collections::HashSet::new(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
@@ -1212,11 +1217,88 @@ impl Agent {
     const WHAT_THEY_CARRY: [(&'static str, u32, f32); 2] =
         [("handaxe", 1, 2.0), ("stoneknife", 1, 0.5)];
 
-    /// What a pair of hands wants to have about it, in the order it wants them.
+    /// Whether this agent can do a step at all.
     ///
-    /// A spear first: it is the difference between eating meat and not. Then
-    /// something to cut wood with, then something to cut meat with.
-    pub const WHAT_A_PAIR_OF_HANDS_WANTS: [&'static str; 3] = ["spear", "handaxe", "stoneknife"];
+    /// Everything a stone-age people arrives knowing is `obvious`; everything
+    /// past that is a thing somebody had to find out, and only the people who
+    /// found it out - or were shown - can do it.
+    pub fn knows_how_to(&self, step: &crate::environment::making::Making) -> bool {
+        step.obvious || self.found_out.contains(step.makes)
+    }
+
+    /// Whether this agent knows any way at all of making a named thing.
+    pub fn knows_how_to_make(&self, what: &str) -> bool {
+        crate::environment::making::every_way_to_make(what).any(|step| self.knows_how_to(step))
+    }
+
+    /// Write down that this agent has found out how to do something.
+    ///
+    /// Returns false if it already knew.
+    pub fn found_out_how_to(&mut self, what: &str) -> bool {
+        self.found_out.insert(what.to_string())
+    }
+
+    /// Everything this agent has found out that it was not born knowing.
+    pub fn what_i_found_out(&self) -> &std::collections::HashSet<String> {
+        &self.found_out
+    }
+
+    /// The work a pair of hands wants to be equipped for, in the order it
+    /// wants them.
+    ///
+    /// Hunting first: a spear is the difference between eating meat and not.
+    /// Then cutting wood, then cutting meat.
+    ///
+    /// This is stated as the work rather than as the tool because what the
+    /// best tool for a job *is* changes as a people finds things out. A man
+    /// who has never seen metal wants a stone knife; a man who has wants a
+    /// metal one, and the same line of code asks for both.
+    pub const WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO: [super::SkillType; 3] = [
+        super::SkillType::Hunting,
+        super::SkillType::Woodcutting,
+        super::SkillType::Leatherworking,
+    ];
+
+    /// The best tool this agent knows how to make for a kind of work, if it
+    /// would be an improvement on what it already carries.
+    pub fn what_i_would_rather_have(
+        &self,
+        trade: super::SkillType,
+    ) -> Option<&'static crate::environment::making::Tool> {
+        let good_enough = self
+            .what_i_have_to_work_with(trade)
+            .map(|tool| tool.how_much_better)
+            .unwrap_or(1.0);
+
+        crate::environment::making::what_helps_with(trade)
+            .filter(|tool| self.knows_how_to_make(tool.called))
+            .filter(|tool| tool.how_much_better > good_enough)
+            .max_by(|a, b| {
+                a.how_much_better
+                    .partial_cmp(&b.how_much_better)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    }
+
+    /// Something this agent has found out how to do and could do right now.
+    ///
+    /// A man who has just worked out what a fire does to a bright stone will
+    /// do it again to see it happen, with no use in mind for what comes out.
+    /// That is how the next link in the chain gets into his hands at all:
+    /// nobody can want a metal knife before anybody has seen a metal blade.
+    pub fn what_i_would_try_out(&self) -> Option<String> {
+        let holding = |what: &str| self.how_many_i_have(what);
+
+        crate::environment::making::everything_to_find_out()
+            .filter(|step| self.knows_how_to(step))
+            .filter(|step| holding(step.makes) < crate::environment::making::A_FEW_SPARE)
+            .filter(|step| {
+                step.wants_in_hand
+                    .is_none_or(|wanted| self.how_many_i_have(wanted) > 0)
+            })
+            .find(|step| step.makings_to_hand(&holding))
+            .map(|step| step.makes.to_string())
+    }
 
     /// The thing this agent would put its hands to now, if anything.
     ///
@@ -1228,10 +1310,18 @@ impl Agent {
     pub fn what_i_would_make(&self) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
 
-        Self::WHAT_A_PAIR_OF_HANDS_WANTS
+        let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+
+        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
             .iter()
-            .filter(|want| holding(want) == 0)
-            .find_map(|want| crate::environment::making::what_to_do_first(want, &holding))
+            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+            .find_map(|want| {
+                crate::environment::making::what_to_do_first_knowing(
+                    want.called,
+                    &holding,
+                    &knows,
+                )
+            })
             .map(|step| step.makes.to_string())
     }
 
@@ -1410,10 +1500,18 @@ impl Agent {
     pub fn what_i_must_find(&self) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
 
-        let wanting: Vec<&'static str> = Self::WHAT_A_PAIR_OF_HANDS_WANTS
+        let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+
+        let wanting: Vec<&'static str> = Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
             .iter()
-            .filter(|want| holding(want) == 0)
-            .flat_map(|want| crate::environment::making::everything_wanting(want, &holding))
+            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+            .flat_map(|want| {
+                crate::environment::making::everything_wanting_knowing(
+                    want.called,
+                    &holding,
+                    &knows,
+                )
+            })
             .collect();
 
         wanting

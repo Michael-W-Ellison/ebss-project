@@ -44,6 +44,32 @@ fn holding_of(agent: &Agent) -> impl Fn(&str) -> u32 + '_ {
     }
 }
 
+/// The tools a founder would set about getting, by name.
+///
+/// What a pair of hands wants is stated as the *work* it wants to be equipped
+/// for, because the best tool for a job changes as a people finds things out.
+/// For somebody who knows only what he was born knowing it comes to the three
+/// stone-age tools.
+fn what_a_founder_wants() -> Vec<&'static str> {
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let founder = &population.agents[0];
+
+    Agent::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+        .iter()
+        .filter_map(|trade| {
+            making::what_helps_with(*trade)
+                .filter(|tool| founder.knows_how_to_make(tool.called))
+                .max_by(|a, b| {
+                    a.how_much_better
+                        .partial_cmp(&b.how_much_better)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|tool| tool.called)
+        })
+        .collect()
+}
+
 /// A world with one agent in it, ready to be told to do something.
 fn one_agent_world() -> Simulation {
     let mut population = Population::new();
@@ -233,7 +259,7 @@ fn a_man_with_his_tools_about_him_asks_for_nothing() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let agent = &mut population.agents[0];
-    for want in Agent::WHAT_A_PAIR_OF_HANDS_WANTS {
+    for want in what_a_founder_wants() {
         carrying(agent, want, 1);
     }
     carrying(agent, "wood", 9);
@@ -341,7 +367,7 @@ fn making_a_thing_teaches_the_hand_that_made_it() {
 /// The three tools a stone-age people carry are all reachable from the ground.
 #[test]
 fn every_tool_a_people_wants_can_be_got_from_raw_material() {
-    for want in Agent::WHAT_A_PAIR_OF_HANDS_WANTS {
+    for want in what_a_founder_wants() {
         let mut population = Population::new();
         population.spawn_agent(AgentConfig::default());
         let agent = &mut population.agents[0];
@@ -374,17 +400,20 @@ fn every_tool_a_people_wants_can_be_got_from_raw_material() {
     }
 }
 
-/// Every step in the table is one a founder already knows.
+/// The stone age is what a people arrives knowing; anything past it is not.
 #[test]
 fn a_stone_age_people_arrives_knowing_the_stone_age() {
-    for step in making::EVERY_STEP {
+    for step in [KNAPPED_TIP, SPEAR, HAND_AXE, STONE_KNIFE, LASHING] {
         assert!(
             step.obvious,
-            "{} is in the founding table, so it should be something they \
-             already know",
+            "{} is what a stone-age people brought with them",
             step.makes
         );
     }
+    assert!(
+        making::everything_to_find_out().count() > 0,
+        "and there should be something left for them to find out"
+    );
     for step in [KNAPPED_TIP, SPEAR, HAND_AXE, STONE_KNIFE, LASHING] {
         assert!(step.effort > 0.0, "{} should cost something to do", step.makes);
     }
