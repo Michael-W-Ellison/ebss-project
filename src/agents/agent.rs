@@ -1341,6 +1341,48 @@ impl Agent {
             .map(|step| step.makes.to_string())
     }
 
+    /// Something in the pack worth breaking down, and what to break it with.
+    ///
+    /// Returns the verb and the thing it is done to. Only workings this agent
+    /// knows, only where there is enough to work with, and only where there is
+    /// not already a pile of what it produces — a man does not spend his life
+    /// smashing cores when he has three flakes he has not used.
+    ///
+    /// What the verb wants in the hand is not asked here. That is the verb
+    /// matrix's business, and it is asked once, before the action runs.
+    pub fn what_i_would_work_on(&self) -> Option<(String, String)> {
+        use crate::environment::making;
+
+        making::EVERY_WORKING
+            .iter()
+            .filter(|working| working.obvious || self.found_out.contains(working.makes))
+            .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
+            .filter(|working| self.how_many_i_have(working.makes) < making::A_FEW_SPARE)
+            .find(|working| {
+                self.lessons
+                    .will_try_this_again(&format!("{}:{}", working.verb, working.to))
+            })
+            .map(|working| (working.verb.to_string(), working.to.to_string()))
+    }
+
+    /// And something in the pack nobody here has ever thought to break down.
+    ///
+    /// The cheapest experiment a person can run: the materials are in the pack
+    /// and the tool is in the hand whatever happens, so what it costs is one
+    /// stick and an afternoon.
+    pub fn what_working_i_would_try_out(&self) -> Option<(String, String)> {
+        use crate::environment::making;
+
+        making::every_working_to_find_out()
+            .filter(|working| !self.found_out.contains(working.makes))
+            .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
+            .find(|working| {
+                self.lessons
+                    .will_try_this_again(&format!("{}:{}", working.verb, working.to))
+            })
+            .map(|working| (working.verb.to_string(), working.to.to_string()))
+    }
+
     /// A step it knows, with the wrong thing where a part should go.
     ///
     /// "Knowing that a stone tool requires the use of specific sub-components,
@@ -3471,6 +3513,7 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
+            Action::Work { verb, to } => format!("{verb}:{to}"),
             Action::Taste => "taste".to_string(),
             Action::TrySwapping {
                 instead_of_making,
@@ -3516,7 +3559,9 @@ impl Agent {
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,
-            Action::Craft { .. } | Action::TrySwapping { .. } => Undertaking::Crafting,
+            Action::Craft { .. } | Action::TrySwapping { .. } | Action::Work { .. } => {
+                Undertaking::Crafting
+            }
             Action::Socialize { .. } | Action::ShareInformation { .. } => Undertaking::Dealing,
             _ => return,
         };

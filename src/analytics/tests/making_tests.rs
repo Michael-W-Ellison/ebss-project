@@ -105,14 +105,36 @@ fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
     let out_of_the_ground = ["wood", "stone", "iron", "food", "water", "flax", "cotton",
                              "hides", "wool"];
 
+    // And what comes off a thing that is worked down rather than assembled -
+    // a flake off a core, leather off a hide, shavings off a stick
+    let worked_out_of_something: Vec<&str> = making::EVERY_WORKING
+        .iter()
+        .map(|working| working.makes)
+        .collect();
+
     for step in making::EVERY_STEP {
         for (needed, _) in step.needs {
             assert!(
-                out_of_the_ground.contains(needed) || making::is_made_not_found(needed),
-                "{} wants {needed}, which is neither gathered nor made",
+                out_of_the_ground.contains(needed)
+                    || making::is_made_not_found(needed)
+                    || worked_out_of_something.contains(needed),
+                "{} wants {needed}, which is neither gathered nor made nor worked",
                 step.makes
             );
         }
+    }
+
+    // The same of the workings themselves: nothing is worked out of a thing
+    // that does not exist
+    for working in making::EVERY_WORKING {
+        assert!(
+            out_of_the_ground.contains(&working.to)
+                || making::is_made_not_found(working.to)
+                || worked_out_of_something.contains(&working.to),
+            "{} works on {}, which is neither gathered nor made nor worked",
+            working.verb,
+            working.to
+        );
     }
 }
 

@@ -38,3 +38,4 @@ pub mod transplant_tests;
 pub mod tasting_tests;
 pub mod swap_tests;
 pub mod verb_tests;
+pub mod working_tests;

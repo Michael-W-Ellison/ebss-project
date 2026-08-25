@@ -1042,6 +1042,7 @@ impl Simulation {
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
+            Action::Work { .. } => Some(ActionType::Crafting),
             Action::Taste => Some(ActionType::Farming),
             Action::TrySwapping { .. } => Some(ActionType::Crafting),
             Action::TakeCutting => Some(ActionType::Farming),
@@ -2225,9 +2226,13 @@ impl Simulation {
             // wooden axe was asking for a technology these people have not
             // got: every one of those turns came back
             // `missing technology 'wooden_tools'`.
+            // Reducing first, then assembling: a core has to be broken before
+            // there is a flake to haft. What each of these wants in the hand
+            // is the matrix's business and is enforced before it runs.
             DriveType::Utility => agent
-                .what_i_would_make()
-                .map(|item_type| Action::Craft { item_type })
+                .what_i_would_work_on()
+                .map(|(verb, to)| Action::Work { verb, to })
+                .or_else(|| agent.what_i_would_make().map(|item_type| Action::Craft { item_type }))
                 .or_else(|| {
                     agent
                         .what_i_must_find()
@@ -2269,6 +2274,13 @@ impl Simulation {
                 // is food is for somebody to eat one.
                 if let Some(action) = self.tasting_action(agent, agent_position) {
                     return Some(action);
+                }
+
+                // Doing something to a thing to see what it turns into. The
+                // cheapest kind of experiment there is: the materials are in
+                // the pack and the tool is in the hand either way.
+                if let Some((verb, to)) = agent.what_working_i_would_try_out() {
+                    return Some(Action::Work { verb, to });
                 }
 
                 // And putting the wrong thing where a part goes, which is
@@ -8342,8 +8354,15 @@ impl Simulation {
                     .nearest_fire_from(agent_pos, Self::FIRE_REACH, false)
                     .map(|(id, _)| id);
 
+                // Shavings catch where a log will not, so a hearth laid with
+                // tinder under it takes half the timber to get going. This is
+                // what scraping a stick is for - see `making::SCRAPE_A_STICK`.
+                let has_tinder = self.population.agents[agent_index].how_many_i_have("tinder") > 0;
+
                 let wood_needed = if existing.is_some() {
                     Self::FIRE_FUEL_WOOD
+                } else if has_tinder {
+                    (Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD).div_ceil(2)
                 } else {
                     Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
                 };
@@ -8899,6 +8918,74 @@ impl Simulation {
                     .with_drive_change(DriveType::Curiosity, -0.3)
                     .with_energy_cost(step.effort)
                 }
+            },
+
+            Action::Work { verb, to } => {
+                use crate::environment::making;
+
+                let Some(working) = making::how_to_work(verb, to) else {
+                    return ActionResult::failure(format!("Nothing comes of {verb} a {to}"));
+                };
+
+                if self.population.agents[agent_index].how_many_i_have(to) < working.how_much {
+                    return ActionResult::failure(format!("Not enough {to} to {verb}"));
+                }
+
+                // What comes off it, and how much of it these hands get. A
+                // practised hand wastes less of the core.
+                let hand = self.population.agents[agent_index]
+                    .skills
+                    .hand_for(working.hands);
+                let tool = self.population.agents[agent_index]
+                    .how_much_my_tools_help(working.hands);
+
+                let worth = working.how_many as f32 * hand.min(2.0) * tool.min(2.0);
+                let whole = worth.floor();
+                let came_off = (whole as u32)
+                    + u32::from(rng.gen::<f32>() < worth - whole);
+                let came_off = came_off.max(1);
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.remove_item(to, working.how_much);
+                    agent.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            working.makes.to_string(),
+                            came_off,
+                            1.0,
+                        ),
+                    );
+                    agent.skills.practise(working.hands, 12, tick_now);
+
+                    // Having done it once he can do it on purpose. For the
+                    // obvious ones this is a formality; for the rest it is the
+                    // whole of the discovery - somebody with a scraper in his
+                    // hand and a fire that will not light finds out what
+                    // shavings are for by making some.
+                    agent.found_out_how_to(working.makes);
+                }
+
+                // And the edge that did it is the worse for it
+                if let Some(broke) = self.population.agents[agent_index]
+                    .wear_what_i_worked_with(working.hands)
+                {
+                    debug!(
+                        "Agent {} wore out a {broke}",
+                        self.population.agents[agent_index].id
+                    );
+                }
+
+                debug!(
+                    "Agent {} {verb} {} {to} into {came_off} {}",
+                    self.population.agents[agent_index].id,
+                    working.how_much,
+                    working.makes
+                );
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.25)
+                    .with_energy_cost(working.effort)
+                    .with_message(format!("{verb} {to} into {came_off} {}", working.makes))
             },
 
             Action::Taste => {

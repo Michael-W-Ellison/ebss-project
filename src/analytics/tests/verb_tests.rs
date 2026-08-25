@@ -153,6 +153,9 @@ fn every_verb_is_performed_by_something_real() {
         "wearclothing", "tillsoil", "tendfield", "taste", "takecutting",
         "plantcutting", "spreadmuck", "fish", "wait", "shareinformation",
         "collectanimalproduct", "harvestplant",
+        // Working a thing down into another thing: `Action::Work` carries the
+        // verb in it, so the verb's own name is what the action is called
+        "smash", "crush", "cut", "scrape", "drill", "split",
     ];
 
     for one in EVERY_VERB {
@@ -175,7 +178,7 @@ fn the_matrix_admits_what_nothing_does_yet() {
     assert_eq!(live + waiting, EVERY_VERB.len());
 
     assert!(
-        live >= 15,
+        live >= 20,
         "a good part of the matrix should be doing something: {live}"
     );
     assert!(

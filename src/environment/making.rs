@@ -120,6 +120,20 @@ pub const KNAPPED_TIP: Making = Making {
     wants_in_hand: None,
 };
 
+/// The same, from a flake already struck off a core.
+///
+/// Half the stone for the same edge: this is what smashing a core buys.
+pub const KNAPPED_TIP_FROM_FLINT: Making = Making {
+    makes: "knappedtip",
+    how_many: 1,
+    needs: &[("flint", 1)],
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
 /// Stick, tip, lashing.
 pub const SPEAR: Making = Making {
     makes: "spear",
@@ -196,6 +210,100 @@ pub const METAL_KNIFE: Making = Making {
     over_a_fire: false,
     wants_in_hand: None,
 };
+
+/// Working a thing until it is a different thing.
+///
+/// The other half of what a tool is for. A `Making` puts several things
+/// together; a `Working` takes one thing and reduces it — a core is smashed
+/// into flakes, a hide is cut into leather, a stick is scraped into shavings.
+/// The difference matters because the verb is different and because it wants
+/// a different sort of thing in the hand: you assemble with your fingers and
+/// you reduce with an edge.
+///
+/// What each of these wants in the hand is not written here. It is written in
+/// the verb matrix — see [`crate::environment::verbs`] — and enforced there,
+/// which is the point of having a matrix: a working declares what it turns
+/// into what, and the verb it is done with declares what that verb needs.
+#[derive(Debug, Clone, Copy)]
+pub struct Working {
+    /// The verb it is done with, as the matrix names it
+    pub verb: &'static str,
+    /// What it is done to
+    pub to: &'static str,
+    /// How much of that goes in
+    pub how_much: u32,
+    /// What comes out
+    pub makes: &'static str,
+    /// And how much of it
+    pub how_many: u32,
+    /// The hand it wants
+    pub hands: SkillType,
+    /// What it costs to do once
+    pub effort: f32,
+    /// Whether a people arriving here already know it
+    pub obvious: bool,
+}
+
+/// A core broken down into flakes. Half the work of a stone tool, and the
+/// half a people brings with it.
+pub const SMASH_A_CORE: Working = Working {
+    verb: "smash",
+    to: "stone",
+    how_much: 2,
+    makes: "flint",
+    how_many: 3,
+    hands: SkillType::Mining,
+    effort: 5.0,
+    obvious: true,
+};
+
+/// A hide cut down into workable leather.
+pub const CUT_A_HIDE: Working = Working {
+    verb: "cut",
+    to: "hides",
+    how_much: 1,
+    makes: "leather",
+    how_many: 2,
+    hands: SkillType::Leatherworking,
+    effort: 6.0,
+    obvious: true,
+};
+
+/// Shavings off a stick, which catch where a log will not.
+///
+/// Not obvious. Everybody knows a fire wants wood; that a fire wants wood cut
+/// small enough to catch is a thing somebody works out with a scraper in his
+/// hand and a fire that will not light.
+pub const SCRAPE_A_STICK: Working = Working {
+    verb: "scrape",
+    to: "wood",
+    how_much: 1,
+    makes: "tinder",
+    how_many: 3,
+    hands: SkillType::Leatherworking,
+    effort: 3.0,
+    obvious: false,
+};
+
+/// Everything that can be done to a thing to make it another thing.
+pub const EVERY_WORKING: &[Working] = &[SMASH_A_CORE, CUT_A_HIDE, SCRAPE_A_STICK];
+
+/// The working of that verb on that thing, if there is one.
+pub fn how_to_work(verb: &str, to: &str) -> Option<&'static Working> {
+    EVERY_WORKING
+        .iter()
+        .find(|working| working.verb == verb && working.to == to)
+}
+
+/// Everything that can be done to a named thing.
+pub fn what_can_be_done_to(what: &str) -> impl Iterator<Item = &'static Working> + '_ {
+    EVERY_WORKING.iter().filter(move |working| working.to == what)
+}
+
+/// The workings nobody arrives knowing.
+pub fn every_working_to_find_out() -> impl Iterator<Item = &'static Working> {
+    EVERY_WORKING.iter().filter(|working| !working.obvious)
+}
 
 /// Putting the wrong thing in the right place.
 ///
@@ -316,6 +424,7 @@ pub const EVERY_STEP: &[Making] = &[
     LASHING,
     LASHING_FROM_COTTON,
     KNAPPED_TIP,
+    KNAPPED_TIP_FROM_FLINT,
     SPEAR,
     HAND_AXE,
     STONE_KNIFE,

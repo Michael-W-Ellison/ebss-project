@@ -342,7 +342,7 @@ pub const SMASH: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
-    None,
+    Some("smash"),
 );
 
 pub const CRUSH: Verb = verb(
@@ -360,7 +360,7 @@ pub const CUT: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Leatherworking),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
-    None,
+    Some("cut"),
 );
 
 pub const SCRAPE: Verb = verb(
@@ -369,7 +369,7 @@ pub const SCRAPE: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Leatherworking),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
-    None,
+    Some("scrape"),
 );
 
 pub const PIERCE: Verb = verb(

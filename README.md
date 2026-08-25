@@ -64,6 +64,15 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ Working a thing down into another thing, which is the other half of what
+  a tool is for. A making puts several things together; a working takes one
+  and reduces it. A core smashed into flakes — half the stone for the same
+  edge — a hide cut into leather, a stick scraped into shavings. Each wants
+  something in the hand and is refused without it, and the edge that did it is
+  the worse for it. Shavings are a discovery: everybody knows a fire wants
+  wood, and that a fire wants wood cut small enough to catch is a thing
+  somebody works out with a scraper in his hand and a hearth that will not
+  light. A hearth laid with tinder takes half the timber
 - ✅ Every action defined by three things: what it targets, what it wants in
   the hand, and what it changes. Sixty-eight verbs across twelve families live
   in one table — `src/environment/verbs.rs` — and the table is what the

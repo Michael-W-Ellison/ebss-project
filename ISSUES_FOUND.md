@@ -728,11 +728,26 @@ every action, so the requirement is declared once and enforced once. Two things
 are enforced that were not: a hunt wants a spear — the specification's own
 "hunting = spear + animal" — and stitching wants a hand free.
 
-The table is honest about what it does not do. Twenty-two of the sixty-eight
-verbs have something performing them; forty-six are declared and idle, and the
-whole chemical and fluid family is declaration. A test fails if the table stops
-saying so, because a matrix that quietly implied sixty-eight working verbs
-would be worse than no matrix.
+The table is honest about what it does not do. Twenty-five of the sixty-eight
+verbs have something performing them; forty-three are declared and idle, and
+the whole chemical and fluid family is declaration. A test fails if the table
+stops saying so, because a matrix that quietly implied sixty-eight working
+verbs would be worse than no matrix.
+
+Three of the idle ones have since been built, and building them showed what
+the matrix is worth: smashing, cutting and scraping are a table of workings
+that say what turns into what, and not one word about what they want in the
+hand — the verb says that, and the executor enforces it without knowing
+anything about stone. Over eight worlds against `c6218ae` the settlements
+smashed 866 cores and scraped 901 sticks apiece, spears carried went from 33
+to 65 because a struck flake is half the stone of a raw core, fires standing
+went from 37 to 43, and about two thirds of a living settlement worked out
+what shavings are for. Population 85.5 to 79.3, a difference of 6.3 at a
+standard error of 7.6.
+
+Cutting hides into leather fires almost never — nought to twelve times in a
+world — because hides are scarce in a pack and what there is goes straight
+into clothing. The verb works; the material does not reach it.
 
 Measured over eight worlds against `1b9aa40`: population 73.3 to 77.4, a
 difference of 4.1 at a standard error of 5.9. What did move is the spread —
