@@ -33,3 +33,7 @@ pub mod lean_season_tests;
 pub mod midden_tests;
 pub mod farming_tests;
 pub mod nomad_tests;
+pub mod sprouting_tests;
+pub mod transplant_tests;
+pub mod tasting_tests;
+pub mod swap_tests;

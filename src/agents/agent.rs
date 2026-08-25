@@ -1247,6 +1247,43 @@ impl Agent {
         &self.found_out
     }
 
+    /// How an opinion about one of the strange plants is written down
+    fn what_i_call_that_plant(kind: u8, good: bool) -> String {
+        format!("plant:{kind}:{}", if good { "good" } else { "bad" })
+    }
+
+    /// Whether this agent has any opinion at all about that plant.
+    ///
+    /// Nobody is born with one. What settles it is somebody eating one and
+    /// either being fed by it or being ill.
+    pub fn have_i_tried_that_plant(&self, kind: u8) -> bool {
+        self.found_out
+            .contains(&Self::what_i_call_that_plant(kind, true))
+            || self
+                .found_out
+                .contains(&Self::what_i_call_that_plant(kind, false))
+    }
+
+    /// Whether this agent believes that plant is food.
+    pub fn is_that_plant_food(&self, kind: u8) -> bool {
+        self.found_out
+            .contains(&Self::what_i_call_that_plant(kind, true))
+    }
+
+    /// Write down what that plant turned out to be.
+    pub fn now_i_know_that_plant(&mut self, kind: u8, good: bool) {
+        self.found_out
+            .insert(Self::what_i_call_that_plant(kind, good));
+    }
+
+    /// How many of the strange plants this agent has an opinion about
+    pub fn how_many_plants_i_know(&self) -> usize {
+        self.found_out
+            .iter()
+            .filter(|what| what.starts_with("plant:"))
+            .count()
+    }
+
     /// The work a pair of hands wants to be equipped for, in the order it
     /// wants them.
     ///
@@ -1302,6 +1339,74 @@ impl Agent {
             })
             .find(|step| step.makings_to_hand(&holding))
             .map(|step| step.makes.to_string())
+    }
+
+    /// A step it knows, with the wrong thing where a part should go.
+    ///
+    /// "Knowing that a stone tool requires the use of specific sub-components,
+    /// an agent might substitute known sub-components for new/random things."
+    ///
+    /// Returns what was being attempted, the part left out, and what went in
+    /// instead. It picks a step whose other parts are all to hand, so the man
+    /// is genuinely one component short and has genuinely got something else,
+    /// and it will not offer a substitution this agent has already tried and
+    /// found useless - see `Lessons::will_try_this_again`.
+    pub fn what_i_would_swap(&self) -> Option<(String, String, String)> {
+        use crate::environment::making;
+
+        for step in making::EVERY_STEP.iter().filter(|step| self.knows_how_to(step)) {
+            if self.how_many_i_have(step.makes) >= making::A_FEW_SPARE {
+                continue;
+            }
+
+            if step
+                .wants_in_hand
+                .is_some_and(|wanted| self.how_many_i_have(wanted) == 0)
+            {
+                continue;
+            }
+
+            for (left_out, _) in step.needs {
+                // Everything else the step wants has to be in the pack, or
+                // this is not a substitution, it is a wish
+                let rest_to_hand = step.needs.iter().all(|(what, how_many)| {
+                    what == left_out || self.how_many_i_have(what) >= *how_many
+                });
+
+                if !rest_to_hand {
+                    continue;
+                }
+
+                for stack in self.inventory.get_all_items().values() {
+                    if stack.quantity == 0 {
+                        continue;
+                    }
+
+                    let put_in = stack.item_id.as_str();
+
+                    // Not a thing the step already wants, and not the part
+                    // that is missing
+                    if step.needs.iter().any(|(what, _)| *what == put_in) {
+                        continue;
+                    }
+
+                    let called =
+                        making::what_that_swap_is_called(step.makes, left_out, put_in);
+
+                    if !self.lessons.will_try_this_again(&called) {
+                        continue;
+                    }
+
+                    return Some((
+                        step.makes.to_string(),
+                        left_out.to_string(),
+                        put_in.to_string(),
+                    ));
+                }
+            }
+        }
+
+        None
     }
 
     /// The thing this agent would put its hands to now, if anything.
@@ -3346,6 +3451,18 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
+            Action::Taste => "taste".to_string(),
+            Action::TrySwapping {
+                instead_of_making,
+                instead_of,
+                put_in,
+            } => crate::environment::making::what_that_swap_is_called(
+                instead_of_making,
+                instead_of,
+                put_in,
+            ),
+            Action::TakeCutting => "takecutting".to_string(),
+            Action::PlantCutting => "plantcutting".to_string(),
             Action::SpreadMuck => "spreadmuck".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
@@ -3371,11 +3488,15 @@ impl Agent {
             Action::Fight { .. } => Undertaking::Fighting,
             Action::Fish => Undertaking::Fishing,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
-            Action::TillSoil | Action::SpreadMuck | Action::TendField => Undertaking::Farming,
+            Action::TillSoil
+            | Action::SpreadMuck
+            | Action::TendField
+            | Action::TakeCutting
+            | Action::PlantCutting => Undertaking::Farming,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,
-            Action::Craft { .. } => Undertaking::Crafting,
+            Action::Craft { .. } | Action::TrySwapping { .. } => Undertaking::Crafting,
             Action::Socialize { .. } | Action::ShareInformation { .. } => Undertaking::Dealing,
             _ => return,
         };

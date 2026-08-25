@@ -129,6 +129,15 @@ pub struct World {
     pub zone_manager: zoning::ZoneManager, // Spatial zoning for settlement planning
     pub road_network: path_planning::RoadNetwork, // Road and path network
     pub territory_manager: territory::TerritoryManager, // Territory claiming and ownership
+
+    /// Which sorts of strange plant feed a person in this world, by kind.
+    ///
+    /// Drawn once when the country is made and never shown to anybody living
+    /// in it. `true` at index `k` means a strange plant of kind `k` is supper;
+    /// `false` means it is not, and finding out which costs somebody their
+    /// health or their life. See `ResourceType::StrangePlant`.
+    #[serde(default)]
+    pub what_the_strange_plants_are: Vec<bool>,
 }
 
 /// World configuration
@@ -267,6 +276,35 @@ impl WorldConfig {
 }
 
 impl World {
+    /// How many different unknown plants grow in a world.
+    ///
+    /// Few enough that a people can get through them in a few generations,
+    /// and enough that getting through them costs somebody.
+    pub const HOW_MANY_STRANGE_PLANTS: u8 = 4;
+
+    /// Which of them turn out to be food, drawn fresh for each world.
+    ///
+    /// Always at least one of each, so no world is a world where curiosity is
+    /// simply free and none is a world where it is simply fatal.
+    fn draw_the_strange_plants() -> Vec<bool> {
+        use rand::seq::SliceRandom;
+
+        let how_many = Self::HOW_MANY_STRANGE_PLANTS as usize;
+        let mut what_they_are: Vec<bool> = (0..how_many).map(|i| i % 2 == 0).collect();
+        what_they_are.shuffle(&mut rand::thread_rng());
+        what_they_are
+    }
+
+    /// Whether a strange plant of this kind feeds a person.
+    ///
+    /// The world knows. Nobody living in it does.
+    pub fn does_this_one_feed_you(&self, kind: u8) -> bool {
+        self.what_the_strange_plants_are
+            .get(kind as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+
     pub fn new(config: WorldConfig) -> Self {
         let mut grid = Grid::new(config.size.0, config.size.1);
         grid.generate_terrain();
@@ -290,6 +328,7 @@ impl World {
             zone_manager: zoning::ZoneManager::new(),
             road_network: path_planning::RoadNetwork::new(),
             territory_manager: territory::TerritoryManager::new(),
+            what_the_strange_plants_are: Self::draw_the_strange_plants(),
         };
 
         // The ground under the terrain that was just generated
@@ -315,6 +354,66 @@ impl World {
         world
     }
 
+    /// How many patches of each unknown plant a world carries.
+    const PATCHES_OF_EACH_STRANGE_PLANT: u32 = 4;
+
+    /// How much stands in one of them.
+    const WHAT_A_STRANGE_PATCH_CARRIES: u32 = 30;
+
+    /// Put the unknown plants about the country.
+    ///
+    /// On open ground, like anything else that grows, and scattered rather than
+    /// clustered: the point is that a people walking about its own country
+    /// keeps coming across them, and has to decide each time whether today is
+    /// the day somebody tries one.
+    fn scatter_the_strange_plants(&mut self) {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let width = self.grid.width as i32;
+        let height = self.grid.height as i32;
+
+        for kind in 0..Self::HOW_MANY_STRANGE_PLANTS {
+            let mut placed = 0;
+            let mut tries = 0;
+
+            while placed < Self::PATCHES_OF_EACH_STRANGE_PLANT && tries < 400 {
+                tries += 1;
+
+                let where_it_is = Position::new(
+                    rng.gen_range(0..width),
+                    rng.gen_range(0..height),
+                );
+
+                let will_grow = self
+                    .grid
+                    .get_tile(&where_it_is)
+                    .map(|tile| tile.terrain.can_be_tilled())
+                    .unwrap_or(false);
+
+                if !will_grow {
+                    continue;
+                }
+
+                if self
+                    .resources
+                    .iter()
+                    .any(|resource| resource.position == where_it_is)
+                {
+                    continue;
+                }
+
+                self.resources.push(ResourceNode::of_kind(
+                    ResourceType::StrangePlant,
+                    where_it_is,
+                    Self::WHAT_A_STRANGE_PATCH_CARRIES,
+                    kind,
+                ));
+                placed += 1;
+            }
+        }
+    }
+
     fn generate_resources(&mut self, config: &ResourceConfig) {
         let mut rng = rand::thread_rng();
 
@@ -325,6 +424,9 @@ impl World {
         if config.use_naturalistic_spawning {
             self.generate_naturalistic_resources(config);
         }
+
+        // And the things nobody has tried
+        self.scatter_the_strange_plants();
 
         // Update resource_nodes map for spatial queries
         self.update_resource_node_map();

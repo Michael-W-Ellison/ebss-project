@@ -197,8 +197,121 @@ pub const METAL_KNIFE: Making = Making {
     wants_in_hand: None,
 };
 
-/// Everything a stone-age people can put together, and the three steps beyond
-/// it that they have to find out for themselves.
+/// Putting the wrong thing in the right place.
+///
+/// "Knowing that a stone tool requires the use of specific sub-components, an
+/// agent might substitute known sub-components for new/random things."
+///
+/// A man who can haft a flake to a stick knows the shape of the job: a shaft,
+/// a head, something to bind them. Given that shape and a pack with something
+/// unexpected in it, he can put the unexpected thing where the head goes and
+/// see what he ends up with. Almost always he ends up with nothing and has
+/// wasted a good stick. Occasionally he ends up with something nobody had.
+///
+/// This table is what happens when he is right. Everything not in it is the
+/// wasted stick.
+#[derive(Debug, Clone, Copy)]
+pub struct Swap {
+    /// The step being attempted, named by what it normally makes
+    pub instead_of_making: &'static str,
+    /// The part left out
+    pub instead_of: &'static str,
+    /// And what went in its place
+    pub put_in: &'static str,
+    /// What comes out
+    pub makes: &'static str,
+    pub how_many: u32,
+}
+
+/// A hide cut round and round makes a longer thong than a handful of flax
+/// makes cord, and a better one.
+pub const THONG_FOR_CORD: Swap = Swap {
+    instead_of_making: "lashing",
+    instead_of: "flax",
+    put_in: "hides",
+    makes: "lashing",
+    how_many: 3,
+};
+
+/// A hafted metal blade is an axe, and a far better one than a flake.
+pub const BLADE_FOR_FLAKE_IN_AN_AXE: Swap = Swap {
+    instead_of_making: "handaxe",
+    instead_of: "knappedtip",
+    put_in: "metalblade",
+    makes: "metalaxe",
+    how_many: 1,
+};
+
+/// The same blade lashed the other way round is a spear that goes in.
+pub const BLADE_FOR_FLAKE_IN_A_SPEAR: Swap = Swap {
+    instead_of_making: "spear",
+    instead_of: "knappedtip",
+    put_in: "metalblade",
+    makes: "metalspear",
+    how_many: 1,
+};
+
+/// Everything that comes of putting the wrong thing in the right place.
+pub const EVERY_SWAP: &[Swap] = &[
+    THONG_FOR_CORD,
+    BLADE_FOR_FLAKE_IN_AN_AXE,
+    BLADE_FOR_FLAKE_IN_A_SPEAR,
+];
+
+/// What comes of this particular substitution, if anything does.
+pub fn what_comes_of_swapping(
+    instead_of_making: &str,
+    instead_of: &str,
+    put_in: &str,
+) -> Option<&'static Swap> {
+    EVERY_SWAP.iter().find(|swap| {
+        swap.instead_of_making == instead_of_making
+            && swap.instead_of == instead_of
+            && swap.put_in == put_in
+    })
+}
+
+/// How a try at a substitution is written down, so that nobody spends a life
+/// putting the same wrong thing in the same right place.
+pub fn what_that_swap_is_called(
+    instead_of_making: &str,
+    instead_of: &str,
+    put_in: &str,
+) -> String {
+    format!("swap:{instead_of_making}:{instead_of}:{put_in}")
+}
+
+/// A hafted metal blade, once anybody has worked out that it can be done.
+///
+/// The same three parts as a hand axe with a blade where the flake goes. It is
+/// here rather than only in the swap table because a discovery nobody can
+/// repeat is not a discovery: the first one is found by putting the wrong
+/// thing in the right place, and every one after that is made on purpose.
+pub const METAL_AXE: Making = Making {
+    makes: "metalaxe",
+    how_many: 1,
+    needs: &[("wood", 1), ("metalblade", 1), ("lashing", 1)],
+    hands: SkillType::Crafting,
+    effort: 9.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// And the same, lashed the other way round.
+pub const METAL_SPEAR: Making = Making {
+    makes: "metalspear",
+    how_many: 1,
+    needs: &[("wood", 1), ("metalblade", 1), ("lashing", 1)],
+    hands: SkillType::Crafting,
+    effort: 9.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// Everything a stone-age people can put together, and the steps beyond it
+/// that they have to find out for themselves.
 pub const EVERY_STEP: &[Making] = &[
     LASHING,
     LASHING_FROM_COTTON,
@@ -209,6 +322,8 @@ pub const EVERY_STEP: &[Making] = &[
     SHINY_LUMP,
     METAL_BLADE,
     METAL_KNIFE,
+    METAL_AXE,
+    METAL_SPEAR,
 ];
 
 /// The steps nobody arrives knowing.
@@ -426,6 +541,36 @@ pub const METAL_KNIFE_FOR_CRAFTING: Tool = Tool {
     how_long_it_lasts: 90.0,
 };
 
+/// An axe with a metal head. Twice the tool a stone one is, and it lasts.
+pub const METAL_AXE_FOR_WOOD: Tool = Tool {
+    called: "metalaxe",
+    helps: SkillType::Woodcutting,
+    how_much_better: 2.6,
+    how_long_it_lasts: 110.0,
+};
+
+pub const METAL_AXE_FOR_STONE: Tool = Tool {
+    called: "metalaxe",
+    helps: SkillType::Mining,
+    how_much_better: 2.1,
+    how_long_it_lasts: 110.0,
+};
+
+/// And a spear that goes in rather than bruising.
+pub const METAL_SPEAR_FOR_HUNTING: Tool = Tool {
+    called: "metalspear",
+    helps: SkillType::Hunting,
+    how_much_better: 3.0,
+    how_long_it_lasts: 100.0,
+};
+
+pub const METAL_SPEAR_FOR_FISHING: Tool = Tool {
+    called: "metalspear",
+    helps: SkillType::Fishing,
+    how_much_better: 2.2,
+    how_long_it_lasts: 100.0,
+};
+
 /// Every tool these people have, and what each is for.
 pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_WOOD,
@@ -436,6 +581,10 @@ pub const EVERY_TOOL: &[Tool] = &[
     KNIFE_FOR_CRAFTING,
     METAL_KNIFE_FOR_BUTCHERING,
     METAL_KNIFE_FOR_CRAFTING,
+    METAL_AXE_FOR_WOOD,
+    METAL_AXE_FOR_STONE,
+    METAL_SPEAR_FOR_HUNTING,
+    METAL_SPEAR_FOR_FISHING,
 ];
 
 /// The tools that are any use for a kind of work.

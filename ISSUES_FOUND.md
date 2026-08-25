@@ -695,6 +695,12 @@ machinery is built, tested and idle. Making it fire means putting more wild
 grain in the world, which is a world-generation change with its own measurement
 to do, not a line to tune here.
 
+Partly answered since, by accident rather than by design: grain that gets wet
+sprouts, and a sprouted grain that falls out of a pack takes root — so grain
+patches now propagate, and eight worlds finished with 12.9 of them against 7.8.
+That is more grain in the country than a world starts with, and it still is not
+enough for grain to be the thing a settlement reaches for. See #11.
+
 The first cut of the sowing rule let an agent sow anything in its pack. Over
 eight worlds the people put in flax and cotton — they carry it for clothing —
 and the food standing on the map fell by ninety per cent while they farmed
@@ -705,7 +711,70 @@ Also found on the way: `Gather { resource_type: "grain" }` was not a request
 the executor understood. It fell through to "unknown resource type" and failed.
 Grain only ever arrived as an edible substitute for a request for food.
 
-### 11. There is no camp for nomadism to be a departure from
+### 11. Four accidents that teach farming, and two that hardly ever happen
+
+Farming had one route in and two teachers. It has four of each now, and none of
+them is anybody's idea about agriculture — which is the point, because nobody
+gets ideas about agriculture before there is any.
+
+**Grain gets wet and stops being grain.** A pack carried across a marsh, along
+a riverbank, or through a downpour on open ground has grain coming up in it.
+What sprouted works its way out of the pack, and what falls on ground that can
+carry it grows where somebody happened to be standing. Whoever is within six
+tiles of that learns what seed does. Over eight worlds the grain patches
+standing at the end went from 7.8 to 12.9.
+
+**Somebody moves the bush instead of walking to it.** A person who walks half a
+morning to the same berry patch lifts a slip of it and puts it in beside the
+tents. It is not a theory about growing things, it is an opinion about the
+walk. This turned out to be the strongest of the four by a long way: eight
+worlds lifted 269 slips apiece and put 193 of them in, and the food standing on
+the map went from 1,319 units to 5,526.
+
+That last number wants watching. The first cut took three units off the parent
+plant, left the parent as big as it was, and grew into a plant carrying forty:
+transplanting was not moving food about, it was manufacturing it, and the map
+carried six times what it had. A slip now comes off the parent's carrying
+capacity rather than only off this year's crop, and grows into somewhat more
+than it cost rather than thirteen times. Four times the standing food is still
+a large change for one mechanism and it is what a people that plants things
+would do.
+
+**Population did not move.** 70.5 at ten thousand ticks before, 75.0 after: a
+difference of 4.5 at a standard error of 7.2. Fields went 93 to 101 and the
+share of a living settlement with farming as settled practice went from 34 to
+43 of about 70.
+
+**Some plants are things nobody has tried, and hardly anybody ever does.** Four
+sorts grow in a world; which are supper is drawn when the country is made and
+written nowhere anybody in it can read. A curious agent with nothing pressing
+walks over and eats one, and it costs him between a bad afternoon and his life.
+Everybody standing round him learns it for nothing. Over eight worlds this
+happened three times in total, in three different worlds — twice the plant was
+food. It is built, it is tested, and it is barely exercised: curiosity rarely
+wins a turn against everything else a person wants, and sixteen patches in a
+hundred-tile country are not often underfoot.
+
+The first cut of it never fired at all, in eight worlds of ten thousand ticks.
+Two things were wrong: it asked the agent to be standing exactly on the plant,
+and it rolled the odds again on every tick of the walk, so a small chance was
+compounded against itself until nobody ever arrived. The roll is made once now,
+to set out.
+
+**Putting the wrong thing where a part goes** fires in about half of worlds and
+has never yet produced anything. The good substitutions want a metal blade in
+hand, and a metal blade is three discoveries deep already — so what actually
+gets tried is a hide where the flax goes, over and over, by people who have
+hides. The mechanism is sound and the tree above it is too tall for ten
+thousand ticks.
+
+Found on the way: a discovered thing nobody can make again is not a discovery.
+A metal axe existed only as the outcome of a substitution and had no step in
+the table, so the man who found one could never deliberately make a second.
+Both new tools are steps now, marked as things nobody is born knowing, and the
+substitution is how you come to know them.
+
+### 12. There is no camp for nomadism to be a departure from
 
 A people that cannot farm has nothing it can do to make this ground carry
 more, so it should go where the ground already carries something, and a people
@@ -741,14 +810,14 @@ about twelve people. What replaced it is relative: somewhere three times better
 than here. That stops the moment the camp arrives, because it is then standing
 on the best ground it knows of.
 
-### 12. Agents still cannot hear anything
+### 13. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 13. Zoning and territory are never established
+### 14. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -756,7 +825,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 14. Agents carry food they will never eat
+### 15. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -766,7 +835,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 15. Personality exists and reaches the drives, and still decides nothing
+### 16. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -948,7 +1017,7 @@ within reach of everybody, that adds up for every pair alike. It is the same
 shape of defect as the two that were fixed — an unbounded accumulator over a
 long run — and the principle has not yet been applied to it.
 
-### 16. Skill measured how far you had walked, and bought nothing
+### 17. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
 
@@ -1004,16 +1073,16 @@ matching the eight-world baseline exactly.
 
 ## Housekeeping
 
-### 17. Committed backup file
+### 18. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 18. Build warnings
+### 19. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 19. Placeholder package metadata
+### 20. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

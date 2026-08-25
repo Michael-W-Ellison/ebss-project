@@ -82,6 +82,8 @@ pub fn terrain_color(terrain: TerrainType) -> Color32 {
 /// Get resource color for map rendering
 pub fn resource_color(resource_type: ResourceType) -> Color32 {
     match resource_type {
+        // Something nobody has tried yet
+        ResourceType::StrangePlant => Color32::from_rgb(186, 85, 211),
         ResourceType::Wood => Color32::from_rgb(139, 69, 19),
         ResourceType::Stone => Color32::from_rgb(169, 169, 169),
         ResourceType::Iron => Color32::from_rgb(112, 128, 144),

@@ -229,6 +229,18 @@ pub enum Action {
     /// Go over a standing field pulling weeds out of it and picking pests off
     /// it, which is most of what growing a crop actually consists of
     TendField,
+    /// Eat a piece of something growing that nobody has tried, and find out
+    Taste,
+    /// Attempt a known step with the wrong thing where one of the parts goes
+    TrySwapping {
+        instead_of_making: String,
+        instead_of: String,
+        put_in: String,
+    },
+    /// Lift a piece of a plant that is known to be good, to carry home
+    TakeCutting,
+    /// Put a carried cutting in the ground where the agent is standing
+    PlantCutting,
     /// Tip whatever is spoiling in the pack onto the ground here
     SpreadMuck,
     /// Take what the run is carrying, from the reach the agent is standing at
@@ -266,6 +278,10 @@ impl Action {
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
+            Action::Taste => Some(DriveType::Curiosity), // Nobody eats a strange plant for the nutrition
+            Action::TrySwapping { .. } => Some(DriveType::Curiosity),
+            Action::TakeCutting => Some(DriveType::Sustenance),
+            Action::PlantCutting => Some(DriveType::Sustenance),
             Action::SpreadMuck => Some(DriveType::Sustenance),
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),

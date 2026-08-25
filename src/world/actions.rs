@@ -613,6 +613,10 @@ impl World {
             if harvested > 0 {
                 // Convert resource to item type
                 let item_type = match resource_type {
+                    // Whatever it turns out to be, it goes in the pack as
+                    // itself until somebody eats one
+                    ResourceType::StrangePlant => ItemType::Food,
+
                     // Basic
                     ResourceType::Wood => ItemType::Wood,
                     ResourceType::Stone => ItemType::Stone,

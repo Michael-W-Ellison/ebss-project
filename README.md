@@ -63,7 +63,28 @@ original specifications.
   stripped ground, somewhere three times better a fortnight off, no crop
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
-  ISSUES_FOUND.md #11
+  ISSUES_FOUND.md #12
+- ✅ Four ways into farming, none of which is anybody's idea about agriculture.
+  Grain carried through the wet — a marsh, a riverbank, a downpour on open
+  ground — starts coming up in the pack, and what falls out of a pack takes
+  root where somebody was standing. Somebody who walks half a morning to the
+  same berry bush lifts a slip of it and puts it in beside the tents, because
+  the walk is the thing he minds. The midden the people void in comes up in
+  what they ate. And a crop carried home off broken ground settles it. Whoever
+  is standing near enough to see any of that happen takes the lesson
+- ✅ Some plants are things nobody has tried. Four sorts grow in a world and
+  which of them are supper is drawn when the country is made and written
+  nowhere anybody living in it can read. A curious agent with nothing pressing
+  on him occasionally eats one: if it feeds him, the people have a new food
+  and can gather it; if it does not, it costs him between a bad afternoon and
+  his life. Everybody standing round him learns it for nothing, which is most
+  of what being a people rather than a person is worth
+- ✅ Putting the wrong thing where a part goes. A man who can haft a flake to a
+  stick knows the shape of the job — a shaft, a head, something to bind them —
+  and can put something unexpected where the head goes. Almost always he ends
+  up with a lump tied to a stick and has wasted a good stick; the materials go
+  either way. Occasionally he ends up with a metal axe, and knows how to do it
+  again on purpose
 - ✅ Farming is worked out, and then worked at. Nobody starts out believing that
   seed put in the ground on purpose comes back as food; breaking ground is a
   hunch an agent follows out of curiosity until something proves it. Two things
@@ -90,7 +111,7 @@ original specifications.
   back more than a casual one, and a dedicated tailor makes better coats and
   wastes fewer. Skill used to measure how much of the map somebody had walked
   over: everybody was a master farmer, nobody had farmed, and none of it did
-  anything. See ISSUES_FOUND.md #16
+  anything. See ISSUES_FOUND.md #17
 - ✅ Everybody is somebody: a founder is drawn with three to five compatible
   traits out of sixty-odd, and everybody born afterwards takes after their two
   parents. Forty founders are forty different people
@@ -99,7 +120,7 @@ original specifications.
   pushing before starting work and a coward starts running at a smaller wolf.
   Measured against the old action ladder it changed almost nothing; both things
   that blocked it have since been rebuilt, and whether it now tells has not
-  been re-measured. See ISSUES_FOUND.md #15
+  been re-measured. See ISSUES_FOUND.md #16
 - ✅ Drives that know which of them matters: they are ranked primary, secondary
   and tertiary, and among the primaries the one that would kill soonest wins —
   a thirsty man stops hunting. Each drive waits on the one before it in the

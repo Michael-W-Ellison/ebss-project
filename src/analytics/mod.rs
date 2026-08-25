@@ -352,6 +352,11 @@ impl Simulation {
         // And the ground they fouled last season comes up in berries
         self.what_was_dropped_comes_up();
 
+        // Grain carried through a wet season starts growing in the pack, and
+        // what is dropped out of a pack takes root where it falls
+        self.what_got_wet_sprouts();
+        self.what_was_dropped_takes_root();
+
         // Let hungry predators try their luck with the people
         self.process_predator_attacks();
 
@@ -1037,6 +1042,10 @@ impl Simulation {
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
+            Action::Taste => Some(ActionType::Farming),
+            Action::TrySwapping { .. } => Some(ActionType::Crafting),
+            Action::TakeCutting => Some(ActionType::Farming),
+            Action::PlantCutting => Some(ActionType::Farming),
             Action::SpreadMuck => Some(ActionType::Farming),
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
@@ -2167,6 +2176,7 @@ impl Simulation {
                 .cooking_action(agent, agent_position)
                 .or_else(|| self.muck_action(agent, agent_position))
                 .or_else(|| self.farming_action(agent, agent_position))
+                .or_else(|| self.transplanting_action(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))
                 .or_else(|| self.fishing_action(agent, agent_position)),
 
@@ -2253,6 +2263,35 @@ impl Simulation {
                 // is the point. Nobody can want a metal knife until somebody
                 // has held a metal blade, and nobody holds one until somebody
                 // does the trick a second time for its own sake.
+                // Something growing underfoot that nobody has ever tried.
+                // This is where a people's larder comes from and where some
+                // of its people go: the only way to find out whether a plant
+                // is food is for somebody to eat one.
+                if let Some(action) = self.tasting_action(agent, agent_position) {
+                    return Some(action);
+                }
+
+                // And putting the wrong thing where a part goes, which is
+                // how a people gets past the things it already knows how to
+                // make. Rare, because it costs the materials whether or not
+                // anything comes of it.
+                let feeling_experimental = {
+                    use rand::Rng;
+                    rand::thread_rng().gen_bool(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP)
+                };
+
+                if feeling_experimental {
+                    if let Some((instead_of_making, instead_of, put_in)) =
+                        agent.what_i_would_swap()
+                    {
+                        return Some(Action::TrySwapping {
+                            instead_of_making,
+                            instead_of,
+                            put_in,
+                        });
+                    }
+                }
+
                 if let Some(what) = agent.what_i_would_try_out() {
                     // The conditions are checked here and not only in the
                     // executor, because an agent that keeps asking for a thing
@@ -2597,17 +2636,30 @@ impl Simulation {
     /// How near you have to be standing to notice that the midden is growing.
     const CLOSE_ENOUGH_TO_SEE_IT_COME_UP: i32 = 6;
 
+    /// What a mouthful of a strange plant that turns out to be food is worth.
+    const WHAT_ONE_MOUTHFUL_IS_WORTH: f32 = 60.0;
+
+    /// And what one that turns out not to be costs, in health.
+    ///
+    /// A person carries a hundred. The low end is a bad afternoon; the high
+    /// end kills somebody who was not in good condition to start with, which
+    /// is what makes tasting a thing a people does carefully and rarely.
+    const WHAT_A_BAD_PLANT_DOES: (f32, f32) = (12.0, 55.0);
+
     /// Everything an agent might put in the ground, by what a pack calls it.
     ///
     /// Seed is not a separate thing an agent carries: a handful of the grain
     /// in the pack is next year's field, which is exactly the choice a hungry
     /// people has to make.
-    fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 5] {
+    fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 6] {
         use crate::world::ResourceType;
 
         // The flag is whether it is worth breaking ground for when the thing
-        // driving you is hunger
+        // driving you is hunger. Sprouted grain comes first because it is the
+        // one thing in the list that is visibly already doing what a field is
+        // for - a man holding it does not have to be told.
         [
+            ("sproutedgrain", ResourceType::Grain, true),
             ("grain", ResourceType::Grain, true),
             ("food", ResourceType::Food, true),
             ("flax", ResourceType::Flax, false),
@@ -2656,6 +2708,178 @@ impl Simulation {
 
     /// How much comes up off one tile's worth of seed.
     const WHAT_A_MIDDEN_COMES_UP_IN: f32 = 8.0;
+
+    /// How wet it has to be under a pack before grain in it starts moving.
+    ///
+    /// Set against `Soil::humidity`, which reads the country and the sky
+    /// together: a wetland or a riverbank is wet enough standing still, a
+    /// forest floor is on the line, and open plains only get there when it is
+    /// actually raining. Dry ground under a clear sky never does.
+    const WET_ENOUGH_TO_START_IT: f32 = 0.7;
+
+    /// And how readily it goes, per tick, at that wetness.
+    ///
+    /// Slow: a handful of grain that gets rained on does not come up the same
+    /// afternoon. Over a wet season most of what a person is carrying will
+    /// have started, which is the point - the seed spoils as food and becomes
+    /// something else.
+    const HOW_READILY_GRAIN_TAKES: f32 = 0.01;
+
+    /// Grain carried in the wet stops being grain.
+    ///
+    /// "Something like grain getting wet should result in the grains
+    /// sprouting." Nobody does this on purpose. It is a thing that happens to
+    /// a pack in the rain, and it is the plainest lesson in the world about
+    /// what seed does, because it happens in the owner's hands.
+    fn what_got_wet_sprouts(&mut self) {
+        use crate::agents::InventoryItem;
+        use rand::Rng;
+
+        let raining = self
+            .world
+            .climate
+            .weather
+            .weather_type
+            .precipitation_intensity();
+
+        let mut rng = rand::thread_rng();
+
+        for index in 0..self.population.agents.len() {
+            if !self.population.agents[index].state.is_alive {
+                continue;
+            }
+
+            let where_it_stands = self.population.agents[index].state.position;
+
+            // Rain on the pack, or the wet of the ground it is set down on.
+            // A camp beside a river is a wet camp whatever the sky is doing.
+            let wet = self
+                .world
+                .grid
+                .get_tile(&crate::world::Position::new(where_it_stands.0, where_it_stands.1))
+                .map(|tile| {
+                    crate::world::Soil::humidity(tile.terrain.terrain_type, raining)
+                })
+                .unwrap_or(0.0);
+
+            if wet < Self::WET_ENOUGH_TO_START_IT {
+                continue;
+            }
+
+            let agent = &mut self.population.agents[index];
+
+            if agent.how_many_i_have("grain") == 0 {
+                continue;
+            }
+
+            if !rng.gen_bool((wet * Self::HOW_READILY_GRAIN_TAKES).clamp(0.0, 1.0) as f64) {
+                continue;
+            }
+
+            agent.inventory.remove_item("grain", 1);
+            agent.inventory.add_item(InventoryItem::new_with_weight(
+                "sproutedgrain".to_string(),
+                1,
+                0.5,
+            ));
+
+            debug!("Agent {} found the grain in its pack coming up", agent.id);
+        }
+    }
+
+    /// How readily a sprouted grain works its way out of a pack, per tick.
+    const WHAT_FALLS_OUT_OF_A_PACK: f64 = 0.02;
+
+    /// And what a plant grown from one carries when it is full grown.
+    const WHAT_ONE_SEED_COMES_TO: u32 = 30;
+
+    /// A sprouted grain dropped where it can grow, grows.
+    ///
+    /// "If sprouted grains are thrown out or dropped, they could grow into
+    /// adult plants." Nobody plants this. It falls out of a pack onto ground
+    /// somebody happened to be standing on, and the next time anybody walks
+    /// past there is a plant. Whoever is near enough to see it takes the
+    /// lesson, the same as with the midden - this is the second of the two
+    /// accidents that teach a people what seed is for.
+    fn what_was_dropped_takes_root(&mut self) {
+        use crate::world::{Position, ResourceNode, ResourceType};
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let mut took_root: Vec<Position> = Vec::new();
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            if agent.how_many_i_have("sproutedgrain") == 0 {
+                continue;
+            }
+
+            if !rng.gen_bool(Self::WHAT_FALLS_OUT_OF_A_PACK) {
+                continue;
+            }
+
+            agent.inventory.remove_item("sproutedgrain", 1);
+            took_root.push(Position::new(
+                agent.state.position.0,
+                agent.state.position.1,
+            ));
+        }
+
+        for where_it_fell in took_root {
+            // Not on rock, not in a river, and not on top of something already
+            // growing there
+            let can_grow = self
+                .world
+                .grid
+                .get_tile(&where_it_fell)
+                .map(|tile| {
+                    tile.terrain.can_be_tilled() || tile.terrain.is_cultivated()
+                })
+                .unwrap_or(false);
+
+            if !can_grow {
+                continue;
+            }
+
+            if self
+                .world
+                .resources
+                .iter()
+                .any(|resource| resource.position == where_it_fell)
+            {
+                continue;
+            }
+
+            let mut plant = ResourceNode::new(
+                ResourceType::Grain,
+                where_it_fell,
+                Self::WHAT_ONE_SEED_COMES_TO,
+            );
+            plant.amount = 1;
+            self.world.resources.push(plant);
+
+            debug!("A dropped grain took root at {where_it_fell:?}");
+
+            for agent in self
+                .population
+                .agents
+                .iter_mut()
+                .filter(|agent| agent.state.is_alive)
+            {
+                let apart = (agent.state.position.0 - where_it_fell.x).abs()
+                    + (agent.state.position.1 - where_it_fell.y).abs();
+
+                if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                    agent
+                        .practices
+                        .saw_it_work(crate::agents::practices::Practice::Farming);
+                }
+            }
+        }
+    }
 
     /// The nearest fire within reach, and where it is.
     ///
@@ -4337,6 +4561,257 @@ impl Simulation {
         })
     }
 
+    /// How near the camp a plant has to stand before nobody would bother
+    /// moving it, and how near a cutting has to be put in for the move to have
+    /// been worth making.
+    const A_SHORT_WALK: u32 = 6;
+
+    /// How many people standing together make a camp, when there is no roof up
+    /// yet to mark one.
+    const ENOUGH_PEOPLE_TO_BE_A_CAMP: u32 = 3;
+
+    /// How much of a plant comes away as a cutting, and how much the slip
+    /// grows into once it is in.
+    ///
+    /// The first cut of this took three units off the parent and grew into a
+    /// plant carrying forty, and left the parent as big as it was. Over eight
+    /// worlds the people planted two hundred slips apiece and the food
+    /// standing on the map went up six times: transplanting was not moving
+    /// food about, it was manufacturing it out of nothing.
+    ///
+    /// A slip is a piece of the plant. It comes off the parent's carrying
+    /// capacity and not only off this year's crop, and what it grows into is
+    /// somewhat more than what it cost - because a plant put in open ground
+    /// with nobody's roots against it does better than one more stem on a
+    /// crowded patch. Somewhat, not thirteen times.
+    const WHAT_A_CUTTING_TAKES: u32 = 8;
+    const WHAT_A_CUTTING_STARTS_WITH: u32 = 2;
+    const WHAT_A_MOVED_PLANT_COMES_TO: u32 = 20;
+
+    /// And how small a patch has to be before nobody digs any more out of it.
+    const TOO_THIN_TO_DIG: u32 = 12;
+
+    /// Where the camp is, from where this agent is standing.
+    ///
+    /// There is no settlement object in this model - see ISSUES_FOUND #11 -
+    /// so a camp is the nearest roof, and failing that the middle of whatever
+    /// knot of people the agent is standing in. Both are rough and both are
+    /// good enough to answer "is this plant near where I live".
+    fn where_the_camp_is(&self, position: (i32, i32, i32)) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        // The people first, and the roof only when there are not enough of
+        // them about to make a camp. `nearest_shelter_from` searches out from
+        // wherever the agent is standing, so for a man twenty tiles out on the
+        // moor it answers "the nearest cave to the moor", which is not his
+        // home and is exactly the wrong answer to what this asks.
+        let reach = Self::FORAGE_RADIUS as i32;
+
+        let neighbours: Vec<(i32, i32)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| (agent.state.position.0, agent.state.position.1))
+            .filter(|(x, y)| {
+                (x - position.0).abs() <= reach && (y - position.1).abs() <= reach
+            })
+            .collect();
+
+        if (neighbours.len() as u32) >= Self::ENOUGH_PEOPLE_TO_BE_A_CAMP {
+            return Some(Position::new(
+                neighbours.iter().map(|(x, _)| x).sum::<i32>() / neighbours.len() as i32,
+                neighbours.iter().map(|(_, y)| y).sum::<i32>() / neighbours.len() as i32,
+            ));
+        }
+
+        self.nearest_shelter_from(position)
+    }
+
+    /// Moving a plant that is known to be good to ground beside the camp.
+    ///
+    /// This is the third way into farming and the one that needs no seed and
+    /// no theory at all. A person who walks half a morning to the same berry
+    /// bush every day, and who has already dug up plants for one reason or
+    /// another, eventually digs up that one and puts it in beside the tents.
+    /// It is not an idea about agriculture. It is an idea about the walk.
+    ///
+    /// Two halves: lift a piece of something growing a long way off, and put
+    /// it in the ground where you live. What it teaches is taught by the
+    /// plant standing there afterwards, which is `record_outcome` on the
+    /// harvest like any other crop.
+    fn transplanting_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let camp = self.where_the_camp_is(agent_position)?;
+
+        // Carrying one already: get it in the ground somewhere near home
+        if let Some(cutting) = Self::a_cutting_in_the_pack(agent) {
+            let _ = cutting;
+
+            if camp.distance_to(&here) > Self::A_SHORT_WALK {
+                return Some(Action::Move {
+                    target: (camp.x, camp.y, agent_position.2),
+                });
+            }
+
+            let can_carry_it = self
+                .world
+                .grid
+                .get_tile(&here)
+                .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+                .unwrap_or(false);
+
+            let taken = self
+                .world
+                .resources
+                .iter()
+                .any(|resource| resource.position == here);
+
+            if can_carry_it && !taken {
+                return Some(Action::PlantCutting);
+            }
+
+            // Standing on the wrong tile at home: step to one that will do
+            let spot = self.ground_to_break((camp.x, camp.y, agent_position.2))?;
+            if spot != here {
+                return Some(Action::Move {
+                    target: (spot.x, spot.y, agent_position.2),
+                });
+            }
+
+            return None;
+        }
+
+        // Nothing carried: lift a piece of whatever is standing here, if it is
+        // worth lifting - which means it is a long way from home and there is
+        // something growing here that is known to be good
+        if camp.distance_to(&here) <= Self::A_SHORT_WALK {
+            return None;
+        }
+
+        let standing = self.world.resources.iter().find(|resource| {
+            resource.position == here
+                && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                && resource.max_amount > Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
+        })?;
+
+        Self::what_can_be_sown()
+            .into_iter()
+            .find(|(_, crop, _)| *crop == standing.resource_type)
+            .map(|_| Action::TakeCutting)
+    }
+
+    /// How often a curious man with a pack full of parts tries putting the
+    /// wrong one in the right place.
+    ///
+    /// Low, and it is meant to be. Each try costs the makings of a spear, and
+    /// the great majority of them come to nothing at all.
+    const HOW_OFTEN_ANYBODY_TRIES_A_SWAP: f64 = 0.04;
+
+    /// How willing somebody has to be before they put a strange plant in
+    /// their mouth.
+    ///
+    /// Set against the Curiosity drive rather than a trait, because this is a
+    /// thing done on an idle afternoon by somebody with nothing pressing on
+    /// them - never by a man with a wolf behind him, and only rarely by
+    /// anybody.
+    const CURIOUS_ENOUGH_TO_EAT_IT: f32 = 0.55;
+
+    /// And how often even a curious man actually does it, per chance.
+    ///
+    /// Low. A person who walks past a strange plant every day for years
+    /// eventually tries one; a person who tries every plant he passes does not
+    /// get to be a person for long.
+    ///
+    /// This is the chance of setting out towards one, not of eating it: a man
+    /// who has walked to the plant eats it. Rolling again on arrival, which is
+    /// what the first cut did, compounded a small chance against itself once
+    /// per tick of the walk and meant nobody in eight worlds ever arrived.
+    const HOW_OFTEN_ANYBODY_RISKS_IT: f64 = 0.06;
+
+    /// Trying an unknown plant.
+    fn tasting_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::{Position, ResourceType};
+        use rand::Rng;
+
+        // Not while anything is actually wrong. A hungry man eating a strange
+        // plant is a different story and a worse one; this is the idle
+        // curiosity that finds things out cheaply.
+        if !agent.immediate_needs_met() {
+            return None;
+        }
+
+        let curious = agent
+            .drives
+            .get(DriveType::Curiosity)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0);
+
+        if curious < Self::CURIOUS_ENOUGH_TO_EAT_IT {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        // The nearest one of a sort nobody here has an opinion about. The
+        // first cut of this asked the agent to be standing exactly on the
+        // plant, and over eight worlds of ten thousand ticks not one person
+        // ever tried anything: sixteen tiles in ten thousand is not a thing
+        // that happens by accident.
+        let strange = self
+            .world
+            .resources
+            .iter()
+            .filter(|resource| {
+                resource.resource_type == ResourceType::StrangePlant && resource.amount > 0
+            })
+            .filter(|resource| !agent.have_i_tried_that_plant(resource.kind))
+            .map(|resource| (resource.position, here.distance_to(&resource.position)))
+            .filter(|(_, apart)| *apart <= Self::FORAGE_RADIUS)
+            .min_by_key(|(_, apart)| *apart)
+            .map(|(where_it_is, _)| where_it_is)?;
+
+        // Standing on it already: the walk was the deciding, and re-deciding
+        // on arrival is what kept anybody from ever getting there. The roll is
+        // made once, to set out.
+        if strange == here {
+            return Some(Action::Taste);
+        }
+
+        if !rand::thread_rng().gen_bool(Self::HOW_OFTEN_ANYBODY_RISKS_IT) {
+            return None;
+        }
+
+        Some(Action::Move {
+            target: (strange.x, strange.y, agent_position.2),
+        })
+    }
+
+    /// What a cutting of a named crop is called in a pack
+    fn a_cutting_of(called: &str) -> String {
+        format!("{called}cutting")
+    }
+
+    /// The cutting this agent is carrying, if any
+    fn a_cutting_in_the_pack(
+        agent: &crate::agents::Agent,
+    ) -> Option<(&'static str, crate::world::ResourceType)> {
+        Self::what_can_be_sown()
+            .into_iter()
+            .find(|(called, _, _)| agent.how_many_i_have(&Self::a_cutting_of(called)) > 0)
+            .map(|(called, crop, _)| (called, crop))
+    }
+
     /// The nearest field within reach that has gone over to weeds and pests
     fn field_wanting_work(
         &self,
@@ -5183,9 +5658,19 @@ impl Simulation {
                 let gathering_food = resource_type_enum == ResourceType::Food;
 
                 let mut nearest_resource: Option<(usize, u32)> = None;
+                // What this particular person will accept as food. Everybody
+                // takes berries; only somebody who has seen a strange plant
+                // eaten and survived will pick one.
+                let knows_it_is_food = |resource: &crate::world::ResourceNode| {
+                    resource.resource_type == ResourceType::StrangePlant
+                        && self.population.agents[agent_index].is_that_plant_food(resource.kind)
+                };
+
                 for (i, resource) in self.world.resources.iter().enumerate() {
                     let matches_request = resource.resource_type == resource_type_enum
-                        || (gathering_food && Self::edible_item_for(resource.resource_type).is_some());
+                        || (gathering_food
+                            && (Self::edible_item_for(resource.resource_type).is_some()
+                                || knows_it_is_food(resource)));
 
                     if matches_request && resource.amount > 0 {
                         let distance = agent_pos.distance_to(&resource.position);
@@ -5203,8 +5688,15 @@ impl Simulation {
 
                 if let Some((resource_index, _)) = nearest_resource {
                     // The harvested node may be an edible substitute for a
-                    // generic food request, so classify by what was found
-                    let resource_type_enum = self.world.resources[resource_index].resource_type;
+                    // generic food request, so classify by what was found.
+                    // A strange plant somebody has established is food is
+                    // food from here on: it goes in the pack and feeds people
+                    // like anything else that grows.
+                    let resource_type_enum = match self.world.resources[resource_index].resource_type
+                    {
+                        ResourceType::StrangePlant => ResourceType::Food,
+                        found => found,
+                    };
 
                     // What an ordinary pair of hands brings back in a trip
                     let ordinary = match resource_type_enum {
@@ -8226,6 +8718,20 @@ impl Simulation {
                 // season, and finds out what a berry bush thinks of a plough.
                 let sown = Self::what_this_one_would_sow(&self.population.agents[agent_index]);
 
+                // The seed itself goes in the ground. Sowing was free before
+                // this, which made a field a thing you got for a day's digging
+                // rather than for a day's digging and a meal you did not eat.
+                for (called, crop, _) in Self::what_can_be_sown() {
+                    if crop != sown {
+                        continue;
+                    }
+                    let agent = &mut self.population.agents[agent_index];
+                    if agent.how_many_i_have(called) > 0 {
+                        agent.inventory.remove_item(called, 1);
+                        break;
+                    }
+                }
+
                 // A newly sown field starts empty and fills as it grows
                 let mut field = ResourceNode::new(
                     sown,
@@ -8249,6 +8755,291 @@ impl Simulation {
                     .with_drive_change(DriveType::Sustenance, -0.4)
                     .with_energy_cost(12.0)
                     .with_message("Broke ground and sowed a field".to_string())
+            },
+
+            Action::TrySwapping {
+                instead_of_making,
+                instead_of,
+                put_in,
+            } => {
+                use crate::environment::making;
+
+                let Some(step) = making::how_to_make(instead_of_making) else {
+                    return ActionResult::failure("No such job".to_string());
+                };
+
+                // The parts have to be to hand: everything the step wants
+                // except the one left out, and one of whatever is going in
+                // instead.
+                {
+                    let agent = &self.population.agents[agent_index];
+
+                    let short = step.needs.iter().any(|(what, how_many)| {
+                        *what != instead_of.as_str()
+                            && agent.how_many_i_have(what) < *how_many
+                    }) || agent.how_many_i_have(put_in) == 0;
+
+                    if short {
+                        return ActionResult::failure(
+                            "Not the makings for that, either way".to_string(),
+                        );
+                    }
+                }
+
+                let outcome = making::what_comes_of_swapping(
+                    instead_of_making,
+                    instead_of,
+                    put_in,
+                );
+
+                // The materials go whether it works or not. That is the whole
+                // cost of trying things: a man who puts a lump of iron where
+                // the flake goes has spent a stick and a length of cord and
+                // has a lump of iron tied to a stick.
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    for (what, how_many) in step.needs {
+                        if *what == instead_of.as_str() {
+                            continue;
+                        }
+                        agent.inventory.remove_item(what, *how_many);
+                    }
+                    agent.inventory.remove_item(put_in, 1);
+                }
+
+                let worked = outcome.is_some();
+
+                if let Some(swap) = outcome {
+                    let made = self.population.agents[agent_index]
+                        .a_tool_fresh_from_these_hands(swap.makes, swap.how_many, 2.0);
+
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.add_item(made);
+
+                    // And he knows how to do it now, which is what makes it a
+                    // discovery rather than an accident
+                    agent.found_out_how_to(swap.makes);
+                    agent.skills.practise(step.hands, 20, tick_now);
+
+                    debug!(
+                        "Agent {} put {put_in} where the {instead_of} goes and got a {}",
+                        agent.id, swap.makes
+                    );
+                }
+
+                let called = making::what_that_swap_is_called(
+                    instead_of_making,
+                    instead_of,
+                    put_in,
+                );
+                self.population.agents[agent_index]
+                    .lessons
+                    .record_particular(&called, worked);
+
+                if worked {
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Curiosity, -0.5)
+                        .with_drive_change(DriveType::Utility, -0.3)
+                        .with_energy_cost(step.effort)
+                        .with_message(format!("Put {put_in} in and got something new"))
+                } else {
+                    ActionResult::failure(format!(
+                        "{put_in} where the {instead_of} goes comes to nothing"
+                    ))
+                    .with_drive_change(DriveType::Curiosity, -0.3)
+                    .with_energy_cost(step.effort)
+                }
+            },
+
+            Action::Taste => {
+                use crate::world::Position;
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let here = Position::new(agent_position.0, agent_position.1);
+
+                let Some(index) = self.world.resources.iter().position(|resource| {
+                    resource.position == here
+                        && resource.resource_type == crate::world::ResourceType::StrangePlant
+                        && resource.amount > 0
+                }) else {
+                    return ActionResult::failure("Nothing here to try".to_string());
+                };
+
+                let kind = self.world.resources[index].kind;
+                let feeds_you = self.world.does_this_one_feed_you(kind);
+
+                self.world.resources[index].harvest(1);
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.now_i_know_that_plant(kind, feeds_you);
+
+                let result = if feeds_you {
+                    // It is food. Not much of a meal - one mouthful of a
+                    // strange plant is a mouthful - but the man is no worse for
+                    // it and the people have one more thing to eat.
+                    agent
+                        .nutrition
+                        .consume(&crate::world::nutrition::NutritionalContent {
+                            energy: Self::WHAT_ONE_MOUTHFUL_IS_WORTH,
+                            protein: 1.0,
+                            micronutrients: 2.0,
+                            water_content: 5.0,
+                        });
+
+                    debug!("Agent {} found that plant {kind} is food", agent.id);
+
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Curiosity, -0.4)
+                        .with_drive_change(DriveType::Hunger, -0.05)
+                        .with_energy_cost(1.0)
+                        .with_message(format!("Tried plant {kind}: it is food"))
+                } else {
+                    // It is not. What that costs runs from a bad afternoon to
+                    // everything, which is what makes the trying a real choice
+                    // rather than a free lookup.
+                    let harm = rng.gen_range(
+                        Self::WHAT_A_BAD_PLANT_DOES.0..=Self::WHAT_A_BAD_PLANT_DOES.1,
+                    );
+                    agent.take_damage(harm);
+
+                    debug!(
+                        "Agent {} was poisoned by plant {kind} ({harm:.0} damage, {:.0} health left)",
+                        agent.id, agent.state.health
+                    );
+
+                    ActionResult::failure(format!("Tried plant {kind}: it is poison"))
+                        .with_drive_change(DriveType::Curiosity, -0.4)
+                        .with_energy_cost(6.0)
+                };
+
+                // And whoever was standing about learns it too, without paying
+                // for it. This is the whole value of other people: one man is
+                // ill and forty know not to eat that.
+                for onlooker in self
+                    .population
+                    .agents
+                    .iter_mut()
+                    .filter(|agent| agent.state.is_alive)
+                {
+                    let apart = (onlooker.state.position.0 - here.x).abs()
+                        + (onlooker.state.position.1 - here.y).abs();
+
+                    if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                        onlooker.now_i_know_that_plant(kind, feeds_you);
+                    }
+                }
+
+                result
+            },
+
+            Action::TakeCutting => {
+                use crate::agents::InventoryItem;
+                use crate::world::Position;
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let here = Position::new(agent_position.0, agent_position.1);
+
+                let Some(index) = self
+                    .world
+                    .resources
+                    .iter()
+                    .position(|resource| {
+                        resource.position == here && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                    })
+                else {
+                    return ActionResult::failure("Nothing here to lift".to_string());
+                };
+
+                let crop = self.world.resources[index].resource_type;
+
+                let Some((called, _, _)) = Self::what_can_be_sown()
+                    .into_iter()
+                    .find(|(_, sowable, _)| *sowable == crop)
+                else {
+                    return ActionResult::failure(format!("{crop:?} does not move"));
+                };
+
+                if self.world.resources[index].max_amount
+                    <= Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
+                {
+                    return ActionResult::failure("Too thin to dig out of".to_string());
+                }
+
+                // Taking a cutting costs the plant it came off, permanently: a
+                // slip is a piece of the plant and not a piece of this year's
+                // crop. A patch dug over for slips carries less from now on.
+                self.world.resources[index].harvest(Self::WHAT_A_CUTTING_TAKES);
+                self.world.resources[index].max_amount = self.world.resources[index]
+                    .max_amount
+                    .saturating_sub(Self::WHAT_A_CUTTING_TAKES);
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.inventory.add_item(InventoryItem::new_with_weight(
+                    Self::a_cutting_of(called),
+                    1,
+                    1.5,
+                ));
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Farming, 8, tick_now);
+
+                debug!("Agent {} lifted a slip of {called} at {here:?}", agent.id);
+
+                ActionResult::success()
+                    .with_energy_cost(5.0)
+                    .with_message(format!("Lifted a slip of {called}"))
+            },
+
+            Action::PlantCutting => {
+                use crate::world::{Position, ResourceNode};
+
+                let agent_position = self.population.agents[agent_index].state.position;
+                let here = Position::new(agent_position.0, agent_position.1);
+
+                let Some((called, crop)) =
+                    Self::a_cutting_in_the_pack(&self.population.agents[agent_index])
+                else {
+                    return ActionResult::failure("Nothing to plant".to_string());
+                };
+
+                let will_take = self
+                    .world
+                    .grid
+                    .get_tile(&here)
+                    .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+                    .unwrap_or(false);
+
+                if !will_take {
+                    return ActionResult::failure("Nothing will take here".to_string());
+                }
+
+                if self
+                    .world
+                    .resources
+                    .iter()
+                    .any(|resource| resource.position == here)
+                {
+                    return ActionResult::failure("Something already grows here".to_string());
+                }
+
+                let mut moved = ResourceNode::new(crop, here, Self::WHAT_A_MOVED_PLANT_COMES_TO);
+                moved.amount = Self::WHAT_A_CUTTING_STARTS_WITH;
+                self.world.resources.push(moved);
+
+                let agent = &mut self.population.agents[agent_index];
+                agent
+                    .inventory
+                    .remove_item(&Self::a_cutting_of(called), 1);
+                agent
+                    .skills
+                    .practise(crate::agents::SkillType::Farming, 15, tick_now);
+
+                debug!("Agent {} put a slip of {called} in at {here:?}", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Sustenance, -0.3)
+                    .with_energy_cost(8.0)
+                    .with_message(format!("Put a slip of {called} in beside the camp"))
             },
 
             Action::TendField => {
