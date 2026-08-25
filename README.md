@@ -64,6 +64,21 @@ original specifications.
   standing here — and over sixteen worlds it changed nothing measurable,
   because there is no camp in this model for it to be a departure from. See
   ISSUES_FOUND.md #13
+- ✅ Taking what is not yours, and running. Both were in the world already and
+  neither had a name: flight went out as a `Move` like any other, so a man who
+  had escaped four wolves had no record of having escaped anything. Running is
+  its own verb now — further in a turn than a walk and a good deal more tiring
+  — and it taught us something the moment it was measured. Filing an escape
+  under fighting, on the grounds that they are two answers to one question,
+  made the settlement pick nearly three times as many fights: a man who had
+  outrun four wolves came away believing he could beat the fifth. Getting away
+  is its own lesson now, and the attack count went straight back to where it
+  had been (97 a world to 40, against 35 before any of this). Theft is the
+  other half and is very nearly a null result: it is built, tested and chosen
+  once in eight worlds of ten thousand ticks, because a band of forty who all
+  grew up together has nobody standing next to it that it distrusts. The
+  machinery is there for a world that has strangers in it; this one does not
+
 - ✅ Things done with a vessel of water, which is the family that was entirely
   declaration until somebody could hollow out a bowl. Flax left in water lets
   go of its fibre and gives three times the cordage — cordage carried per
@@ -127,8 +142,9 @@ original specifications.
   executor consults before an action runs, so a hunt without a spear and a
   stitch with no hand free are refused in one place rather than in thirty. The
   table is honest about itself: a verb nothing performs yet says so, and a test
-  fails if it stops saying so. Twenty-odd of the sixty-eight are live; the
-  chemical and fluid family is entirely declaration so far
+  fails if it stops saying so. Forty-four of the sixty-eight are live; what is
+  left is mostly the equipment family, which wants a real in-the-hand state
+  before `equip` and `use` can mean anything
 - ✅ Four ways into farming, none of which is anybody's idea about agriculture.
   Grain carried through the wet — a marsh, a riverbank, a downpour on open
   ground — starts coming up in the pack, and what falls out of a pack takes

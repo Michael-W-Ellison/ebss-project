@@ -164,6 +164,8 @@ fn every_verb_is_performed_by_something_real() {
         "pickup", "putdown",
         // And turning a strange thing over in your hands
         "examine",
+        // And helping yourself to what somebody else is carrying, and running
+        "takefrom", "fleefrom",
     ];
 
     for one in EVERY_VERB {

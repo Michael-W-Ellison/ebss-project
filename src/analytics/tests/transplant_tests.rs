@@ -28,7 +28,10 @@ fn a_camp_at(camp: Position) -> Simulation {
         )
     });
 
-    // Open grass right round the camp, so there is somewhere to put a slip
+    // Open grass right round the camp, so there is somewhere to put a slip.
+    // Clear it of everything else as well: a slip will not go in on top of a
+    // boulder, and whether the world happened to drop one on the camp tile is
+    // not what any of these tests is about.
     for dx in -8..=8 {
         for dy in -8..=8 {
             let tile_position = Position::new(camp.x + dx, camp.y + dy);
@@ -37,6 +40,10 @@ fn a_camp_at(camp: Position) -> Simulation {
             }
         }
     }
+    world.resources.retain(|resource| {
+        (resource.position.x as i32 - camp.x as i32).abs() > 8
+            || (resource.position.y as i32 - camp.y as i32).abs() > 8
+    });
 
     let mut population = Population::new();
     for _ in 0..4 {

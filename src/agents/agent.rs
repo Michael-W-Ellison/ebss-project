@@ -3688,6 +3688,8 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
+            Action::TakeFrom { .. } => "takefrom".to_string(),
+            Action::FleeFrom { .. } => "fleefrom".to_string(),
             Action::Examine { what } => format!("examine:{what}"),
             Action::PickUp { .. } => "pickup".to_string(),
             Action::PutDown { .. } => "putdown".to_string(),
@@ -3729,6 +3731,11 @@ impl Agent {
         let undertaking = match action {
             Action::Hunt { .. } => Undertaking::Hunting,
             Action::Fight { .. } => Undertaking::Fighting,
+            // Running is the other answer to the same question, but it is not
+            // the same lesson. Getting away teaches you that getting away
+            // works; it must not teach you that you can win, or a man who has
+            // outrun four wolves goes and picks a fight with the fifth
+            Action::FleeFrom { .. } => Undertaking::Fleeing,
             Action::Fish => Undertaking::Fishing,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
@@ -6958,6 +6965,74 @@ impl Agent {
             .entry(liar)
             .or_insert_with(|| super::gossip::TrustRating::new(self.id, liar))
             .update_on_verification(false);
+    }
+
+    /// Somebody took something of this agent's.
+    ///
+    /// The same shape as finding out you were lied to, and worse: a lie costs
+    /// you a belief and a theft costs you the thing. It lands on the bond, it
+    /// lands on the anger, and it goes on the record that decides whose word
+    /// this agent will take next time.
+    pub fn they_took_something_of_mine(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_tick: u32,
+    ) {
+        use super::EmotionSource;
+
+        // What it costs depends on how much was taken and how much this agent
+        // had. Two sticks off a man with forty is a nuisance; two off a man
+        // with three is the difference between a spear and no spear.
+        let had = self.how_many_i_have(what).max(how_many);
+        let share = (how_many as f32 / had as f32).clamp(0.0, 1.0);
+        let cost = Self::WHAT_BEING_ROBBED_COSTS_THEM * (0.4 + 0.6 * share);
+
+        self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+
+        let bond = self
+            .relationships
+            .get_or_create_relationship(thief, current_tick);
+        bond.weaken(cost);
+        bond.settle_what_we_are();
+
+        self.knowledge
+            .trust_ratings
+            .entry(thief)
+            .or_insert_with(|| super::gossip::TrustRating::new(self.id, thief))
+            .update_on_verification(false);
+    }
+
+    /// What being robbed costs the man who was robbed, at its worst.
+    ///
+    /// More than a lie. A lie takes a belief off you and a theft takes the
+    /// thing.
+    const WHAT_BEING_ROBBED_COSTS_THEM: f32 = 0.55;
+
+    /// How readily this agent would help itself to somebody else's things.
+    ///
+    /// Nobody steals for the sake of it. What decides it is what sort of
+    /// person this is and how badly the want is pressing: an honest man with a
+    /// full belly does not, and a starving one might.
+    pub fn how_readily_i_would_take_it(&self) -> f32 {
+        use crate::core::traits::Trait;
+
+        let mut how_readily: f32 = 0.12;
+
+        if self.traits.has(Trait::Honest) {
+            how_readily -= 0.10;
+        }
+        if self.traits.has(Trait::Greedy) {
+            how_readily += 0.12;
+        }
+
+        // And need, which is what actually does it
+        if self.state.is_starving() || self.nutrition.is_starving() {
+            how_readily += 0.35;
+        }
+
+        how_readily.clamp(0.0, 1.0)
     }
 
     /// And when what it was told turns out to have been true once.

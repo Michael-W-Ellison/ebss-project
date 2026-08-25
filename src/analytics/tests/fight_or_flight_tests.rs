@@ -62,17 +62,27 @@ fn a_frightened_agent_runs_away_from_the_thing_itself() {
         .run_from_what_frightens_me(&simulation.population.agents[0], here)
         .expect("somebody terrified of a wolf four paces off should go");
 
-    let Action::Move { target } = away else {
-        panic!("running away is a move, not {away:?}");
+    // Running is its own verb now, not a `Move` the matrix cannot tell from a
+    // stroll, and it names the thing being run from rather than a destination
+    let Action::FleeFrom { away_from } = away else {
+        panic!("running away is its own verb, not {away:?}");
     };
 
-    // The wolf is to the east, so the agent goes west
+    assert_eq!(
+        away_from.0, 34,
+        "it should be running from the wolf, not from {away_from:?}"
+    );
+
+    // And carrying it out puts ground between the two of them
+    simulation.execute_action(&away, 0);
+    let landed = simulation.population.agents[0].state.position;
+
     assert!(
-        target.0 < here.0,
-        "it should be heading away from the wolf at x=34, not to {target:?}"
+        landed.0 < here.0,
+        "it should be heading away from the wolf at x=34, not to {landed:?}"
     );
     assert!(
-        (target.0 - 34).abs() > (here.0 - 34).abs(),
+        (landed.0 - 34).abs() > (here.0 - 34).abs(),
         "and should end further from it than it started"
     );
 }

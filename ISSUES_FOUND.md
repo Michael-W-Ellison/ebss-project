@@ -1267,18 +1267,66 @@ matching the eight-world baseline exactly.
 
 ---
 
+### 19. Running away taught agents they could win a fight
+
+Fleeing and theft were the last two verbs in the matrix that the world was
+already doing under other names, or not doing at all.
+
+**Running had no name.** Flight went out as an `Action::Move` like any other
+walk, so the matrix could not tell a bolt from a stroll, it cost what a stroll
+costs, and — worse — an agent who had escaped four wolves had no record of
+having escaped anything, because `learn_from` had nothing to file it under.
+Running is its own verb now: further in a turn than a walk, `WHAT_RUNNING_COSTS`
+in energy, refused if there is nothing to land on, and recorded.
+
+**And filing it under fighting cost the settlement dearly.** The first cut sent
+`FleeFrom` to `Undertaking::Fighting` on the reasoning that standing your ground
+and running are two answers to one question. They are, and they are not one
+lesson. `what_fighting_has_taught_me` scales an agent's estimate of what it can
+beat by its own record, so every successful escape raised the estimate: a man
+who had outrun four wolves went and picked a fight with the fifth. Over eight
+worlds it showed up as 97 attacks a settlement against 35 before the change —
+nearly three times as many fights, from a change that was supposed to be a
+rename. Getting away is `Undertaking::Fleeing` now and the count went back to
+39.8, which is baseline within the noise. A test asserts that a dozen
+successful escapes leave a man exactly as confident about a fight as he was.
+
+This one is worth keeping in view because of how it was found. Nothing about
+the change looked behavioural — it named a thing the world was already doing —
+and the only reason the regression surfaced is that the batch was measured
+against a baseline anyway.
+
+**Theft is built and almost never chosen.** Somebody with nothing more pressing
+to do, standing next to somebody he does not think well of who is carrying
+something worth having, takes half of it; the victim and everybody within six
+tiles knows who did it, and it costs the bond and the trust rating in
+proportion to the share taken. Honesty makes it rarer, greed and an empty
+stomach make it likelier, and every onlooker divides the odds.
+
+Over eight worlds of ten thousand ticks it happened once. The reason is not a
+bug in the decision: mean bond strength across a settlement is 0.78, the bar
+for not robbing somebody is 0.4, and so the filter that excludes people you
+think well of excludes nearly everybody standing near enough to rob. A band of
+forty who all grew up together has no strangers in it. The machinery is there
+for a world that produces them — a second settlement, an outsider, a season bad
+enough to drive the trust down — and this world does not.
+
+**Everything else held.** Population 71.4 at ten thousand ticks against 71.4,
+with the spread between worlds narrowing from a standard error of 9.0 to 4.3.
+Standing crop 5,080 against 4,573 (t = 1.4). Deaths 19.0 against 16.0.
+
 ## Housekeeping
 
-### 19. Committed backup file
+### 20. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 20. Build warnings
+### 21. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 21. Placeholder package metadata
+### 22. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

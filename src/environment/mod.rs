@@ -230,6 +230,10 @@ pub enum Action {
     /// Go over a standing field pulling weeds out of it and picking pests off
     /// it, which is most of what growing a crop actually consists of
     TendField,
+    /// Help yourself to something of somebody else's
+    TakeFrom { from: uuid::Uuid },
+    /// Put ground between yourself and something, at a run
+    FleeFrom { away_from: (i32, i32, i32) },
     /// Look closely at something in the pack, and sometimes work out what it
     /// is for
     Examine { what: String },
@@ -295,6 +299,8 @@ impl Action {
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
+            Action::TakeFrom { .. } => Some(DriveType::Utility),
+            Action::FleeFrom { .. } => Some(DriveType::Safety),
             Action::Examine { .. } => Some(DriveType::Curiosity),
             Action::PickUp { .. } => Some(DriveType::Utility),
             Action::PutDown { .. } => Some(DriveType::Utility),

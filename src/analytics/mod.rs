@@ -1042,6 +1042,8 @@ impl Simulation {
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
+            Action::TakeFrom { .. } => Some(ActionType::Social),
+            Action::FleeFrom { .. } => Some(ActionType::Combat),
             Action::Examine { .. } => Some(ActionType::Crafting),
             Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),
             Action::Trade { .. } | Action::GiveTo { .. } => Some(ActionType::Social),
@@ -2247,6 +2249,12 @@ impl Simulation {
                 // out to fetch a thing rather than ahead of making one out of
                 // what is already in the pack.
                 .or_else(|| self.something_worth_stooping_for(agent, agent_position))
+                // And failing all of that, somebody standing here who has it.
+                // Last, because it is the answer nobody reaches for first.
+                .or_else(|| {
+                    self.somebody_to_take_from(agent, agent_position)
+                        .map(|from| Action::TakeFrom { from })
+                })
                 .or_else(|| {
                     agent
                         .what_i_must_find()
@@ -2772,6 +2780,15 @@ impl Simulation {
     /// the whole chain into an afternoon spent looking at things.
     const WHAT_LOOKING_CLOSELY_IS_WORTH: f32 = 0.06;
 
+    /// How far a frightened person gets in one turn.
+    ///
+    /// Further than a walk, which is the whole difference between running and
+    /// going somewhere.
+    const HOW_FAR_A_FRIGHTENED_PERSON_GETS: i32 = Self::FAR_ENOUGH_AWAY + 4;
+
+    /// And what it takes out of them.
+    const WHAT_RUNNING_COSTS: f32 = 14.0;
+
     /// How far somebody will walk for a thing they can see lying on the ground.
     const WORTH_WALKING_OVER_FOR: u32 = 12;
 
@@ -2827,6 +2844,74 @@ impl Simulation {
         Some(Action::Move {
             target: (there.x, there.y, agent_position.2),
         })
+    }
+
+    /// Somebody standing here worth helping yourself from.
+    ///
+    /// Nobody steals for the sake of it. What decides it is what sort of
+    /// person this is and how badly the want is pressing - see
+    /// `Agent::how_readily_i_would_take_it` - and, just as much, who is
+    /// watching: a man does not rob somebody he thinks well of, and does not
+    /// rob anybody at all in front of a crowd.
+    fn somebody_to_take_from(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        use rand::Rng;
+
+        let me = self
+            .population
+            .agents
+            .iter()
+            .position(|other| other.id == agent.id)?;
+
+        let how_readily = agent.how_readily_i_would_take_it();
+
+        if how_readily <= 0.0 {
+            return None;
+        }
+
+        // Who would see it. The same reckoning a liar makes about the people
+        // in earshot - it is the same kind of decision.
+        let watching = self
+            .population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP
+            })
+            .count();
+
+        let odds = how_readily / (1.0 + watching as f32);
+
+        if !rand::thread_rng().gen_bool(odds.clamp(0.0, 1.0) as f64) {
+            return None;
+        }
+
+        self.population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
+            .filter(|(_, them)| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            // Not somebody you think well of. This is most of what a bond is
+            // worth: it is the reason people who like each other do not rob
+            // each other.
+            .filter(|(_, them)| {
+                agent.how_far_i_trust(them.id, &them.traits) < Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+            })
+            .find(|(them, _)| self.what_i_would_hand_over(*them, me).is_some())
+            .map(|(_, them)| them.id)
     }
 
     /// How generous somebody has to feel about a person before handing them
@@ -4024,7 +4109,9 @@ impl Simulation {
         let (kind, _) = agent.emotions.what_frightens_me_most()?;
         let (_, where_it_is, _) = self.nearest_of_kind(kind, agent_position)?;
 
-        Some(Self::put_ground_between(agent_position, (where_it_is.0, where_it_is.1)))
+        Some(Action::FleeFrom {
+            away_from: (where_it_is.0, where_it_is.1, agent_position.2),
+        })
     }
 
     /// Head off in the opposite direction, far enough not to arrive back where
@@ -9222,6 +9309,111 @@ impl Simulation {
                     .with_drive_change(DriveType::Curiosity, -0.3)
                     .with_energy_cost(step.effort)
                 }
+            },
+
+            Action::TakeFrom { from } => {
+                let Some(them) = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == *from && other.state.is_alive)
+                else {
+                    return ActionResult::failure("Nobody there to take from".to_string());
+                };
+
+                // What they have that I am short of. The same question a trade
+                // asks, with the asking left out.
+                let Some(theirs) = self.what_i_would_hand_over(them, agent_index) else {
+                    return ActionResult::failure("Nothing of theirs worth taking".to_string());
+                };
+
+                let took = (theirs.1 / 2).max(1);
+                let me = self.population.agents[agent_index].id;
+                let robbed = self.population.agents[them].id;
+
+                {
+                    let other = &mut self.population.agents[them];
+                    other.inventory.remove_item(&theirs.0, took);
+                    other.they_took_something_of_mine(me, &theirs.0, took, tick_now);
+                }
+
+                {
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.inventory.add_item(
+                        crate::agents::InventoryItem::new_with_weight(
+                            theirs.0.clone(),
+                            took,
+                            1.0,
+                        ),
+                    );
+                }
+
+                // And whoever else was standing there saw it. A thief in a
+                // camp of forty is a thief to forty people.
+                let here = self.population.agents[agent_index].state.position;
+
+                for onlooker in 0..self.population.agents.len() {
+                    if onlooker == agent_index || onlooker == them {
+                        continue;
+                    }
+                    if !self.population.agents[onlooker].state.is_alive {
+                        continue;
+                    }
+
+                    let stood = self.population.agents[onlooker].state.position;
+                    let apart = (stood.0 - here.0).abs().max((stood.1 - here.1).abs());
+
+                    if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                        self.population.agents[onlooker]
+                            .they_took_something_of_mine(me, &theirs.0, took, tick_now);
+                    }
+                }
+
+                debug!("Agent {me} helped himself to {took} {} of {robbed}'s", theirs.0);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Utility, -0.35)
+                    .with_energy_cost(2.0)
+                    .with_message(format!("Took {took} {} from somebody", theirs.0))
+            },
+
+            Action::FleeFrom { away_from } => {
+                // Running is not walking. A frightened person covers more
+                // ground in a turn and is a good deal more tired at the end of
+                // it, and this is where that difference lives rather than
+                // being a `Move` the matrix cannot tell from a stroll.
+                let stood = self.population.agents[agent_index].state.position;
+
+                let dx = stood.0 - away_from.0;
+                let dy = stood.1 - away_from.1;
+                let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
+
+                let bolt = Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS as f32;
+                let landed = (
+                    (stood.0 as f32 + dx as f32 / span * bolt) as i32,
+                    (stood.1 as f32 + dy as f32 / span * bolt) as i32,
+                    stood.2,
+                );
+
+                let landed = (
+                    landed.0.clamp(0, self.world.grid.width as i32 - 1),
+                    landed.1.clamp(0, self.world.grid.height as i32 - 1),
+                    landed.2,
+                );
+
+                if !self.is_passable_tile(landed.0, landed.1) {
+                    return ActionResult::failure("Nowhere to run".to_string());
+                }
+
+                let agent = &mut self.population.agents[agent_index];
+                agent.state.position = landed;
+
+                debug!("Agent {} bolted to {landed:?}", agent.id);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Safety, -0.4)
+                    .with_energy_cost(Self::WHAT_RUNNING_COSTS)
+                    .with_message("Ran".to_string())
             },
 
             Action::Examine { what } => {

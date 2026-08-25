@@ -154,6 +154,10 @@ pub enum Undertaking {
     Fishing,
     /// Standing your ground against something
     Fighting,
+    /// Getting away from something. Not the same thing as fighting it, and
+    /// deliberately kept apart from it: a man who has run from four wolves
+    /// and lived has learnt that running works, not that he can beat a wolf.
+    Fleeing,
     /// Putting food over a fire
     Cooking,
     /// Breaking ground, sowing, spreading muck

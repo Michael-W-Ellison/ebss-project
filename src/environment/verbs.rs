@@ -300,7 +300,7 @@ pub const FLEE_FROM: Verb = verb(
     Targets::AnAnimal,
     Wants::BareHands,
     &[Changes::Where],
-    None,
+    Some("fleefrom"),
 );
 
 pub const ENTER: Verb = verb(
@@ -815,13 +815,16 @@ pub const AIM: Verb = verb(
     None,
 );
 
-pub const DODGE: Verb = verb(
+/// Nobody decides to dodge either. It is what a body does when something
+/// comes at it, and how much of it a body manages is what standing your ground
+/// has taught it - see `Agent::what_a_blow_costs_me`.
+pub const DODGE: Verb = happens_when(
     "dodge",
     Family::Combat,
     Targets::Nobody,
     Wants::BareHands,
     &[Changes::ABody],
-    None,
+    "something comes at you",
 );
 
 pub const PARRY: Verb = verb(
@@ -852,7 +855,7 @@ pub const TAKE_FROM: Verb = verb(
     Targets::APerson,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld, Changes::ABond],
-    None,
+    Some("takefrom"),
 );
 
 pub const TRADE: Verb = verb(
