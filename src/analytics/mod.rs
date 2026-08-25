@@ -1720,6 +1720,157 @@ impl Simulation {
     /// How far a people will pick up and move for water they can count on.
     const HOW_FAR_A_PEOPLE_WILL_MOVE: u32 = 60;
 
+    /// What one person wants standing within reach of the camp before the
+    /// ground counts as feeding them.
+    ///
+    /// Wild food regrows about four times slower than a settlement eats it, so
+    /// a camp of any size strips its own ground and the number here is what
+    /// "stripped" means. A nomad moves while there is still something to eat,
+    /// because a nomad that waits until there is nothing has to walk on an
+    /// empty stomach.
+    ///
+    /// The first cut of this was 25 a head, which is about what a person
+    /// eats in a season and reads as the right number until you notice that
+    /// no ground anywhere in the world carries that much for a grown
+    /// settlement. It fired every tick of every life. Over eight worlds
+    /// foraging fell forty per cent, the food standing on the map went up
+    /// four and a half times because nobody was eating it, the camp did not
+    /// end up any further from where it started, and it cost about twelve
+    /// people.
+    const WHAT_A_CAMP_WANTS_STANDING: u32 = 4;
+
+    /// And how much better somewhere else has to be before it is worth
+    /// picking the camp up.
+    ///
+    /// This is the half that stops the walking. An absolute standard for good
+    /// ground is a standard nowhere meets, so a camp held to one walks for
+    /// ever; a camp that moves because somewhere is three times better stops
+    /// the moment it gets there, because it is now standing on the best ground
+    /// it knows of.
+    const WORTH_PICKING_THE_CAMP_UP_FOR: u32 = 3;
+
+    /// Moving camp, for a people that has no other way of making food happen.
+    ///
+    /// "Until there is a method of producing food through farming, the agents
+    /// should likely stick to a nomadic way of life."
+    ///
+    /// This is the Sustenance answer for anybody who cannot farm: you cannot
+    /// make this ground carry more, so you go where the ground already does.
+    /// An agent that has worked farming out does not do this - a field is a
+    /// reason to stay, and the whole of what settling down is.
+    ///
+    /// It is not the same thing as `migration_action`, which fires on an agent
+    /// that has already been going hungry for a hundred and twenty ticks. This
+    /// fires while there is still food here, on the strength of there not
+    /// being much of it, which is the difference between moving camp and
+    /// fleeing.
+    fn moving_on(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Practice;
+
+        // A farmer stays. So does anybody standing beside a field with
+        // something in it, farmer or not: whatever is growing there is a
+        // better answer than a fortnight's walk.
+        if agent.practices.is_established(Practice::Farming) {
+            return None;
+        }
+
+        if self.crop_standing_on_fields_within(agent_position, Self::FIELD_WALK_RADIUS) > 0 {
+            return None;
+        }
+
+        // Enough hands here to strip the place, and enough standing to feed
+        // them. Both are counted within the distance somebody actually walks
+        // to forage.
+        let mouths = self.how_many_camped_within(agent_position, Self::FORAGE_RADIUS);
+        let standing = self.edible_standing_within(agent_position, Self::FORAGE_RADIUS);
+
+        if standing >= mouths * Self::WHAT_A_CAMP_WANTS_STANDING {
+            return None;
+        }
+
+        // Somewhere better, far enough off to be a move rather than a stroll.
+        // The best ground within the distance a people will shift for, not the
+        // nearest: this is a decision about where to spend a season.
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+
+        let (there, carrying) = self
+            .world
+            .resources
+            .iter()
+            .filter(|resource| resource.amount > 0)
+            .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
+            .map(|resource| (resource.position, here.distance_to(&resource.position), resource.amount))
+            .filter(|(_, distance, _)| {
+                *distance >= Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK as u32
+                    && *distance <= Self::HOW_FAR_A_PEOPLE_WILL_MOVE
+            })
+            .max_by_key(|(_, _, amount)| *amount)
+            .map(|(where_it_is, _, amount)| (where_it_is, amount))?;
+
+        // And it has to be worth the walk. Without this the camp sets out for
+        // whatever is furthest, arrives, finds the same thin ground, and sets
+        // out again: it walks for ever and forages a great deal less than a
+        // people that stayed put.
+        if carrying < standing.max(1) * Self::WORTH_PICKING_THE_CAMP_UP_FOR {
+            return None;
+        }
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
+    }
+
+    /// How many people are living within reach of this spot
+    fn how_many_camped_within(&self, position: (i32, i32, i32), radius: u32) -> u32 {
+        let reach = radius as i32;
+
+        self.population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .filter(|agent| {
+                (agent.state.position.0 - position.0).abs() <= reach
+                    && (agent.state.position.1 - position.1).abs() <= reach
+            })
+            .count() as u32
+    }
+
+    /// How much there is to eat standing within reach of this spot
+    fn edible_standing_within(&self, position: (i32, i32, i32), radius: u32) -> u32 {
+        let here = crate::world::Position::new(position.0, position.1);
+
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
+            .filter(|resource| here.distance_to(&resource.position) <= radius)
+            .map(|resource| resource.amount)
+            .sum()
+    }
+
+    /// And how much of that is standing on ground somebody has broken
+    fn crop_standing_on_fields_within(&self, position: (i32, i32, i32), radius: u32) -> u32 {
+        let here = crate::world::Position::new(position.0, position.1);
+
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| here.distance_to(&resource.position) <= radius)
+            .filter(|resource| {
+                self.world
+                    .grid
+                    .get_tile(&resource.position)
+                    .map(|tile| tile.terrain.is_cultivated())
+                    .unwrap_or(false)
+            })
+            .map(|resource| resource.amount)
+            .sum()
+    }
+
     fn migration_action(
         &self,
         agent: &crate::agents::Agent,
@@ -2016,6 +2167,7 @@ impl Simulation {
                 .cooking_action(agent, agent_position)
                 .or_else(|| self.muck_action(agent, agent_position))
                 .or_else(|| self.farming_action(agent, agent_position))
+                .or_else(|| self.moving_on(agent, agent_position))
                 .or_else(|| self.fishing_action(agent, agent_position)),
 
             // A coat is shelter you carry, and it comes before walking to a

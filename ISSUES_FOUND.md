@@ -705,14 +705,50 @@ Also found on the way: `Gather { resource_type: "grain" }` was not a request
 the executor understood. It fell through to "unknown resource type" and failed.
 Grain only ever arrived as an edible substitute for a request for food.
 
-### 11. Agents still cannot hear anything
+### 11. There is no camp for nomadism to be a departure from
+
+A people that cannot farm has nothing it can do to make this ground carry
+more, so it should go where the ground already carries something, and a people
+that can farm should stop. That decision now exists: an agent with no
+established farming practice, standing on ground carrying less than four units
+a head within foraging reach, with somewhere three times better between twenty
+and sixty tiles off, picks up and goes. A standing crop on broken ground nearby
+cancels it, and so does knowing how to farm.
+
+It is built, it is tested, and over sixteen worlds it changed nothing
+measurable. The camp walked 1,301 tiles in ten thousand ticks before and 1,331
+after. Net displacement of the centroid was 28 tiles either way. Population
+73.1 before and 64.6 after, a difference of 8.5 at a standard error of 6.5 -
+consistently negative across two batches and not significant in either.
+
+The reason is the finding. There is no camp. A settlement in this model is not
+an entity with a location that people belong to; it is however many agents
+happen to be standing near each other, and each of them is already dragged
+across the map by its own foraging. They walk thirteen hundred tiles a run
+whatever they believe about farming, and they finish about fourteen tiles from
+each other's centre. Making the ground under a people something it can decide
+to leave means first making the people a thing that is somewhere, which is a
+larger piece of work than a decision function - a settlement with a seat, a
+hearth the camp follows, and a way for a move to be agreed rather than taken
+one agent at a time.
+
+The first cut of the rule asked for an absolute standard of good ground -
+twenty-five units a head - which no ground in the world meets for a settlement
+of any size. It fired every tick of every life. Foraging fell forty per cent,
+the food standing on the map went up four and a half times because nobody was
+eating it, the camp ended up no further from where it started, and it cost
+about twelve people. What replaced it is relative: somewhere three times better
+than here. That stops the moment the camp arrives, because it is then standing
+on the best ground it knows of.
+
+### 12. Agents still cannot hear anything
 
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
-### 12. Zoning and territory are never established
+### 13. Zoning and territory are never established
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -720,7 +756,7 @@ tests ever calls `add_zone` or `claim_territory`. Both managers are therefore
 always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
-### 13. Agents carry food they will never eat
+### 14. Agents carry food they will never eat
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -730,7 +766,7 @@ along in the pack. Both announce themselves as a decay scent to anyone nearby,
 which is realistic and mildly useful, but nothing makes the carrier drop them:
 carried weight still includes rot and cinders.
 
-### 14. Personality exists and reaches the drives, and still decides nothing
+### 15. Personality exists and reaches the drives, and still decides nothing
 
 The project's stated purpose is emergent social behaviour out of drives and
 personality. Both halves are now live: everybody has a personality and it bends
@@ -912,7 +948,7 @@ within reach of everybody, that adds up for every pair alike. It is the same
 shape of defect as the two that were fixed — an unbounded accumulator over a
 long run — and the principle has not yet been applied to it.
 
-### 15. Skill measured how far you had walked, and bought nothing
+### 16. Skill measured how far you had walked, and bought nothing
 
 **Since fixed**, and recorded because the shape of it recurs.
 
@@ -968,16 +1004,16 @@ matching the eight-world baseline exactly.
 
 ## Housekeeping
 
-### 16. Committed backup file
+### 17. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 17. Build warnings
+### 18. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 18. Placeholder package metadata
+### 19. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

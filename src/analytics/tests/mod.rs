@@ -32,3 +32,4 @@ pub mod pattern_tests;
 pub mod lean_season_tests;
 pub mod midden_tests;
 pub mod farming_tests;
+pub mod nomad_tests;

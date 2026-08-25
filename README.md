@@ -58,6 +58,12 @@ original specifications.
 - ✅ Farming: agents break open grass into fields and sow them. A field gets at
   more of what the soil holds and carries a heavier crop — it does not grow
   anything faster than that plant's kind can grow
+- 🚧 A people without a field goes where the ground already carries something,
+  and one that has worked farming out stays. The decision is built and tested —
+  stripped ground, somewhere three times better a fortnight off, no crop
+  standing here — and over sixteen worlds it changed nothing measurable,
+  because there is no camp in this model for it to be a departure from. See
+  ISSUES_FOUND.md #11
 - ✅ Farming is worked out, and then worked at. Nobody starts out believing that
   seed put in the ground on purpose comes back as food; breaking ground is a
   hunch an agent follows out of curiosity until something proves it. Two things
@@ -84,7 +90,7 @@ original specifications.
   back more than a casual one, and a dedicated tailor makes better coats and
   wastes fewer. Skill used to measure how much of the map somebody had walked
   over: everybody was a master farmer, nobody had farmed, and none of it did
-  anything. See ISSUES_FOUND.md #15
+  anything. See ISSUES_FOUND.md #16
 - ✅ Everybody is somebody: a founder is drawn with three to five compatible
   traits out of sixty-odd, and everybody born afterwards takes after their two
   parents. Forty founders are forty different people
@@ -93,7 +99,7 @@ original specifications.
   pushing before starting work and a coward starts running at a smaller wolf.
   Measured against the old action ladder it changed almost nothing; both things
   that blocked it have since been rebuilt, and whether it now tells has not
-  been re-measured. See ISSUES_FOUND.md #14
+  been re-measured. See ISSUES_FOUND.md #15
 - ✅ Drives that know which of them matters: they are ranked primary, secondary
   and tertiary, and among the primaries the one that would kill soonest wins —
   a thirsty man stops hunting. Each drive waits on the one before it in the
