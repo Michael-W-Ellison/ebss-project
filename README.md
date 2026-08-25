@@ -77,6 +77,15 @@ original specifications.
   half, which is much worse than one and not four times worse. A man who would
   stand his ground against one now runs from four, which is the specification's
   own example and a test
+- ✅ Prey is not a threat. What made something frightening was its
+  `attack_damage`, which a rabbit has because a rabbit will bite you if you
+  pick it up — so once several of a thing began adding up, a herd of twenty
+  reindeer came to about a wolf. What menaces somebody who has done nothing is
+  a thing that comes after people; what merely defends itself is a question
+  for whoever attacks it, and that is a question about temperament rather than
+  teeth. Over twenty-four worlds the settlement had been running 465 times
+  where it should run 213, and freezing 194 times where it should freeze 27 —
+  most of that last being children hemmed in by deer
 - ✅ Five answers to a thing that would kill you, where there used to be two.
   Fight if you can win; run if you cannot; turn and fight anyway if there is
   nowhere to run; go anyway if you cannot lift an arm; and when neither is
@@ -97,9 +106,8 @@ original specifications.
   through the bonds. On an ordinary day the sums come out against it. A
   primary drive past bearing sets the cost aside altogether, because a man who
   will be dead by morning is not weighing his reputation. Theft went from 0.75
-  a world to 23, and it shows downstream exactly as it should: attacks rose
-  from 42 to 188 and burials from 14.5 to 20. A settlement with thieves in it
-  fights more and buries more people
+  a world to about 21, and it shows downstream exactly as it should: attacks
+  roughly quadrupled. A settlement with thieves in it fights more
 - 🚧 Laying down your life for your own, which half works. A wolf standing
   over somebody you love who cannot deal with it themselves brings you at it
   whatever the odds — the one place in the model where an agent knowingly

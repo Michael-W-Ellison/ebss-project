@@ -155,6 +155,68 @@ fn a_man_who_would_fight_one_wolf_runs_from_four() {
     );
 }
 
+/// A deer is not a threat, and neither is a field full of them.
+///
+/// This is what pack-counting cost before it was fixed. A rabbit has an
+/// `attack_damage` of 1.0 and a deer of 5.0, because both defend themselves if
+/// you go at them — so reading danger off the number alone made a herd of
+/// twenty reindeer about as frightening as a wolf. Over twenty-four worlds it
+/// had a settlement running 465 times where it should have run 213.
+#[test]
+fn a_herd_of_deer_is_not_a_pack_of_wolves() {
+    let mut world = an_empty_country();
+    for at in [(31, 30), (32, 30), (29, 30), (30, 31), (30, 29), (31, 31)] {
+        world
+            .spawn_animal("deer".to_string(), at)
+            .expect("a deer should spawn");
+    }
+
+    let mut simulation = one_person(world);
+    simulation.population.agents[0].state.health = 70.0;
+    simulation.feel_about_what_stands_in_the_way();
+
+    assert_eq!(
+        simulation.population.agents[0].emotions.fear, 0.0,
+        "nobody is afraid of deer"
+    );
+}
+
+/// And the thing that does come after people still is one.
+#[test]
+fn a_wolf_is_still_a_wolf() {
+    let mut world = an_empty_country();
+    world
+        .spawn_animal("wolf".to_string(), (31, 30))
+        .expect("a wolf should spawn");
+
+    let mut simulation = one_person(world);
+    simulation.population.agents[0].state.health = 12.0;
+    simulation.feel_about_what_stands_in_the_way();
+
+    assert!(
+        simulation.population.agents[0].emotions.fear > 0.0,
+        "a wolf at his elbow is a wolf"
+    );
+}
+
+/// What a thing does to somebody who has done nothing to it is a question
+/// about its temper, not about its teeth.
+#[test]
+fn what_menaces_you_is_a_question_about_temper() {
+    use crate::environment::fauna::AnimalBehavior;
+
+    assert_eq!(
+        AnimalBehavior::Passive.how_much_it_menaces_you(),
+        0.0,
+        "a thing that runs away is not a threat"
+    );
+    assert!(
+        AnimalBehavior::Aggressive.how_much_it_menaces_you()
+            > AnimalBehavior::Defensive.how_much_it_menaces_you(),
+        "a thing that comes after you beats a thing that would rather not"
+    );
+}
+
 // --------------------------------------------------------------------------
 // What a threat threatens
 // --------------------------------------------------------------------------

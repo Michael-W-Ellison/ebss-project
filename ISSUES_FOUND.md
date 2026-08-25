@@ -1402,18 +1402,52 @@ reason to carry a meal rather than eat it where it was found, and a winter bad
 enough that somebody goes short. The machinery is there for a settlement that
 has either.
 
+### 22. A herd of deer counted as a pack of wolves
+
+Introduced by the change immediately before it, and worth writing up because
+of how it happened rather than because of what it cost.
+
+Once several of a thing began adding up rather than only the worst of them
+counting, the question of *what counts as a thing* stopped being harmless.
+The filter was `attack_damage > 0.0`. A rabbit has an `attack_damage` of 1.0
+and a deer of 5.0, because both will defend themselves if you pick them up;
+reindeer travel in groups of five to twenty. So a herd of reindeer standing in
+a field came to about a wolf, and the settlement spent its days running from
+its own dinner.
+
+What menaces somebody who has done nothing to it is a thing that comes after
+people. What merely defends itself is a question for whoever attacks it. The
+model already carried `AnimalBehavior` and nothing had ever consulted it:
+Passive now counts for nothing at all, Neutral a quarter, Defensive two fifths,
+and Aggressive and Territorial the whole of it.
+
+Over twenty-four worlds: fleeing 465 times a settlement against 213 (se 76 and
+66), and freezing 194 against 27 — most of that last being children hemmed in
+by deer, which is the freeze branch firing for entirely the wrong reason.
+Population, standing crop and burials are unchanged.
+
+**A correction.** The commit that introduced this reported that hunting had
+fallen from 91 a world to 44 and called it the price of agents being properly
+afraid. That does not survive a larger sample: at twenty-four worlds hunting
+sits at 51.9 before the fix and 52.3 after, and re-measuring the earlier
+baseline gave 69.8 where the first run had said 91.2. The drop was mostly the
+noise in an n=8 comparison and it was over-read. The bug above is real
+regardless — a herd of reindeer registering as a pack of wolves is wrong
+whatever it does to the hunting figures — but it was not costing the
+settlement its dinner.
+
 ## Housekeeping
 
-### 22. Committed backup file
+### 23. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 23. Build warnings
+### 24. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 24. Placeholder package metadata
+### 25. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

@@ -89,6 +89,37 @@ pub enum AnimalBehavior {
     Territorial, // Attacks near den/territory
 }
 
+impl AnimalBehavior {
+    /// How much of a thing's teeth count against somebody who is simply
+    /// standing there.
+    ///
+    /// A rabbit has an `attack_damage` of 1.0 and a deer of 5.0, because both
+    /// will defend themselves if you go at them. Neither is a threat to a man
+    /// walking past, and reading danger off `attack_damage` alone said they
+    /// were: once several of a thing began adding up, a herd of twenty
+    /// reindeer registered as about as dangerous as a wolf.
+    ///
+    /// What menaces somebody who has done nothing is a thing that comes after
+    /// people. What defends itself is a question for whoever attacks it.
+    ///
+    /// What it cost, measured over twenty-four worlds: a settlement ran 465
+    /// times where it should have run 213, and froze 194 times where it should
+    /// have frozen 27 - most of that being children hemmed in by deer.
+    pub fn how_much_it_menaces_you(&self) -> f32 {
+        match self {
+            // Runs away. Not a threat to anybody, whatever it would do if
+            // cornered
+            AnimalBehavior::Passive => 0.0,
+            // Minds its own business, and is worth an eye
+            AnimalBehavior::Neutral => 0.25,
+            // Will not start it, but is a bad thing to be near
+            AnimalBehavior::Defensive => 0.4,
+            // Comes after you
+            AnimalBehavior::Aggressive | AnimalBehavior::Territorial => 1.0,
+        }
+    }
+}
+
 /// Animal diet type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DietType {

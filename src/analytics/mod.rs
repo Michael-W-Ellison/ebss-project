@@ -4629,14 +4629,21 @@ impl Simulation {
             .filter(|animal| animal.is_alive() && !animal.is_domesticated)
             .filter_map(|animal| {
                 let species = self.world.animals.get_species(&animal.species_id)?;
-                if species.attack_damage <= 0.0 {
+
+                // What a thing does to somebody who has done nothing to it.
+                // Reading this off `attack_damage` said a rabbit was a threat,
+                // because a rabbit will bite you if you pick it up - and once
+                // several of a thing began adding up, a herd of reindeer came
+                // to about a wolf and the settlement stopped hunting.
+                let temper = species.behavior.how_much_it_menaces_you();
+                if temper <= 0.0 || species.attack_damage <= 0.0 {
                     return None;
                 }
 
                 // What it is worth in a fight, on the same scale an agent
                 // reckons itself on: a healthy body, and what it can do with it
                 let condition = (animal.current_health / species.health.max(1.0)).clamp(0.0, 1.0);
-                let menace = (species.attack_damage / 20.0).clamp(0.1, 2.0);
+                let menace = (species.attack_damage / 20.0).clamp(0.1, 2.0) * temper;
 
                 Some((
                     (animal.position.0, animal.position.1),
