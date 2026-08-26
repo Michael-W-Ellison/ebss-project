@@ -4483,6 +4483,13 @@ impl Agent {
         match action {
             Action::Gather { resource_type } => format!("gather:{resource_type}"),
             Action::Craft { item_type } => format!("craft:{item_type}"),
+            // Digging yourself in is not framing. `build` wants poles in the
+            // hand - right for a tent, wrong for a hole - so the matrix has
+            // to be asked a different question about a burrow, and there has
+            // always been a `burrow` verb in it to ask.
+            Action::Build { structure_type, .. } if structure_type == "burrow" => {
+                format!("burrow:{structure_type}")
+            }
             Action::Build { structure_type, .. } => format!("build:{structure_type}"),
             Action::Store { item_type, .. } => format!("store:{item_type}"),
             Action::Eat { food_type } => format!("eat:{food_type}"),

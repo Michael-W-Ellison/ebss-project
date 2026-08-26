@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 247 source files, with 1,748 library tests.
+across 247 source files, with 1,757 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,785 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -165,6 +165,23 @@ original specifications.
   out of 1,525 for want of anything to bury. Winter stores went from nothing
   at all to 42 units standing through the lean season, pits from 2 to 10,
   burials from 4 to 86, and food dried or smoked from 2.8 a world to 666
+- ✅ A people with nothing to build with digs itself in. `shelters built` was
+  nought in every arm ever measured across the whole life of the project, and
+  it was three deadlocks in a row: a tent wants eight wood and four hides,
+  hides come off an animal and nothing else makes one, and hunting was
+  unreachable. Unblocking hunting moved it from 2.25 shelters a world to 3.56,
+  which is neither significant nor enough. What was missing is the shelter
+  that depends on none of it — a hole in the ground with turf over it, costing
+  earth and a morning, and worse than a tent in every way except that it can
+  actually be built. It is dug rather than built, so it is its own verb:
+  `build` is framing and wants poles in the hand, which is right for a tent
+  and nonsense for a hole. `burrow` had been sitting dead in the matrix since
+  the matrix existed; it is live now, and it finishes the subterranean family.
+  Burrows dug went 0 to 39.6 a world and shelters standing 0.6 to 30.4, with
+  people cold about half as often. Population and burials do not move, which
+  is the honest reading: nobody was dying of exposure at ten thousand ticks,
+  so a roof buys comfort rather than lives at this timescale. See
+  ISSUES_FOUND.md #32
 - ✅ Hunting is reachable at last. It had been put behind eating what you
   carry, behind foraging, behind walking to a known patch, behind moving the
   whole camp, behind walking back to ground that fed you once — and then

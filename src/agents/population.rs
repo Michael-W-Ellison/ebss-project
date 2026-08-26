@@ -1883,6 +1883,8 @@ impl Population {
             BuildingType::SkinTent => {
                 vec![(SkillType::Construction, 5), (SkillType::Leatherworking, 5)]
             }
+            // And digging one in teaches the same hands, without the hides
+            BuildingType::Burrow => vec![(SkillType::Construction, 5), (SkillType::Mining, 5)],
             BuildingType::Workshop => vec![(SkillType::Crafting, 10)],
             BuildingType::Farm => vec![(SkillType::Farming, 10)],
             BuildingType::Bakery => vec![(SkillType::Cooking, 10)],

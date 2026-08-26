@@ -38,6 +38,7 @@ pub mod transplant_tests;
 pub mod tasting_tests;
 pub mod swap_tests;
 pub mod verb_tests;
+pub mod burrow_tests;
 pub mod clay_tests;
 pub mod danger_map_tests;
 pub mod keeping_it_tests;

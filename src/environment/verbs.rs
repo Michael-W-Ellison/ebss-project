@@ -738,13 +738,18 @@ pub const DIG: Verb = verb(
     Some("tillsoil"),
 );
 
+/// Digging yourself into the ground, because there is nothing to build with.
+///
+/// Live at last. `build` is framing - it wants poles in the hand, which is
+/// right for a tent and quite wrong for a hole - so a burrow is its own verb
+/// rather than a kind of building. What it wants is something to dig with.
 pub const BURROW: Verb = verb(
     "burrow",
     Family::Subterranean,
     Targets::TheGroundUnderfoot,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::TheGround, Changes::Where],
-    None,
+    Some("burrow"),
 );
 
 /// Digging a hole in the ground to keep things in, and what comes out of it.

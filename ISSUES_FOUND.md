@@ -2063,18 +2063,62 @@ holding around a hundred units since the ordering was fixed two batches ago.
 correct and costs nothing, but it should not be described as having fixed
 anything.
 
+### 32. Nobody ever built anything, and it was three deadlocks in a row
+
+`shelters built` was **nought in every arm ever measured**, across the whole
+life of the project. It was not a number that wanted tuning.
+
+A tent — the only shelter a stone-age people can raise, and itself a fix for
+an earlier deadlock where every other building needed thirty stone nobody
+could quarry — wants eight wood and four hides. Wood is a walk. Hides come off
+an animal and nothing else in this world produces one. And hunting sat behind
+six other branches of the hunger chain and then behind being *desperate* on
+top of that, so it was never reached. Three things, each one waiting on the
+last.
+
+Unblocking hunting (#31) moved shelters from 2.25 a world to 3.56, which is
+not significant and not enough. What was missing is the shelter that depends
+on none of it: **a hole in the ground with turf over it.** It costs earth and
+a morning. It is worse than a tent in every way except the one that matters.
+
+Two things had to be right about it. It is dug rather than built, so it is its
+own verb: `build` is *framing* and wants poles in the hand, which is correct
+for a tent and nonsense for a hole. There has been a `burrow` verb sitting
+dead in the matrix since the matrix existed, wanting something to dig with,
+and it is live now — which finishes the subterranean family. And the decision
+checks for the digging tool before choosing it, because an action chosen
+without what it needs comes straight back refused and the turn is gone.
+
+**Sixteen worlds a side:**
+
+| | before | after | t |
+|---|---|---|---|
+| burrows dug | 0.0 | **39.6 ± 2.7** | 14.7 |
+| shelters standing, averaged over the run | 0.6 | **30.4 ± 1.7** | 17.4 |
+| tents | 2.5 | 2.4 | 0.0 |
+| exposures anybody is suffering | 0.07 | 0.04 | -1.7 |
+| people at ten thousand ticks | 34.8 | 34.8 | 0.0 |
+| burials of people | 13.8 | 13.9 | 0.0 |
+
+A settlement lives under a roof for the first time, and what it is worth is
+that people are cold about half as often (t = -1.7, directional rather than
+established). Population and burials do not move, which is the honest reading:
+nobody was dying of exposure at ten thousand ticks, so the roof buys comfort
+rather than lives at this timescale. Tents are unchanged — the burrow does not
+replace the better shelter, it fills in underneath it.
+
 ## Housekeeping
 
-### 32. Committed backup file
+### 33. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 33. Build warnings
+### 34. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 34. Placeholder package metadata
+### 35. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

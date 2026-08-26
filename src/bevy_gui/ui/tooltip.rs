@@ -140,6 +140,7 @@ pub fn building_color(building_type: BuildingType, completed: bool) -> Color32 {
     }
     match building_type {
         BuildingType::SkinTent => Color32::from_rgb(160, 130, 96),
+        BuildingType::Burrow => Color32::from_rgb(92, 74, 52),
         BuildingType::Longhouse => Color32::from_rgb(139, 90, 43),
         BuildingType::UpgradedLonghouse => Color32::from_rgb(160, 82, 45),
         BuildingType::SmallHouse => Color32::from_rgb(160, 82, 45),

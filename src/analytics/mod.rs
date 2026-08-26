@@ -4462,13 +4462,79 @@ impl Simulation {
             // refusals of `No hides sources nearby` in a single world before
             // this told the difference between what the ground gives and what
             // has to be taken off an animal.
-            Some((what, _)) if what.contains("hide") || what.contains("leather") => {
-                self.hunting_action(agent, agent_position)
-            }
+            //
+            // And if there is nothing to hunt, dig in instead of standing
+            // there. A tent wants eight wood and four hides; hides come off
+            // animals and nothing else; and hunting was unreachable for the
+            // whole life of this project - three deadlocked things in a row,
+            // which is why `shelters built` was nought in every arm ever
+            // measured. A hole in the ground with turf over it needs none of
+            // them.
+            Some((what, _)) if what.contains("hide") || what.contains("leather") => self
+                .hunting_action(agent, agent_position)
+                .or_else(|| self.digging_in(agent, agent_position)),
 
             Some((what, _)) => Some(Action::Gather { resource_type: what }),
         }
     }
+
+    /// Digging yourself in, for want of anything to build with.
+    ///
+    /// Worse than a tent in every way except that it can be done. It wants
+    /// ground that will take a hole - the same question the larder asks - and
+    /// no roof already standing here, because a settlement that digs a second
+    /// burrow on top of the first has spent a morning for nothing.
+    fn digging_in(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        // Something to dig with. The matrix enforces it before the action
+        // runs, so choosing this without one spends the turn on a refusal -
+        // the pattern that cost a settlement half its winter store three
+        // batches ago.
+        if agent
+            .what_i_have_to_work_with(crate::agents::SkillType::Mining)
+            .is_none()
+        {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        if !self.is_ground_a_pit_will_go_in(here) {
+            return None;
+        }
+
+        // Not on top of somebody else's roof, and not on top of a hole that
+        // is already there.
+        let already = self
+            .world
+            .buildings
+            .iter()
+            .any(|building| {
+                (building.position.x - here.x).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
+                    && (building.position.y - here.y).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
+            });
+
+        if already {
+            return None;
+        }
+
+        Some(Action::Build {
+            structure_type: "burrow".to_string(),
+            position: agent_position,
+        })
+    }
+
+    /// How near one shelter goes to another.
+    ///
+    /// Two paces. A settlement is people living beside each other, not people
+    /// living on top of each other, and without this a camp digs a burrow
+    /// every tick for ever.
+    const HOW_CLOSE_TWO_ROOFS_GET: i32 = 2;
 
     /// The bare name of an action, without whatever it is aimed at.
     ///
@@ -8193,6 +8259,7 @@ impl Simulation {
                     // that has never had a single block of it spent an eighth
                     // of its life saying so.
                     "tent" | "skintent" => BuildingType::SkinTent,
+                    "burrow" | "dugout" => BuildingType::Burrow,
                     "shelter" => BuildingType::SkinTent,
                     "smallhouse" => BuildingType::SmallHouse,
                     "mediumhouse" => BuildingType::MediumHouse,

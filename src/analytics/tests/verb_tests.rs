@@ -174,9 +174,10 @@ fn every_verb_is_performed_by_something_real() {
         "excavate", "cover",
         // And making food outlast the week it was got in
         "dry", "salt",
-        // And pressing a lump of clay into a shape it keeps, and holding it
-        // in a fire until it stops being clay
-        "mold", "fire",
+        // And pressing a lump of clay into a shape it keeps, holding it in a
+        // fire until it stops being clay, and digging yourself into the
+        // ground because there is nothing to build with
+        "mold", "fire", "burrow",
     ];
 
     for one in EVERY_VERB {
@@ -231,17 +232,19 @@ fn the_matrix_admits_what_nothing_does_yet() {
         "and the matrix should say so where nothing does yet"
     );
 
-    // The families that are all declaration and no mechanism yet are worth
-    // being able to name
-    let untouched: Vec<&str> = verbs::everything_still_to_build()
+    // The subterranean family is finished, which is worth asserting rather
+    // than leaving to chance: tilling, burrowing, excavating a store and
+    // putting the earth back over it are all four of it and all four are
+    // carried out by something. It was the family that was all declaration
+    // and no mechanism, and burrowing was the last of it.
+    let subterranean_left: Vec<&str> = verbs::everything_still_to_build()
         .filter(|verb| verb.family == Family::Subterranean)
         .map(|verb| verb.called)
         .collect();
 
     assert!(
-        !untouched.is_empty(),
-        "digging is the whole of the subterranean family so far; the matrix \
-         should not pretend otherwise"
+        subterranean_left.is_empty(),
+        "the subterranean family is finished; these are still waiting: {subterranean_left:?}"
     );
 }
 
