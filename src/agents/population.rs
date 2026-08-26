@@ -1712,7 +1712,7 @@ impl Population {
                 }
 
                 let me = agent.id;
-                for (_, said, what_they_said) in found_out {
+                for (where_it_is, said, what_they_said) in found_out {
                     if said.who == me {
                         continue;
                     }
@@ -1725,9 +1725,13 @@ impl Population {
                     // worked out. Somebody who reported what was there last
                     // season told the truth about last season, and the most
                     // it should cost him is that his word keeps less well
-                    // than a fresh man's.
+                    // than a fresh man's - and somebody stripping the place
+                    // this morning should cost him nothing at all.
                     let subject = format!("{:?}", what_they_said).to_lowercase();
-                    if said.was_he_answerable_for_it(current_tick) {
+                    if said.does_bare_ground_convict_him(
+                        current_tick,
+                        world.where_it_was_worked_out.contains(&where_it_is),
+                    ) {
                         agent.found_out_i_was_lied_to(said.who, &subject, current_tick);
                     } else {
                         agent.found_out_they_were_out_of_date(said.who);

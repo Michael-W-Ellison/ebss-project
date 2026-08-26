@@ -14,16 +14,25 @@ and running the project.
 
 ## Correctness
 
-### 1. Twenty tests fail intermittently
+### 1. Seventeen tests fail intermittently
 
-    world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
+**Three of the twenty that used to be on this list were not flakes at all.**
+`water_is_not_used_up` failed 12 times out of 12 and
+`honest_agents_do_not_end_up_accused` 8 out of 8, on the commit that found them
+and on the one before it: standing, reproducible failures filed as flakes and
+left alone, each with a real defect under it (#46, #47, #48).
+`test_resource_clustering` really was intermittent, at 28%, and had a real
+defect under it too (#49). All three are fixed and none of them belongs here.
+
+The moral is worth keeping: **a test on this list is a claim that nobody has
+reproduced it, not a claim that it cannot be.** Three of twenty had never been
+run more than a handful of times on their own.
+
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
     analytics::tests::agent_building_integration_tests::test_production_building_placed_near_resources
     analytics::tests::agent_building_integration_tests::test_production_chain_buildings_cluster
     analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
-    analytics::tests::longevity_tests::water_is_not_used_up
     analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
-    analytics::tests::news_tests::honest_agents_do_not_end_up_accused
     analytics::tests::working_tests::nobody_works_more_than_they_have_a_use_for
     analytics::tests::predator_prey_tests::predators_hold_a_herd_down
     analytics::tests::fluid_tests::nobody_proposes_a_fluid_working_with_a_dry_pack
@@ -2891,18 +2900,184 @@ Not investigated to a root cause and not fixed. It is a data-modelling wart
 rather than a behaviour, and every preservation measurement in this file has
 been taken over the top of it.
 
+### 46. A settlement drank its own springs dry, and the comment said it would not
+
+Three tests in this file's own intermittent list were failing in the suite.
+Two of them turned out not to be intermittent at all: they failed **twelve
+times out of twelve** and **eight times out of eight**, on this commit and on
+the one before it. They were real, standing, reproducible failures that had
+been filed as flakes and left. This is the first of them.
+
+`water_is_not_used_up` says a river should not be drunk dry. Run with **nobody
+in the world**, the total holds at 100%. With twelve founders it fell to 55% in
+six thousand ticks, and the per-source breakdown says where it went:
+
+| terrain | left | of |
+|---|---|---|
+| Hills | 2 | 423 |
+| Forest | 2 | 444 |
+| Hills | 2 | 289 |
+| Meadow | 1 | 312 |
+| *(five more the same)* | | |
+| Sea, SaltMarsh | full | — |
+
+**Eight of twenty-one sources drawn to two units and left there.** The sea and
+the salt marshes read full because nobody drinks them, which is also why the
+test's whole-world total was a poor measure of anything.
+
+The numbers beside the terrains were:
+
+```rust
+TerrainType::Water | TerrainType::Riverbank => 3.0,   // "whatever is drawn is replaced from upstream"
+TerrainType::Mountain | TerrainType::Hills => 1.5,
+TerrainType::Wetland | TerrainType::Forest => 1.2,
+_ => 0.8,
+```
+
+These are per pass of the resource tick, which comes round once every ten
+ticks — so a spring gave back **0.15 a tick** against a camp of forty drinking
+something like three. A twentieth of what it needed. The comment on the first
+line is the correct design and the number under it never implemented it.
+
+It also explains a figure that has been sitting in every refusal table in this
+file without being read: **"Gather: No water sources nearby" was the single
+largest refusal in the model**, up to 6,769 in a world. That is not a map with
+too little water on it. That is a settlement standing in the middle of its own
+dry springs, walking further every year for a drink.
+
+Fixed by making a stream a flow rather than a stock: running water replaces
+whatever was drawn, a spring gives 20 a pass and will carry a camp, a seep 12,
+and standing water 6 plus what falls on it. A pond can still be drunk down,
+which is right — it is why a village sits on a spring.
+
+The test now asserts source by source rather than on a total, because the total
+cannot tell a river drawn to nothing from a puddle that was always small. Over
+thirty-two sampled worlds the worst case is three sources of twenty-one drawn
+below a tenth, against eight before; the thresholds are set at a third and a
+half, which leaves real margin either way.
+
+### 47. Being honest has nothing to do with keeping your hands off other people's things
+
+The second standing failure. `honest_agents_do_not_end_up_accused` fills a
+settlement with twenty-five people who all have `Trait::Honest` and asserts
+that none of them ends up on anybody's books as having been caught out in a
+claim. Between six and a hundred and thirteen of them were, every run.
+
+Two separate causes, and this is the smaller one. `they_took_something_of_mine`
+recorded a **theft** through `update_on_verification(false)` — the same column
+`wrong_count` that a proven lie goes in. An honest man can still help himself
+to a neighbour's spear; `Trait::Honest` governs what he says, not what he
+takes. So the settlement of people who would not dream of lying was full of
+men on the record as liars, for thefts.
+
+`TrustRating` now has a `took_from_me` column of its own. The weight on the
+trust is unchanged — a thief is no more to be relied on than a liar — so
+nothing about behaviour moves; only the charge is filed correctly.
+
+### 48. Worked ground looked exactly like ground somebody made up
+
+The larger half of the same failure, and a nastier shape.
+
+The model already had the right idea in it. A liar names a place a good walk
+from the real one and claims he passed it this morning; an honest man names
+the real place and says when he actually saw it. Walk to the spot, find
+nothing, and `was_he_answerable_for_it` decides: a fresh claim is a lie and an
+old one is only news that kept badly.
+
+What it could not tell was *somebody else got here first*. A renewable node —
+a berry patch, a fish run — stays on the map when it is emptied, so a picked
+patch still reads as "there is something here" and nobody is convicted. But a
+**mined-out mineral seam is deleted**, and deleted ground is indistinguishable
+from the invented spot a liar names. Report a clay seam you honestly passed
+yesterday, have somebody mine it out this morning, and you are a proven liar
+to everybody who walks past.
+
+The world now remembers where a seam was worked out, and bare ground that was
+worked does not convict anybody.
+
+**And there were two copies of the verification sweep**, one in
+`Simulation::tick` and one in `Population::process_exploration_with_world`,
+carrying the same comment quoting the same requirement. Fixing the first
+took the count from 19 to 10 and no further, which is how the second was
+found. The decision now lives in one place, `Hearsay::does_bare_ground_convict_him`,
+and both call it. That is the fourth instance of this project's duplicated
+vocabulary defect.
+
+### 49. A cluster of three was usually one
+
+The third failing test, and the only one of the three that really was
+intermittent: 28% over twenty-five runs.
+
+`spawn_resource_clusters` picks a centre on terrain the resource likes, then
+places the rest of the cluster at a random offset within the radius — and
+**dropped any that landed on the wrong terrain**, silently, with one throw of
+the dice each. Clay wants wetland or riverbank, which is ribbon terrain a
+couple of tiles wide, so an offset of five in each direction usually lands on
+dry ground.
+
+Asked for five clusters of three, a world produced **5.8 nodes**, and a quarter
+of worlds had no two clay nodes within twenty paces of each other — which is
+not clustering, and is what the test was quite correctly complaining about.
+Every clustered resource in the world went through this: clay, sand, coal,
+grain, flax, herbs, cotton and fish.
+
+A cluster now takes up to twenty-four throws before giving up on a node, and
+still gives up, because a centre at the tip of a spit may genuinely have
+nothing near it. Five clusters of three now produce **13.5 nodes** and forty
+worlds out of forty cluster. The test passes sixty times in sixty.
+
+#### And what correcting the world exposed
+
+The three fixes were measured together against the commit before them, and
+then the clustering fix was backed out and the other two measured on their own,
+because the first result had something in it worth separating. Thirty-two
+worlds a side for the first, sixteen for the second:
+
+| | before | all three | water and trust only |
+|---|---|---|---|
+| failure rate | 0.034 | **0.030** (t = −4.1) | **0.031** (t = −2.8) |
+| people alive | 50.8 | 56.9 (t = 1.8) | 42.8 (t = −2.0) |
+| food eaten | 10,365 | 10,256 | 8,691 |
+| **efficiency** | **0.82** | **0.74 (t = −8.5)** | 0.79 (t = −1.1) |
+| rotted in packs | 731 | **1,467** (t = 9.2) | 622 |
+| rotted on the ground | 1,087 | **1,412** (t = 4.8) | 931 |
+
+The **failure rate falls in both arms**, which is the water fix doing exactly
+what it was meant to: a settlement that is not walking half a mile for a drink
+does not spend a twentieth of its turns being told there is no water nearby.
+Population moves in neither arm at these sample sizes.
+
+But putting the world's resources back to the number the config always asked
+for costs **eight points of efficiency**, and it is not a subtle effect.
+Doubling what there is to gather does not double what anybody eats — food eaten
+is flat — it doubles what rots in a pack and on the grass. The agents gather to
+the limit of what is in front of them rather than to the limit of what they
+will eat.
+
+That is the same defect as #43, one step upstream: a people that buried four
+years of food into a hole also picks four years of berries off a bush. The
+larder was capped by asking what the camp would eat before winter; gathering
+has no such question in it at all. Not fixed here — it is a change to what
+`is_this_lot_for_the_store` and the ordinary gather branch ask, it wants its
+own measurement, and folding it in would have confounded three fixes that are
+each about something else. It is the obvious next thing.
+
+The clustering fix stands. The world was misgenerating and now is not; what it
+exposed is a fault in the agents, and hiding it behind a broken world was never
+a fix.
+
 ## Housekeeping
 
-### 46. Committed backup file
+### 50. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 47. Build warnings
+### 51. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 48. Placeholder package metadata
+### 52. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

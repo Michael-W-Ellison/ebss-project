@@ -647,7 +647,21 @@ pub struct TrustRating {
     /// Number of times trustee has been correct
     pub correct_count: u32,
     /// Number of times trustee has been wrong
+    ///
+    /// Claims only. A man is wrong when he says a thing that is not so and
+    /// somebody walks to the spot and finds it out. What he has *taken* is a
+    /// separate count - see `took_from_me` - because they are separate
+    /// charges and only one of them is being a liar.
     pub wrong_count: u32,
+    /// Number of times trustee has helped himself to the truster's things.
+    ///
+    /// This used to go in `wrong_count`, and being honest has nothing to do
+    /// with keeping your hands off other people's things: a settlement of
+    /// twenty-five people who would not dream of lying still produced dozens
+    /// of men on the record as having been caught out in a claim, every one
+    /// of them for a theft. See ISSUES_FOUND #47.
+    #[serde(default)]
+    pub took_from_me: u32,
 }
 
 impl TrustRating {
@@ -658,6 +672,7 @@ impl TrustRating {
             trust: 0.5, // Start neutral
             correct_count: 0,
             wrong_count: 0,
+            took_from_me: 0,
         }
     }
 
@@ -670,6 +685,16 @@ impl TrustRating {
             self.wrong_count += 1;
             self.trust = (self.trust - 0.15).max(0.0);
         }
+    }
+
+    /// This man took something of yours.
+    ///
+    /// It weighs on the trust exactly as heavily as being caught out in a
+    /// claim does - a thief is no more to be relied on than a liar - but it
+    /// is a different charge and it is kept in a different column.
+    pub fn update_on_theft(&mut self) {
+        self.took_from_me += 1;
+        self.trust = (self.trust - 0.15).max(0.0);
     }
 
     /// What this man told you was true once and is not any more.

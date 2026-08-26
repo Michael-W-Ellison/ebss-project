@@ -206,6 +206,24 @@ impl Hearsay {
     pub fn was_he_answerable_for_it(&self, now: u32) -> bool {
         self.how_stale(now) <= Self::STILL_ANSWERABLE_FOR
     }
+
+    /// Whether finding this place bare makes the man who named it a liar.
+    ///
+    /// Two ways it does not, and they are different. His news may simply be
+    /// old, which `was_he_answerable_for_it` decides. Or somebody else may
+    /// have got there first and stripped the place between the telling and
+    /// the walk, which is the world's business and not his.
+    ///
+    /// That second one mattered far more than it looks. A worked-out mineral
+    /// seam is taken off the map, so the ground reads exactly like the
+    /// invented spot a liar names - and a settlement of twenty-five people
+    /// who would not dream of lying still produced dozens of proven liars.
+    /// Both call sites of this ask the same question now, in one place,
+    /// because there are two copies of the verification sweep and the first
+    /// fix went into one of them. See ISSUES_FOUND #48.
+    pub fn does_bare_ground_convict_him(&self, now: u32, somebody_got_here_first: bool) -> bool {
+        self.was_he_answerable_for_it(now) && !somebody_got_here_first
+    }
 }
 
 impl ExplorationKnowledge {

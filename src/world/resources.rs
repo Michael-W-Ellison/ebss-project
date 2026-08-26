@@ -696,6 +696,13 @@ impl ResourceNode {
     /// more than half its water in fifteen thousand ticks.
     ///
     /// Returns units per regeneration pass, which runs every ten world ticks.
+    /// What a reach of running water gives back in a pass: all of it.
+    ///
+    /// Not a number so much as a statement that a river is not a stock. It is
+    /// larger than any water source's `max_amount`, so `take_inflow` fills the
+    /// source and drops the rest.
+    pub const WHATEVER_WAS_DRAWN: f32 = 1000.0;
+
     pub fn water_inflow(&self, terrain: TerrainType, precipitation: f32, freezing: bool) -> f32 {
         if self.resource_type != ResourceType::Water {
             return 0.0;
@@ -705,23 +712,41 @@ impl ResourceNode {
         // the map rather than sitting on water tiles - they are the streams,
         // springs and ponds of the country they are in, and what feeds them
         // depends on which.
+        //
+        // These are reckoned per pass of the resource tick, which comes round
+        // once every ten ticks, and they have to be read against what a
+        // settlement draws: a drink is a unit or two, and forty people drink
+        // something like thirty units in the time between two passes. The
+        // first cut of this had a spring giving back **1.5**, which is a
+        // twentieth of that. Measured over six thousand ticks, eight of a
+        // world's twenty-one sources were drawn down to 2 units out of four
+        // hundred and stayed there, and "no water sources nearby" was the
+        // single largest refusal in the model - a settlement standing in the
+        // middle of its own dry springs, walking further every year for a
+        // drink.
+        //
+        // A stream is a flow and not a stock. What limits what you can draw
+        // from a spring in an afternoon is the spring's rate, and that rate is
+        // why a village sits on one.
         let source = match terrain {
-            // Running water: whatever is drawn is replaced from upstream
-            TerrainType::Water | TerrainType::Riverbank => 3.0,
+            // Running water: whatever is drawn is replaced from upstream.
+            // The comment said this before the numbers did.
+            TerrainType::Water | TerrainType::Riverbank => Self::WHATEVER_WAS_DRAWN,
 
-            // Springs and snowmelt come off high ground
-            TerrainType::Mountain | TerrainType::Hills => 1.5,
+            // Springs and snowmelt come off high ground, and will carry a
+            // camp
+            TerrainType::Mountain | TerrainType::Hills => 20.0,
 
-            // Seeps and marsh hold what they get
-            TerrainType::Wetland | TerrainType::Forest => 1.2,
+            // Seeps and marsh hold what they get, which is less
+            TerrainType::Wetland | TerrainType::Forest => 12.0,
 
-            // Anywhere else it is open water, and lives mostly on the sky
-            _ => 0.8,
+            // Anywhere else it is standing water, and lives mostly on the sky
+            _ => 6.0,
         };
 
         // Rain tops everything up; a dry spell is felt most by the pools
         let rain = precipitation.clamp(0.0, 1.0);
-        let from_sky = rain * 0.6;
+        let from_sky = rain * 6.0;
 
         // Frozen ground gives nothing up, and the rain falls as snow
         let flow = source + from_sky;

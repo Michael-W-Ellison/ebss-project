@@ -438,6 +438,48 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ Three "known flaky" tests, and two of them were not flaky. The suite had
+  twenty tests on a list of intermittent failures. Run on their own,
+  `water_is_not_used_up` failed **twelve times out of twelve** and
+  `honest_agents_do_not_end_up_accused` **eight out of eight** — standing,
+  reproducible failures filed as flakes and left. Each had a real defect under
+  it.
+
+  **A settlement drank its own springs dry.** With nobody in the world the
+  water total holds at 100%; with twelve founders it fell to 55%, and eight of
+  a world's twenty-one sources sat at two units out of four hundred. The
+  comment beside the numbers said "running water: whatever is drawn is replaced
+  from upstream" and the number under it gave back 0.15 a tick against a camp
+  drinking three. That also explains a figure that has been in every refusal
+  table in ISSUES_FOUND without being read: **"no water sources nearby" was the
+  single largest refusal in the model** — a settlement standing among its own
+  dry springs. A stream is a flow now, not a stock.
+
+  **An honest man was called a liar for two different reasons.** A theft was
+  filed in the same column as a proven lie, and being honest is about what a
+  man says rather than what he takes. And worse: a mined-out mineral seam is
+  deleted from the map, so honestly reporting a clay seam somebody else strips
+  overnight left ground indistinguishable from the invented spot a liar names.
+  The world remembers worked ground now. Fixing the first of **two copies of
+  the verification sweep** took the count from 19 to 10 and no further, which is
+  how the second was found — the fourth instance of this project's duplicated
+  vocabulary defect.
+
+  **And a cluster of three was usually one.** `spawn_resource_clusters` placed
+  each node at a random offset and silently dropped any that landed on the
+  wrong terrain, one throw each. Clay wants riverbank, which is a ribbon two
+  tiles wide. Asked for five clusters of three, a world made **5.8 nodes**;
+  it makes 13.5 now. Every clustered resource went through this.
+
+  Measured at thirty-two worlds a side, with the clustering fix backed out
+  again to separate it: **the failure rate falls in both arms** (t = -4.1 and
+  t = -2.8), which is the water fix doing what it was for. But putting the
+  world's resources back to the number the config always asked for **costs
+  eight points of efficiency** (0.82 to 0.74, t = -8.5) — doubling what there
+  is to gather does not double what anybody eats, it doubles what rots in a
+  pack. That is #43 one step upstream: the larder now asks what the camp will
+  eat before winter, and gathering asks nothing of the kind. The next thing.
+  See ISSUES_FOUND.md #46, #47, #48, #49
 - ✅ The larder was four years deep. Entry #39 named the store as the biggest
   single leak in the model and left the question open: do people draw on it too
   rarely, or is the pit's rate wrong? Neither. What is in the pits is almost all
@@ -964,6 +1006,10 @@ the code actually does, verified by running it — not what was planned.
 - [ ] Performance has not been profiled at scale
 
 ### Beyond the original plan
+- [ ] Stop a people gathering to the limit of what is in front of them rather
+      than the limit of what they will eat: correcting resource clustering
+      doubled what a world holds and doubled what rots rather than what is
+      eaten
 - [ ] Let an agent in a corner do something other than refuse to run: three
       impassable directions and `FleeFrom` fails forever, which in one measured
       world was three quarters of every turn taken

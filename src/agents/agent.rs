@@ -8278,11 +8278,13 @@ impl Agent {
         bond.weaken(cost);
         bond.settle_what_we_are();
 
+        // On the record - but in the thief's column, not the liar's. Being
+        // honest is about what a man says, and this is about what he takes.
         self.knowledge
             .trust_ratings
             .entry(thief)
             .or_insert_with(|| super::gossip::TrustRating::new(self.id, thief))
-            .update_on_verification(false);
+            .update_on_theft();
     }
 
     /// What being robbed costs the man who was robbed, at its worst.

@@ -154,6 +154,22 @@ pub struct World {
     #[serde(default)]
     pub pits: Vec<Pit>,
 
+    /// Where a seam was worked out.
+    ///
+    /// A mined-out mineral node is genuinely gone and is taken off the map,
+    /// which left no way to tell worked ground from ground that never held
+    /// anything. That mattered in one place and mattered a lot: a man who
+    /// honestly reported a clay seam he passed yesterday was recorded as a
+    /// **liar** the moment somebody else mined it out and walked over the
+    /// spot, because the spot was then indistinguishable from the invented
+    /// one a liar names. A settlement of twenty-five people who would not
+    /// dream of lying produced dozens of proven liars. See ISSUES_FOUND #48.
+    ///
+    /// Ground that has been worked looks worked. This is the world
+    /// remembering that.
+    #[serde(default)]
+    pub where_it_was_worked_out: std::collections::HashSet<Position>,
+
     /// What has dried out in the sun since anybody last looked, and where.
     ///
     /// The world does the drying; whoever is standing near enough to see it
@@ -902,6 +918,7 @@ impl World {
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             dropped: Vec::new(),
             pits: Vec::new(),
+            where_it_was_worked_out: std::collections::HashSet::new(),
             what_dried_in_the_sun: Vec::new(),
             food_that_rotted_where_it_lay: 0,
             food_that_rotted_in_the_ground: 0,
@@ -1326,9 +1343,17 @@ impl World {
         // A renewable node stays on the map when emptied so it can regrow;
         // deleting it would make berry patches and fish runs single-use and
         // drain the world of food permanently. Mined-out mineral deposits are
-        // genuinely gone and are removed.
-        self.resources
-            .retain(|r| r.amount > 0 || r.is_renewable());
+        // genuinely gone and are removed - but the ground remembers being
+        // worked, which is what tells a stripped seam from a spot somebody
+        // made up.
+        let worked_out = &mut self.where_it_was_worked_out;
+        self.resources.retain(|r| {
+            let keeping = r.amount > 0 || r.is_renewable();
+            if !keeping {
+                worked_out.insert(r.position);
+            }
+            keeping
+        });
     }
 
     // ===== Heat Source Management =====

@@ -13821,6 +13821,8 @@ impl Simulation {
                     })
                     .collect();
 
+                let worked_out = &self.world.where_it_was_worked_out;
+
                 let agent = &mut self.population.agents[agent_index];
                 let agent_id = agent.id;
 
@@ -13884,12 +13886,19 @@ impl Simulation {
                         !in_view || really_here.contains(where_it_is)
                     });
 
-                for (_, said, what_they_said) in found_out {
+                for (where_it_is, said, what_they_said) in found_out {
                     if said.who == agent_id {
                         continue;
                     }
                     let subject = format!("{:?}", what_they_said).to_lowercase();
-                    if said.was_he_answerable_for_it(self.current_tick) {
+
+                    // Ground that has been worked looks worked, and somebody
+                    // else stripping a seam between the telling and the walk
+                    // is not evidence against the man who told you about it.
+                    if said.does_bare_ground_convict_him(
+                        self.current_tick,
+                        worked_out.contains(&where_it_is),
+                    ) {
                         agent.found_out_i_was_lied_to(said.who, &subject, self.current_tick);
                     } else {
                         agent.found_out_they_were_out_of_date(said.who);
