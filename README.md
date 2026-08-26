@@ -19,7 +19,7 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 248 source files, with 1,835 library tests.
+across 249 source files, with 1,847 library tests.
 
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
@@ -352,6 +352,28 @@ original specifications.
   reached 36.6 of 37.1 people by being *watched*. Telling is redundant for the
   only thing worth telling — until there is a discovery that does not announce
   itself to everybody standing nearby. See ISSUES_FOUND.md #37
+- ✅ What you cannot carry stays where it fell. `add_item` enforces the weight
+  limit and returns `false`; butchering ignored what it returned, so a kill
+  bigger than a hunter could carry **stopped existing** rather than being left
+  in the field. It stays where it fell now, and it counts.
+
+  The interesting half is what that makes of preserving. **Drying takes the
+  water out, and water is most of what meat weighs** — dried meat is a third
+  the weight of the meat it was, so a hunter who dries a kill before walking
+  home carries more of the animal home. Preserving buys carrying capacity as
+  well as time, and they are the same thing from different ends. Salting buys
+  the keeping and not the carrying, because salt puts back about what it draws
+  out. A leather bag holds more than a flax basket and costs an animal and a
+  leatherworker, because carrying capacity is what this people is shortest of.
+  **A settlement eats an eighth more than it did (t = 2.6) and wastes a
+  quarter less of what it gets, 73% used to 77% (t = 3.0).**
+  See ISSUES_FOUND.md #38
+- 🚧 And where the food actually goes, which is not where anybody was looking:
+  per settlement per ten thousand ticks, **537 units rot in the pits**, 438
+  where they lie, and 231 in packs. The larder is the biggest single source of
+  waste in the model — it gets filled and never drawn down. Every "winter
+  store" headline above is measuring a stock that quietly loses about half of
+  itself. Measured and written up, not yet fixed. See ISSUES_FOUND.md #39
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the

@@ -228,13 +228,26 @@ impl InventoryItem {
     /// Get total weight of this item stack
     /// Includes container contents (water, etc.) if applicable
     pub fn total_weight(&self) -> f32 {
-        let base_weight = self.weight_per_unit * self.quantity as f32;
+        // What has been done to it tells on what it weighs. Drying takes the
+        // water out and water is most of what meat weighs, so a hunter who
+        // dries a kill before walking home carries more of the animal home -
+        // see `PreparationState::what_it_does_to_the_weight`.
+        let each = self.weight_per_unit * self.how_much_lighter_it_is();
+        let base_weight = each * self.quantity as f32;
 
         // Add liquid weight if this is a filled container
         // Water weighs ~1 kg per liter
         let liquid_weight = self.fill_level.unwrap_or(0.0);
 
         base_weight + liquid_weight
+    }
+
+    /// What being dried or cooked or smoked has taken off this thing's weight.
+    pub fn how_much_lighter_it_is(&self) -> f32 {
+        self.food_data
+            .as_ref()
+            .map(|food| food.preparation.what_it_does_to_the_weight())
+            .unwrap_or(1.0)
     }
 }
 
@@ -444,17 +457,31 @@ impl Inventory {
     /// what their arms hold and what the basket holds, which is most of the
     /// reason anybody ever wove one - see `making::WEAVE_A_BASKET`.
     pub fn effective_max_weight(&self) -> f32 {
+        // And a leather bag holds a good deal more than a flax basket, which
+        // is what being a leatherworker is worth: carrying capacity is the
+        // thing this people is shortest of - see `making::SEW_A_BAG`.
+        let bags = self
+            .items
+            .get("leatherbag")
+            .map(|item| item.quantity)
+            .unwrap_or(0);
+
         let baskets = self
             .items
             .get("basket")
             .map(|item| item.quantity)
             .unwrap_or(0);
 
-        self.max_weight + baskets as f32 * Self::WHAT_A_BASKET_HOLDS
+        self.max_weight
+            + baskets as f32 * Self::WHAT_A_BASKET_HOLDS
+            + bags as f32 * Self::WHAT_A_LEATHER_BAG_HOLDS
     }
 
     /// What one basket adds, in the units a pack is weighed in.
     pub const WHAT_A_BASKET_HOLDS: f32 = 20.0;
+
+    /// And what a leather bag adds, which is rather more.
+    pub const WHAT_A_LEATHER_BAG_HOLDS: f32 = 35.0;
 
     /// Get weight capacity remaining
     pub fn weight_capacity_remaining(&self) -> f32 {

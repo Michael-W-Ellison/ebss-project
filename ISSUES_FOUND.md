@@ -2458,18 +2458,101 @@ worlds a side had population, store and burials all leaning favourably; at
 thirty-two all three came back to nothing, which is the honest reading and the
 reason for running the second sixteen.
 
+### 38. A deer bigger than a man could carry was silently deleted
+
+`Inventory::add_item` enforces the weight limit and returns `false`.
+Butchering called it and **ignored what it returned.** So a kill that came to
+more than a hunter could carry did not get left in the field — it stopped
+existing, every time, counted nowhere, and invisible to the waste ledger built
+one commit earlier. A hunter walked away from part of an animal and the world
+behaved as though the animal had been that size.
+
+What will not fit stays where it fell now. It can be come back for, it counts
+against the hunt when it rots, and it is there for something else to find.
+
+Which makes carrying capacity the quiet third term in the whole preservation
+argument, and the interesting half of this entry. Rot is the wasted half of a
+hunt; so is a carcass left in a field because it would not fit in the pack.
+**Drying takes the water out, and water is most of what meat weighs** — so
+dried meat is a third of the weight of the meat it was, and a hunter who dries
+a kill before walking home carries more of the animal home. Preserving buys
+carrying capacity as well as time, and they are the same thing seen from
+different ends. Salting buys the keeping and not the carrying, because salt
+puts back about what it draws out; the two preserving verbs stopped being
+interchangeable.
+
+And a leather bag holds rather more than a flax basket. It costs an animal and
+a leatherworker, which is the point: carrying capacity is what this people is
+shortest of, and being good at something ought to buy you more of what
+everybody is short of.
+
+**Thirty-two worlds a side:**
+
+| | before | after | t |
+|---|---|---|---|
+| food actually eaten | 3,308 | **3,917 ± 152** | 2.56 |
+| **share of what was got that fed somebody** | **73%** | **77%** | 2.98 |
+| meat left in the field rather than deleted | 0.0 | 46.3 ± 15.8 | 2.9 |
+| people at ten thousand ticks | 37.0 | 39.9 ± 1.4 | 1.4 |
+| food in the ground through the winter | 186.8 | 206.7 ± 9.8 | 1.2 |
+| food lost to rot | 1,144 | 1,175 | 0.5 |
+| burials of people | 13.6 | 14.5 | 1.0 |
+
+**A settlement eats an eighth more than it did and wastes a quarter less of
+what it gets.** The mechanism is the weight of dried food rather than the
+leaving-behind: the deletion was real but rare, at forty-six units a world
+against three and a half thousand eaten. Population, store and burials all lean
+favourably and none of them is established.
+
+**A measurement mistake, recorded because it nearly went into this document.**
+The first run of this comparison reported meat left behind at *645 units a
+world*, which would have made it the largest waste in the model. It was
+nonsense twice over. A `cd` into the baseline worktree persisted across
+commands, so `cargo build --example` rebuilt the baseline and left the
+project's harness binary stale — **the entire "after" arm measured the commit
+before the change.** And the stale binary was still printing an older column,
+so the number in that slot was the count of questions asked, which happens to
+sit around 660. Two independent harnesses disagreeing by fifty-fold is what
+caught it. Neither would have been noticed from one.
+
+### 39. Where the food actually goes, and it is not where anybody looked
+
+Broken down across twelve worlds, food lost per settlement per ten thousand
+ticks:
+
+| where it went | units |
+|---|---|
+| rotted in the pits | **537** |
+| rotted where it lay | 438 |
+| rotted in somebody's pack | 231 |
+
+**The larder is the biggest single source of waste in the model.** The store
+that a dozen batches of work went into filling loses more food than anywhere
+else: it gets filled and is not drawn down, and buried food ages out over ten
+thousand ticks even at the quarter rate a covered pit gives it.
+
+Which means every "winter store" headline in the entries above — and there are
+several — has been measuring a stock that quietly loses about half of itself.
+That is not a reason to distrust those measurements, which were all comparative,
+but it is a reason to stop treating the size of the store as the goal. The goal
+is food in somebody, and the store is only a means to it.
+
+Not fixed here. It is the next thing to look at, and it wants its own batch:
+either people draw on the larder far too rarely, or the pit's rate is wrong, and
+telling those apart is a measurement rather than a guess.
+
 ## Housekeeping
 
-### 38. Committed backup file
+### 40. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 39. Build warnings
+### 41. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 40. Placeholder package metadata
+### 42. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

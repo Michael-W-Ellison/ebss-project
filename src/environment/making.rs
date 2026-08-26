@@ -531,6 +531,30 @@ pub const WEAVE_A_BASKET: Working = Working {
     over_a_fire: false,
 };
 
+/// Leather sewn into a bag, which is how a person carries a great deal more
+/// than their arms hold.
+///
+/// A basket is flax and holds what flax holds. A leather bag is the other
+/// answer to the same problem and a better one, and it is behind a skill and
+/// behind an animal: hides come off something that had to be killed, and
+/// turning one into leather wants a leatherworker. That is the point of it -
+/// carrying capacity is the thing this people is shortest of, and being good
+/// at something ought to buy you more of what everybody is short of.
+pub const SEW_A_BAG: Working = Working {
+    verb: "weave",
+    to: "leather",
+    how_much: 3,
+    makes: "leatherbag",
+    how_many: 1,
+    hands: SkillType::Leatherworking,
+    effort: 10.0,
+    obvious: true,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
 /// A block of wood hollowed out, which is how water travels.
 ///
 /// Not obvious, and the thing the whole container machinery was waiting for:
@@ -628,6 +652,7 @@ pub const EVERY_WORKING: &[Working] = &[
     CUT_FISH_INTO_STRIPS,
     CUT_MEAT_INTO_STRIPS,
     WEAVE_A_BASKET,
+    SEW_A_BAG,
     CARVE_A_BOWL,
     SOAK_FLAX,
     FERMENT_FRUIT,

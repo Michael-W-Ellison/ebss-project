@@ -113,6 +113,10 @@ pub struct Simulation {
     /// And what one person told another, by discovery. The one way a thing
     /// somebody worked out has ever had of leaving the head that made it.
     pub what_anybody_was_told: std::collections::HashMap<String, u64>,
+    /// How much of what was killed or gathered would not go in the pack and
+    /// stayed where it fell. The other half of the waste - see
+    /// `into_the_pack_or_on_the_ground`.
+    pub what_would_not_fit_in_the_pack: u64,
 }
 
 /// Configuration for simulation behavior and limits
@@ -279,6 +283,7 @@ impl Simulation {
             actions_failed_because: std::collections::HashMap::new(),
             what_anybody_found_out: std::collections::HashMap::new(),
             what_anybody_was_told: std::collections::HashMap::new(),
+            what_would_not_fit_in_the_pack: 0,
         }
     }
 
@@ -4724,6 +4729,74 @@ impl Simulation {
     /// carcass by - see `Agent::how_much_my_tools_help`. Taking a deer apart
     /// with a sharp flake and taking it apart with your hands are not the
     /// same job, and until now they were.
+    /// Put these in the pack, and leave on the ground whatever will not go in.
+    ///
+    /// `Inventory::add_item` enforces the weight limit and returns `false`,
+    /// and butchering ignored what it returned - so a deer that came to more
+    /// than a man could carry was **silently deleted**, every time, and
+    /// counted nowhere. A hunter walked away from three quarters of an animal
+    /// and the world behaved as though the animal had been that size.
+    ///
+    /// What will not fit stays where it fell. It can be come back for, it
+    /// counts against the hunt when it rots, and it is there for something
+    /// else to find - which is what makes a second trip a decision rather than
+    /// a formality.
+    fn into_the_pack_or_on_the_ground(
+        &mut self,
+        agent_index: usize,
+        items: Vec<crate::agents::InventoryItem>,
+        where_it_fell: crate::world::Position,
+    ) -> u32 {
+        let tick_now = self.current_tick;
+        let mut left_behind = 0u32;
+
+        for item in items {
+            let each = item.weight_per_unit * item.how_much_lighter_it_is();
+
+            let room = self.population.agents[agent_index]
+                .inventory
+                .weight_capacity_remaining();
+
+            let fits = if each > 0.0 {
+                ((room / each).floor() as u32).min(item.quantity)
+            } else {
+                item.quantity
+            };
+
+            if fits > 0 {
+                let mut taking = item.clone();
+                taking.quantity = fits;
+
+                // The slot limit can still refuse a kind of thing this pack
+                // has no room for, in which case the lot stays where it fell
+                if !self.population.agents[agent_index].inventory.add_item(taking) {
+                    self.world.somebody_left_this(item.clone(), where_it_fell, tick_now);
+                    left_behind += item.quantity;
+                    continue;
+                }
+            }
+
+            let over = item.quantity - fits;
+            if over > 0 {
+                let mut leaving = item.clone();
+                leaving.quantity = over;
+                self.world.somebody_left_this(leaving, where_it_fell, tick_now);
+                left_behind += over;
+            }
+        }
+
+        if left_behind > 0 {
+            self.what_would_not_fit_in_the_pack =
+                self.what_would_not_fit_in_the_pack.saturating_add(left_behind as u64);
+            debug!(
+                "Agent {} left {left_behind} behind at {where_it_fell:?}",
+                self.population.agents[agent_index].id
+            );
+        }
+
+        left_behind
+    }
+
     fn butcher(
         &self,
         dropped: &[crate::environment::ItemStack],
@@ -10074,10 +10147,17 @@ impl Simulation {
                                     crate::agents::skills::SkillType::Leatherworking,
                                 );
                             let butchered = self.butcher(&items_gained, knife);
+                            let where_it_fell = {
+                                let at = self.population.agents[agent_index].state.position;
+                                crate::world::Position::new(at.0, at.1)
+                            };
+                            self.into_the_pack_or_on_the_ground(
+                                agent_index,
+                                butchered,
+                                where_it_fell,
+                            );
                             let agent = &mut self.population.agents[agent_index];
-                            for item in butchered {
-                                agent.inventory.add_item(item);
-                            }
+                            let _ = &agent;
 
                             // Both tools are one job further through their
                             // lives: the spear that was thrown and the flake
@@ -10296,10 +10376,15 @@ impl Simulation {
                         );
                     let butchered = self.butcher(&items_gained, knife);
                     {
-                        let agent = &mut self.population.agents[agent_index];
-                        for item in butchered {
-                            agent.inventory.add_item(item);
-                        }
+                        let where_it_fell = {
+                            let at = self.population.agents[agent_index].state.position;
+                            crate::world::Position::new(at.0, at.1)
+                        };
+                        self.into_the_pack_or_on_the_ground(
+                            agent_index,
+                            butchered,
+                            where_it_fell,
+                        );
                     }
 
                     let mut result = ActionResult::success()
@@ -12156,6 +12241,10 @@ impl Simulation {
                 // over in a turn; whether the meat is still good in a week is
                 // the question, and it stays in the pack where its owner can
                 // see it.
+                // What is in the pack weighs what it weighs, and preparing a
+                // thing changes that - the cached total has to be told.
+                agent.inventory.recalculate_weight();
+
                 let watch_it = crate::agents::wondering::Watched::of(
                     agent.inventory.get_item(what).expect("it is in there"),
                 );
@@ -12264,6 +12353,12 @@ impl Simulation {
                 food.set_preparation(how, tick_now);
 
                 let how_many = item.quantity;
+
+                // Drying takes the water out, and water is most of what meat
+                // weighs. A pack of dried strips is a third of the pack of raw
+                // joints it was, which is the second thing preserving buys.
+                agent.inventory.recalculate_weight();
+
                 agent
                     .skills
                     .practise(crate::agents::SkillType::Cooking, 14, tick_now);
@@ -14512,6 +14607,7 @@ impl Simulation {
             actions_failed_because: std::collections::HashMap::new(),
             what_anybody_found_out: std::collections::HashMap::new(),
             what_anybody_was_told: std::collections::HashMap::new(),
+            what_would_not_fit_in_the_pack: 0,
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);

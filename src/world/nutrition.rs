@@ -242,6 +242,30 @@ impl PreparationState {
     }
 
     /// Get spoilage rate multiplier (lower = longer lasting)
+    /// What preparing a thing this way does to what it weighs.
+    ///
+    /// Drying takes the water out, and water is most of what meat weighs. This
+    /// is not decoration: an agent can only carry so much, so a hunter who
+    /// dries what he kills before he walks home carries more of the animal
+    /// home. Preserving buys carrying capacity as well as time, and the two
+    /// are the same thing seen from different ends - a deer left behind at the
+    /// kill because it would not fit in the pack is exactly as wasted as a
+    /// deer that rotted in it.
+    ///
+    /// Cooking drives some water off too, and less of it. Salting and pickling
+    /// add as much as they take.
+    pub fn what_it_does_to_the_weight(&self) -> f32 {
+        match self {
+            Self::Dried => 0.35,
+            Self::Smoked => 0.5,
+            Self::Cooked => 0.8,
+            Self::Ground => 0.9,
+            // Salt and brine put back roughly what they draw out
+            Self::Salted | Self::Pickled | Self::Fermented => 1.0,
+            Self::Raw | Self::Ruined => 1.0,
+        }
+    }
+
     pub fn spoilage_multiplier(&self) -> f32 {
         match self {
             Self::Raw => 1.0,        // Baseline
