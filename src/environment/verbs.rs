@@ -483,6 +483,17 @@ pub const DRY: Verb = verb(
     Some("dry"),
 );
 
+/// Rubbing salt into food, which is the third way of keeping a thing and the
+/// only one that needs neither a week of sun nor a fire kept going.
+pub const SALT: Verb = verb(
+    "salt",
+    Family::Thermal,
+    Targets::AThingHeld,
+    Wants::BareHands,
+    &[Changes::WhatAThingIs],
+    Some("salt"),
+);
+
 pub const COOL: Verb = verb(
     "cool",
     Family::Thermal,
@@ -1013,7 +1024,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 3
     SMASH, CRUSH, CUT, SCRAPE, PIERCE, DRILL, SPLIT,
     // 4
-    HEAT, DRY, COOL, QUENCH, IGNITE, MELT, ROAST,
+    HEAT, DRY, SALT, COOL, QUENCH, IGNITE, MELT, ROAST,
     // 5
     MIX, POUR, SOAK, COAT, BOIL, LEACH, FERMENT,
     // 6

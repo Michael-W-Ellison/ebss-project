@@ -20,7 +20,12 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
         | TerrainType::Riverbank
         | TerrainType::Beach
         | TerrainType::Farmland
-        | TerrainType::Water => ClimateZone::Temperate,
+        | TerrainType::Water
+        | TerrainType::Sea
+        | TerrainType::SaltMarsh => ClimateZone::Temperate,
+        // A salt flat is a shallow sea that dried up, and it dried up for a
+        // reason
+        TerrainType::SaltFlat => ClimateZone::Desert,
         // Mountains can be cold (arctic adjacent)
         TerrainType::Mountain => ClimateZone::Arctic,
     }

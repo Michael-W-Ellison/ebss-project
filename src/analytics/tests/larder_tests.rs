@@ -401,6 +401,13 @@ fn a_surplus_and_no_pit_means_digging() {
         .inventory
         .add_item(supper(30, 0));
 
+    // Somebody who has already seen what the sun does to food. Without this
+    // he lays it out on the ground instead, which is the route into the
+    // discovery and comes first for anybody who has not made it yet - see
+    // `putting_food_by`.
+    simulation.population.agents[0]
+        .found_out_how_to(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT);
+
     simulation.execute_action(
         &Action::Dry {
             what: "food".to_string(),

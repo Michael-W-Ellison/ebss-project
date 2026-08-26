@@ -81,7 +81,7 @@ fn test_eating_cooked_food_more_effective() {
     );
 
     let cooked_item = InventoryItem::new_food(
-        "cooked_meat".to_string(),
+        "cooked_meatportions".to_string(),
         5,
         2.0,
         cooked_meat,
@@ -91,7 +91,7 @@ fn test_eating_cooked_food_more_effective() {
     let initial_protein = agent.nutrition.protein_stores;
 
     // Eat cooked meat
-    let result = agent.eat_food_item("cooked_meat", 100);
+    let result = agent.eat_food_item("cooked_meatportions", 100);
 
     match result {
         EatResult::Success(nutrition) => {
@@ -289,7 +289,7 @@ fn test_find_best_food_prioritizes_needs() {
         0,
     );
     agent.inventory.add_item(InventoryItem::new_food(
-        "meat".to_string(), 5, 2.0, meat,
+        "meatportions".to_string(), 5, 2.0, meat,
     ));
 
     // Add high-energy food (grain/bread)

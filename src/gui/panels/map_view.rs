@@ -800,6 +800,9 @@ fn terrain_color(terrain: TerrainType) -> Color32 {
         TerrainType::Desert => Color32::from_rgb(238, 203, 173),
         TerrainType::Wetland => Color32::from_rgb(85, 107, 47),
         TerrainType::Beach => Color32::from_rgb(238, 214, 175),
+        TerrainType::Sea => Color32::from_rgb(20, 60, 120),
+        TerrainType::SaltMarsh => Color32::from_rgb(96, 128, 116),
+        TerrainType::SaltFlat => Color32::from_rgb(232, 232, 224),
         TerrainType::Riverbank => Color32::from_rgb(107, 142, 35),
         TerrainType::Farmland => Color32::from_rgb(205, 170, 90),
     }

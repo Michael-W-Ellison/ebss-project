@@ -213,6 +213,10 @@ impl Marketplace {
 
             // Minerals
             ItemType::Clay | ItemType::Sand | ItemType::Coal => 3,
+            // Dear, because it comes from one or two places in a whole
+            // country and it is the difference between eating in February
+            // and not
+            ItemType::Salt => 12,
             ItemType::Copper => 8,  // Copper age material
             ItemType::Tin => 6,     // Bronze alloy ingredient
             ItemType::Iron => 10,

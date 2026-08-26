@@ -20,7 +20,7 @@ pub mod fatigue;
 pub mod practices;
 pub mod patterns;
 
-pub use agent::{Agent, AgentConfig, AgentState, Inventory, InventoryItem, LifeStage};
+pub use agent::{Agent, AgentConfig, AgentState, Ailment, Inventory, InventoryItem, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};
 pub use body::{
     Body, BodyPart, BodyPartType, BodyPartStatus, BodySummary, Condition, ConditionType,

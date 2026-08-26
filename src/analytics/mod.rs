@@ -386,6 +386,10 @@ impl Simulation {
         // the sun now knows something they did not
         self.who_saw_that_dry();
 
+        // And whoever has been living on a midden or beside a body may be
+        // about to find out what that costs
+        self.what_the_ground_underfoot_does();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -1440,10 +1444,28 @@ impl Simulation {
         // being told there was no water anywhere, which was the largest single
         // failure in the simulation.
         let carrying_water = agent.inventory.available_water() >= 1.0;
+
+        // Not the sea. Everybody knows better than to drink out of the sea -
+        // this is not a discovery, a mouthful tells you what it is - and
+        // everybody stops knowing better once they are dying of thirst, which
+        // is exactly how people have always come to do it.
+        let would_drink_the_sea = agent.would_i_drink_the_sea();
+        let drinkable = |resource: &crate::world::ResourceNode| {
+            if resource.resource_type != ResourceType::Water {
+                return false;
+            }
+            if would_drink_the_sea {
+                return true;
+            }
+            !self
+                .world
+                .grid
+                .get_tile(&resource.position)
+                .is_some_and(|tile| tile.terrain.is_the_water_salt())
+        };
+
         let water_in_reach = self
-            .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
-                resource.resource_type == ResourceType::Water
-            })
+            .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, drinkable)
             .is_some();
 
         if carrying_water || water_in_reach {
@@ -1518,6 +1540,15 @@ impl Simulation {
         // in 3,254 were carrying any food at all - three in a hundred - so
         // there was never a load to carry home.
         let putting_by = self.is_this_lot_for_the_store(agent, agent_position);
+
+        // A carcass has to come apart before any of the rest of this means
+        // anything. This sits above cooking and above eating because it is
+        // the step that makes either possible: a man with a deer over his
+        // shoulder and nothing cut is a man with no food at all, and before
+        // this he simply ate the deer.
+        if let Some((verb, to)) = agent.what_flesh_i_should_cut_up() {
+            return Some(Action::Work { verb, to });
+        }
 
         // A fire right here turns a third of what is in raw meat into nearly
         // all of it, so one tick spent cooking buys back several meals' worth.
@@ -3252,13 +3283,122 @@ impl Simulation {
 
         let spare = agent.what_food_i_can_spare();
 
+        // Cut it down small before you do anything else with it.
+        //
+        // This is the difference between a joint and a strip and it is the
+        // only reason anybody would bother: a joint takes most of a week in
+        // the sun and a strip is dry in two days. Somebody putting food by
+        // for a winter has the time and a reason to spend it, where somebody
+        // who is simply hungry does not - which is why this sits here and not
+        // in `food_action`.
+        //
+        // The first cut of the portioning work left this out and made strips
+        // a second step off a joint with nobody to take it, so a settlement
+        // cut three hundred carcasses up a world and made almost no strips at
+        // all - the preservation chain built the batch before had quietly
+        // lost its way in.
+        if let Some((verb, to)) = agent.what_i_would_cut_down_for_keeping() {
+            return Some(Action::Work { verb, to });
+        }
+
+        // If there is a hole right here with room in it, use it.
+        //
+        // This goes first, ahead of every way of preserving a thing, and the
+        // ordering is the whole lesson of this batch. Burying is one turn and
+        // it is what actually gets food through to February. Preserving is
+        // several turns and only pays if the food is somewhere it will keep.
+        // With the preservation branches in front, a settlement spent some
+        // two thousand turns a world cutting, boiling, salting and drying,
+        // and put a third as much in the ground as it had before any of it
+        // existed - all the machinery working, and the settlement worse off.
+        if let Some((what, _)) = spare.clone() {
+            if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
+                return Some(Action::Cover { what });
+            }
+        }
+
+        // Salt it, if there is salt for it.
+        //
+        // Salting is the third way of keeping a thing and the only one that
+        // needs neither a week of sun nor a fire kept going - which makes it
+        // the answer in a wet autumn, when the drying branch below simply
+        // never comes good. It sits above drying because salt in the pack is
+        // salt already paid for: leaving it there while food turns is waste.
+        if agent.how_many_i_have("salt") >= Self::WHAT_IT_TAKES_TO_SALT_A_LOT {
+            if let Some((what, _)) = agent.what_i_could_salt() {
+                return Some(Action::Salt { what });
+            }
+        }
+
+        // And go and make some, if there is a sea to make it out of and a
+        // fire to make it over. Only in autumn and only with food worth
+        // keeping: boiling the sea in June is a way of spending a day.
+        //
+        // And only when the sky will not do it for nothing. Drying costs a
+        // turn and a fortnight of weather; boiling costs a turn, a fire and
+        // the wood to keep it going. Nobody boils the sea on a clear day in
+        // October - the first cut left this out and a settlement boiled the
+        // sea three hundred and eighty times a world.
+        if agent.how_many_i_have("salt") < Self::WHAT_IT_TAKES_TO_SALT_A_LOT
+            && spare.is_some()
+            && !self.is_the_sky_clear()
+            && matches!(
+                self.world.climate.current_season(),
+                crate::environment::seasons::Season::Fall
+            )
+            && self.salt_water_within_reach(agent_position).is_some()
+            && self
+                .nearest_fire_from(agent_position, Self::WITHIN_REACH_OF_THE_HEARTH, true)
+                .is_some()
+        {
+            return Some(Action::Boil);
+        }
+
         // Dry it before you bury it. A hole in the ground makes a thing keep
         // four times as long; drying makes it keep twenty. Doing both is what
         // a store is actually for, and doing neither is why nothing anybody
         // put by ever lasted the winter.
-        if let Some((what, _)) = spare.clone() {
-            if agent.is_it_worth_drying(&what) {
-                return Some(Action::Dry { what });
+        //
+        // Asked of everything in the pack rather than of the one biggest
+        // stack. The first cut of this used `what_food_i_can_spare`, which
+        // picks by size, and a settlement carries more whole fish than
+        // anything else - so the drying branch spent its life being handed a
+        // whole fish. That worked, and it should not have: laying a whole
+        // fish in the sun turns it. Once whole flesh was correctly refused,
+        // the branch went quiet altogether and the winter store fell by a
+        // quarter, because a settlement's entire preservation output had been
+        // built on drying fish that ought to have rotted.
+        if let Some((what, _)) = agent.what_i_could_dry() {
+            return Some(Action::Dry { what });
+        }
+
+        // Lay it out where you stand, if you do not yet know what that does.
+        //
+        // This is how anybody ever finds out, and it has to come before
+        // burying or nobody ever does. Nobody here is born knowing that cut
+        // flesh laid in the sun keeps and a whole fish laid in the sun turns;
+        // somebody has to put something down and come back to it.
+        //
+        // It sat after the pit branches and after the autumn gate to begin
+        // with, so it effectively never ran - a fourth circular precondition
+        // of the same family as the three the provisioning work turned up.
+        // You had to have seen drying to choose to dry, and the only route to
+        // seeing it was behind two conditions that were almost never both
+        // true. What a settlement actually did instead was lay whole fish out
+        // to dry, which worked and should not have.
+        //
+        // Once somebody knows, the drying branch above catches it first and
+        // this goes quiet - which is right. Laying food on the ground is what
+        // you do before you know better; drying it deliberately is what you
+        // do after.
+        if !agent
+            .what_i_found_out()
+            .contains(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
+        {
+            if let Some((what, _)) = spare.clone() {
+                if crate::world::World::will_this_dry(&what) && self.is_the_sky_clear() {
+                    return Some(Action::PutDown { what });
+                }
             }
         }
 
@@ -3311,22 +3451,6 @@ impl Simulation {
             return Some(Action::Gather {
                 resource_type: "food".to_string(),
             });
-        }
-
-        // More than can be eaten, nowhere to put it, and a dry sky. Lay it
-        // out where you stand.
-        //
-        // This is how anybody ever finds out. Nobody here is born knowing
-        // that cut flesh laid in the sun keeps and a whole fish laid in the
-        // sun turns; somebody has to put something down and come back to it.
-        // A person carrying more than they can eat with no store to put it in
-        // puts it down, which is a perfectly ordinary thing to do and happens
-        // to be the beginning of every preserved thing this people will ever
-        // have.
-        if let Some((what, _)) = spare.clone() {
-            if crate::world::World::will_this_dry(&what) && self.is_the_sky_clear() {
-                return Some(Action::PutDown { what });
-            }
         }
 
         // No store anywhere, and the year turning. Dig one.
@@ -3397,6 +3521,43 @@ impl Simulation {
             .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
             .unwrap_or(false)
     }
+
+    /// Salt water close enough to dip a pot in.
+    fn salt_water_within_reach(&self, from: (i32, i32, i32)) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        for dy in -Self::AS_FAR_AS_A_POT_GETS_CARRIED..=Self::AS_FAR_AS_A_POT_GETS_CARRIED {
+            for dx in -Self::AS_FAR_AS_A_POT_GETS_CARRIED..=Self::AS_FAR_AS_A_POT_GETS_CARRIED {
+                let there = Position::new(from.0 + dx, from.1 + dy);
+                if self
+                    .world
+                    .grid
+                    .get_tile(&there)
+                    .is_some_and(|tile| tile.terrain.is_the_water_salt())
+                {
+                    return Some(there);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// How far somebody will carry a pot of sea water to a fire.
+    ///
+    /// Not far. Water is heavy, and the point of boiling the sea is that you
+    /// are standing beside it.
+    const AS_FAR_AS_A_POT_GETS_CARRIED: i32 = 4;
+
+    /// What one pot of the sea leaves behind when the water has gone.
+    ///
+    /// Two. This is why salt is dear and why a settlement that has a flat or
+    /// a seam within reach uses that instead: boiling is the answer for
+    /// people who have neither.
+    const WHAT_A_POT_OF_THE_SEA_LEAVES: u32 = 2;
+
+    /// How much salt it takes to keep one lot of food.
+    const WHAT_IT_TAKES_TO_SALT_A_LOT: u32 = 1;
 
     /// Whether the sky is doing anything that would dry a thing laid out in
     /// it.
@@ -3757,6 +3918,9 @@ impl Simulation {
                 .inventory
                 .get_item(food_type)
                 .filter(|item| item.quantity > 0)
+                .filter(|item| {
+                    crate::world::nutrition::Piece::of(&item.item_id).can_it_be_cooked()
+                })
                 .map(|item| item.item_id.clone());
         }
 
@@ -3775,6 +3939,12 @@ impl Simulation {
                 crate::agents::storage_integration::id_to_item_type(&item.item_id)
                     .map(|item_type| item_type.cooking_outcome() == CookingOutcome::Improves)
                     .unwrap_or(false)
+            })
+            // A whole beast does not go over a fire. What happens if you try
+            // is that the outside chars and the inside stays raw, which is
+            // the same thing as not having cooked it.
+            .filter(|item| {
+                crate::world::nutrition::Piece::of(&item.item_id).can_it_be_cooked()
             })
             .map(|item| item.item_id.clone())
             .min()
@@ -4540,11 +4710,29 @@ impl Simulation {
             if let Some(tile) = self.world.grid.get_tile_mut(&here) {
                 tile.soil.add_leaf_litter(soft);
                 tile.soil.add_woody_litter(bone);
+
+                // And it fouls the ground it fell on, which is the whole
+                // reason a body is a thing you want to be away from. Until
+                // now a corpse was a nutrient deposit and nothing else -
+                // agents walked over their own dead with no more consequence
+                // than walking over leaf mould.
+                tile.soil.somebody_voided_here(
+                    soft * Self::HOW_MUCH_OF_A_BODY_IS_FOULING,
+                );
             }
         }
 
         self.what_the_dead_left_behind();
     }
+
+    /// What share of what a body is left on the ground counts as fouling.
+    ///
+    /// A body is a great deal of soft matter and only some of it is the part
+    /// that makes ground foul, so this is well under one. What it has to do
+    /// is put a fresh corpse comfortably over `FOUL_ENOUGH_TO_WALK_AWAY_FROM`,
+    /// so that people move off ground somebody died on and come back to it
+    /// once it has broken down.
+    const HOW_MUCH_OF_A_BODY_IS_FOULING: f32 = 0.4;
 
     /// What a person was carrying stays where they fell.
     ///
@@ -5153,6 +5341,68 @@ impl Simulation {
             }
         }
     }
+
+    /// Living on a midden, or beside somebody's body.
+    ///
+    /// "Spending time near dead bodies or fresh waste" - and the two are one
+    /// question here, because a corpse fouls the ground it falls on the same
+    /// way a midden does. Agents already step off foul ground when they
+    /// notice it; what was missing is any reason to, beyond distaste.
+    ///
+    /// Nothing here is certain and nothing is fast. Standing on fouled ground
+    /// for one tick is almost always nothing; living on it is what tells.
+    fn what_the_ground_underfoot_does(&mut self) {
+        use rand::Rng;
+
+        if self.current_tick % Self::HOW_OFTEN_THE_GROUND_IS_ASKED != 0 {
+            return;
+        }
+
+        let now = self.current_tick;
+        let mut rng = rand::thread_rng();
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive || agent.is_ailing() {
+                continue;
+            }
+
+            let here = crate::world::Position::new(agent.state.position.0, agent.state.position.1);
+            let Some(tile) = self.world.grid.get_tile(&here) else {
+                continue;
+            };
+
+            if !tile.soil.is_foul() {
+                continue;
+            }
+
+            // How foul, as a share of as foul as ground gets.
+            let how_bad = (tile.soil.fouling / crate::world::Soil::AS_FOUL_AS_IT_GETS)
+                .clamp(0.0, 1.0);
+            let odds = Self::HOW_OFTEN_FOUL_GROUND_TELLS * how_bad as f64;
+
+            if rng.gen_bool(odds.clamp(0.0, 1.0)) {
+                agent.taken_ill_with(
+                    crate::agents::Agent::OFF_FOUL_GROUND,
+                    0.25 + 0.35 * how_bad,
+                    now,
+                );
+            }
+        }
+    }
+
+    /// How often the ground under everybody is asked about.
+    ///
+    /// Once a day rather than every tick: this is a question about living
+    /// somewhere, not about walking across it.
+    const HOW_OFTEN_THE_GROUND_IS_ASKED: u32 = crate::environment::seasons::TICKS_PER_DAY;
+
+    /// And how often a day spent on the worst ground there is makes somebody
+    /// ill.
+    ///
+    /// One day in twenty at the very worst, which over a season on a midden
+    /// is most of a settlement and over a week is almost nobody. Fouling
+    /// breaks down, so this is a pressure to move rather than a sentence.
+    const HOW_OFTEN_FOUL_GROUND_TELLS: f64 = 0.05;
 
     /// What an agent has to have seen before it will deliberately lay food
     /// out to dry.
@@ -7148,11 +7398,30 @@ impl Simulation {
                         && self.population.agents[agent_index].is_that_plant_food(resource.kind)
                 };
 
+                // And whether this one would put its face in it. The decision
+                // layer already leaves the sea alone; this is the same
+                // question asked again here, because the executor takes the
+                // *nearest* water and a man walking to a stream should not
+                // end up at the sea because the sea was closer.
+                let would_drink_the_sea =
+                    self.population.agents[agent_index].would_i_drink_the_sea();
+                let a_drink_this_one_would_take = |resource: &crate::world::ResourceNode| {
+                    if resource.resource_type != ResourceType::Water || would_drink_the_sea {
+                        return true;
+                    }
+                    !self
+                        .world
+                        .grid
+                        .get_tile(&resource.position)
+                        .is_some_and(|tile| tile.terrain.is_the_water_salt())
+                };
+
                 for (i, resource) in self.world.resources.iter().enumerate() {
-                    let matches_request = resource.resource_type == resource_type_enum
+                    let matches_request = (resource.resource_type == resource_type_enum
                         || (gathering_food
                             && (Self::edible_item_for(resource.resource_type).is_some()
-                                || knows_it_is_food(resource)));
+                                || knows_it_is_food(resource))))
+                        && a_drink_this_one_would_take(resource);
 
                     if matches_request && resource.amount > 0 {
                         let distance = agent_pos.distance_to(&resource.position);
@@ -7269,6 +7538,17 @@ impl Simulation {
                     if harvested > 0 {
                         // Water is consumed immediately (drinking), not stored
                         if resource_type_enum == ResourceType::Water {
+                            // And whether it is water worth drinking is a
+                            // question about the ground it is standing on.
+                            // Every drop in this world was fresh until now: a
+                            // river, a spring and the sea were one terrain
+                            // and one drink.
+                            let salt = self
+                                .world
+                                .grid
+                                .get_tile(&self.world.resources[resource_index].position)
+                                .is_some_and(|tile| tile.terrain.is_the_water_salt());
+
                             let agent = &mut self.population.agents[agent_index];
 
                             // Satisfy thirst drive
@@ -7279,6 +7559,19 @@ impl Simulation {
                             // Reset dehydration counter
                             agent.state.last_drank_tick = self.current_tick;
                             agent.state.ticks_without_water = 0;
+
+                            if salt {
+                                // "Even if it seems to temporarily satiate
+                                // it." The thirst goes down on the tick and
+                                // comes back worse for days, which is the
+                                // whole shape of the mistake.
+                                agent.drank_salt_water(self.current_tick);
+
+                                return ActionResult::success()
+                                    .with_drive_change(DriveType::Thirst, -0.5)
+                                    .with_energy_cost(5.0)
+                                    .with_message("Drank salt water".to_string());
+                            }
 
                             // Fill containers if agent has any
                             let filled = agent.inventory.fill_containers(harvested as f32);
@@ -9947,7 +10240,13 @@ impl Simulation {
                     .get_item(&chosen)
                     .map(|item| item.quantity)
                     .unwrap_or(0);
-                let quantity = carried.min(Self::COOK_BATCH);
+                // How much of it fits over the flames, which is a question
+                // about how small it was cut. Cut into strips and most of a
+                // pack is ready at the end of one turn; left as joints and it
+                // takes several.
+                let over_the_flames = crate::world::nutrition::Piece::of(&chosen)
+                    .how_many_fit_over_a_fire();
+                let quantity = carried.min(Self::COOK_BATCH).min(over_the_flames);
 
                 if quantity == 0 {
                     return ActionResult::failure(format!("No {} to cook", chosen));
@@ -10612,6 +10911,95 @@ impl Simulation {
                     .with_message(format!("Looked at a {what}: it is for a {worth_a_look}"))
             },
 
+            Action::Boil => {
+                // The sea boiled down for what is in it.
+                //
+                // A coast is worth living on for this, and it is the only
+                // route to salt for a people with no flat and no seam. It
+                // wants three things at once - salt water within reach, a
+                // fire already going, and something to boil it in - which is
+                // why it is a thing a settled people does and a wandering one
+                // does not.
+                let where_i_am = self.population.agents[agent_index].state.position;
+
+                if self.salt_water_within_reach(where_i_am).is_none() {
+                    return ActionResult::failure("No salt water within reach".to_string());
+                }
+
+                if self
+                    .nearest_fire_from(where_i_am, Self::WITHIN_REACH_OF_THE_HEARTH, true)
+                    .is_none()
+                {
+                    return ActionResult::failure("No lit fire to boil it over".to_string());
+                }
+
+                let tick_now = self.current_tick;
+                let agent = &mut self.population.agents[agent_index];
+
+                // What a pot of sea water comes to when the water has gone,
+                // which is not much - that is the whole of why salt is dear.
+                let came_out = Self::WHAT_A_POT_OF_THE_SEA_LEAVES;
+
+                agent.inventory.add_item(crate::agents::InventoryItem::new_with_weight(
+                    "salt".to_string(),
+                    came_out,
+                    0.2,
+                ));
+                agent.skills.practise(crate::agents::SkillType::Cooking, 8, tick_now);
+                agent.lessons.record_particular("boil", true);
+                agent.found_out_how_to("salt");
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Preparedness, -0.15)
+                    .with_energy_cost(9.0)
+                    .with_message(format!("Boiled the sea down for {came_out} salt"))
+            }
+
+            Action::Salt { what } => {
+                use crate::world::nutrition::PreparationState;
+
+                let agent = &mut self.population.agents[agent_index];
+
+                if agent.how_many_i_have("salt") < Self::WHAT_IT_TAKES_TO_SALT_A_LOT {
+                    return ActionResult::failure("No salt to rub into it".to_string());
+                }
+
+                if crate::world::nutrition::Piece::of(what)
+                    == crate::world::nutrition::Piece::Whole
+                {
+                    return ActionResult::failure(format!(
+                        "{what} would have to be cut up before it would take salt"
+                    ));
+                }
+
+                let Some(item) = agent.inventory.get_item_mut(what) else {
+                    return ActionResult::failure(format!("No {what} to salt"));
+                };
+
+                let Some(food) = item.food_data.as_mut() else {
+                    return ActionResult::failure(format!("{what} is not food"));
+                };
+
+                if food.preparation != PreparationState::Raw {
+                    return ActionResult::failure(format!("That {what} is already seen to"));
+                }
+
+                if food.freshness < Self::TOO_FAR_GONE_TO_KEEP {
+                    return ActionResult::failure(format!("That {what} is past saving"));
+                }
+
+                let now = self.current_tick;
+                food.set_preparation(PreparationState::Salted, now);
+
+                agent.inventory.remove_item("salt", Self::WHAT_IT_TAKES_TO_SALT_A_LOT);
+                agent.lessons.record_particular("salt", true);
+
+                ActionResult::success()
+                    .with_drive_change(DriveType::Preparedness, -0.2)
+                    .with_energy_cost(3.0)
+                    .with_message(format!("Salted the {what}"))
+            }
+
             Action::Dry { what } => {
                 use crate::world::nutrition::PreparationState;
 
@@ -10635,6 +11023,16 @@ impl Simulation {
                     return ActionResult::failure(
                         "Nobody here knows what laying it out would do".to_string(),
                     );
+                }
+
+                // And a whole beast does not dry however long you leave it
+                // out. Laying a carcass in the sun is how you make carrion.
+                if crate::world::nutrition::Piece::of(what)
+                    == crate::world::nutrition::Piece::Whole
+                {
+                    return ActionResult::failure(format!(
+                        "{what} would have to be cut up before it would dry"
+                    ));
                 }
 
                 let Some(item) = agent.inventory.get_item_mut(what) else {

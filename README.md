@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 242 source files, with 1,657 library tests.
+across 245 source files, with 1,713 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,694 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,746 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -165,6 +165,55 @@ original specifications.
   out of 1,525 for want of anything to bury. Winter stores went from nothing
   at all to 42 units standing through the lean season, pits from 2 to 10,
   burials from 4 to 86, and food dried or smoked from 2.8 a world to 666
+- ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
+  in the way: one `Eat` swallowed one unit off a kill, the only gates were
+  "is it spoiled" and "is it poison", and cooking was worth 2.7 times the
+  nutrition and nothing else. A carcass is now whole until somebody takes a
+  knife to it, and while it is whole it can be neither eaten nor put over a
+  fire. Everybody is born knowing a carcass comes apart — there is nothing to
+  discover about a joint of meat — but knowing it is not the same as having an
+  edge to do it with. Strips come off a joint rather than off the animal, dry
+  in two days where a joint takes most of a week, and twice as many of them
+  fit over a fire, which is the whole reason anybody bothers cutting a thing
+  thin rather than just quartering it
+- ✅ People get ill. There was no sickness anywhere in this project: the only
+  health consequence in it was a flat ten damage for eating something already
+  past saving, taken in one tick and done with, so a settlement could live on
+  raw flesh and sleep in its own midden and never know the difference. Raw
+  flesh is a gamble now — about one meal in twelve — and food that has started
+  to go is a worse one the further gone it is, and a day on fouled ground is
+  worse again. A body fouls the ground it falls on, which is what makes a
+  corpse a thing to be away from rather than a nutrient deposit. An ailment
+  lasts days rather than landing in a tick, because what costs a settlement is
+  not the damage but somebody laid up for a week in the autumn. Two weeks in
+  bed off the same thing and an agent will leave that thing alone, unless it
+  is starving, in which case a strong enough survival drive overrides the risk
+  as it does everywhere else
+- ✅ Salt, and the sea it mostly comes out of. `PreparationState::Salted` was
+  written, tested and unreachable for the whole life of the project, because
+  there was no salt anywhere in the world — and there was only one kind of
+  water in it: a river, a spring and the sea were the same terrain and the
+  same drink. There are three new grounds now. The sea forms where the land
+  falls furthest away, salt marsh where it meets the shore, and salt flats
+  where a shallow sea dried up and left what was in it. Salt is picked up off
+  a flat, broken out of rare seams in the hills, or boiled out of the sea by a
+  people who have neither — and a pot of the sea leaves almost none of it,
+  which is why salt is dear. Salting keeps food about seven times as long and,
+  unlike drying, needs neither a fortnight of sun nor a fire kept going, so it
+  is the answer in a wet autumn. Sea water is a drink that costs more than it
+  gives: it slakes the thirst on the tick and raises it for days afterwards.
+  Everybody knows better — a mouthful tells you what it is — and nobody who is
+  three days dry knows better at all.
+
+  What all three cost is **cooking, down by three fifths**, and that is the
+  efficiency trade again: turns spent quartering a deer, boiling the sea and
+  rubbing salt in are turns not spent at the fire. Population and burials do
+  not move. Four rounds of measurement were needed and the third and fourth
+  each found something: a settlement's entire preservation output had been
+  drying *whole fish*, which ought to rot; and with every way of preserving a
+  thing placed ahead of burying it, a settlement spent two thousand turns a
+  world preserving food and put a third as much in the ground as before any of
+  it existed. See ISSUES_FOUND.md #28
 - ✅ The sun and the rain do the preserving, and somebody has to notice. Food
   lying on the ground used to age at one flat penalty whatever the sky was
   doing. Now what falls on a thing decides what happens to it: rain rots, and

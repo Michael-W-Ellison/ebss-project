@@ -76,6 +76,130 @@ pub enum CookingOutcome {
     NotFood,
 }
 
+/// How big the piece is.
+///
+/// "Can they just absorb an entire side of beef? Should they not have to cut
+/// it into smaller pieces so they can cook and eat it?" - and they could, and
+/// they should. A kill dropped two-kilo lumps of `meat` that an agent ate raw,
+/// one lump per bite, with nothing in between the carcass and the mouth.
+///
+/// A piece is not a property an item carries about with it; it is a thing you
+/// can read off what the item *is*, the same way `World::will_this_dry` reads
+/// off an id. A carcass is whole until somebody takes a knife to it, and what
+/// comes off the knife says so in its name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Piece {
+    /// A carcass, or a fish out of the water with its head still on. Too much
+    /// to put in your mouth and too much to put over a fire.
+    Whole,
+    /// A joint: what one person takes off a carcass to cook and eat now.
+    Portion,
+    /// Cut down thin, which is what you do to a thing you mean to keep rather
+    /// than to eat.
+    Strip,
+    /// What arrives at about the size of a mouthful and needs no butchering
+    /// at all: a berry, a handful of grain, a root.
+    ///
+    /// Distinct from a joint because thickness and bulk are two different
+    /// questions and the first cut of this merged them. A berry has the bulk
+    /// of a mouthful and the thickness of nothing, so it dries as fast as a
+    /// strip and goes over a fire in the same quantities everything always
+    /// did.
+    Small,
+}
+
+impl Piece {
+    /// What size the thing with this id is.
+    ///
+    /// Flesh is whole until it is cut. Everything else - a berry, a handful of
+    /// grain, a root - arrives at about the size of a mouthful and needs no
+    /// butchering, so it counts as a portion from the start.
+    pub fn of(item_id: &str) -> Self {
+        let id = item_id.to_lowercase();
+
+        if id.ends_with("strips") {
+            return Self::Strip;
+        }
+        if id.ends_with("portions") {
+            return Self::Portion;
+        }
+        if Self::is_it_flesh(&id) {
+            return Self::Whole;
+        }
+
+        Self::Small
+    }
+
+    /// Whether this is the kind of thing that comes off an animal in one
+    /// piece and has to be taken apart.
+    ///
+    /// Kept here, in one place, rather than spread across the dozen call
+    /// sites that want to know.
+    pub fn is_it_flesh(item_id: &str) -> bool {
+        let id = item_id.to_lowercase();
+        let base = id
+            .strip_prefix("cooked_")
+            .or_else(|| id.strip_prefix("burnt_"))
+            .unwrap_or(&id);
+
+        // And a joint of it is still flesh, which the first cut of this got
+        // wrong: it stripped the cooking prefix and not the cutting suffix,
+        // so `meatportions` read as something that had never been an animal
+        // and eating it raw carried no risk at all.
+        let base = base
+            .strip_suffix("portions")
+            .or_else(|| base.strip_suffix("strips"))
+            .unwrap_or(base);
+
+        matches!(base, "meat" | "fish")
+    }
+
+    /// Whether a person can put this in their mouth as it is.
+    pub fn can_it_be_eaten(&self) -> bool {
+        !matches!(self, Self::Whole)
+    }
+
+    /// Whether this will go over a fire.
+    ///
+    /// A whole carcass will not: what happens to a beast laid on a fire is
+    /// that the outside chars and the inside stays raw, which is the same
+    /// thing as not cooking it.
+    pub fn can_it_be_cooked(&self) -> bool {
+        !matches!(self, Self::Whole)
+    }
+
+    /// How many of these fit over the flames at once.
+    ///
+    /// This is what "smaller portions cook faster" comes to in a model where
+    /// an action is a tick: cut small, and more of your supper is ready at the
+    /// end of the same turn.
+    ///
+    /// A portion is deliberately the same five that everything was before
+    /// this existed, so that a basket of berries cooks exactly as it always
+    /// did and the only thing that has changed is what a carcass costs you.
+    pub fn how_many_fit_over_a_fire(&self) -> u32 {
+        match self {
+            Self::Whole => 0,
+            Self::Portion | Self::Small => 5,
+            Self::Strip => 10,
+        }
+    }
+
+    /// How long this has to lie in the sun before it is dry, in weathering
+    /// passes.
+    ///
+    /// A strip is dry in a couple of days and a joint takes most of a week,
+    /// which is the whole reason anybody bothers cutting a thing into strips
+    /// rather than just quartering it.
+    pub fn how_long_it_takes_to_dry(&self) -> u32 {
+        match self {
+            Self::Whole => u32::MAX,
+            Self::Portion => 72,
+            Self::Strip | Self::Small => 24,
+        }
+    }
+}
+
 /// Preparation state of food affecting utilization and spoilage
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum PreparationState {

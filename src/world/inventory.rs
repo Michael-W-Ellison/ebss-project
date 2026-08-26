@@ -42,6 +42,7 @@ pub enum ItemType {
 
     // === Raw Materials (Mineral) ===
     Clay,
+    Salt,
     Sand,
     Coal,
     Copper,

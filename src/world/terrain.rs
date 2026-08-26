@@ -19,6 +19,20 @@ pub enum TerrainType {
     Beach,    // Coastal area - sand, shells, fish access
     Riverbank, // Along rivers - clay, flax, fishing
 
+    /// Salt water. Everything in this world drank out of the same kind of
+    /// water until now: a river, a spring and the sea were one terrain and
+    /// one drink. The sea is where salt comes from and where a thirsty man
+    /// makes his worst mistake.
+    Sea,
+
+    /// Where the sea meets the land and neither wins. Brackish, boggy, and
+    /// worth boiling for what is in it.
+    SaltMarsh,
+
+    /// Where a shallow sea dried up and left what was in it. Rare, walkable,
+    /// and the only place salt can simply be picked up off the ground.
+    SaltFlat,
+
     /// Ground broken and sown by an agent - crops grow here far faster than
     /// anything wild, which is how a settlement feeds more people than the
     /// country around it would carry
@@ -42,9 +56,30 @@ impl Terrain {
             TerrainType::Plains | TerrainType::Forest | TerrainType::Mountain |
             TerrainType::Desert | TerrainType::Meadow | TerrainType::Hills |
             TerrainType::Beach | TerrainType::Riverbank | TerrainType::Wetland |
-            TerrainType::Farmland => true,
-            TerrainType::Water => false, // Requires swimming
+            TerrainType::Farmland | TerrainType::SaltMarsh | TerrainType::SaltFlat => true,
+            TerrainType::Water | TerrainType::Sea => false, // Requires swimming
         }
+    }
+
+    /// Whether the water here is salt.
+    ///
+    /// "Agents should know not to drink salt water but if they do so it
+    /// should increase their hydration drive more over time even if it seems
+    /// to temporarily satiate it."
+    pub fn is_the_water_salt(&self) -> bool {
+        matches!(
+            self.terrain_type,
+            TerrainType::Sea | TerrainType::SaltMarsh
+        )
+    }
+
+    /// Whether salt can be had here at all, by picking it up or by boiling
+    /// for it.
+    pub fn is_there_salt_here(&self) -> bool {
+        matches!(
+            self.terrain_type,
+            TerrainType::Sea | TerrainType::SaltMarsh | TerrainType::SaltFlat
+        )
     }
 
     /// Whether this ground can be broken into a field.
@@ -75,7 +110,14 @@ impl Terrain {
 
     /// Check if this is aquatic terrain (water or wetland)
     pub fn is_aquatic(&self) -> bool {
-        matches!(self.terrain_type, TerrainType::Water | TerrainType::Wetland | TerrainType::Riverbank)
+        matches!(
+            self.terrain_type,
+            TerrainType::Water
+                | TerrainType::Wetland
+                | TerrainType::Riverbank
+                | TerrainType::Sea
+                | TerrainType::SaltMarsh
+        )
     }
 
     /// Get movement cost (for pathfinding)
@@ -85,8 +127,9 @@ impl Terrain {
             | TerrainType::Farmland => 1,
             TerrainType::Forest | TerrainType::Hills | TerrainType::Riverbank => 2,
             TerrainType::Mountain | TerrainType::Desert => 3, // Desert is slow due to sand
-            TerrainType::Wetland => 4, // Slow slogging through marsh
-            TerrainType::Water => u32::MAX, // Requires swimming skill check
+            TerrainType::Wetland | TerrainType::SaltMarsh => 4, // Slow slogging through marsh
+            TerrainType::SaltFlat => 2, // Crusted and uneven, but dry
+            TerrainType::Water | TerrainType::Sea => u32::MAX, // Requires swimming skill check
         }
     }
 
@@ -135,8 +178,9 @@ impl Terrain {
             TerrainType::Forest | TerrainType::Hills | TerrainType::Riverbank => 1.3,
             TerrainType::Mountain => 2.0,
             TerrainType::Desert => 1.8, // Heat makes it tiring
-            TerrainType::Wetland => 1.5, // Slogging is tiring
-            TerrainType::Water => 3.0, // Swimming is very tiring
+            TerrainType::Wetland | TerrainType::SaltMarsh => 1.5, // Slogging is tiring
+            TerrainType::SaltFlat => 1.4, // Hot, bright and hard underfoot
+            TerrainType::Water | TerrainType::Sea => 3.0, // Swimming is very tiring
         }
     }
 
@@ -152,6 +196,9 @@ impl Terrain {
             TerrainType::Meadow => ',',
             TerrainType::Hills => 'n',
             TerrainType::Beach => '_',
+            TerrainType::Sea => '≈',
+            TerrainType::SaltMarsh => ';',
+            TerrainType::SaltFlat => '=',
             TerrainType::Riverbank => '=',
             TerrainType::Farmland => '#',
         }
@@ -169,6 +216,9 @@ impl Terrain {
             TerrainType::Meadow => "\x1b[92m",   // Bright Green
             TerrainType::Hills => "\x1b[90m",    // Dark Gray
             TerrainType::Beach => "\x1b[97m",    // Bright White
+            TerrainType::Sea => "\x1b[34m",      // Blue, darker than a river
+            TerrainType::SaltMarsh => "\x1b[36m", // Cyan
+            TerrainType::SaltFlat => "\x1b[97m", // Bright White
             TerrainType::Riverbank => "\x1b[96m", // Bright Cyan
             TerrainType::Farmland => "\x1b[33m",  // Yellow, like the crop on it
         }

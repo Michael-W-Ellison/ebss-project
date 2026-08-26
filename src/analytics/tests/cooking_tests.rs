@@ -227,7 +227,8 @@ fn an_agent_with_nothing_worth_cooking_lights_no_fire() {
         "an agent carrying only berries has no reason to light a fire"
     );
 
-    // Give it a fish and it changes its mind
+    // A whole fish is still not: it has to be cut up before it will go over
+    // a fire at all - see `nutrition::Piece`.
     simulation.population.agents[0]
         .inventory
         .add_item(food_item("fish", ItemType::Fish, 5));
@@ -235,8 +236,20 @@ fn an_agent_with_nothing_worth_cooking_lights_no_fire() {
     assert!(
         simulation
             .cooking_action(&simulation.population.agents[0], position)
+            .is_none(),
+        "a whole fish chars outside and stays raw inside, which is not cooking"
+    );
+
+    // Cut into joints it changes its mind
+    simulation.population.agents[0]
+        .inventory
+        .add_item(food_item("fishportions", ItemType::Fish, 5));
+
+    assert!(
+        simulation
+            .cooking_action(&simulation.population.agents[0], position)
             .is_some(),
-        "a fish is worth a fire"
+        "a joint of fish is worth a fire"
     );
 }
 

@@ -648,6 +648,9 @@ fn terrain_description(terrain: crate::world::TerrainType) -> &'static str {
         TerrainType::Desert => "Arid sandy terrain with sparse vegetation.",
         TerrainType::Wetland => "Marshy area with water and vegetation.",
         TerrainType::Beach => "Sandy shoreline between land and water.",
+        TerrainType::Sea => "Salt water. Fish in it, salt in it, and nothing in it to drink.",
+        TerrainType::SaltMarsh => "Brackish and boggy, where the sea meets the land.",
+        TerrainType::SaltFlat => "Where a shallow sea dried up and left what was in it.",
         TerrainType::Riverbank => "The edge of a river, good for fishing.",
         TerrainType::Farmland => "Ground broken and sown; crops grow here far faster than anything wild.",
     }

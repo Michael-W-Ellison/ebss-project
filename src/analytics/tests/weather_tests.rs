@@ -85,23 +85,28 @@ fn what_is_left(simulation: &Simulation, where_it_is: Position) -> Option<(Prepa
 // Cutting it up
 // --------------------------------------------------------------------------
 
-/// A fish comes apart. Anybody with an edge works that out.
+/// A fish comes apart into joints, and a joint comes apart into strips.
+/// Anybody with an edge works both out.
 #[test]
 fn a_fish_can_be_cut_into_strips() {
-    let cutting = making::how_to_work("cut", "fish").expect("a fish comes apart");
-
-    assert_eq!(cutting.makes, "fishstrips");
+    let quartering = making::how_to_work("cut", "fish").expect("a fish comes apart");
+    assert_eq!(quartering.makes, "fishportions");
     assert!(
-        cutting.obvious,
+        quartering.obvious,
         "there is nothing to discover about a fish coming apart"
     );
+
+    let cutting = making::how_to_work("cut", "fishportions").expect("and a joint cuts down");
+    assert_eq!(cutting.makes, "fishstrips");
 }
 
 /// And so does a carcass.
 #[test]
 fn meat_can_be_cut_into_strips() {
-    let cutting = making::how_to_work("cut", "meat").expect("a carcass comes apart");
+    let quartering = making::how_to_work("cut", "meat").expect("a carcass comes apart");
+    assert_eq!(quartering.makes, "meatportions");
 
+    let cutting = making::how_to_work("cut", "meatportions").expect("and a joint cuts down");
     assert_eq!(cutting.makes, "meatstrips");
 }
 
@@ -317,11 +322,11 @@ fn nobody_dries_anything_on_purpose_before_they_have_seen_it_work() {
     let mut simulation = one_person();
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(a_meal(ItemType::Meat, "meat", 6, 0));
+        .add_item(a_meal(ItemType::Meat, "meatportions", 6, 0));
 
     let refused = simulation.execute_action(
         &Action::Dry {
-            what: "meat".to_string(),
+            what: "meatportions".to_string(),
         },
         0,
     );
@@ -335,7 +340,7 @@ fn nobody_dries_anything_on_purpose_before_they_have_seen_it_work() {
 
     let now = simulation.execute_action(
         &Action::Dry {
-            what: "meat".to_string(),
+            what: "meatportions".to_string(),
         },
         0,
     );

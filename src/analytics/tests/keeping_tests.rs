@@ -157,7 +157,7 @@ fn what_is_carried_goes_off() {
     let mut simulation = one_person();
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(a_meal(ItemType::Meat, "meat", 4, 0));
+        .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
 
     for _ in 0..(TICKS_PER_DAY * 12) {
         simulation.population.agents[0].tick_food_spoilage(simulation.world.tick);
@@ -165,7 +165,7 @@ fn what_is_carried_goes_off() {
     }
 
     assert_eq!(
-        simulation.population.agents[0].how_many_i_have("meat"),
+        simulation.population.agents[0].how_many_i_have("meatportions"),
         0,
         "a fortnight on, that is not meat any more"
     );
@@ -181,11 +181,11 @@ fn drying_food_makes_it_keep() {
     let mut simulation = one_person();
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(a_meal(ItemType::Meat, "meat", 4, 0));
+        .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
 
     let result = simulation.execute_action(
         &Action::Dry {
-            what: "meat".to_string(),
+            what: "meatportions".to_string(),
         },
         0,
     );
@@ -194,7 +194,7 @@ fn drying_food_makes_it_keep() {
 
     let how = simulation.population.agents[0]
         .inventory
-        .get_item("meat")
+        .get_item("meatportions")
         .and_then(|item| item.food_data.as_ref())
         .map(|food| food.preparation)
         .expect("still in the pack");
@@ -212,7 +212,7 @@ fn dried_meat_outlasts_raw_meat() {
     let mut simulation = one_person();
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(a_meal(ItemType::Meat, "meat", 4, 0));
+        .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(a_meal(ItemType::Meat, "venison", 4, 0));
@@ -230,7 +230,7 @@ fn dried_meat_outlasts_raw_meat() {
     }
 
     assert_eq!(
-        simulation.population.agents[0].how_many_i_have("meat"),
+        simulation.population.agents[0].how_many_i_have("meatportions"),
         0,
         "the raw one is gone"
     );
@@ -247,7 +247,7 @@ fn food_hung_over_a_fire_is_smoked() {
     let mut simulation = one_person();
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(a_meal(ItemType::Meat, "meat", 4, 0));
+        .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
 
     let fire = simulation
         .world
@@ -267,14 +267,14 @@ fn food_hung_over_a_fire_is_smoked() {
 
     simulation.execute_action(
         &Action::Dry {
-            what: "meat".to_string(),
+            what: "meatportions".to_string(),
         },
         0,
     );
 
     let how = simulation.population.agents[0]
         .inventory
-        .get_item("meat")
+        .get_item("meatportions")
         .and_then(|item| item.food_data.as_ref())
         .map(|food| food.preparation)
         .expect("still in the pack");
@@ -288,17 +288,17 @@ fn nobody_dries_the_same_thing_twice() {
     let mut simulation = one_person();
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(a_meal(ItemType::Meat, "meat", 4, 0));
+        .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
 
     simulation.execute_action(
         &Action::Dry {
-            what: "meat".to_string(),
+            what: "meatportions".to_string(),
         },
         0,
     );
     let again = simulation.execute_action(
         &Action::Dry {
-            what: "meat".to_string(),
+            what: "meatportions".to_string(),
         },
         0,
     );
@@ -311,7 +311,7 @@ fn nobody_dries_the_same_thing_twice() {
 #[test]
 fn nobody_dries_what_has_already_turned() {
     let mut simulation = one_person();
-    let mut going_off = a_meal(ItemType::Meat, "meat", 4, 0);
+    let mut going_off = a_meal(ItemType::Meat, "meatportions", 4, 0);
     if let Some(food) = going_off.food_data.as_mut() {
         food.freshness = 0.1;
     }
@@ -319,7 +319,7 @@ fn nobody_dries_what_has_already_turned() {
 
     let result = simulation.execute_action(
         &Action::Dry {
-            what: "meat".to_string(),
+            what: "meatportions".to_string(),
         },
         0,
     );

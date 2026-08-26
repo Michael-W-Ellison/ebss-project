@@ -92,6 +92,13 @@ impl TerrainResourceMapper {
             ResourceType::Clay => vec![TerrainType::Wetland, TerrainType::Riverbank],
             ResourceType::Sand => vec![TerrainType::Desert, TerrainType::Beach],
             ResourceType::Coal => vec![TerrainType::Hills, TerrainType::Mountain],
+            // On the flats where a shallow sea dried up, and in rare seams in
+            // the hills for a people with no coast at all
+            ResourceType::Salt => vec![
+                TerrainType::SaltFlat,
+                TerrainType::Mountain,
+                TerrainType::Hills,
+            ],
 
             // Agricultural
             ResourceType::Grain => vec![TerrainType::Plains, TerrainType::Meadow],
@@ -103,7 +110,12 @@ impl TerrainResourceMapper {
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => vec![],
 
             // Gatherable
-            ResourceType::Fish => vec![TerrainType::Water, TerrainType::Beach, TerrainType::Riverbank],
+            ResourceType::Fish => vec![
+                TerrainType::Water,
+                TerrainType::Beach,
+                TerrainType::Riverbank,
+                TerrainType::Sea,
+            ],
             ResourceType::Honey => vec![TerrainType::Forest, TerrainType::Meadow],
 
             // Processed/finished goods don't spawn naturally

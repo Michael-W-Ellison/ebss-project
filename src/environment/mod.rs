@@ -248,6 +248,13 @@ pub enum Action {
     /// Lay food out to dry, or hang it over a fire to smoke. The only thing
     /// anybody here can do to make food outlast the week it was got in
     Dry { what: String },
+    /// Boil sea or salt-marsh water down for what is in it. The one route to
+    /// salt for a people with no flat and no seam, and the reason a coast is
+    /// worth living on
+    Boil,
+    /// Rub salt into food, which keeps it about seven times as long as
+    /// leaving it alone and does not need a week of sun
+    Salt { what: String },
     /// Dig a pit in the ground here, to keep things in
     Excavate,
     /// Put something into the pit here and put the earth back over it
@@ -325,6 +332,8 @@ impl Action {
             Action::Equip { .. } => Some(DriveType::Utility),
             Action::Unequip { .. } => Some(DriveType::Utility),
             Action::Dry { .. } => Some(DriveType::Preparedness),
+            Action::Boil => Some(DriveType::Preparedness),
+            Action::Salt { .. } => Some(DriveType::Preparedness),
             Action::Excavate => Some(DriveType::Preparedness),
             Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),

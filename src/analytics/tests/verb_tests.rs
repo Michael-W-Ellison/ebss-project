@@ -173,7 +173,7 @@ fn every_verb_is_performed_by_something_real() {
         // And digging a store and filling it in
         "excavate", "cover",
         // And making food outlast the week it was got in
-        "dry",
+        "dry", "salt",
     ];
 
     for one in EVERY_VERB {

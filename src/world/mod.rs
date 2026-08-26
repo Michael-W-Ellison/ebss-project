@@ -554,7 +554,15 @@ impl World {
     /// difference a people here can actually see, and it is the only route
     /// they have to anything that keeps.
     pub fn will_this_dry(what: &str) -> bool {
+        // Flesh dries once somebody has cut it, and not before. A whole beast
+        // laid in the sun goes off; a joint of it takes most of a week and a
+        // strip of it two days - see `nutrition::Piece`.
+        if crate::world::nutrition::Piece::is_it_flesh(what) {
+            return crate::world::nutrition::Piece::of(what) != crate::world::nutrition::Piece::Whole;
+        }
+
         what.ends_with("strips")
+            || what.ends_with("portions")
             || matches!(what, "food" | "berries" | "greens" | "grain" | "roots")
     }
 
@@ -573,6 +581,9 @@ impl World {
     /// Two days of clear weather, which on this calendar is a real wait: rain
     /// in the middle of it does not undo the drying but it does stop it, so a
     /// wet fortnight is a fortnight nothing gets preserved.
+    /// Superseded by `nutrition::Piece::how_long_it_takes_to_dry`, which asks
+    /// the question this constant could not: how big is the piece.
+    #[allow(dead_code)]
     const HOW_LONG_DRYING_TAKES: u32 = 24;
 
     /// How often the weathering pass runs, which is what the extra ageing is
@@ -677,7 +688,14 @@ impl World {
             }
 
             let weathered = left.weathered;
-            let long_enough = left.dried_in_the_sun >= Self::HOW_LONG_DRYING_TAKES;
+
+            // How long it has to lie there is a question about how small it
+            // was cut. This was one flat number for everything, so a joint
+            // dried as fast as a strip and there was no reason on earth to
+            // cut a thing into strips.
+            let long_enough = left.dried_in_the_sun
+                >= crate::world::nutrition::Piece::of(&left.item.item_id)
+                    .how_long_it_takes_to_dry();
 
             if let Some(food) = left.item.food_data.as_mut() {
                 if long_enough && food.preparation == crate::world::nutrition::PreparationState::Raw
@@ -965,6 +983,33 @@ impl World {
             }
         }
 
+        // Salt: rare, and in two quite different places.
+        //
+        // On a flat, where a shallow sea dried up and left what was in it, it
+        // can be picked up off the ground. In a seam in the hills it has to
+        // be broken out. Both are scarce on purpose - a settlement that has
+        // neither has to boil the sea for it or go without, and going without
+        // is what most inland peoples actually did.
+        for (terrain, how_many, carrying) in [
+            (TerrainType::SaltFlat, Self::HOW_MANY_SALT_FLATS_CARRY, (40, 110)),
+            (TerrainType::Mountain, Self::HOW_MANY_SEAMS_IN_THE_HILLS, (15, 45)),
+        ] {
+            for _ in 0..how_many {
+                // Only where the ground for it actually exists. A world with
+                // no coast has no flats, and asking for a position on terrain
+                // that is not there would put salt in the middle of a wood.
+                if !self.is_there_any_of_this_terrain(terrain) {
+                    continue;
+                }
+                let pos = self.find_random_terrain_position(terrain);
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Salt,
+                    pos,
+                    rng.gen_range(carrying.0..carrying.1),
+                ));
+            }
+        }
+
         // Generate water sources (rivers, wells, springs)
         // Water is critical for survival - place near various terrains
         for _ in 0..config.water_sources {
@@ -983,7 +1028,35 @@ impl World {
                 rng.gen_range(200..500), // High capacity, water is abundant at source
             ));
         }
+
+        // And the sea, which is water and is not a drink.
+        //
+        // It has to be here as a water source or nobody could ever make the
+        // mistake: a thing an agent cannot reach is a thing an agent cannot
+        // learn about. What stops them drinking it is not that it is
+        // unreachable, it is that they know better - see
+        // `Agent::would_i_drink_the_sea`, which is false for everybody who is
+        // not already dying of thirst.
+        for terrain in [TerrainType::Sea, TerrainType::SaltMarsh] {
+            if !self.is_there_any_of_this_terrain(terrain) {
+                continue;
+            }
+            for _ in 0..Self::HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED {
+                let pos = self.find_random_terrain_position(terrain);
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Water,
+                    pos,
+                    // As much as any one source in this world carries. There
+                    // is no running the sea dry, but a node is a node and
+                    // nothing else in the world is allowed to be bigger.
+                    rng.gen_range(400..500),
+                ));
+            }
+        }
     }
+
+    /// How many places along a coast a person can get down to the water.
+    const HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED: u32 = 3;
 
     /// Generate naturalistic resources for technology progression
     fn generate_naturalistic_resources(&mut self, config: &ResourceConfig) {
@@ -1032,6 +1105,29 @@ impl World {
                 .push(pos_tuple);
         }
     }
+
+    /// Whether this world has any of a given ground in it at all.
+    ///
+    /// `find_random_terrain_position` falls back to *any* free tile when it
+    /// cannot find the ground it was asked for, which is right for wood in a
+    /// world short of forest and quite wrong for salt: it would put a salt
+    /// flat in the middle of a wood. A world with no coast should simply have
+    /// no flats.
+    fn is_there_any_of_this_terrain(&self, terrain_type: TerrainType) -> bool {
+        (0..self.grid.height).any(|y| {
+            (0..self.grid.width).any(|x| {
+                self.grid
+                    .get_tile(&Position::new(x as i32, y as i32))
+                    .is_some_and(|tile| tile.terrain.terrain_type == terrain_type)
+            })
+        })
+    }
+
+    /// How many patches of salt a world's flats carry.
+    const HOW_MANY_SALT_FLATS_CARRY: u32 = 4;
+
+    /// And how many seams there are in the hills, for a people with no coast.
+    const HOW_MANY_SEAMS_IN_THE_HILLS: u32 = 2;
 
     fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
         use rand::seq::SliceRandom;

@@ -352,6 +352,47 @@ pub const CRUSH_GRAIN: Working = Working {
     over_a_fire: false,
 };
 
+/// A carcass taken apart into joints.
+///
+/// Everybody is born knowing this. There is nothing to discover about a
+/// carcass coming apart - it is what a knife and an afternoon are for - and
+/// before this existed an agent ate a two-kilo lump of raw beast in one bite
+/// straight off the kill, because nothing in the model stood between the
+/// animal and the mouth.
+///
+/// A joint is what one person cooks and eats now. What it is *not* is a thing
+/// worth keeping, which is what the strips below are for.
+pub const CUT_MEAT_INTO_PORTIONS: Working = Working {
+    verb: "cut",
+    to: "meat",
+    how_much: 1,
+    makes: "meatportions",
+    how_many: 3,
+    hands: SkillType::Leatherworking,
+    effort: 3.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Meat),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// And a fish, which comes apart more easily and gives less.
+pub const CUT_FISH_INTO_PORTIONS: Working = Working {
+    verb: "cut",
+    to: "fish",
+    how_much: 1,
+    makes: "fishportions",
+    how_many: 2,
+    hands: SkillType::Leatherworking,
+    effort: 2.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Fish),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
 /// A fish opened out and cut down into strips.
 ///
 /// Obvious - anybody with an edge and a fish works out that a fish comes
@@ -361,7 +402,7 @@ pub const CRUSH_GRAIN: Working = Working {
 /// it happen, which is the point.
 pub const CUT_FISH_INTO_STRIPS: Working = Working {
     verb: "cut",
-    to: "fish",
+    to: "fishportions",
     how_much: 2,
     makes: "fishstrips",
     how_many: 2,
@@ -374,10 +415,10 @@ pub const CUT_FISH_INTO_STRIPS: Working = Working {
     over_a_fire: false,
 };
 
-/// And the same with a carcass.
+/// And the same with a joint of meat.
 pub const CUT_MEAT_INTO_STRIPS: Working = Working {
     verb: "cut",
-    to: "meat",
+    to: "meatportions",
     how_much: 2,
     makes: "meatstrips",
     how_many: 2,
@@ -496,6 +537,8 @@ pub const EVERY_WORKING: &[Working] = &[
     CUT_A_HIDE,
     SCRAPE_A_STICK,
     CRUSH_GRAIN,
+    CUT_MEAT_INTO_PORTIONS,
+    CUT_FISH_INTO_PORTIONS,
     CUT_FISH_INTO_STRIPS,
     CUT_MEAT_INTO_STRIPS,
     WEAVE_A_BASKET,

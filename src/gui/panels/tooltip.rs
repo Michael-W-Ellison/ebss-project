@@ -63,6 +63,9 @@ pub fn terrain_name(terrain: TerrainType) -> &'static str {
         TerrainType::Meadow => "Meadow",
         TerrainType::Hills => "Hills",
         TerrainType::Beach => "Beach",
+        TerrainType::Sea => "Sea",
+        TerrainType::SaltMarsh => "Salt marsh",
+        TerrainType::SaltFlat => "Salt flat",
         TerrainType::Riverbank => "Riverbank",
         TerrainType::Farmland => "Farmland",
     }

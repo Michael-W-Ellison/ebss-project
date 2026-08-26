@@ -44,8 +44,21 @@ pub fn butchered_item_id(material_id: &str) -> &str {
 /// `burnt_meat` - because one inventory stack can hold only one preparation
 /// state. Underneath it is still fish and still meat.
 pub fn base_item_id(id: &str) -> &str {
-    id.strip_prefix("cooked_")
+    let id = id
+        .strip_prefix("cooked_")
         .or_else(|| id.strip_prefix("burnt_"))
+        .unwrap_or(id);
+
+    // And a thing that has been cut up is still the thing it was cut off.
+    //
+    // Without this, `meatstrips` and `fishportions` resolved to no item type
+    // at all, so nothing downstream would cook them, price them or put them
+    // in a store - the same defect that had a kill dropping `mutton` and
+    // `deer_meat` that nothing knew what to do with. See
+    // `nutrition::Piece`, which reads the other half of the same name.
+    id.strip_suffix("portions")
+        .or_else(|| id.strip_suffix("strips"))
+        .filter(|base| !base.is_empty())
         .unwrap_or(id)
 }
 

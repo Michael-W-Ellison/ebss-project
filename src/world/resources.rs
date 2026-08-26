@@ -55,6 +55,13 @@ pub enum ResourceType {
     Sand,       // For glass
     Coal,       // For fuel/charcoal
 
+    /// What is left where a shallow sea dried up, and what sits in rare seams
+    /// in the hills. The one thing that will keep meat through a winter
+    /// without a fire and without a week of sun, and until now there was none
+    /// of it anywhere in this world - so `PreparationState::Salted` was
+    /// written, tested and unreachable.
+    Salt,
+
     // === Processed Materials ===
     Flour,      // Grain → Miller → Flour
     Leather,    // Hides → Tanner → Leather
@@ -227,6 +234,7 @@ impl ResourceType {
             ResourceType::StrangePlant => '?',
             ResourceType::Greens => 'v',
             ResourceType::Roots => 'r',
+            ResourceType::Salt => '*',
 
             // Basic
             ResourceType::Wood => 't',
@@ -289,6 +297,7 @@ impl ResourceType {
             ResourceType::StrangePlant => "\x1b[35m",  // Magenta: unknown
             ResourceType::Greens => "\x1b[92m",        // Bright green: new leaf
             ResourceType::Roots => "\x1b[33m",         // Yellow/brown
+            ResourceType::Salt => "\x1b[97m",          // Bright white
 
             // Basic - Original colors
             ResourceType::Wood => "\x1b[33m",      // Yellow/Brown
@@ -354,6 +363,8 @@ impl ResourceType {
             // Picking leaves is quicker than anything else anybody does
             ResourceType::Greens => 8,
             ResourceType::Roots => 18,
+            // Scraping a crust off a flat, or breaking it out of a seam
+            ResourceType::Salt => 25,
 
             // Basic - gathering
             ResourceType::Wood => 20,
@@ -485,7 +496,7 @@ impl ResourceType {
             ResourceType::Greens | ResourceType::Roots => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",
-            ResourceType::Clay | ResourceType::Sand | ResourceType::Coal => "Mineral",
+            ResourceType::Clay | ResourceType::Sand | ResourceType::Coal | ResourceType::Salt => "Mineral",
             ResourceType::Flour | ResourceType::Leather | ResourceType::Cloth | ResourceType::Linen |
             ResourceType::Glass | ResourceType::Bricks | ResourceType::Charcoal | ResourceType::Rope |
             ResourceType::Paper | ResourceType::Dye => "Processed Material",

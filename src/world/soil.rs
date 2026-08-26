@@ -194,6 +194,13 @@ impl Soil {
             TerrainType::Mountain => (0.10, 0.05),
             TerrainType::Desert => (0.08, 0.02),
             TerrainType::Water => (0.30, 0.2),
+            TerrainType::Sea => (0.30, 0.2),
+            // A salt marsh grows a great deal and almost none of it is any
+            // use to anybody
+            TerrainType::SaltMarsh => (0.55, 1.0),
+            // And nothing at all grows on a salt flat, which is the point of
+            // one
+            TerrainType::SaltFlat => (0.02, 0.0),
         };
 
         Self {
@@ -218,7 +225,10 @@ impl Soil {
     /// breaks down.
     pub fn humidity(terrain: TerrainType, precipitation: f32) -> f32 {
         let ground = match terrain {
-            TerrainType::Water | TerrainType::Wetland => 1.0,
+            TerrainType::Water
+            | TerrainType::Wetland
+            | TerrainType::Sea
+            | TerrainType::SaltMarsh => 1.0,
             TerrainType::Riverbank => 0.85,
             TerrainType::Forest => 0.7,
             TerrainType::Meadow => 0.55,
@@ -228,6 +238,7 @@ impl Soil {
             TerrainType::Hills => 0.35,
             TerrainType::Mountain => 0.25,
             TerrainType::Desert => 0.05,
+            TerrainType::SaltFlat => 0.03,
         };
 
         (ground + precipitation.clamp(0.0, 1.0) * 0.3).clamp(0.0, 1.0)

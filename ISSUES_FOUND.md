@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Thirteen tests fail intermittently
+### 1. Fourteen tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -29,6 +29,7 @@ and running the project.
     analytics::tests::fluid_tests::nobody_proposes_a_fluid_working_with_a_dry_pack
     analytics::tests::relationship_tests::a_settlement_ends_up_with_enemies_in_it
     analytics::tests::nutrient_loop_tests::what_a_settlement_eats_reaches_the_ground_it_stands_on
+    analytics::tests::survival_pressure_tests::the_children_of_a_settlement_live_past_infancy
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -61,10 +62,12 @@ luck, and fifteen runs is not enough to tell a 5% flake from a new bug. When
 it does fail it fails at 0.250 litter falling to 0.143, which is the tile
 decaying with nothing added at all: ten agents pinned to a tile still wander
 off it during the tick they are pinned for, and where what they leave behind
-lands is up to the world. None of the five is a regression; all five had
-simply never been written down.
+lands is up to the world. The sixth,
+`the_children_of_a_settlement_live_past_infancy`, came out at 1-in-15 on both
+sides the same way. None of the six is a regression; all six had simply never
+been written down.
 
-All thirteen build a world through
+All fourteen build a world through
 `World::new`, which draws from `thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
@@ -72,7 +75,7 @@ the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
-which is corrosive: check whether the failing test is one of these thirteen
+which is corrosive: check whether the failing test is one of these fourteen
 before assuming a regression, and if it is not, check it against the previous
 commit in a worktree before calling it one.
 
@@ -1795,18 +1798,109 @@ drizzle are the same event. And nothing yet distinguishes food under a roof
 from food in the open: the shade case is a constant rather than a question
 about where the thing is lying.
 
+### 28. Agents ate two-kilo lumps of raw beast, and nothing in this world could make anybody ill
+
+Two questions, and the answer to both was no.
+
+**"How are agents eating meat? Are they cooking it first? Can they just absorb
+an entire side of beef?"** They ate it raw, in two-kilo lumps, with nothing in
+the way. `eat_food_item` removed exactly one unit per `Eat`, and a unit off a
+carcass is two kilos. The only gates were `is_harmful` and `is_spoiled`.
+Cooking was worth 2.7 times the nutrition — 0.35 raw utilization against 0.95
+cooked — and nothing else at all, so a fire you had to fetch wood for was a
+convenience rather than a necessity. Nothing anywhere required a knife, and
+piece size affected nothing: a whole deer dried as fast as a strip.
+
+**"Eating raw meat, spending time near dead bodies or fresh waste, and eating
+spoiling food should have a chance to cause sickness."** There was no illness
+in this project at all. The only health consequence anywhere in it was a flat
+ten damage for eating something past `is_harmful`, taken in one tick and over
+with. A settlement could live on raw flesh and sleep in its own midden and
+never know the difference.
+
+**What was built.** `nutrition::Piece` reads how big a thing is off its own
+name — whole, a joint, a strip, or already the size of a mouthful. A whole
+beast can be neither eaten nor put over a fire; a joint can be both. Everybody
+is born knowing a carcass comes apart, but knowing it is not the same as
+having an edge to do it with, and the decision checks for one so that choosing
+to cut without a knife does not spend the turn. Strips come off a joint rather
+than off the animal, dry in two days where a joint takes most of a week, and
+twice as many of them fit over a fire.
+
+Illness is a state that lasts days rather than a hit that lands. Raw flesh
+tells about one meal in twelve; food between 0.3 and 0.5 freshness tells more
+often the further gone it is; a day on fouled ground tells one time in twenty
+at the worst. A corpse now fouls the ground it falls on, which is what makes a
+body a thing to be away from rather than a nutrient deposit.
+
+**Salt exists.** `PreparationState::Salted` had been written, tested and
+unreachable for the whole life of the project because there was no salt in the
+world. There are now three new grounds — sea, salt marsh and salt flat — with
+salt on the flats and in rare seams in the hills, and boiling the sea for it
+when a people has neither. Sea and marsh water is a drink that costs more than
+it gives: it slakes the thirst on the tick and raises it for days after.
+Everybody knows better than to touch it, and nobody who is dying of thirst
+does.
+
+**Sixteen worlds a side, against the commit before:**
+
+| | before | after | t |
+|---|---|---|---|
+| carcasses cut into joints | 8.3 | **357.6** | 10.8 |
+| joints cut down into strips | 0.0 | 2.3 | 4.5 |
+| food salted | 0.0 | 68.3 | 9.3 |
+| the sea boiled for salt | 0.0 | 161.8 | 6.7 |
+| people who know what drying does | 5.1 | 27.9 | 8.0 |
+| illnesses | 0.0 | 4.8 | 7.8 |
+| people at ten thousand ticks | 33.5 | 33.0 | -0.1 |
+| burials of people | 15.1 | 15.6 | 0.3 |
+| **times anybody cooked** | **284.4** | **111.8** | **-4.4** |
+| units in the ground through winter | 97.3 | 71.1 | -1.8 |
+
+Population and deaths do not move. What it costs is **cooking, down by
+three fifths**, which is the efficiency trade showing up again: turns spent
+quartering a deer, boiling the sea and rubbing salt in are turns not spent at
+the fire. Winter stores are down a quarter and that is *not* established at
+this sample (t = -1.8).
+
+**Four rounds of measurement, and the third found something worth writing
+down.** The first cut of the portioning work correctly refused to dry a whole
+fish — and the winter store collapsed by 63%, because *a settlement's entire
+preservation output had been drying whole fish*, which the specification says
+should rot. The honest route was blocked behind a fourth circular
+precondition of the same family as the three the provisioning work turned up:
+you had to have seen food dry before you would lay any out, and the only route
+to seeing it sat behind an autumn gate and two pit branches and effectively
+never ran. Laying food out now comes before burying it, for anybody who has
+not yet learned what it does; once they have, the drying branch catches it
+first and this goes quiet.
+
+The fourth round found the ordering error that mattered most: with all four
+preservation branches ahead of burying, a settlement spent some two thousand
+turns a world cutting, boiling, salting and drying and put a *third* as much
+in the ground as it had before any of it existed. Every mechanism working, and
+the settlement worse off. Burying a thing is one turn and it is what actually
+gets food to February; preserving is several and only pays if the food is
+somewhere it will keep. Burying goes first now.
+
+**What is still wrong.** Preserved food does not accumulate: agents hold 0.56
+units of dried or salted food through winter, which is nothing. What gets
+preserved gets eaten rather than kept, because nothing in `find_best_food_to_eat`
+prefers raw food over a thing somebody spent three turns making keep. That is
+the next thing to fix and it is why the store has not recovered.
+
 ## Housekeeping
 
-### 28. Committed backup file
+### 29. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 29. Build warnings
+### 30. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 30. Placeholder package metadata
+### 31. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

@@ -642,6 +642,7 @@ impl World {
 
                     // Mineral
                     ResourceType::Clay => ItemType::Clay,
+                    ResourceType::Salt => ItemType::Salt,
                     ResourceType::Sand => ItemType::Sand,
                     ResourceType::Coal => ItemType::Coal,
 
