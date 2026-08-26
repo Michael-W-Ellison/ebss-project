@@ -1889,18 +1889,131 @@ preserved gets eaten rather than kept, because nothing in `find_best_food_to_eat
 prefers raw food over a thing somebody spent three turns making keep. That is
 the next thing to fix and it is why the store has not recovered.
 
+### 29. Clay was in every world and nobody could pick any of it up
+
+`ResourceType::Clay`, `Pottery` and `Bricks` were three enum variants with
+nothing whatever behind them. Clay had been spawning on every riverbank and
+every marsh in every world since the project began, and no agent could ever
+touch any of it: `"clay"` was missing from the vocabulary `Action::Gather`
+answers to, which is the only vocabulary it has.
+
+That vocabulary turned out to be **two** vocabularies, in two places, that had
+drifted. The decision layer maps a request string to a `ResourceType`; the
+executor maps a `ResourceType` back to an item name, and its table ended in
+`_ => "generic"`. Greens and roots have been going into packs as `"generic"`
+since the day they were added, three batches ago. There is one table now.
+
+**Nobody is handed pottery.** There was also no reason for anybody to gather
+clay even once it was possible, because every material in the chain is
+gathered by somebody who already wants the thing it makes — and nobody can
+want a pot before anybody has made one. Curiosity is the drive for that: a
+curious agent within a short walk of a material nobody here has ever done
+anything with goes and gets a handful. It is a detour, not an expedition, and
+somebody who has tried everything clay does walks past the clay.
+
+From there the chain is three separate things to find out, none of them handed
+down:
+
+- **clay holds a shape** (`mold clay`) — no tool, no fire, no water, just
+  somebody turning a lump over in their hands. What comes out is worth almost
+  nothing: an unfired shape holds nothing and comes apart in the rain.
+- **fire stops it being clay** (`fire claypot`) — and what comes out holds
+  water, which is the first thing this people can make that keeps something
+  else.
+- **and clay fired in a block is a brick** (`fire clay`) — a separate
+  discovery off the same material and the same fire. A people that has fired a
+  pot has not thereby learned to make a wall.
+
+**And there is an accident.** "An agent 'cooks' some clay which causes it to
+harden into stoneware." Nobody intends it: somebody is sitting at a fire with
+clay in their pack because they picked it up walking past a riverbank, a lump
+finds the embers about one day in fifty, and in the morning it is not clay any
+more. Everyone round that fire sees it. It is the same shape as the drying
+discovery two batches back and for the same reason — a people at this stage
+does not reason its way to firing clay, it notices that firing has happened.
+
+`MOLD` had sat in the verb matrix since the matrix existed with nothing
+carrying it out. `FIRE` is new, and had to be: `heat` was already spoken for
+by `Craft`, and holding a thing in a fire until it stops being what it was is
+not the same act as warming it on the way to making something else.
+
+### 30. An agent could be mauled at a ford and go back the next morning
+
+The map an agent carries had explored tiles, resource positions with an age
+and a source, buildings, storage and terrains — a real picture of the world's
+*things* — and nothing whatever about danger, and nothing about people. There
+was nowhere for "there are wolves in that wood" to live, so nobody could know
+it.
+
+Danger goes on the map now, with the same discipline the resource knowledge
+already had: it has a place, a name, a time and a strength, and it **fades**.
+A pack works a wood for a season and then moves on, and a man who avoids that
+wood for the rest of his life is not being careful, he is being wrong — so a
+fright is gone entirely after a season, and a bad place is three tiles wide
+either way, because "there are wolves in that wood" is not a fact about one
+tile. Nobody carries more than thirty-two of them about.
+
+What goes on it is what somebody would actually notice: everything in sight
+that means them harm, **taken together**. Together rather than one at a time,
+because that is what the specification said a threat was — "a man encountering
+4 wolves should see them as a threat" — and judging each wolf separately would
+have him walk into the pack four times unafraid. One wolf is not much to a man
+with a spear; four of them are a different afternoon.
+
+Two callers, so it is not another library with nobody to use it. A patch of
+food in a wood where this agent saw wolves last month is **further away than
+it measures** — twelve paces further at full strength, fading with the memory —
+so a settlement works its safe ground first and its bad ground only when
+there is nothing else. And a fleeing agent picks between straight away and a
+quarter-turn either side by what it knows of the ground, rather than bolting
+headlong into the wood the pack lives in.
+
+**A real ordering bug turned up while testing it.** The sight pass ran at the
+end of the tick, after the beasts had moved — and a wolf pack that has just
+been frightened off by the man it walked up to is nine paces away by then. The
+man never learned there were wolves there at all. Everybody looks round before
+the beasts move now.
+
+**Sixteen worlds a side, both this and the clay above:**
+
+| | before | after | t |
+|---|---|---|---|
+| people at ten thousand ticks | 27.6 ± 3.0 | **38.2 ± 3.2** | 2.4 |
+| the most it ever held | 33.3 | 43.2 | 2.7 |
+| handfuls of clay gathered | 0.0 | 106.9 | 7.9 |
+| clay molded into a shape | 0.0 | 34.1 | 7.1 |
+| things put in a fire to harden | 0.0 | 315.6 | 7.4 |
+| people who know what a fire does to clay | 0.0 | 22.6 | 8.6 |
+| pots standing at the end | 0.0 | 53.1 | 6.8 |
+| bricks | 0.0 | 16.2 | 5.8 |
+| bad places remembered | 0.0 | 55.3 | 5.1 |
+| people remembered | 0.0 | 1793.5 | 9.0 |
+| **times anybody ran** | **9015.2** | **131.5** | **-2.3** |
+| burials of people | 14.6 | 15.8 | 1.0 |
+
+**Population is up by a third, and the reason is the last line.** A settlement
+was spending nine thousand turns a world running away — three per cent of
+every turn anybody took, each one costing fourteen energy on top of the turn
+itself. Agents that avoid the bad wood while choosing where to forage do not
+have to run out of it. That was not a number anybody had looked at, and it was
+the largest single waste left in the model.
+
+The clay chain is doing real work at the same time and the two cannot be
+separated at this sample; both are in one commit and the population figure is
+the two together.
+
 ## Housekeeping
 
-### 29. Committed backup file
+### 31. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 30. Build warnings
+### 32. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 31. Placeholder package metadata
+### 33. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

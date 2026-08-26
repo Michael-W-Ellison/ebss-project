@@ -174,6 +174,9 @@ fn every_verb_is_performed_by_something_real() {
         "excavate", "cover",
         // And making food outlast the week it was got in
         "dry", "salt",
+        // And pressing a lump of clay into a shape it keeps, and holding it
+        // in a fire until it stops being clay
+        "mold", "fire",
     ];
 
     for one in EVERY_VERB {

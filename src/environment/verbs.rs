@@ -494,6 +494,22 @@ pub const SALT: Verb = verb(
     Some("salt"),
 );
 
+/// Holding a thing in a fire until it stops being what it was.
+///
+/// Distinct from `heat`, which is what a `Making` does over a fire and is
+/// carried out by `Craft`. This is the other thing a fire does: not warming a
+/// thing up on the way to making something else out of it, but changing what
+/// the thing *is*. Clay goes in and pottery comes out, and there is no going
+/// back.
+pub const FIRE: Verb = verb(
+    "fire",
+    Family::Thermal,
+    Targets::AThingHeld,
+    Wants::BareHands,
+    &[Changes::WhatAThingIs],
+    Some("fire"),
+);
+
 pub const COOL: Verb = verb(
     "cool",
     Family::Thermal,
@@ -637,13 +653,17 @@ pub const CARVE: Verb = verb(
     Some("carve"),
 );
 
+/// Pressing a soft thing into a shape it keeps.
+///
+/// Live at last. Clay is the only material in this world that will do it, and
+/// it is where every fired thing starts.
 pub const MOLD: Verb = verb(
     "mold",
     Family::Assembly,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatAThingIs],
-    None,
+    Some("mold"),
 );
 
 pub const FOLD: Verb = verb(
@@ -1024,7 +1044,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 3
     SMASH, CRUSH, CUT, SCRAPE, PIERCE, DRILL, SPLIT,
     // 4
-    HEAT, DRY, SALT, COOL, QUENCH, IGNITE, MELT, ROAST,
+    HEAT, DRY, SALT, FIRE, COOL, QUENCH, IGNITE, MELT, ROAST,
     // 5
     MIX, POUR, SOAK, COAT, BOIL, LEACH, FERMENT,
     // 6

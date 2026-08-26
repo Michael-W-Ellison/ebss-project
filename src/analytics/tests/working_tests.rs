@@ -82,21 +82,34 @@ fn every_working_is_done_with_a_verb_in_the_matrix() {
         let verb = verbs::what_that_verb_is(one.verb)
             .unwrap_or_else(|| panic!("{} is not in the matrix", one.verb));
 
+        // Breaking a thing down, putting it together, or working it wet —
+        // and, since clay, holding it in a fire until it stops being what it
+        // was. That fourth case is Thermal and belongs there: nothing in this
+        // list was done over a fire until firing clay existed, which is why
+        // the first three were once the whole of it.
+        let mut families: Vec<verbs::Family> = vec![
+            verbs::Family::Disruption,
+            verbs::Family::Assembly,
+            verbs::Family::Fluid,
+        ];
+        if one.over_a_fire {
+            families.push(verbs::Family::Thermal);
+        }
+
         assert!(
-            matches!(
-                verb.family,
-                verbs::Family::Disruption | verbs::Family::Assembly | verbs::Family::Fluid
-            ),
-            "{} does something to a thing, so it belongs to one of those three \
-             families and not {:?}",
+            families.contains(&verb.family),
+            "{} does something to a thing, so it belongs to one of {families:?} \
+             and not {:?}",
             one.verb,
             verb.family
         );
 
         // Most of them want an edge or a hammer, and the ones done with water
-        // want a vessel. Weaving is fingers, and the matrix is where that
-        // difference is written down.
-        if one.verb != "weave" {
+        // want a vessel. Weaving is fingers and so is pressing a lump of clay
+        // into a shape; a thing held in a fire wants the fire and nothing in
+        // the hand at all. The matrix is where those differences are written
+        // down.
+        if !matches!(one.verb, "weave" | "mold" | "fire") {
             assert!(
                 verb.wants_something_in_hand(),
                 "{} takes something in the hand, and the matrix should say so",
@@ -332,7 +345,7 @@ fn doing_it_once_is_what_makes_it_a_thing_you_do() {
     // that can be done to a stick is this particular man's own business - see
     // `what_working_i_would_try_out`, where taking the first of the list meant
     // the order of the table decided what a whole people ever found out.
-    let curious = simulation.population.agents[0].what_working_i_would_try_out();
+    let curious = simulation.population.agents[0].what_working_i_would_try_out(true);
     assert!(
         matches!(curious, Some((_, ref to)) if to == "wood"),
         "a man with a stick and a scraper has an idle afternoon's question: {curious:?}"

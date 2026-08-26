@@ -97,6 +97,10 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "linen" => Some(ItemType::Linen),
         "glass" => Some(ItemType::Glass),
         "bricks" => Some(ItemType::Bricks),
+        // What clay becomes on the way to being a pot, and what it becomes
+        // when the fire has had it
+        "claypot" => Some(ItemType::Clay),
+        "stoneware" => Some(ItemType::Pottery),
         "charcoal" => Some(ItemType::Charcoal),
         "rope" => Some(ItemType::Rope),
         "paper" => Some(ItemType::Paper),

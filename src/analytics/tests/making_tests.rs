@@ -109,7 +109,12 @@ fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
                              // gathered by name once they are lying about,
                              // and this list had not caught up with hunting
                              // and fishing being wired in.
-                             "meat", "fish"];
+                             "meat", "fish",
+                             // And what the ground gives that nobody had a
+                             // word for until lately: clay off a riverbank,
+                             // salt off a flat, and the thin stuff a hedgerow
+                             // offers before anything has ripened.
+                             "clay", "salt", "greens", "roots"];
 
     // And what comes off a thing that is worked down rather than assembled -
     // a flake off a core, leather off a hide, shavings off a stick

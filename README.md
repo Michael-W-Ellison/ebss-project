@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 245 source files, with 1,713 library tests.
+across 247 source files, with 1,739 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,746 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,776 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -165,6 +165,51 @@ original specifications.
   out of 1,525 for want of anything to bury. Winter stores went from nothing
   at all to 42 units standing through the lean season, pits from 2 to 10,
   burials from 4 to 86, and food dried or smoked from 2.8 a world to 666
+- ✅ Clay, and a fire that stops it being clay. `ResourceType::Clay`,
+  `Pottery` and `Bricks` were three enum variants with nothing behind them:
+  clay had been spawning on every riverbank and every marsh in every world
+  since the project began and no agent could ever pick any of it up, because
+  "clay" was missing from the vocabulary `Gather` answers to. That vocabulary
+  turned out to be *two* vocabularies in two places that had drifted, and
+  greens and roots had been going into packs as `"generic"` since the day they
+  were added. There is one table now.
+
+  Nobody is handed pottery. Every material in the chain is gathered by
+  somebody who already wants the thing it makes, and nobody can want a pot
+  before anybody has made one — so it is curiosity that fetches a handful of
+  something nobody here has ever done anything with. A lump of clay holds a
+  shape, which costs nothing but an idle afternoon to find out and is worth
+  almost nothing on its own: an unfired shape holds nothing and comes apart in
+  the rain. What it is worth is what a fire does to it, and that is a separate
+  thing to find out, and bricks are a third — a people that has fired a pot
+  has not thereby learned to make a wall. There is also an accident, which is
+  the way most people got there: somebody sitting at a fire with clay in the
+  pack loses a lump to the embers about one day in fifty, and in the morning
+  it is not clay any more, and everyone round that fire saw it
+- ✅ A map with danger on it. What an agent carried in its head had explored
+  tiles, resource positions with an age and a source, buildings, storage and
+  terrains — a real picture of the world's *things* — and nothing at all about
+  danger. Somebody could be mauled at a ford and walk back to the same ford
+  the next morning, because there was nowhere for "there are wolves in that
+  wood" to live. It has a place, a name, a time and a strength now, and it
+  fades: a pack works a wood for a season and moves on, so a fright is gone
+  entirely after one, and a bad place is three tiles wide because "there are
+  wolves in that wood" is not a fact about one tile. What goes on it is
+  everything in sight that means harm *taken together* — one wolf is not much
+  to a man with a spear and four of them are a different afternoon, and
+  judging each separately would have him walk into the pack four times
+  unafraid.
+
+  It is load-bearing in two places. A patch of food in a wood where this agent
+  saw wolves is further away than it measures, so a settlement works its safe
+  ground first; and somebody running picks their way by what they know of the
+  ground rather than bolting into the wood the pack lives in. **Population is
+  up by a third (t = 2.4), and the reason is that a settlement had been
+  spending nine thousand turns a world running away** — three per cent of
+  every turn anybody took, at fourteen energy apiece — and agents who avoid the
+  bad wood do not have to run out of it. That was not a number anybody had
+  looked at, and it was the largest single waste left in the model. See
+  ISSUES_FOUND.md #29 and #30
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the

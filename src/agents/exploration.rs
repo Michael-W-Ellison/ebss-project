@@ -96,6 +96,62 @@ pub struct ExplorationKnowledge {
     pub last_seen_ticks: HashMap<Position, u32>,
     /// Building discovery tick tracking (position -> tick discovered)
     pub building_discovery_ticks: HashMap<Position, u32>,
+    /// Where this one has seen something it would rather not meet again.
+    ///
+    /// The map held explored tiles, resources with an age and a source,
+    /// buildings, storage and terrains - a real picture of the world's
+    /// *things* - and nothing whatever about danger. An agent could be
+    /// mauled at a ford and walk back to the same ford the next morning with
+    /// no more hesitation than the first time, because there was nowhere for
+    /// "there are wolves in that wood" to live.
+    #[serde(default)]
+    pub where_it_went_badly: HashMap<Position, Danger>,
+    /// And where each person this one knows was last actually seen.
+    ///
+    /// Everything social in the model reads live positions, which is to say
+    /// every agent knows where every other agent is at all times. This is
+    /// what somebody would actually know: where they last laid eyes on them,
+    /// and when.
+    #[serde(default)]
+    pub where_i_last_saw: HashMap<uuid::Uuid, (Position, u32)>,
+}
+
+/// Something met on a particular piece of ground, and how badly it went.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Danger {
+    /// What it was, in the agent's own words - "wolves", "a bear".
+    pub what: String,
+    /// When it was last seen there.
+    pub when: u32,
+    /// How badly it read at the time, from nought to one.
+    pub how_bad: f32,
+}
+
+impl Danger {
+    /// How much of this is still worth minding, given how long ago it was.
+    ///
+    /// Fades, and for the same reason a claim about a berry patch fades: a
+    /// wolf pack works a wood for a season and then moves on, and a man who
+    /// avoids that wood for the rest of his life is not being careful, he is
+    /// being wrong. Gone entirely after a season.
+    pub fn how_bad_it_still_looks(&self, now: u32) -> f32 {
+        let ago = now.saturating_sub(self.when) as f32;
+        let over = Self::HOW_LONG_A_FRIGHT_LASTS as f32;
+
+        if ago >= over {
+            return 0.0;
+        }
+
+        self.how_bad * (1.0 - ago / over)
+    }
+
+    /// How long a fright takes to fade to nothing.
+    ///
+    /// One season. Long enough to keep somebody out of a wood for the summer
+    /// the pack is working it, short enough that the country is not
+    /// permanently marked by one bad afternoon.
+    pub const HOW_LONG_A_FRIGHT_LASTS: u32 =
+        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TICKS_PER_DAY;
 }
 
 /// Something an agent was told rather than saw.
@@ -156,8 +212,131 @@ impl ExplorationKnowledge {
             resource_discovery_ticks: HashMap::new(),
             last_seen_ticks: HashMap::new(),
             building_discovery_ticks: HashMap::new(),
+            where_it_went_badly: HashMap::new(),
+            where_i_last_saw: HashMap::new(),
         }
     }
+
+    /// This one saw something on that ground it would rather not meet again.
+    ///
+    /// Keeps the worse of what it already thought and what it has just seen,
+    /// so that one quiet afternoon in a bad wood does not talk somebody into
+    /// going back. Ageing does that job instead, and does it slowly.
+    pub fn saw_danger(&mut self, where_it_was: Position, what: &str, how_bad: f32, now: u32) {
+        let how_bad = how_bad.clamp(0.0, 1.0);
+        if how_bad <= 0.0 {
+            return;
+        }
+
+        let standing = self
+            .where_it_went_badly
+            .get(&where_it_was)
+            .map(|danger| danger.how_bad_it_still_looks(now))
+            .unwrap_or(0.0);
+
+        if how_bad < standing {
+            // Still worth refreshing when it happened, or a wood somebody
+            // walks through weekly would fade while the pack was still in it
+            if let Some(danger) = self.where_it_went_badly.get_mut(&where_it_was) {
+                danger.when = now;
+            }
+            return;
+        }
+
+        self.where_it_went_badly.insert(
+            where_it_was,
+            Danger {
+                what: what.to_string(),
+                when: now,
+                how_bad,
+            },
+        );
+
+        self.forget_the_frights_that_have_faded(now);
+    }
+
+    /// How bad this one thinks that piece of ground is.
+    ///
+    /// Nought for anywhere it has never had trouble, and for anywhere the
+    /// trouble is old enough not to matter. Reads the ground *around* the
+    /// place as well as the place itself, because "there are wolves in that
+    /// wood" is not a fact about one tile.
+    pub fn how_bad_is_it_there(&self, where_it_is: Position, now: u32) -> f32 {
+        self.where_it_went_badly
+            .iter()
+            .filter(|(went_badly, _)| {
+                (went_badly.x - where_it_is.x).abs() <= Self::HOW_WIDE_A_BAD_PLACE_IS
+                    && (went_badly.y - where_it_is.y).abs() <= Self::HOW_WIDE_A_BAD_PLACE_IS
+            })
+            .map(|(_, danger)| danger.how_bad_it_still_looks(now))
+            .fold(0.0f32, f32::max)
+    }
+
+    /// And what it thinks is there, if anything.
+    pub fn what_is_wrong_with_that_place(&self, where_it_is: Position, now: u32) -> Option<&str> {
+        self.where_it_went_badly
+            .iter()
+            .filter(|(went_badly, _)| {
+                (went_badly.x - where_it_is.x).abs() <= Self::HOW_WIDE_A_BAD_PLACE_IS
+                    && (went_badly.y - where_it_is.y).abs() <= Self::HOW_WIDE_A_BAD_PLACE_IS
+            })
+            .filter(|(_, danger)| danger.how_bad_it_still_looks(now) > 0.0)
+            .max_by(|(_, one), (_, other)| {
+                one.how_bad_it_still_looks(now)
+                    .partial_cmp(&other.how_bad_it_still_looks(now))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(_, danger)| danger.what.as_str())
+    }
+
+    /// Drop what has faded, and the oldest of what is left if there is too
+    /// much of it.
+    ///
+    /// An agent holds ninety-six places it has been told about; there is no
+    /// reason it should hold an unbounded number of frights.
+    fn forget_the_frights_that_have_faded(&mut self, now: u32) {
+        self.where_it_went_badly
+            .retain(|_, danger| danger.how_bad_it_still_looks(now) > 0.0);
+
+        while self.where_it_went_badly.len() > Self::AS_MANY_BAD_PLACES_AS_ANYBODY_HOLDS {
+            let Some(oldest) = self
+                .where_it_went_badly
+                .iter()
+                .min_by_key(|(_, danger)| danger.when)
+                .map(|(where_it_was, _)| *where_it_was)
+            else {
+                break;
+            };
+            self.where_it_went_badly.remove(&oldest);
+        }
+    }
+
+    /// This one laid eyes on somebody.
+    pub fn saw_somebody(&mut self, who: uuid::Uuid, where_they_were: Position, now: u32) {
+        self.where_i_last_saw.insert(who, (where_they_were, now));
+    }
+
+    /// Where this one last saw somebody, if it has seen them lately enough
+    /// for it to be worth walking to.
+    pub fn where_did_i_last_see(&self, who: uuid::Uuid, now: u32) -> Option<Position> {
+        self.where_i_last_saw
+            .get(&who)
+            .filter(|(_, when)| now.saturating_sub(*when) <= Self::HOW_LONG_A_SIGHTING_IS_WORTH)
+            .map(|(where_they_were, _)| *where_they_were)
+    }
+
+    /// How far either side of a bad place the badness reaches.
+    ///
+    /// "There are wolves in that wood" is not a fact about one tile.
+    const HOW_WIDE_A_BAD_PLACE_IS: i32 = 3;
+
+    /// How many bad places anybody carries about with them.
+    const AS_MANY_BAD_PLACES_AS_ANYBODY_HOLDS: usize = 32;
+
+    /// How long a sighting of somebody is worth acting on.
+    ///
+    /// A day. People move.
+    const HOW_LONG_A_SIGHTING_IS_WORTH: u32 = crate::environment::seasons::TICKS_PER_DAY;
 
     /// Mark a tile as explored and return true if it's a new discovery
     pub fn explore_tile(&mut self, position: Position, current_tick: u32) -> bool {

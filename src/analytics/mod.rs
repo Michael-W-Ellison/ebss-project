@@ -379,6 +379,17 @@ impl Simulation {
         // the name - eat, and do not be eaten - and until now it had neither
         // opinion about us: a deer stood placidly in a field while somebody
         // walked up to it with a spear.
+        // Everybody takes in what is round them first: what would eat them,
+        // and who else is about.
+        //
+        // Before the beasts move, not after. The first cut ran this at the
+        // end of the tick and it saw almost nothing: a wolf pack that has
+        // just been frightened off by the man it walked up to is nine paces
+        // away by the time anybody looks, so the man never learned there were
+        // wolves there at all.
+        self.what_everybody_saw_that_frightened_them();
+        self.who_everybody_saw();
+
         self.what_the_beasts_make_of_us();
         self.the_beasts_act_on_it();
 
@@ -389,6 +400,12 @@ impl Simulation {
         // And whoever has been living on a midden or beside a body may be
         // about to find out what that costs
         self.what_the_ground_underfoot_does();
+
+        // And whoever has been sitting at a fire with clay in their pack may
+        // be about to find out what a fire does to clay
+        self.what_the_embers_did();
+
+
 
         debug!("=== Tick {} ===", self.current_tick);
 
@@ -2419,10 +2436,31 @@ impl Simulation {
                     return Some(Action::Examine { what });
                 }
 
+                // Going to get a handful of something nobody here has ever
+                // done anything with.
+                //
+                // Every material in the chain is gathered by somebody who
+                // already wants the thing it makes - and nobody can want the
+                // thing until somebody has made one. Clay had been spawning
+                // on every riverbank in every world since the project began
+                // and no agent had ever picked any of it up, so
+                // `ResourceType::Clay`, `Pottery` and `Bricks` were three
+                // enum variants with nothing whatever behind them.
+                //
+                // Curiosity is the right drive for it: this is fetching a
+                // material for no reason except that nobody has tried it.
+                if let Some(what) = self.something_nobody_has_tried_within_reach(agent, agent_position)
+                {
+                    return Some(Action::Gather { resource_type: what });
+                }
+
                 // Doing something to a thing to see what it turns into. The
                 // cheapest kind of experiment there is: the materials are in
                 // the pack and the tool is in the hand either way.
-                if let Some((verb, to)) = agent.what_working_i_would_try_out() {
+                let a_fire_is_to_hand = self
+                    .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+                    .is_some();
+                if let Some((verb, to)) = agent.what_working_i_would_try_out(a_fire_is_to_hand) {
                     return Some(Action::Work { verb, to });
                 }
 
@@ -2957,6 +2995,89 @@ impl Simulation {
     /// recovered, whatever fell out of a full pack. Picking it up is the
     /// cheapest way there is to get a tool, and it is why what a people makes
     /// outlives the people who made it.
+    /// A material within reach that this agent has never done anything with.
+    ///
+    /// Only what is close enough to be a detour rather than an expedition,
+    /// only what the ground here actually offers, and only where there is a
+    /// working nobody here has found out yet that wants it. A person who has
+    /// already tried everything clay does walks past the clay.
+    fn something_nobody_has_tried_within_reach(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<String> {
+        use crate::environment::making;
+
+        // What an untried working wants, that this pack has not got enough of
+        let wanted: Vec<&'static str> = making::every_working_to_find_out()
+            .filter(|working| !agent.what_i_found_out().contains(working.makes))
+            .filter(|working| agent.how_many_i_have(working.to) < working.how_much)
+            .map(|working| working.to)
+            .collect();
+
+        if wanted.is_empty() {
+            return None;
+        }
+
+        // And which of those the ground within a short walk is offering.
+        //
+        // Scanned directly rather than through `nearest_resource_within`,
+        // which hands back a position: two nodes can sit on one tile, and
+        // looking the position up again could just as easily find the wood
+        // as the clay.
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| resource.amount > 0)
+            .filter(|resource| here.distance_to(&resource.position) <= Self::AS_FAR_AS_CURIOSITY_WALKS)
+            .filter_map(|resource| {
+                Self::gathered_as(resource.resource_type)
+                    .filter(|named| wanted.contains(named))
+                    .map(|named| (named, here.distance_to(&resource.position)))
+            })
+            .min_by_key(|(_, apart)| *apart)
+            .map(|(named, _)| named.to_string())
+    }
+
+    /// What a resource node is called once it is in a pack.
+    ///
+    /// The same vocabulary `Gather` answers to, kept here so that the
+    /// decision and the executor cannot drift apart.
+    fn gathered_as(what: crate::world::ResourceType) -> Option<&'static str> {
+        use crate::world::ResourceType;
+
+        Some(match what {
+            ResourceType::Wood => "wood",
+            ResourceType::Stone => "stone",
+            ResourceType::Iron => "iron",
+            ResourceType::Food => "food",
+            ResourceType::Clay => "clay",
+            ResourceType::Salt => "salt",
+            ResourceType::Sand => "sand",
+            ResourceType::Coal => "coal",
+            ResourceType::Flax => "flax",
+            ResourceType::Cotton => "cotton",
+            ResourceType::Grain => "grain",
+            ResourceType::Greens => "greens",
+            ResourceType::Roots => "roots",
+            ResourceType::Herbs => "herbs",
+            ResourceType::Fish => "fish",
+            ResourceType::Meat => "meat",
+            ResourceType::Hides => "hides",
+            ResourceType::Wool => "wool",
+            ResourceType::Honey => "honey",
+            _ => return None,
+        })
+    }
+
+    /// How far somebody will go out of their way for a handful of something
+    /// they have no use for.
+    ///
+    /// A detour, not an expedition. Curiosity does not outrank supper.
+    const AS_FAR_AS_CURIOSITY_WALKS: u32 = 12;
+
     fn something_worth_stooping_for(
         &self,
         agent: &crate::agents::Agent,
@@ -5404,6 +5525,271 @@ impl Simulation {
     /// breaks down, so this is a pressure to move rather than a sentence.
     const HOW_OFTEN_FOUL_GROUND_TELLS: f64 = 0.05;
 
+    /// What everybody can see that frightens them, and where it was.
+    ///
+    /// The map an agent carries had explored tiles, resource positions with
+    /// an age and a source, buildings, storage and terrains - a real picture
+    /// of the world's *things* - and nothing at all about danger. Somebody
+    /// could be mauled at a ford and walk back to the same ford the next
+    /// morning, because there was nowhere for "there are wolves in that wood"
+    /// to live.
+    ///
+    /// This is the sight pass for it. What goes in is what an agent would
+    /// actually notice: a beast within sight that means it harm, and how the
+    /// odds looked at the time. Reading the odds rather than the species is
+    /// what stops a man with a spear being as frightened of a wolf as a child
+    /// with nothing.
+    fn what_everybody_saw_that_frightened_them(&mut self) {
+        if self.current_tick % Self::HOW_OFTEN_ANYBODY_LOOKS_ROUND != 0 {
+            return;
+        }
+
+        let now = self.current_tick;
+
+        // Everything alive that means anybody harm, with what it is worth in
+        // a fight and what to call it
+        let beasts: Vec<((i32, i32), f32, f32, String)> = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive())
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                let menace = species.behavior.how_much_it_menaces_you();
+                if menace <= 0.0 {
+                    return None;
+                }
+                let worth = Self::what_a_beast_is_worth_in_a_fight(
+                    animal.current_health,
+                    species.health,
+                    species.attack_damage,
+                );
+                Some((animal.position, worth, menace, species.name.clone()))
+            })
+            .collect();
+
+        if beasts.is_empty() {
+            return;
+        }
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let armed = agent
+                .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)
+                .is_some();
+            let i_am_worth = Self::WHAT_A_PERSON_IS_WORTH_TO_A_BEAST
+                * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 };
+
+            // Everything in sight that means harm, taken together.
+            //
+            // Together rather than one at a time, because that is what the
+            // specification says a threat is: "a man encountering 4 wolves
+            // should see them as a threat". One wolf is not much to a man
+            // with a spear and four of them are a different afternoon
+            // entirely, and judging each separately would have him walk into
+            // the pack four times unafraid.
+            let in_sight: Vec<&((i32, i32), f32, f32, String)> = beasts
+                .iter()
+                .filter(|((x, y), _, _, _)| {
+                    (agent.state.position.0 - x)
+                        .abs()
+                        .max((agent.state.position.1 - y).abs())
+                        <= Self::AS_FAR_AS_ANYBODY_SEES_A_BEAST
+                })
+                .collect();
+
+            if in_sight.is_empty() {
+                continue;
+            }
+
+            let against_me: f32 = in_sight
+                .iter()
+                .map(|(_, worth, menace, _)| worth * menace)
+                .sum();
+
+            // A thing worth twice what you are is frightening; a thing worth
+            // half of you is not worth remembering.
+            let odds = against_me / i_am_worth.max(0.01);
+            let how_bad = (odds - 1.0).clamp(0.0, 1.0);
+
+            if how_bad <= 0.0 {
+                continue;
+            }
+
+            // What to call it is whatever the worst single one of them was.
+            let called = in_sight
+                .iter()
+                .max_by(|(_, one, _, _), (_, other, _, _)| {
+                    one.partial_cmp(other).unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|(_, _, _, called)| called.clone())
+                .unwrap_or_else(|| "something".to_string());
+
+            for ((x, y), _, _, _) in in_sight {
+                agent.exploration_knowledge.saw_danger(
+                    crate::world::Position::new(*x, *y),
+                    &called,
+                    how_bad,
+                    now,
+                );
+            }
+        }
+    }
+
+    /// And whoever anybody laid eyes on, and where.
+    ///
+    /// Everything social in the model reads live positions, which is to say
+    /// every agent knows where every other agent is standing at all times.
+    /// This is what somebody would actually know.
+    fn who_everybody_saw(&mut self) {
+        if self.current_tick % Self::HOW_OFTEN_ANYBODY_LOOKS_ROUND != 0 {
+            return;
+        }
+
+        let now = self.current_tick;
+        let standing: Vec<(uuid::Uuid, (i32, i32))> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| (agent.id, (agent.state.position.0, agent.state.position.1)))
+            .collect();
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            for (who, (x, y)) in standing.iter() {
+                if *who == agent.id {
+                    continue;
+                }
+
+                let paces = (agent.state.position.0 - x)
+                    .abs()
+                    .max((agent.state.position.1 - y).abs());
+
+                if paces <= Self::AS_FAR_AS_ANYBODY_SEES_A_PERSON {
+                    agent.exploration_knowledge.saw_somebody(
+                        *who,
+                        crate::world::Position::new(*x, *y),
+                        now,
+                    );
+                }
+            }
+        }
+    }
+
+    /// How often anybody stops and takes in what is round them.
+    ///
+    /// Every few ticks rather than every one. Nothing in a settlement changes
+    /// fast enough to want it more often, and it is a walk over everybody
+    /// against everything.
+    const HOW_OFTEN_ANYBODY_LOOKS_ROUND: u32 = 5;
+
+    /// How far off a beast is worth noticing.
+    const AS_FAR_AS_ANYBODY_SEES_A_BEAST: i32 = 8;
+
+    /// And a person, who is smaller and quieter than a bear.
+    const AS_FAR_AS_ANYBODY_SEES_A_PERSON: i32 = 6;
+
+    /// A lump of clay left too near the fire.
+    ///
+    /// "An agent 'cooks' some clay which causes it to harden into stoneware,
+    /// which unlocks that technology." Nobody intends this. Somebody is
+    /// sitting at a fire with clay in their pack because they picked it up on
+    /// the way past a riverbank, and a lump of it ends up in the embers, and
+    /// in the morning it is not clay any more.
+    ///
+    /// The same shape as `who_saw_that_dry` and for the same reason: a people
+    /// at this stage does not reason its way to firing clay, it notices that
+    /// firing has happened. What it costs is one lump of clay; what it buys
+    /// is the first material this people can make that keeps something else.
+    fn what_the_embers_did(&mut self) {
+        use rand::Rng;
+
+        if self.current_tick % Self::HOW_OFTEN_THE_EMBERS_ARE_ASKED != 0 {
+            return;
+        }
+
+        let mut rng = rand::thread_rng();
+        let mut hardened: Vec<crate::world::Position> = Vec::new();
+
+        for index in 0..self.population.agents.len() {
+            {
+                let agent = &self.population.agents[index];
+                if !agent.state.is_alive || agent.how_many_i_have("clay") == 0 {
+                    continue;
+                }
+            }
+
+            let stood = self.population.agents[index].state.position;
+            if self
+                .nearest_fire_from(stood, Self::WITHIN_REACH_OF_THE_HEARTH, true)
+                .is_none()
+            {
+                continue;
+            }
+
+            if !rng.gen_bool(Self::HOW_OFTEN_A_LUMP_FINDS_THE_EMBERS) {
+                continue;
+            }
+
+            let agent = &mut self.population.agents[index];
+            agent.inventory.remove_item("clay", 1);
+            agent.inventory.add_item(crate::agents::InventoryItem::new_container(
+                "stoneware".to_string(),
+                1,
+                crate::environment::making::WHAT_A_FIRED_POT_HOLDS,
+            ));
+
+            hardened.push(crate::world::Position::new(stood.0, stood.1));
+        }
+
+        // And whoever was sitting round the same fire saw it happen.
+        for where_it_was in hardened {
+            for agent in self.population.agents.iter_mut() {
+                if !agent.state.is_alive {
+                    continue;
+                }
+
+                let paces = (agent.state.position.0 - where_it_was.x)
+                    .abs()
+                    .max((agent.state.position.1 - where_it_was.y).abs());
+
+                if paces > Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                    continue;
+                }
+
+                if agent.found_out_how_to(Self::THAT_FIRE_HARDENS_CLAY) {
+                    debug!("Agent {} saw clay come out of a fire hard", agent.id);
+                }
+                agent.lessons.record_particular("fire:claypot", true);
+            }
+        }
+    }
+
+    /// How often anybody's fire is asked about.
+    const HOW_OFTEN_THE_EMBERS_ARE_ASKED: u32 = crate::environment::seasons::TICKS_PER_DAY;
+
+    /// And how often a day at a fire with clay in the pack costs a lump of it.
+    ///
+    /// Rare. This is meant to happen once or twice in a settlement's life and
+    /// then never matter again, because after it has happened once somebody
+    /// knows and can do it on purpose.
+    const HOW_OFTEN_A_LUMP_FINDS_THE_EMBERS: f64 = 0.02;
+
+    /// What a lump of clay coming out of a fire hard teaches.
+    ///
+    /// The same name the working that does it deliberately makes, so that
+    /// having seen it is the same thing as knowing how - see
+    /// `making::FIRE_A_POT`.
+    pub const THAT_FIRE_HARDENS_CLAY: &'static str = "stoneware";
+
     /// What an agent has to have seen before it will deliberately lay food
     /// out to dry.
     pub const THAT_LAYING_IT_OUT_KEEPS_IT: &'static str =
@@ -6625,6 +7011,56 @@ impl Simulation {
         })
     }
 
+    /// The nearest thing to eat that this particular agent would actually
+    /// walk to.
+    ///
+    /// The same question as `nearest_edible_within` asked of somebody with a
+    /// memory. A patch in a wood where this one saw wolves last month is
+    /// further away than it looks, and a patch it has no bad history with is
+    /// nearer - which is the whole use of a map that has danger on it.
+    ///
+    /// Falls back to the plain answer when everything within reach is bad
+    /// ground: hunger outlasts a fright, and a settlement that starves rather
+    /// than walk past a wood is not being careful.
+    fn nearest_edible_this_one_would_go_to(
+        &self,
+        agent: &crate::agents::Agent,
+        position: (i32, i32, i32),
+        radius: u32,
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        let here = Position::new(position.0, position.1);
+        let now = self.current_tick;
+
+        let best = self
+            .world
+            .resources
+            .iter()
+            .filter(|resource| resource.amount > 0)
+            .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
+            .filter(|resource| here.distance_to(&resource.position) <= radius)
+            .min_by_key(|resource| {
+                let apart = here.distance_to(&resource.position) as f32;
+                let bad = agent
+                    .exploration_knowledge
+                    .how_bad_is_it_there(resource.position, now);
+
+                // What the walk feels like, rather than what it measures.
+                ((apart + bad * Self::WHAT_A_BAD_PLACE_ADDS_TO_A_WALK) * 100.0) as u32
+            })
+            .map(|resource| resource.position);
+
+        best.or_else(|| self.nearest_edible_within(position, radius))
+    }
+
+    /// How much further away a place feels for having gone badly.
+    ///
+    /// A remembered mauling puts twelve paces on a walk, at full strength and
+    /// fading with the memory. Enough to send somebody to the next patch when
+    /// there is one, not enough to keep them out of the only wood there is.
+    const WHAT_A_BAD_PLACE_ADDS_TO_A_WALK: f32 = 12.0;
+
     /// Resource types an agent can eat straight from the land, paired with the
     /// inventory item they correspond to.
     ///
@@ -7233,18 +7669,30 @@ impl Simulation {
                     agent.state.position.1
                 );
 
-                // Look for anything edible within a 25-tile radius
+                // Look for anything edible within a 25-tile radius - and
+                // weigh the walk by what this one remembers about the ground
+                // it would be walking onto. A patch in a wood where this
+                // agent saw wolves last month is further away than it
+                // measures; one it has no bad history with is nearer. See
+                // `what_everybody_saw_that_frightened_them`.
+                let now = self.current_tick;
+                let remembers = &self.population.agents[agent_index].exploration_knowledge;
+
                 let mut nearest_food: Option<(usize, u32)> = None;
                 for (i, resource) in self.world.resources.iter().enumerate() {
                     if Self::edible_item_for(resource.resource_type).is_some() && resource.amount > 0 {
                         let distance = agent_pos.distance_to(&resource.position);
                         if distance <= Self::FORAGE_RADIUS {
+                            let bad = remembers.how_bad_is_it_there(resource.position, now);
+                            let felt = distance
+                                + (bad * Self::WHAT_A_BAD_PLACE_ADDS_TO_A_WALK) as u32;
+
                             if let Some((_, nearest_dist)) = nearest_food {
-                                if distance < nearest_dist {
-                                    nearest_food = Some((i, distance));
+                                if felt < nearest_dist {
+                                    nearest_food = Some((i, felt));
                                 }
                             } else {
-                                nearest_food = Some((i, distance));
+                                nearest_food = Some((i, felt));
                             }
                         }
                     }
@@ -7366,6 +7814,14 @@ impl Simulation {
                     // them rather than because the ground offers any.
                     "flax" => Some(ResourceType::Flax),
                     "cotton" => Some(ResourceType::Cotton),
+                    // Clay has been spawning on every riverbank and every
+                    // marsh in every world since the project began and no
+                    // agent could ever pick any of it up: it was missing from
+                    // this list, which is the only vocabulary `Gather` has.
+                    // `ResourceType::Clay`, `Pottery` and `Bricks` were all
+                    // enum variants with nothing behind them.
+                    "clay" => Some(ResourceType::Clay),
+                    "salt" => Some(ResourceType::Salt),
                     "hides" => Some(ResourceType::Hides),
                     "wool" => Some(ResourceType::Wool),
                     "generic" => Some(ResourceType::Wood), // Default to wood for generic
@@ -7587,22 +8043,14 @@ impl Simulation {
                                 .with_message(format!("Drank water, filled {:.1} into containers", filled));
                         }
 
-                        // Add to agent inventory (non-water resources)
-                        let item_id = match resource_type_enum {
-                            ResourceType::Wood => "wood",
-                            ResourceType::Stone => "stone",
-                            ResourceType::Iron => "iron",
-                            ResourceType::Food => "food",
-                            ResourceType::Grain => "grain",
-                            ResourceType::Fish => "fish",
-                            ResourceType::Meat => "meat",
-                            ResourceType::Flax => "flax",
-                            ResourceType::Cotton => "cotton",
-                            ResourceType::Hides => "hides",
-                            ResourceType::Wool => "wool",
-                            ResourceType::Herbs => "herbs",
-                            _ => "generic",
-                        };
+                        // Add to agent inventory (non-water resources).
+                        //
+                        // One table, shared with the decision that goes
+                        // looking for the stuff. There were two before, and
+                        // they had drifted: greens and roots have been going
+                        // into packs as "generic" since the day they were
+                        // added, and clay would have done the same.
+                        let item_id = Self::gathered_as(resource_type_enum).unwrap_or("generic");
 
                         let mut item = InventoryItem::new_with_weight(
                             item_id.to_string(),
@@ -10815,21 +11263,55 @@ impl Simulation {
                 let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
 
                 let bolt = Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS as f32;
-                let landed = (
-                    (stood.0 as f32 + dx as f32 / span * bolt) as i32,
-                    (stood.1 as f32 + dy as f32 / span * bolt) as i32,
-                    stood.2,
-                );
 
-                let landed = (
-                    landed.0.clamp(0, self.world.grid.width as i32 - 1),
-                    landed.1.clamp(0, self.world.grid.height as i32 - 1),
-                    landed.2,
-                );
+                // Straight away from the thing, or a quarter-turn either side
+                // of that. Which of the three depends on what this one knows
+                // about the ground: running headlong into the wood where the
+                // pack lives is how somebody gets away from one animal and
+                // into four, and until the map had danger on it there was no
+                // way to prefer otherwise.
+                let straight = (dx as f32 / span, dy as f32 / span);
+                let ways = [
+                    straight,
+                    (-straight.1, straight.0),
+                    (straight.1, -straight.0),
+                ];
 
-                if !self.is_passable_tile(landed.0, landed.1) {
+                let now = self.current_tick;
+                let remembers = &self.population.agents[agent_index].exploration_knowledge;
+
+                let landed = ways
+                    .iter()
+                    .map(|(wx, wy)| {
+                        (
+                            (stood.0 as f32 + wx * bolt) as i32,
+                            (stood.1 as f32 + wy * bolt) as i32,
+                            stood.2,
+                        )
+                    })
+                    .map(|landed| {
+                        (
+                            landed.0.clamp(0, self.world.grid.width as i32 - 1),
+                            landed.1.clamp(0, self.world.grid.height as i32 - 1),
+                            landed.2,
+                        )
+                    })
+                    .filter(|landed| self.is_passable_tile(landed.0, landed.1))
+                    .min_by(|one, other| {
+                        let bad = |where_it_is: &(i32, i32, i32)| {
+                            remembers.how_bad_is_it_there(
+                                crate::world::Position::new(where_it_is.0, where_it_is.1),
+                                now,
+                            )
+                        };
+                        bad(one)
+                            .partial_cmp(&bad(other))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+
+                let Some(landed) = landed else {
                     return ActionResult::failure("Nowhere to run".to_string());
-                }
+                };
 
                 let agent = &mut self.population.agents[agent_index];
                 agent.state.position = landed;

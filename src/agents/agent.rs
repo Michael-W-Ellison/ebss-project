@@ -2036,11 +2036,16 @@ impl Agent {
     /// The cheapest experiment a person can run: the materials are in the pack
     /// and the tool is in the hand whatever happens, so what it costs is one
     /// stick and an afternoon.
-    pub fn what_working_i_would_try_out(&self) -> Option<(String, String)> {
+    pub fn what_working_i_would_try_out(&self, a_fire_is_to_hand: bool) -> Option<(String, String)> {
         use crate::environment::making;
 
         let could: Vec<&'static making::Working> = making::every_working_to_find_out()
             .filter(|working| !self.found_out.contains(working.makes))
+            // Not something that wants a fire, when there is no fire. The
+            // executor refuses those, and an experiment that comes straight
+            // back refused is a turn gone - which is exactly what cost a
+            // settlement half its winter store two batches ago.
+            .filter(|working| !working.over_a_fire || a_fire_is_to_hand)
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
             .filter(|working| {

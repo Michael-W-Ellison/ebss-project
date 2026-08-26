@@ -352,6 +352,89 @@ pub const CRUSH_GRAIN: Working = Working {
     over_a_fire: false,
 };
 
+/// Wet clay worked into a shape and left to stand.
+///
+/// The first half of "playing with it". Clay is the one material in this
+/// world that will hold whatever shape you press it into, and finding that
+/// out costs nothing but an idle afternoon with a lump of it - which is why
+/// this is a `Working` rather than a `Making`: no other material, no tool, no
+/// fire. Just somebody turning a thing over in their hands.
+///
+/// What comes out is worth almost nothing. A shape in unfired clay holds
+/// nothing, keeps nothing and comes apart in the rain. All of its value is in
+/// what a fire does to it afterwards, and nobody here knows that yet.
+pub const MOLD_CLAY: Working = Working {
+    verb: "mold",
+    to: "clay",
+    how_much: 2,
+    makes: "claypot",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    // Clay out of a riverbank is already wet, and asking for carried water
+    // here would be a circular precondition of the kind this project keeps
+    // turning up: you would need a vessel to carry the water to make the
+    // vessel.
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// And the same shape put in a fire, which stops it being clay.
+///
+/// This is the technology. A fired pot holds water, holds food, and does not
+/// come apart in the rain - the first thing this people can make that keeps
+/// something else. `ResourceType::Pottery` has been an enum variant with
+/// nothing behind it since the project began.
+///
+/// It can be found out two ways. A curious agent sitting at a fire with a
+/// shape in unfired clay tries putting it in - that is this working. Or a
+/// lump of clay in somebody's pack comes out of the embers hard, which nobody
+/// intended and everybody sees: see `Simulation::what_the_embers_did`.
+pub const FIRE_A_POT: Working = Working {
+    verb: "fire",
+    to: "claypot",
+    how_much: 1,
+    makes: "stoneware",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 8.0,
+    obvious: false,
+    holds: Some(WHAT_A_FIRED_POT_HOLDS),
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: true,
+};
+
+/// And clay fired in a block rather than a pot, which is a brick.
+///
+/// "Other developments like bricks could emerge from similar exploration and
+/// curiosity." So it does: it is a separate thing to find out, off the same
+/// material and the same fire, and nothing hands it down. A people that has
+/// fired a pot has not thereby learned to make a wall.
+pub const FIRE_BRICKS: Working = Working {
+    verb: "fire",
+    to: "clay",
+    how_much: 4,
+    makes: "bricks",
+    how_many: 2,
+    hands: SkillType::Crafting,
+    effort: 10.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: true,
+};
+
+/// What a fired pot will hold, in units of water.
+///
+/// A little more than a carved wooden bowl, because it does not leak and it
+/// does not have to be hollowed out of anything.
+pub const WHAT_A_FIRED_POT_HOLDS: f32 = 4.0;
+
 /// A carcass taken apart into joints.
 ///
 /// Everybody is born knowing this. There is nothing to discover about a
@@ -537,6 +620,9 @@ pub const EVERY_WORKING: &[Working] = &[
     CUT_A_HIDE,
     SCRAPE_A_STICK,
     CRUSH_GRAIN,
+    MOLD_CLAY,
+    FIRE_A_POT,
+    FIRE_BRICKS,
     CUT_MEAT_INTO_PORTIONS,
     CUT_FISH_INTO_PORTIONS,
     CUT_FISH_INTO_STRIPS,
