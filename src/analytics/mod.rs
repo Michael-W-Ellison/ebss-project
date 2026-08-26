@@ -2363,7 +2363,17 @@ impl Simulation {
                 let starving = agent.state.is_starving() || agent.nutrition.is_starving();
                 self.food_action(agent, agent_position, starving)
                     // A store within reach beats a walk out to a berry bush,
-                    // which is the whole of what digging one buys
+                    // which is the whole of what digging one buys.
+                    //
+                    // It stays *behind* the ordinary food branch, which was
+                    // measured both ways. In front, the store is drawn on
+                    // five times as often and the rot in the pits halves -
+                    // and it costs a fifth of all the food anybody eats and
+                    // six of the people in a settlement, because a meal out
+                    // of a hole costs two turns where a berry costs one, and
+                    // because everything taken out was put back in by
+                    // somebody a day earlier. Efficiency did not move.
+                    // See ISSUES_FOUND #43.
                     .or_else(|| self.something_out_of_the_store(agent, agent_position))
                     .or_else(|| self.fishing_action(agent, agent_position))
                     .or_else(|| self.hunting_action(agent, agent_position))
@@ -3151,6 +3161,15 @@ impl Simulation {
     /// And how much they keep on them when they are standing on it.
     ///
     /// One meal. The store is right there.
+    ///
+    /// This wants to be *less* than `ENOUGH_NOT_TO_OPEN_THE_STORE`, and the
+    /// obvious-looking fix of raising it above so that nobody buries food and
+    /// then immediately digs it up again is wrong: at five, a person holding
+    /// five or fewer has nothing spare to bury at all, and `Cover` was refused
+    /// **3,672 times out of 3,729** with the store left empty. The small
+    /// churn is the cheaper of the two failures by a wide margin - it is under
+    /// one per cent of the turns in a world, against a store that does not
+    /// exist.
     const WHAT_A_PERSON_KEEPS_ON_THEM: u32 = 1;
 
     /// How far somebody will walk for a thing they can see lying on the ground.
@@ -3466,9 +3485,64 @@ impl Simulation {
         }
 
         let here = Position::new(agent_position.0, agent_position.1);
+
+        // And a store that already holds a lean season's eating does not want
+        // any more put in it
+        if !self.does_the_store_still_want_filling(here) {
+            return false;
+        }
+
         self.world
             .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
             .is_some()
+    }
+
+    /// How much one mouth wants put by to see it through the lean season.
+    ///
+    /// The store exists to cover the months the hedgerows give nothing. Past
+    /// that it is not a store, it is a hole that food is lost in: measured at
+    /// thirty-two worlds, a settlement kept **479 units** in the ground and
+    /// **rotted 520 more**, and what was in there was almost all dried food
+    /// in lined pits - the very best the model can do. It was not the wrong
+    /// food. It was four years of it.
+    ///
+    /// Sized off what a settlement actually eats. A person gets through about
+    /// a hundred units in ten thousand ticks, which is a shade under three
+    /// over a season; this is a little over two seasons' worth apiece, which
+    /// leaves a margin for a bad year without laying down a decade.
+    const WHAT_ONE_MOUTH_WANTS_PUT_BY: u32 = 7;
+
+    /// Whether the larder round here still wants filling.
+    ///
+    /// Not "is there room in the hole" - a hole takes three hundred and a
+    /// whole settlement eats about a hundred in a winter, so room was never
+    /// once the binding question and a people went on burying until the
+    /// ground was full of food nobody would live long enough to eat.
+    ///
+    /// What is asked instead is whether there is already a lean season's
+    /// eating in the ground for the people about, which is a thing somebody
+    /// standing in their own camp can see.
+    fn does_the_store_still_want_filling(&self, here: crate::world::Position) -> bool {
+        let mouths = self.how_many_mouths_about(here).max(1);
+        let put_by = self
+            .world
+            .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE);
+
+        put_by < mouths * Self::WHAT_ONE_MOUTH_WANTS_PUT_BY
+    }
+
+    /// How many living people this store has to see through the winter.
+    fn how_many_mouths_about(&self, here: crate::world::Position) -> u32 {
+        self.population
+            .agents
+            .iter()
+            .filter(|other| other.state.is_alive)
+            .filter(|other| {
+                let there =
+                    crate::world::Position::new(other.state.position.0, other.state.position.1);
+                here.distance_to(&there) <= Self::WORTH_WALKING_TO_THE_STORE
+            })
+            .count() as u32
     }
 
     /// Whether this agent is carrying a load worth taking to the store.
@@ -3500,6 +3574,11 @@ impl Simulation {
         }
 
         let here = Position::new(agent_position.0, agent_position.1);
+
+        if !self.does_the_store_still_want_filling(here) {
+            return None;
+        }
+
         let (pit, paces) = self
             .world
             .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)?;
@@ -3698,8 +3777,10 @@ impl Simulation {
             }
         }
 
-        // Something to bury, and somewhere to bury it
-        if let Some((what, _)) = spare.clone() {
+        // Something to bury, and somewhere to bury it - and a store that is
+        // not already full of a winter nobody will get to
+        if let Some((what, _)) = spare.clone().filter(|_| self.does_the_store_still_want_filling(here))
+        {
             if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
                 return Some(Action::Cover { what });
             }
@@ -3801,8 +3882,19 @@ impl Simulation {
     ) -> Option<Action> {
         use crate::world::Position;
 
-        // Somebody with supper in the pack does not dig it up
-        if agent.find_best_food_to_eat().is_some() {
+        // Somebody with a proper meal about them does not open the store.
+        //
+        // *A* meal is not a proper meal: this asked for an empty pack, and
+        // `Cover` hands a person one unit back on its way past, so the
+        // condition was never once met by anybody who had just filled a pit.
+        //
+        // And it counts meals rather than food, which is not the same thing.
+        // `is_food` answers yes to an uncut haunch, a stack that has gone
+        // over, and raw flesh this one has been ill off - none of which is
+        // supper. Counting those shuts the store on exactly the people who
+        // most need it open: a man carrying a rotten carcass reads as
+        // provisioned.
+        if agent.how_many_meals_i_have() >= Self::ENOUGH_NOT_TO_OPEN_THE_STORE {
             return None;
         }
 
@@ -3821,6 +3913,14 @@ impl Simulation {
             target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
         })
     }
+
+    /// How many meals in the pack are enough that a person leaves the store
+    /// shut.
+    ///
+    /// Two days' worth. It has to be more than `WHAT_A_PERSON_KEEPS_ON_THEM`,
+    /// or somebody who has just filled a pit is locked out of it by the one
+    /// meal burying handed them back.
+    const ENOUGH_NOT_TO_OPEN_THE_STORE: u32 = 4;
 
     /// Whether a hole will go in here.
     ///

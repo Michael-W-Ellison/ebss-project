@@ -248,10 +248,12 @@ impl Pit {
 
     /// Whether there is anything in it worth walking to.
     ///
-    /// The vessel it is lined with does not count. A hungry man who walks to
-    /// a store and comes back with the bowl has not eaten.
+    /// The vessel it is lined with does not count, and neither does an uncut
+    /// haunch or a stack that has gone over. A hungry man who walks to a
+    /// store and comes back with the bowl has not eaten, and no more has one
+    /// who comes back with something he cannot put in his mouth.
     pub fn has_food(&self) -> bool {
-        self.holds.iter().any(|item| Self::is_it_food(item))
+        self.holds.iter().any(|item| Self::is_it_a_meal(item))
     }
 
     /// Whether a thing in the pit is something to eat rather than the vessel
@@ -261,11 +263,33 @@ impl Pit {
     }
 
     /// What is in there to eat, by name.
+    ///
+    /// A meal, not merely a thing that is not a basket. This used to answer
+    /// with whatever was nearest the top, and a pit holding an uncut haunch
+    /// or a stack that had gone over would offer it over and over to somebody
+    /// who could not eat it: they picked it up, were no better fed for it,
+    /// and picked it up again. One settlement in sixteen starved to death
+    /// standing on its own larder doing exactly that. See ISSUES_FOUND #43.
     pub fn something_to_eat(&self) -> Option<&str> {
         self.holds
             .iter()
-            .find(|item| Self::is_it_food(item))
+            .find(|item| Self::is_it_a_meal(item))
             .map(|item| item.item_id.as_str())
+    }
+
+    /// Whether a thing in the pit is something somebody could actually make a
+    /// meal of, on the same terms `Agent::how_many_meals_i_have` counts by.
+    fn is_it_a_meal(item: &crate::agents::InventoryItem) -> bool {
+        if !Self::is_it_food(item) {
+            return false;
+        }
+        if !crate::world::nutrition::Piece::of(&item.item_id).can_it_be_eaten() {
+            return false;
+        }
+        match item.food_data {
+            Some(ref food) => !food.is_spoiled() && !food.is_harmful(),
+            None => false,
+        }
     }
 
     /// Whether somebody put a vessel in it before they filled it.
@@ -647,6 +671,20 @@ impl World {
             })
             .filter(|(_, paces)| *paces <= within)
             .min_by_key(|(_, paces)| *paces)
+    }
+
+    /// How much food is in the ground about here.
+    ///
+    /// The whole larder within walking distance, not one hole. A person can
+    /// see the pits round their own camp, and how full a store is, is a
+    /// question about the store and not about whichever hole they happen to
+    /// be standing over.
+    pub fn how_much_is_in_the_ground_near(&self, from: Position, within: u32) -> u32 {
+        self.pits
+            .iter()
+            .filter(|pit| from.distance_to(&pit.where_it_is) <= within)
+            .map(|pit| pit.how_much_is_in_it())
+            .sum()
     }
 
     /// The nearest pit with room in it.

@@ -373,7 +373,8 @@ original specifications.
   where they lie, and 231 in packs. The larder is the biggest single source of
   waste in the model — it gets filled and never drawn down. Every "winter
   store" headline above is measuring a stock that quietly loses about half of
-  itself. Measured and written up, not yet fixed. See ISSUES_FOUND.md #39
+  itself. Measured and written up, not fixed here — the fix, and the wrong
+  answer measured first, are two entries below. See ISSUES_FOUND.md #39
 - 🚧 Making the trip pay, and a vessel nobody had ever wanted. `what_i_would_make`
   asks only after **tools**, so a carved bowl and a fired pot both declared what
   they hold and neither was ever made on purpose by anybody. No agent could
@@ -437,6 +438,38 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ The larder was four years deep. Entry #39 named the store as the biggest
+  single leak in the model and left the question open: do people draw on it too
+  rarely, or is the pit's rate wrong? Neither. What is in the pits is almost all
+  *dried* food in *lined* pits, the best this model can do — and a pit takes 300
+  where a settlement eats about a hundred in a winter, so "is there room in the
+  hole" was never once the binding question. A people buried until the ground
+  held four years' eating and went on burying. Everything past the first winter
+  was going to rot whatever its rate was.
+
+  Burying now asks whether there is already a lean season's eating in the ground
+  for the people about — a thing somebody standing in their own camp can see —
+  rather than whether the hole has room. **A settlement eats two and a half
+  times as much food, 3,750 units to 9,831 (t = 8.5), and carries eight more
+  people, 39.1 to 47.2 (t = 3.0).** Rot in the pits is down (t = -3.4), burying
+  is halved (t = -8.9), and efficiency goes 76% to 82%.
+
+  The wrong answer was measured first and is the more useful half. Asking the
+  store *before* going out for food — a hole full of supper underfoot ought to
+  beat a walk to a berry bush — draws on the store five times as often and
+  halves the rot, and **costs a fifth of everything anybody eats (t = -3.1) and
+  six of the people (t = -2.5)**, with efficiency not moving at all. A meal out
+  of a hole costs two turns where a berry costs one, and nearly everything taken
+  out had been buried by somebody a day earlier. Reverted, with a test standing
+  on it.
+
+  Three defects underneath: a fourth instance of this project's circular
+  precondition (`Cover` leaves you one meal, and one meal was enough to lock you
+  out of the store you had just filled); a count that called an uncut haunch
+  "food", so a man carrying a rotten carcass read as provisioned; and a
+  starvation loop — a pit offered an uncut haunch to somebody who could not eat
+  it, over and over, and **one settlement in sixteen starved to death standing
+  on its own larder**. See ISSUES_FOUND.md #43
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the
@@ -931,6 +964,11 @@ the code actually does, verified by running it — not what was planned.
 - [ ] Performance has not been profiled at scale
 
 ### Beyond the original plan
+- [ ] Let an agent in a corner do something other than refuse to run: three
+      impassable directions and `FleeFrom` fails forever, which in one measured
+      world was three quarters of every turn taken
+- [ ] Stop stacking food onto food and keeping the wrong clock: a dried strip
+      buried onto a raw stack of the same name inherits the raw one's freshness
 - [ ] Give world generation a seed, so runs are reproducible and six flaky
       tests become deterministic
 - [ ] Feed the remaining percept channels: agents discover the world by sight

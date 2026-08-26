@@ -2764,18 +2764,145 @@ still shallow: crafting sits fourth of five in the trades a pair of hands wants,
 behind hunting, woodcutting and leatherworking, and a stone knife is three steps
 deep. Most people never get past a spear.
 
+### 43. The larder was four years deep and everything past the first winter rotted
+
+Entry #39 measured where a settlement's food actually goes and named the store
+as the biggest single leak: **537 units a world rotted in the pits**, against
+438 on the grass and 231 in somebody's pack. It closed by saying the question
+was open — "either people draw on the larder far too rarely, or the pit's rate
+is wrong, and telling those apart is a measurement rather than a guess."
+
+This is that measurement. It is the first, and it is not close.
+
+**What is in the pits.** Almost all of it is *dried* food in *lined* pits —
+the best this model can do, a twentieth the spoilage rate and a bowl between
+the food and the ground. It is not the wrong food and the rate is not wrong.
+
+**How much is in them.** A pit takes 300 and a settlement eats about a hundred
+in a winter, so `has_room` — the only thing that ever stopped anybody burying —
+was never once the binding question. A people buried until the ground held
+**four years' eating** and then went on burying. Everything past the first
+winter was going to rot whatever its rate was.
+
+#### The thing that did not work, measured first
+
+The obvious reading of #39 is that nobody draws on the store. So: ask the store
+*before* the ordinary food branch instead of after it, so that a hole full of
+supper underfoot beats a walk to a berry bush. At thirty-two worlds a side:
+
+| | before | after | t |
+|---|---|---|---|
+| rotted in the pits | 520 | **254** | −6.65 |
+| food taken out (actions) | 114 | **590** | 9.14 |
+| **food eaten** | 3750 | **2961** | **−3.07** |
+| **people alive** | 39.1 | **33.3** | **−2.47** |
+| efficiency (eaten ÷ acquired) | 0.758 | 0.766 | — |
+
+The waste halves and it costs a fifth of everything anybody eats and six of the
+people. A meal out of a hole costs two turns where a berry costs one — you pick
+it up and *then* you eat it — and nearly everything taken out had been put in by
+somebody a day earlier. The settlement spent its afternoons moving food between
+a pit and a pack. Efficiency, which is the whole point, did not move at all.
+
+Reverted. `larder_tests::going_out_for_food_comes_before_digging_up_the_store`
+stands on it so nobody tries it again.
+
+#### The thing that did work
+
+Stop filling a store that is already full. Not "is there room in the hole" but
+"is there already a lean season's eating in the ground for the people about" —
+which is a thing somebody standing in their own camp can see. Thirty-two worlds
+a side:
+
+| | before | after | t |
+|---|---|---|---|
+| **food eaten** | 3750 | **9831** | **8.49** |
+| **people alive** | 39.1 | **47.2** | **2.97** |
+| peak population | 42.9 | 49.6 | 2.77 |
+| rotted in the pits | 520 | **367** | −3.39 |
+| times anybody buried anything | 775 | **338** | −8.87 |
+| efficiency (pooled) | 0.758 | **0.815** | — |
+| winter store | 194 | 349 | 5.73 |
+
+A settlement eats **two and a half times as much food** and carries eight more
+people. Burying halves. The store gets *bigger*, not smaller, because there are
+more mouths for it to be sized against — the cap is per-person, and the people
+it freed went and lived.
+
+Absolute waste rose, 1200 to 2238 units, because two and a half times as much
+food is moving through the world; as a fraction of what was acquired it fell.
+That is the number the exercise is about: half the meat rotting means half the
+hunting was wasted, and less of it is wasted now.
+
+#### Three defects underneath it
+
+**A circle, of the family this project keeps finding.** `Cover` hands a person
+one meal back when they bury the rest — the store is right there — and drawing
+on the store asked for a person with **no food at all**. That one meal was
+exactly enough to lock somebody out of the pit they had just filled. Fixed;
+worth nothing on its own, because the branch behind `food_action` rarely got the
+turn either way, but it is a precondition for anything else working.
+
+**A count that lied.** The gate counted `is_food`, which answers yes to an uncut
+haunch, a stack that has gone over, and raw flesh this one has been ill off.
+A man carrying a rotten carcass read as provisioned. `how_many_meals_i_have`
+counts what somebody would actually eat, on the same terms `find_best_food_to_eat`
+picks by.
+
+**A starvation loop.** `Pit::something_to_eat` returned whatever was nearest the
+top that was not a basket. The moment anything actually drew on the store, a pit
+holding an uncut haunch offered it over and over to somebody who could not eat
+it: they picked it up, were no better fed, and picked it up again. **One
+settlement in sixteen starved to death standing on its own larder**, twenty-three
+thousand turns and every one of them a success. `something_to_eat` and `has_food`
+now mean a meal.
+
+### 44. An agent in a corner refuses to run, forever
+
+Found while measuring the above, not fixed here.
+
+`Action::FleeFrom` tries three directions — straight away, and the two square to
+it. If all three land somewhere impassable it returns `"Nowhere to run"`, and
+nothing about the next turn is different, so it returns it again. In one world
+of the store-cap arm this was **76,644 refusals**, three quarters of every turn
+in the settlement and by a distance the largest single refusal the model has
+produced.
+
+It is rare — four other worlds in the same arm ran at the ordinary 2-3% failure
+rate, and four baseline worlds never produced one — and it is the recurring
+defect this project has now hit five times: *a branch that can refuse must not
+stand in front of branches that cannot.* It wants either more directions tried
+before giving up, or standing your ground treated as an answer rather than a
+failure. Left alone deliberately: it is a combat change, it wants its own
+measurement, and folding it into the larder batch would have confounded the
+result above.
+
+### 45. Stacking a thing onto a thing keeps the wrong clock
+
+`Pit::put_in` and `Inventory::add_item` both merge by name and keep the
+*existing* entry's `food_data`. Bury a dried strip into a pit that already holds
+a raw stack of the same name and the dried strip takes on the raw clock; bury a
+fresh one onto an old stack and it inherits the old freshness. Pits were also
+observed holding several hundred units of food with no `food_data` at all, which
+therefore never rots and never counts as a meal — dead weight that a store can
+never work off.
+
+Not investigated to a root cause and not fixed. It is a data-modelling wart
+rather than a behaviour, and every preservation measurement in this file has
+been taken over the top of it.
+
 ## Housekeeping
 
-### 43. Committed backup file
+### 46. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 44. Build warnings
+### 47. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 45. Placeholder package metadata
+### 48. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

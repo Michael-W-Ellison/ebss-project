@@ -765,3 +765,396 @@ fn putting_by_waits_on_hunger_and_thirst_and_nothing_else() {
         "a forager stores food and does not farm it"
     );
 }
+
+// --------------------------------------------------------------------------
+// Getting back into it
+//
+// The store was a one-way valve. Measured over ten thousand ticks: nine
+// hundred and ninety-one things buried, sixty-eight taken back out, nine
+// hundred units of food still in the ground at the end and four hundred and
+// seventy rotted where they lay. See ISSUES_FOUND #43.
+//
+// Two things kept a people out of its own larder, and between them they made
+// a circle. `Cover` hands a person one meal back on its way past — the store
+// is right there — and drawing on the store asked for a person with *no food
+// at all*, so that one meal was exactly enough to lock them out of the pit
+// they had just filled. And the branch sat behind the ordinary food branch,
+// which answers nearly always, so it rarely got the turn to begin with.
+// --------------------------------------------------------------------------
+
+/// The circle, stated as arithmetic: what burying leaves in the pack has to
+/// be less than what shuts the store, or nobody who has just filled a pit can
+/// ever open it again.
+#[test]
+fn what_burying_leaves_behind_does_not_shut_the_store() {
+    assert!(
+        Simulation::WHAT_A_PERSON_KEEPS_ON_THEM < Simulation::ENOUGH_NOT_TO_OPEN_THE_STORE,
+        "burying leaves {} and the store shuts at {}: a man who has just \
+         filled a pit is locked out of it",
+        Simulation::WHAT_A_PERSON_KEEPS_ON_THEM,
+        Simulation::ENOUGH_NOT_TO_OPEN_THE_STORE,
+    );
+}
+
+/// And in the world rather than in the arithmetic: the one meal `Cover` hands
+/// back is not a reason to leave the rest of it in the ground.
+#[test]
+fn one_meal_in_the_pack_does_not_shut_the_store() {
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(40, 0)],
+        covered: true,
+        dug: 0,
+    });
+    let _ = simulation.population.agents[0].inventory.add_item(supper(
+        Simulation::WHAT_A_PERSON_KEEPS_ON_THEM,
+        0,
+    ));
+
+    let here = simulation.population.agents[0].state.position;
+
+    assert!(
+        matches!(
+            simulation.something_out_of_the_store(&simulation.population.agents[0], here),
+            Some(Action::PickUp { .. })
+        ),
+        "one meal is what he kept back when he buried the other forty"
+    );
+}
+
+/// Two days' worth is a proper meal, and a proper meal leaves the store shut.
+#[test]
+fn a_pack_with_two_days_in_it_leaves_the_store_shut() {
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(40, 0)],
+        covered: true,
+        dug: 0,
+    });
+    let _ = simulation.population.agents[0].inventory.add_item(supper(
+        Simulation::ENOUGH_NOT_TO_OPEN_THE_STORE,
+        0,
+    ));
+
+    let here = simulation.population.agents[0].state.position;
+
+    assert!(
+        simulation
+            .something_out_of_the_store(&simulation.population.agents[0], here)
+            .is_none(),
+        "he has enough about him to be going on with"
+    );
+}
+
+/// The store stays *behind* the ordinary food branch, and this is here so
+/// that nobody moves it again without reading why.
+///
+/// In front of it, measured at thirty-two worlds a side: the store is drawn
+/// on five times as often, the rot in the pits halves — and a settlement eats
+/// a fifth less and carries six fewer people. Efficiency did not move at all,
+/// which is the whole point of the exercise. A meal out of a hole costs two
+/// turns where a berry costs one, and almost everything taken out had been
+/// put in by somebody a day earlier. See ISSUES_FOUND #43.
+#[test]
+fn going_out_for_food_comes_before_digging_up_the_store() {
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(40, 0)],
+        covered: true,
+        dug: 0,
+    });
+
+    // Something to eat in his hand and a winter's food under his boots
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(1, 0));
+
+    let here = simulation.population.agents[0].state.position;
+    let answer = simulation.what_this_drive_offers(
+        crate::core::DriveType::Hunger,
+        &simulation.population.agents[0],
+        here,
+    );
+
+    assert!(
+        !matches!(answer, Some(Action::PickUp { .. })),
+        "he eats what is in his hand, or goes and gets more, before he opens \
+         the ground: {answer:?}"
+    );
+}
+
+// --------------------------------------------------------------------------
+// A meal, and a thing that is not one
+//
+// One settlement in sixteen starved to death standing on its own larder. The
+// pit held a haunch nobody had taken a knife to; `something_to_eat` answered
+// with it because it was not a basket; the man picked it up, was no better
+// fed for it, and picked it up again. Twenty-three thousand turns and every
+// one of them a success.
+// --------------------------------------------------------------------------
+
+/// An uncut carcass in the pit is not something to eat.
+#[test]
+fn a_haunch_nobody_has_cut_up_is_not_what_the_store_offers() {
+    let database = FoodDatabase::new();
+    let mut haunch = InventoryItem::new_with_weight("meat".to_string(), 20, 2.0);
+    haunch.food_data = database.create_food_data(&ItemType::Meat, 0);
+
+    let pit = Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![haunch],
+        covered: true,
+        dug: 0,
+    };
+
+    assert!(
+        pit.something_to_eat().is_none(),
+        "somebody has to take a knife to it first"
+    );
+}
+
+/// Nor is a stack that has gone over.
+#[test]
+fn what_has_gone_over_is_not_what_the_store_offers() {
+    let mut gone_off = supper(20, 0);
+    if let Some(ref mut food) = gone_off.food_data {
+        food.freshness = 0.0;
+    }
+
+    let pit = Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![gone_off],
+        covered: true,
+        dug: 0,
+    };
+
+    assert!(
+        pit.something_to_eat().is_none(),
+        "a rotten stack is not supper, whatever else it is"
+    );
+}
+
+/// And the loop itself: a man standing on a pit of things he cannot eat is
+/// not told to pick them up.
+#[test]
+fn nobody_is_sent_to_dig_up_what_they_cannot_eat() {
+    let database = FoodDatabase::new();
+    let mut haunch = InventoryItem::new_with_weight("meat".to_string(), 40, 2.0);
+    haunch.food_data = database.create_food_data(&ItemType::Meat, 0);
+
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![haunch],
+        covered: true,
+        dug: 0,
+    });
+
+    let here = simulation.population.agents[0].state.position;
+
+    assert!(
+        simulation
+            .something_out_of_the_store(&simulation.population.agents[0], here)
+            .is_none(),
+        "there is nothing in that hole he can put in his mouth"
+    );
+}
+
+/// The pack is counted the same way. An uncut haunch does not read as
+/// provisioned, and a man carrying one is not shut out of the store.
+#[test]
+fn a_pack_full_of_carcass_is_a_pack_with_no_meals_in_it() {
+    let database = FoodDatabase::new();
+    let mut haunch = InventoryItem::new_with_weight("meat".to_string(), 20, 0.1);
+    haunch.food_data = database.create_food_data(&ItemType::Meat, 0);
+
+    let mut simulation = a_digger();
+    let _ = simulation.population.agents[0].inventory.add_item(haunch);
+
+    assert_eq!(
+        simulation.population.agents[0].how_many_meals_i_have(),
+        0,
+        "twenty units of food about him and not one of them supper"
+    );
+
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(40, 0)],
+        covered: true,
+        dug: 0,
+    });
+    let here = simulation.population.agents[0].state.position;
+
+    assert!(
+        simulation
+            .something_out_of_the_store(&simulation.population.agents[0], here)
+            .is_some(),
+        "so the store stays open to him"
+    );
+}
+
+/// What is actually edible does count.
+#[test]
+fn what_can_be_eaten_counts_as_a_meal() {
+    let mut simulation = a_digger();
+    let _ = simulation.population.agents[0].inventory.add_item(supper(6, 0));
+
+    assert_eq!(
+        simulation.population.agents[0].how_many_meals_i_have(),
+        6,
+        "six meals is six meals"
+    );
+}
+
+// --------------------------------------------------------------------------
+// Enough is enough
+//
+// A hole takes three hundred and a whole settlement eats about a hundred in a
+// winter, so "is there room in the pit" was never once the binding question.
+// A people went on burying until the ground held four years' eating, and what
+// was in there was almost all *dried* food in *lined* pits — the very best
+// this model can do. It was not the wrong food. It was too much of it, sat
+// there too long. See ISSUES_FOUND #43.
+// --------------------------------------------------------------------------
+
+/// An empty store wants filling.
+#[test]
+fn an_empty_store_wants_filling() {
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: Vec::new(),
+        covered: false,
+        dug: 0,
+    });
+
+    assert!(
+        simulation.does_the_store_still_want_filling(Position::new(25, 25)),
+        "there is nothing in the ground at all"
+    );
+}
+
+/// A store with a lean season's eating in it for everybody about does not.
+#[test]
+fn a_store_with_a_winter_in_it_does_not_want_filling() {
+    let mut simulation = a_digger();
+    let mouths = 1;
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(mouths * Simulation::WHAT_ONE_MOUTH_WANTS_PUT_BY, 0)],
+        covered: true,
+        dug: 0,
+    });
+
+    assert!(
+        !simulation.does_the_store_still_want_filling(Position::new(25, 25)),
+        "one man, and a season's eating for him already in the ground"
+    );
+}
+
+/// It is the whole larder that is counted, not the one hole underfoot. A
+/// person can see the pits round their own camp.
+#[test]
+fn it_is_the_whole_larder_that_is_counted_not_one_hole() {
+    let mut simulation = a_digger();
+    let enough = Simulation::WHAT_ONE_MOUTH_WANTS_PUT_BY;
+
+    // Two pits a few paces apart, each holding rather less than a season
+    for (n, at) in [(25, 25), (28, 25)].iter().enumerate() {
+        simulation.world.pits.push(Pit {
+            where_it_is: Position::new(at.0, at.1),
+            holds: vec![supper(enough - 1 + n as u32, 0)],
+            covered: true,
+            dug: 0,
+        });
+    }
+
+    assert!(
+        !simulation.does_the_store_still_want_filling(Position::new(25, 25)),
+        "neither hole is full on its own and between them they are a winter over"
+    );
+}
+
+/// And a store a long way off is somebody else's store.
+#[test]
+fn a_larder_across_the_valley_is_not_this_camps_larder() {
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(
+            25 + Simulation::WORTH_WALKING_TO_THE_STORE as i32 + 5,
+            25,
+        ),
+        holds: vec![supper(300, 0)],
+        covered: true,
+        dug: 0,
+    });
+
+    assert!(
+        simulation.does_the_store_still_want_filling(Position::new(25, 25)),
+        "a full pit two days' walk off does not feed anybody here"
+    );
+}
+
+/// More mouths, more wanted. The store is sized to the people it has to see
+/// through, which is a thing somebody standing in their own camp can count.
+#[test]
+fn more_mouths_want_more_put_by() {
+    let mut simulation = a_digger();
+    let here = Position::new(25, 25);
+    simulation.world.pits.push(Pit {
+        where_it_is: here,
+        holds: vec![supper(Simulation::WHAT_ONE_MOUTH_WANTS_PUT_BY * 3, 0)],
+        covered: true,
+        dug: 0,
+    });
+
+    assert!(
+        !simulation.does_the_store_still_want_filling(here),
+        "three seasons' eating and one man to eat it"
+    );
+
+    for _ in 0..4 {
+        simulation
+            .population
+            .spawn_agent(crate::agents::AgentConfig::default());
+    }
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (25, 25, 0);
+        agent.state.is_alive = true;
+    }
+
+    assert!(
+        simulation.does_the_store_still_want_filling(here),
+        "five mouths, and what was three winters for one is not one for five"
+    );
+}
+
+/// Which is the point of the whole thing: a full store stops somebody burying
+/// what they are carrying.
+#[test]
+fn nobody_buries_into_a_store_that_is_already_a_winter_deep() {
+    let mut simulation = a_digger();
+    let here = Position::new(25, 25);
+    simulation.world.pits.push(Pit {
+        where_it_is: here,
+        holds: vec![supper(Pit::WHAT_A_PIT_TAKES / 2, 0)],
+        covered: true,
+        dug: 0,
+    });
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(30, 0));
+
+    // Room in the hole, and a load in the pack, and still nothing doing
+    assert!(
+        simulation.world.pits[0].has_room(),
+        "the hole is only half full - room was never the binding question"
+    );
+    assert!(
+        !simulation.does_the_store_still_want_filling(here),
+        "but there is already more in the ground than anybody here will eat"
+    );
+}

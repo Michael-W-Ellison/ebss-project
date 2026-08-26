@@ -5973,6 +5973,51 @@ impl Agent {
     }
 
     /// Find the best food item to eat based on nutritional needs and freshness
+    /// How many meals are actually in the pack.
+    ///
+    /// Not the same question as how much food is in the pack. A haunch nobody
+    /// has taken a knife to, a stack that has gone over, a strip of raw flesh
+    /// that made this one ill last time - all of them answer `is_food` and
+    /// none of them is supper. Anything deciding whether a person needs to go
+    /// and get something wants this count and not the other one, or a man
+    /// carrying a rotten carcass reads as provisioned.
+    pub fn how_many_meals_i_have(&self) -> u32 {
+        self.inventory
+            .items
+            .iter()
+            .filter(|(item_id, _)| self.is_this_a_meal(item_id))
+            .map(|(_, item)| item.quantity)
+            .sum()
+    }
+
+    /// Whether one thing in the pack is something this person would eat, on
+    /// the same terms `find_best_food_to_eat` picks by.
+    fn is_this_a_meal(&self, item_id: &str) -> bool {
+        let Some(item) = self.inventory.items.get(item_id) else {
+            return false;
+        };
+        if item.quantity == 0 {
+            return false;
+        }
+        if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
+            return false;
+        }
+        let Some(ref food_data) = item.food_data else {
+            return false;
+        };
+        if food_data.is_spoiled() || food_data.is_harmful() {
+            return false;
+        }
+        if food_data.preparation == crate::world::nutrition::PreparationState::Raw
+            && crate::world::nutrition::Piece::is_it_flesh(item_id)
+            && self.has_this_made_me_ill(Self::OFF_RAW_FLESH)
+            && !self.state.is_starving()
+        {
+            return false;
+        }
+        true
+    }
+
     pub fn find_best_food_to_eat(&self) -> Option<String> {
         let needed = self.nutrition.most_needed_nutrient();
 
