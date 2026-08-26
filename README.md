@@ -18,11 +18,11 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
-weather, and reproduces over tens of thousands of ticks. Roughly 108,000 lines
-across 207 source files, with 1,279 library tests.
+weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
+across 242 source files, with 1,657 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,316 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,694 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -165,6 +165,38 @@ original specifications.
   out of 1,525 for want of anything to bury. Winter stores went from nothing
   at all to 42 units standing through the lean season, pits from 2 to 10,
   burials from 4 to 86, and food dried or smoked from 2.8 a world to 666
+- ✅ The sun and the rain do the preserving, and somebody has to notice. Food
+  lying on the ground used to age at one flat penalty whatever the sky was
+  doing. Now what falls on a thing decides what happens to it: rain rots, and
+  sun either dries a thing or ruins it depending on whether it is thin enough
+  to dry through. A whole fish left in the sun goes off; the same fish opened
+  out and cut into strips dries, and dried keeps twenty times as long as raw.
+  Berries, greens, grain and roots dry as they are. Shade is the middle case
+  and still costs something, because nothing keeps outdoors.
+
+  Nobody here is born knowing any of that, which is the point. `cut fish` and
+  `cut meat` are obvious workings — anybody with an edge works out that a fish
+  comes apart — and worth exactly nothing on their own. The value is entirely
+  in what the weather does afterwards, which nobody can predict and everybody
+  can watch. An agent carrying more than it can eat, with no store within
+  reach and a clear sky, puts it down; that is an ordinary thing to do and it
+  happens to be the beginning of every preserved thing this people will ever
+  own. When the world turns something from raw to dried, everyone within six
+  paces is told, the same way the four routes into farming work — and an agent
+  that has never seen it happen cannot choose to do it. Watching food go off
+  in your own pack now costs worry rather than nothing, because what has been
+  lost is not the meal so much as the certainty of the next one.
+
+  Leaving that last gate out of the *decision* and putting it only in the
+  executor cost more than half the store — agents spent their turns choosing
+  an action that came straight back refused, and winter stores fell from 42
+  units to 17. With the check where it belongs, winter stores go from 42 to 84
+  and burials of food from 83 a world to 498, on a population and a death rate
+  that do not move. Deliberate drying fell by nine tenths and that is the
+  system working: the preserving happens in the weather now, and what an agent
+  contributes is cutting the fish up and leaving it somewhere sunny. Salting
+  is still unreachable because there is no salt in this world — see
+  ISSUES_FOUND.md #27
 - 🚧 A hole in the cold ground, which is a larder. It pays for itself now that
   anything reaches it — A settlement had nowhere to put anything it ate: what a person could
   put by explicitly excluded food, and the only place to put anything was a

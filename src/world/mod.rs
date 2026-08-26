@@ -154,6 +154,14 @@ pub struct World {
     #[serde(default)]
     pub pits: Vec<Pit>,
 
+    /// What has dried out in the sun since anybody last looked, and where.
+    ///
+    /// The world does the drying; whoever is standing near enough to see it
+    /// happen is what turns it into something a person knows. Drained every
+    /// tick by the simulation - see `Simulation::who_saw_that_dry`.
+    #[serde(default, skip)]
+    pub what_dried_in_the_sun: Vec<(Position, String)>,
+
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
     /// Drawn once when the country is made and never shown to anybody living
@@ -184,6 +192,10 @@ pub struct Dropped {
     /// `saturating_sub` on a `u32` at zero is a very quiet no-op.
     #[serde(default)]
     pub weathered: u32,
+    /// And how much sun it has had, which is the other thing the sky does to
+    /// a thing lying in it.
+    #[serde(default)]
+    pub dried_in_the_sun: u32,
 }
 
 /// A hole in the ground with food in it.
@@ -432,6 +444,7 @@ impl World {
             where_it_is,
             since: tick,
             weathered: 0,
+            dried_in_the_sun: 0,
         });
     }
 
@@ -533,9 +546,34 @@ impl World {
     /// and a hole full of rot.
     const HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE: u32 = 4;
 
+    /// Whether a thing laid out will dry through before it turns.
+    ///
+    /// Strips cut off a carcass will. A berry will - it is mostly skin. A
+    /// whole fish will not: the outside dries and the inside goes on being a
+    /// fish, and by evening the whole of it is carrion. That is the
+    /// difference a people here can actually see, and it is the only route
+    /// they have to anything that keeps.
+    pub fn will_this_dry(what: &str) -> bool {
+        what.ends_with("strips")
+            || matches!(what, "food" | "berries" | "greens" | "grain" | "roots")
+    }
+
     /// How much faster a thing goes off lying in the open than it does in a
     /// pack.
     const WHAT_THE_WEATHER_ADDS: u32 = 3;
+
+    /// And in the shade, out of both sun and rain.
+    ///
+    /// Still worse than a pack, because a pack is carried indoors and out of
+    /// the way of everything that eats carrion.
+    const WHAT_SHADE_ADDS: u32 = 2;
+
+    /// How much sun a thing has to sit in before it is dried through.
+    ///
+    /// Two days of clear weather, which on this calendar is a real wait: rain
+    /// in the middle of it does not undo the drying but it does stop it, so a
+    /// wet fortnight is a fortnight nothing gets preserved.
+    const HOW_LONG_DRYING_TAKES: u32 = 24;
 
     /// How often the weathering pass runs, which is what the extra ageing is
     /// reckoned against.
@@ -594,24 +632,68 @@ impl World {
     fn what_is_lying_about_weathers(&mut self) {
         let now = self.tick;
         let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
+        let mut dried: Vec<(Position, String)> = Vec::new();
 
         // What is lying out in the weather goes off faster than what is in
         // somebody's pack. Sun, rain and flies get at it, and until now they
         // did not: a thing picked up off the grass a fortnight after it was
         // dropped was exactly as fresh as the day it fell.
+        // What the sky is doing to whatever is lying in it.
+        //
+        // Rain rots anything. Sun dries what is thin enough to dry - strips
+        // cut off a carcass, berries - and rots what is not: a whole fish
+        // left out in the sun is carrion by evening, and the same fish cut
+        // down and laid out keeps for a season. That difference is the whole
+        // of what a people here can learn about preserving anything, and it
+        // is the world that teaches it rather than anything written down.
+        let raining = self.climate.weather.weather_type.precipitation_intensity() > 0.0;
+        let sunny = matches!(
+            self.climate.weather.weather_type,
+            crate::environment::WeatherType::Clear
+                | crate::environment::WeatherType::PartlyCloudy
+        );
+
         for left in self.dropped.iter_mut() {
             if left.item.food_data.is_none() {
                 continue;
             }
 
-            left.weathered += (Self::WHAT_THE_WEATHER_ADDS - 1)
-                * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+            let thin_enough_to_dry = Self::will_this_dry(&left.item.item_id);
+            let drying = sunny && thin_enough_to_dry;
+
+            if drying {
+                left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+            } else {
+                // Rain gets at everything; sun gets at anything too thick to
+                // dry through before it turns
+                let harder = raining || (sunny && !thin_enough_to_dry);
+                let adds = if harder {
+                    Self::WHAT_THE_WEATHER_ADDS
+                } else {
+                    Self::WHAT_SHADE_ADDS
+                };
+                left.weathered +=
+                    (adds - 1) * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+            }
 
             let weathered = left.weathered;
+            let long_enough = left.dried_in_the_sun >= Self::HOW_LONG_DRYING_TAKES;
+
             if let Some(food) = left.item.food_data.as_mut() {
+                if long_enough && food.preparation == crate::world::nutrition::PreparationState::Raw
+                {
+                    food.set_preparation(
+                        crate::world::nutrition::PreparationState::Dried,
+                        now,
+                    );
+                    dried.push((left.where_it_is, left.item.item_id.clone()));
+                }
+
                 food.update_freshness(now + weathered);
             }
         }
+
+        self.what_dried_in_the_sun.extend(dried);
 
         self.dropped.retain(|left| {
             // Food that has gone off entirely is not food any more, whatever
@@ -703,6 +785,7 @@ impl World {
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             dropped: Vec::new(),
             pits: Vec::new(),
+            what_dried_in_the_sun: Vec::new(),
         };
 
         // The ground under the terrain that was just generated

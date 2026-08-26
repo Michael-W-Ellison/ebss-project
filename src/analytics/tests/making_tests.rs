@@ -103,7 +103,13 @@ fn a_spear_is_made_of_something_that_was_itself_made() {
 fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
     // What the ground offers, by the names `Action::Gather` answers to.
     let out_of_the_ground = ["wood", "stone", "iron", "food", "water", "flax", "cotton",
-                             "hides", "wool", "grain"];
+                             "hides", "wool", "grain",
+                             // And what does not come off a bush: flesh off a
+                             // kill and a fish out of the river. Both are
+                             // gathered by name once they are lying about,
+                             // and this list had not caught up with hunting
+                             // and fishing being wired in.
+                             "meat", "fish"];
 
     // And what comes off a thing that is worked down rather than assembled -
     // a flake off a core, leather off a hide, shavings off a stick

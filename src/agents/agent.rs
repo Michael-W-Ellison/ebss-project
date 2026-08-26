@@ -1253,6 +1253,38 @@ impl Agent {
             .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
     }
 
+    /// Food went off in this agent's own hands.
+    ///
+    /// Worry rather than grief. What has been lost is not the meal so much as
+    /// the certainty of the next one, and the specification is explicit that
+    /// it should land as a threat to the hunger drive rather than as a bad
+    /// mood: an agent that has watched its supper turn twice this week is an
+    /// agent that has a reason to dig a hole and lay things out in the sun.
+    pub fn watched_food_go_off(&mut self, what: &str, how_much: u32) {
+        use super::EmotionSource;
+
+        let worth_minding = (how_much as f32 * Self::WHAT_A_LOST_MEAL_IS_WORTH)
+            .min(Self::AS_MUCH_AS_ONE_LOT_CAN_COST);
+
+        self.emotions.add_fear_with_traits(
+            EmotionSource::Event(format!("{what} went off")),
+            worth_minding,
+            &self.traits,
+        );
+
+        // And it is a thing that happened, so it is a thing that can be
+        // learned from: whatever this agent was doing with that food, it did
+        // not work
+        self.lessons.record_particular("keeping food", false);
+    }
+
+    /// What one unit of food turning is worth in worry.
+    const WHAT_A_LOST_MEAL_IS_WORTH: f32 = 0.03;
+
+    /// And the most any single lot of it can come to, so that losing a
+    /// basketful is bad rather than paralysing.
+    const AS_MUCH_AS_ONE_LOT_CAN_COST: f32 = 0.25;
+
     /// Whether a thing in the pack is raw food still good enough to be worth
     /// preserving.
     ///
@@ -1261,6 +1293,15 @@ impl Agent {
     /// happened to a thing: all you get from drying carrion is dry carrion.
     pub fn is_it_worth_drying(&self, what: &str) -> bool {
         use crate::world::nutrition::PreparationState;
+
+        // And only if this one knows what laying a thing out would do. The
+        // first cut left this out, so agents chose to dry things they had no
+        // idea how to dry, the action came back refused, and the turn was
+        // gone - which cost a settlement more than half of what it had in the
+        // ground by winter.
+        if !self.found_out.contains(Self::THAT_LAYING_IT_OUT_KEEPS_IT) {
+            return false;
+        }
 
         self.inventory
             .get_item(what)
@@ -1274,6 +1315,14 @@ impl Agent {
     /// How sound a thing has to still be before anybody bothers preserving
     /// it.
     const WORTH_PUTTING_BY: f32 = 0.5;
+
+    /// What somebody has to have watched happen before they will lay food out
+    /// on purpose.
+    ///
+    /// The same string the simulation records when a thing dries in the sun
+    /// with somebody standing over it - see
+    /// `Simulation::THAT_LAYING_IT_OUT_KEEPS_IT`.
+    pub const THAT_LAYING_IT_OUT_KEEPS_IT: &'static str = "drying";
 
     /// Everything a person could use and has next to none of.
     ///
@@ -2736,6 +2785,13 @@ impl Agent {
             if let Some(item) = self.inventory.items.remove(&item_id) {
                 self.state.waste_carried += item.quantity as f32
                     * crate::world::Soil::waste_from_spoilage(&item_id);
+
+                // And it is worth minding. Food going off in your own pack is
+                // a threat to the one drive that kills you soonest, and until
+                // now it was the one kind of loss that cost an agent nothing
+                // at all to watch: the meal simply stopped existing and
+                // nobody felt anything about it.
+                self.watched_food_go_off(&item_id, item.quantity);
             }
         }
     }

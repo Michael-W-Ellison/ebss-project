@@ -41,6 +41,13 @@ fn one_person() -> Simulation {
         .get_all_items_mut()
         .clear();
     simulation.population.agents[0].inventory.recalculate_weight();
+
+    // Laying food out is something somebody has to have watched happen
+    // before they will do it on purpose — see `weather_tests`. These tests
+    // are about what drying is worth, not about finding out that it works.
+    simulation.population.agents[0]
+        .found_out_how_to(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT);
+
     simulation
 }
 
@@ -347,19 +354,24 @@ fn a_surplus_gets_dried_before_it_gets_buried() {
 // Leaving it out
 // --------------------------------------------------------------------------
 
-/// Food left lying in the weather goes off faster than food in a pack.
+/// Food left lying in the weather goes off faster than food in a pack —
+/// where it is something the weather can only spoil. What the sun does to a
+/// thing thin enough to dry is a different matter and lives in
+/// `weather_tests`.
 #[test]
 fn what_is_left_out_goes_off_faster_than_what_is_carried() {
     let mut simulation = one_person();
     let here = Position::new(25, 25);
 
+    // A whole fish. The outside dries and the inside goes on being a fish,
+    // so there is nothing the sky can do to it but ruin it.
     simulation
         .world
-        .somebody_left_this(a_meal(ItemType::Grain, "grain", 10, 0), here, 0);
+        .somebody_left_this(a_meal(ItemType::Fish, "fish", 10, 0), here, 0);
 
-    let mut in_the_pack = a_meal(ItemType::Grain, "grain", 10, 0);
+    let mut in_the_pack = a_meal(ItemType::Fish, "fish", 10, 0);
 
-    for _ in 0..100 {
+    for _ in 0..40 {
         simulation.world.tick();
     }
     if let Some(food) = in_the_pack.food_data.as_mut() {

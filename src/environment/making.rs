@@ -352,6 +352,44 @@ pub const CRUSH_GRAIN: Working = Working {
     over_a_fire: false,
 };
 
+/// A fish opened out and cut down into strips.
+///
+/// Obvious - anybody with an edge and a fish works out that a fish comes
+/// apart - and worth nothing on its own. What it is worth is what the sun
+/// does to it afterwards: a whole fish left out in the sun goes off, and
+/// strips of the same fish dry. Nobody here knows that until they have seen
+/// it happen, which is the point.
+pub const CUT_FISH_INTO_STRIPS: Working = Working {
+    verb: "cut",
+    to: "fish",
+    how_much: 2,
+    makes: "fishstrips",
+    how_many: 2,
+    hands: SkillType::Leatherworking,
+    effort: 4.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Fish),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// And the same with a carcass.
+pub const CUT_MEAT_INTO_STRIPS: Working = Working {
+    verb: "cut",
+    to: "meat",
+    how_much: 2,
+    makes: "meatstrips",
+    how_many: 2,
+    hands: SkillType::Leatherworking,
+    effort: 5.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Meat),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
 /// Flax worked into a basket, which is how a person carries more than their
 /// arms hold.
 pub const WEAVE_A_BASKET: Working = Working {
@@ -458,6 +496,8 @@ pub const EVERY_WORKING: &[Working] = &[
     CUT_A_HIDE,
     SCRAPE_A_STICK,
     CRUSH_GRAIN,
+    CUT_FISH_INTO_STRIPS,
+    CUT_MEAT_INTO_STRIPS,
     WEAVE_A_BASKET,
     CARVE_A_BOWL,
     SOAK_FLAX,

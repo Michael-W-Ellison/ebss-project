@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Eight tests fail intermittently
+### 1. Thirteen tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -24,6 +24,11 @@ and running the project.
     analytics::tests::longevity_tests::water_is_not_used_up
     analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
     analytics::tests::news_tests::honest_agents_do_not_end_up_accused
+    analytics::tests::working_tests::nobody_works_more_than_they_have_a_use_for
+    analytics::tests::predator_prey_tests::predators_hold_a_herd_down
+    analytics::tests::fluid_tests::nobody_proposes_a_fluid_working_with_a_dry_pack
+    analytics::tests::relationship_tests::a_settlement_ends_up_with_enemies_in_it
+    analytics::tests::nutrient_loop_tests::what_a_settlement_eats_reaches_the_ground_it_stands_on
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -40,7 +45,26 @@ reach the flax it can see. The eighth was found the same way: it failed once
 in a full-suite run and then passed ten times running on its own, and what it
 asserts — that no honest agent is ever accused of lying — depends on where a
 random world happens to put its resources and who happens to walk over them.
-All eight build a world through
+The last five were found the same way and characterised the same way: each
+was run twenty-odd times in the working tree and the same number of times on
+the commit before it, in a worktree, and each came out at the same rate on
+both sides — `nobody_works_more_than_they_have_a_use_for` at 1-in-20 and
+1-in-20, `predators_hold_a_herd_down` at 2-in-24 and 2-in-24,
+`nobody_proposes_a_fluid_working_with_a_dry_pack` at 1-in-12 and 1-in-12, and
+`a_settlement_ends_up_with_enemies_in_it` at 3-in-20 against 1-in-20, which
+is the same order and not a difference this sample can see. The fifth,
+`what_a_settlement_eats_reaches_the_ground_it_stands_on`, is worth a note on
+method: it first read 2-in-15 in the working tree against 0-in-15 on the
+previous commit, which looks like a regression and is not one. Taken out to
+fifty-five runs a side it is 3-in-55 against 3-in-55 — the clean baseline was
+luck, and fifteen runs is not enough to tell a 5% flake from a new bug. When
+it does fail it fails at 0.250 litter falling to 0.143, which is the tile
+decaying with nothing added at all: ten agents pinned to a tile still wander
+off it during the tick they are pinned for, and where what they leave behind
+lands is up to the world. None of the five is a regression; all five had
+simply never been written down.
+
+All thirteen build a world through
 `World::new`, which draws from `thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
@@ -48,8 +72,9 @@ the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
-which is corrosive: check whether the failing test is one of these eight before
-assuming a regression.
+which is corrosive: check whether the failing test is one of these thirteen
+before assuming a regression, and if it is not, check it against the previous
+commit in a worktree before calling it one.
 
 ### 2. Three fifths of everything a settlement does fails — mostly fixed
 
@@ -1704,18 +1729,84 @@ seen while nobody provisioned at all. Burials of people are up 13.8 to 17.1
 (t = 1.7, not significant at this sample) and population is down four (t =
 -0.7); both are consistent in sign and neither is established.
 
+### 27. Nobody was born knowing how to dry a fish, and it showed
+
+The preservation states were reachable from the last batch, and the way in was
+`Action::Dry`: an agent decided to preserve a thing and the thing was
+preserved. That is a rule handed down from nowhere. Nothing in this world had
+ever *shown* anybody that laying food out keeps it, and the weather — which is
+the thing that actually does the drying — had no opinion about food at all.
+Everything lying on the ground aged at one flat penalty whatever the sky was
+doing.
+
+What the weather does now depends on what is under it. Rain rots. Sun dries a
+thing thin enough to dry through and ruins a thing that is not: a whole fish
+in the sun goes off, and the same fish opened out and cut into strips dries.
+Berries, greens, grain and roots dry as they are. Shade is the middle case and
+still costs something, because nothing keeps outdoors.
+
+That makes the discovery possible, and the discovery is the point. `cut fish`
+and `cut meat` are obvious workings — anybody with an edge works out that a
+fish comes apart — and worth exactly nothing on their own. The value is
+entirely in what happens afterwards, which nobody can predict and everybody
+can watch. An agent carrying more than it can eat, with no store within reach
+and a clear sky, puts it down; that is an ordinary thing to do and it is the
+beginning of every preserved thing this people will ever own. When the world
+converts something from raw to dried, everyone within six paces is told, the
+same way the four routes into farming work. And `Action::Dry` is now gated on
+having seen it: an agent that has never watched food dry cannot choose to dry
+food.
+
+**Leaving that last gate out cost more than half the store.** The first cut
+let anybody choose `Dry` while only the executor checked the discovery, so
+agents spent turns on an action that came back refused. Sixteen worlds a side
+against the same baseline: winter store **41.9 → 17.5 (t = -2.9)** — worse
+than doing nothing at all. Putting the same check inside the decision, where
+it belongs, turned it round:
+
+| | before | after |
+|---|---|---|
+| units in the ground through winter | 41.9 ± 8.1 | **84.3 ± 8.9** |
+| burials of food | 83.4 ± 16.0 | 498.1 ± 72.7 |
+| agents who know what drying is | 0.0 | 4.3 ± 1.2 |
+| fish and meat cut into strips | 0.0 | 14.2 ± 3.8 |
+| food deliberately laid out | 0.0 | 1.8 ± 0.6 |
+| `Dry` attempted | 582.5 ± 102.6 | 42.8 ± 13.8 |
+| people at ten thousand ticks | 25.8 ± 4.0 | 27.9 ± 3.3 |
+| burials of people | 17.7 ± 1.1 | 18.1 ± 1.7 |
+
+The winter store doubles (t = 3.5) and burials of food go up sixfold (t =
+5.6), on a population and a death rate that do not move (t = 0.4 and 0.2).
+
+**The `Dry` line is the interesting one and it went the other way on purpose.**
+Deliberate drying fell by more than nine tenths, because 582 attempts a world
+was almost entirely agents trying to dry things they had no idea how to dry.
+The preserving now happens in the weather rather than in a turn, which is both
+cheaper and the right place for it: what an agent contributes is cutting the
+fish up and choosing to leave it somewhere sunny. That number also counts
+watching somebody else's food dry, so the deliberate share of the remaining 43
+is smaller still.
+
+**What is still missing.** Salting is written, tested and unreachable, because
+there is no salt anywhere in this world — no resource, no deposit, no
+evaporation. Fermenting is reachable only through a recipe nobody chooses.
+Rain rots things at the same rate whatever the intensity, so a downpour and a
+drizzle are the same event. And nothing yet distinguishes food under a roof
+from food in the open: the shade case is a constant rather than a question
+about where the thing is lying.
+
 ## Housekeeping
 
-### 27. Committed backup file
+### 28. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 28. Build warnings
+### 29. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 29. Placeholder package metadata
+### 30. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

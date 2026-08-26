@@ -382,6 +382,10 @@ impl Simulation {
         self.what_the_beasts_make_of_us();
         self.the_beasts_act_on_it();
 
+        // And whoever was standing near enough to watch a thing dry out in
+        // the sun now knows something they did not
+        self.who_saw_that_dry();
+
         debug!("=== Tick {} ===", self.current_tick);
 
         // Process agent behavior and actions
@@ -3309,6 +3313,22 @@ impl Simulation {
             });
         }
 
+        // More than can be eaten, nowhere to put it, and a dry sky. Lay it
+        // out where you stand.
+        //
+        // This is how anybody ever finds out. Nobody here is born knowing
+        // that cut flesh laid in the sun keeps and a whole fish laid in the
+        // sun turns; somebody has to put something down and come back to it.
+        // A person carrying more than they can eat with no store to put it in
+        // puts it down, which is a perfectly ordinary thing to do and happens
+        // to be the beginning of every preserved thing this people will ever
+        // have.
+        if let Some((what, _)) = spare.clone() {
+            if crate::world::World::will_this_dry(&what) && self.is_the_sky_clear() {
+                return Some(Action::PutDown { what });
+            }
+        }
+
         // No store anywhere, and the year turning. Dig one.
         //
         // This is what was missing, and it was a circle: digging a pit wanted
@@ -3376,6 +3396,16 @@ impl Simulation {
             .get_tile(&here)
             .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
             .unwrap_or(false)
+    }
+
+    /// Whether the sky is doing anything that would dry a thing laid out in
+    /// it.
+    fn is_the_sky_clear(&self) -> bool {
+        matches!(
+            self.world.climate.weather.weather_type,
+            crate::environment::WeatherType::Clear
+                | crate::environment::WeatherType::PartlyCloudy
+        )
     }
 
     /// How far somebody will walk to a store, either to fill it or to draw on
@@ -5078,6 +5108,56 @@ impl Simulation {
             }
         }
     }
+
+    /// Whoever was standing near enough to see a thing dry out learns what
+    /// dried it.
+    ///
+    /// The world does the drying; this is what turns it into something a
+    /// person knows. It is the same shape as the four ways into farming: a
+    /// thing happens, and whoever is near enough to see it happen takes the
+    /// lesson. Nobody here is born knowing that cut flesh laid in the sun
+    /// keeps and whole flesh laid in the sun does not - it has to be watched
+    /// once.
+    fn who_saw_that_dry(&mut self) {
+        let dried: Vec<(crate::world::Position, String)> =
+            std::mem::take(&mut self.world.what_dried_in_the_sun);
+
+        if dried.is_empty() {
+            return;
+        }
+
+        for (where_it_is, what) in dried {
+            for agent in self.population.agents.iter_mut() {
+                if !agent.state.is_alive {
+                    continue;
+                }
+
+                let paces = (agent.state.position.0 - where_it_is.x)
+                    .abs()
+                    .max((agent.state.position.1 - where_it_is.y).abs());
+
+                if paces > Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                    continue;
+                }
+
+                if agent.found_out_how_to(Self::THAT_LAYING_IT_OUT_KEEPS_IT) {
+                    debug!(
+                        "Agent {} watched {what} dry out at {where_it_is:?}",
+                        agent.id
+                    );
+                }
+
+                // And what it was worth: something that would have been
+                // carrion is supper
+                agent.lessons.record_particular("dry", true);
+            }
+        }
+    }
+
+    /// What an agent has to have seen before it will deliberately lay food
+    /// out to dry.
+    pub const THAT_LAYING_IT_OUT_KEEPS_IT: &'static str =
+        crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT;
 
     /// What the beasts make of us.
     ///
@@ -10544,6 +10624,18 @@ impl Simulation {
                     .is_some();
 
                 let agent = &mut self.population.agents[agent_index];
+
+                // Nobody is born knowing this. It has to be watched once -
+                // somebody's cut fish left out in the sun, keeping where a
+                // whole one would have turned. See `who_saw_that_dry`.
+                if !agent
+                    .what_i_found_out()
+                    .contains(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
+                {
+                    return ActionResult::failure(
+                        "Nobody here knows what laying it out would do".to_string(),
+                    );
+                }
 
                 let Some(item) = agent.inventory.get_item_mut(what) else {
                     return ActionResult::failure(format!("No {what} to dry"));
