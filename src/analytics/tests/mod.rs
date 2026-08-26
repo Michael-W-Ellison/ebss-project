@@ -60,3 +60,4 @@ pub mod larder_tests;
 pub mod sacrifice_tests;
 pub mod theft_tests;
 pub mod threat_tests;
+pub mod situation_tests;

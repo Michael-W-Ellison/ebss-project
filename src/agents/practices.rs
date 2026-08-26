@@ -199,6 +199,18 @@ pub struct Lessons {
     particular: HashMap<String, f32>,
     #[serde(default)]
     particular_attempts: HashMap<String, u32>,
+    /// How many of those went well. The running belief above is an opinion,
+    /// slow to move and asymmetric on purpose; this is the plain count, and a
+    /// plain count is what one circumstance has to be compared against
+    /// another with.
+    #[serde(default)]
+    particular_successes: HashMap<String, u32>,
+    /// And the same count kept separately for each circumstance the thing was
+    /// attempted under - see `Circumstance`. Nested rather than keyed by a
+    /// pair so that it survives a round trip through a format whose map keys
+    /// are strings.
+    #[serde(default)]
+    under: HashMap<String, HashMap<Circumstance, Tally>>,
 }
 
 impl Lessons {
@@ -340,7 +352,10 @@ impl Lessons {
         } else {
             *belief = (*belief - Self::LEARNED_FROM_FAILURE).max(0.0);
         }
-        *self.particular_attempts.entry(what).or_insert(0) += 1;
+        *self.particular_attempts.entry(what.clone()).or_insert(0) += 1;
+        if worked {
+            *self.particular_successes.entry(what).or_insert(0) += 1;
+        }
     }
 
     /// Note how one particular attempt turned out.
@@ -372,6 +387,164 @@ impl Lessons {
         self.particular_attempts.get(what).copied().unwrap_or(0)
     }
 
+    /// Note how one particular attempt turned out, and what the world was
+    /// doing at the time.
+    ///
+    /// The circumstances are not a description of the attempt: nobody decides
+    /// to dry fish *in the sun*, they decide to dry fish, and the sun is
+    /// simply what the sky happened to be doing. Writing them down against the
+    /// attempt anyway is the whole of this: it is what lets an agent find out
+    /// afterwards that the sky was the part that mattered.
+    pub fn record_particular_here(&mut self, what: &str, worked: bool, here: &[Circumstance]) {
+        self.note(what.to_string(), worked);
+
+        if here.is_empty() {
+            return;
+        }
+
+        // A head is not a filing cabinet, and `what` is open-ended: every
+        // resource and every made thing in the world has its own key. Keep the
+        // circumstances only for the things this agent actually does, and let
+        // the ones it did once and never again fall out.
+        if !self.under.contains_key(what) && self.under.len() >= Self::AS_MANY_THINGS_AS_ANYBODY_HOLDS
+        {
+            self.forget_the_thing_i_have_done_least();
+        }
+
+        let against = self.under.entry(what.to_string()).or_default();
+
+        for circumstance in here {
+            let tally = against.entry(*circumstance).or_default();
+            tally.tried = tally.tried.saturating_add(1);
+            if worked {
+                tally.worked = tally.worked.saturating_add(1);
+            }
+        }
+    }
+
+    /// Drop the circumstances of whatever this agent has done least of.
+    fn forget_the_thing_i_have_done_least(&mut self) {
+        let least = self
+            .under
+            .iter()
+            .min_by_key(|(what, _)| self.particular_attempts.get(*what).copied().unwrap_or(0))
+            .map(|(what, _)| what.clone());
+
+        if let Some(what) = least {
+            self.under.remove(&what);
+        }
+    }
+
+    /// How much better or worse this thing goes under this circumstance than
+    /// it goes in general, or `None` where there is not yet a record worth
+    /// reading.
+    ///
+    /// The comparison is against the agent's own overall record of the same
+    /// thing, which is what makes it a lesson about the circumstance rather
+    /// than about the thing. A man who has only ever dried fish in the sun
+    /// learns nothing from having done it forty times: the sun is all he has
+    /// to compare with, and this returns nought for him, correctly. It takes
+    /// one wet afternoon to teach him anything at all.
+    pub fn what_this_changes(&self, what: &str, here: Circumstance) -> Option<f32> {
+        let tried = self.particular_attempts.get(what).copied().unwrap_or(0);
+        if tried < Self::ENOUGH_TO_SEE_A_PATTERN {
+            return None;
+        }
+
+        let tally = self.under.get(what)?.get(&here)?;
+        if tally.tried < Self::ENOUGH_TO_SEE_A_PATTERN {
+            return None;
+        }
+
+        let overall = self.particular_successes.get(what).copied().unwrap_or(0) as f32 / tried as f32;
+
+        Some(tally.rate()? - overall)
+    }
+
+    /// How willing this agent is to try this particular thing, here and now.
+    ///
+    /// What it thinks of the thing in general, moved by whatever it has worked
+    /// out about the circumstances it finds itself in. Where it has worked out
+    /// nothing this is exactly `how_likely_to_try_this`, which is what every
+    /// caller had before there were circumstances at all.
+    pub fn how_likely_to_try_this_here(&self, what: &str, here: &[Circumstance]) -> f32 {
+        let base = self.how_likely_to_try_this(what);
+
+        let moved: f32 = here
+            .iter()
+            .filter_map(|circumstance| self.what_this_changes(what, *circumstance))
+            .sum();
+
+        (base + moved).clamp(Self::NEVER_QUITE_GIVES_UP, Self::NEVER_QUITE_CERTAIN)
+    }
+
+    /// Whether it will bother, here and now.
+    pub fn will_try_this_here(&self, what: &str, here: &[Circumstance]) -> bool {
+        use rand::Rng;
+        rand::thread_rng().gen_bool(self.how_likely_to_try_this_here(what, here) as f64)
+    }
+
+    /// How many times this thing has been tried under this circumstance.
+    pub fn tried_this_here(&self, what: &str, here: Circumstance) -> u32 {
+        self.under
+            .get(what)
+            .and_then(|against| against.get(&here))
+            .map(|tally| tally.tried)
+            .unwrap_or(0)
+    }
+
+    /// Everything this agent has worked out about when things work, strongest
+    /// first.
+    ///
+    /// Nobody wrote any of these down. They are whatever fell out of what this
+    /// particular agent happened to do and what happened to come of it, which
+    /// is the point: an agent can arrive at "laying fish out works in the sun"
+    /// without anybody having thought of fish, or of the sun.
+    pub fn what_i_have_worked_out(&self) -> Vec<(&str, Circumstance, f32)> {
+        let mut worked_out: Vec<(&str, Circumstance, f32)> = self
+            .under
+            .keys()
+            .flat_map(|what| {
+                Circumstance::EVERY_CIRCUMSTANCE
+                    .iter()
+                    .filter_map(move |circumstance| {
+                        let changes = self.what_this_changes(what, *circumstance)?;
+                        (changes.abs() >= Self::WORTH_KNOWING)
+                            .then_some((what.as_str(), *circumstance, changes))
+                    })
+            })
+            .collect();
+
+        worked_out.sort_by(|a, b| {
+            b.2.abs()
+                .partial_cmp(&a.2.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        worked_out
+    }
+
+    /// How many such things this agent has worked out.
+    pub fn how_much_i_have_worked_out(&self) -> usize {
+        self.what_i_have_worked_out().len()
+    }
+
+    /// How many instances of a circumstance it takes before a difference is a
+    /// pattern rather than a run of luck.
+    ///
+    /// Lower than `A_FAIR_GO`, because this is a comparison between two
+    /// records the agent already holds rather than a judgement built from
+    /// nothing, and higher than the two or three that would let any pair of
+    /// coincidences turn into a rule.
+    const ENOUGH_TO_SEE_A_PATTERN: u32 = 8;
+
+    /// How large a difference has to be before it is worth calling a thing
+    /// somebody has worked out.
+    const WORTH_KNOWING: f32 = 0.15;
+
+    /// How many different things one agent keeps the circumstances of.
+    const AS_MANY_THINGS_AS_ANYBODY_HOLDS: usize = 48;
+
     /// The thing this agent has found works best for it, of those it has tried
     /// enough times to have an opinion about.
     ///
@@ -383,5 +556,90 @@ impl Lessons {
             .filter(|(undertaking, _)| self.attempts(**undertaking) >= Self::ENOUGH_TO_JUDGE)
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(undertaking, _)| *undertaking)
+    }
+}
+
+/// Something that was true of the world at the moment an attempt was made.
+///
+/// A lesson keyed on the thing attempted - `dry`, `gather:greens`, `hunt` -
+/// says whether a thing works. It cannot say *when* a thing works, and for a
+/// good half of what this people does that is the only question worth asking.
+/// Laying fish out works in the sun and ruins them in the rain; greens are
+/// there in the spring and gone by the autumn; firing clay works at a fire and
+/// nowhere else. Every one of those had to be written into the code by hand as
+/// a rule or a discovery flag, which means an agent can only ever learn about
+/// a situation somebody already thought of.
+///
+/// These are the circumstances instead. They are attached to every attempt
+/// automatically, without anybody naming the situation, and what an agent
+/// works out is which of them go with a thing working and which go with it
+/// failing. Deliberately few and deliberately coarse: a finer set would be a
+/// truer description of the afternoon and no agent would ever gather enough
+/// instances of any one of them to notice anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Circumstance {
+    /// Nothing coming out of the sky and the sun on it
+    ClearSky,
+    /// Something coming out of the sky
+    Raining,
+    /// A lit fire close enough to work at
+    AFireToHand,
+    /// Standing under a roof
+    UnderARoof,
+    /// Somebody else within sight
+    OtherPeopleAbout,
+    /// Water within a few paces
+    ByWater,
+    InSpring,
+    InSummer,
+    InAutumn,
+    InWinter,
+}
+
+impl Circumstance {
+    pub const EVERY_CIRCUMSTANCE: [Circumstance; 10] = [
+        Circumstance::ClearSky,
+        Circumstance::Raining,
+        Circumstance::AFireToHand,
+        Circumstance::UnderARoof,
+        Circumstance::OtherPeopleAbout,
+        Circumstance::ByWater,
+        Circumstance::InSpring,
+        Circumstance::InSummer,
+        Circumstance::InAutumn,
+        Circumstance::InWinter,
+    ];
+
+    /// How an agent would put it, if an agent could put things.
+    pub fn describe(&self) -> &'static str {
+        match self {
+            Circumstance::ClearSky => "in the sun",
+            Circumstance::Raining => "in the rain",
+            Circumstance::AFireToHand => "at a fire",
+            Circumstance::UnderARoof => "under a roof",
+            Circumstance::OtherPeopleAbout => "with others about",
+            Circumstance::ByWater => "by water",
+            Circumstance::InSpring => "in spring",
+            Circumstance::InSummer => "in summer",
+            Circumstance::InAutumn => "in autumn",
+            Circumstance::InWinter => "in winter",
+        }
+    }
+}
+
+/// How one thing has gone under one circumstance.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct Tally {
+    pub tried: u32,
+    pub worked: u32,
+}
+
+impl Tally {
+    fn rate(&self) -> Option<f32> {
+        if self.tried == 0 {
+            None
+        } else {
+            Some(self.worked as f32 / self.tried as f32)
+        }
     }
 }

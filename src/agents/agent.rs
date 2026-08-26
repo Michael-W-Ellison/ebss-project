@@ -4542,13 +4542,31 @@ impl Agent {
     }
 
     pub fn learn_from(&mut self, action: &Action, worked: bool) {
+        self.learn_from_this_here(action, worked, &[]);
+    }
+
+    /// The same, with what the world was doing at the time written down
+    /// alongside it.
+    ///
+    /// Nobody names the situation. The circumstances are whatever the sky, the
+    /// season and the ground happened to be, gathered by the simulation and
+    /// attached to the attempt without either the agent or the code that chose
+    /// the action having an opinion about which of them matter. Which of them
+    /// matter is the thing the agent works out - see
+    /// [`super::practices::Lessons::what_this_changes`].
+    pub fn learn_from_this_here(
+        &mut self,
+        action: &Action,
+        worked: bool,
+        here: &[super::practices::Circumstance],
+    ) {
         use super::practices::Undertaking;
 
         // The fine record, which is what decides whether this exact thing is
         // worth trying again. The coarse one below answers a different
         // question - what sort of person this is - and both are wanted.
         self.lessons
-            .record_particular(&Self::what_was_tried(action), worked);
+            .record_particular_here(&Self::what_was_tried(action), worked, here);
 
         let undertaking = match action {
             Action::Hunt { .. } => Undertaking::Hunting,

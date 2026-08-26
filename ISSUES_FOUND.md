@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Fifteen tests fail intermittently
+### 1. Sixteen tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -31,6 +31,7 @@ and running the project.
     analytics::tests::nutrient_loop_tests::what_a_settlement_eats_reaches_the_ground_it_stands_on
     analytics::tests::survival_pressure_tests::the_children_of_a_settlement_live_past_infancy
     analytics::tests::personality_tests::a_congenital_trait_survives_inheritance
+    analytics::tests::midden_tests::a_settlement_fouls_the_ground_it_stands_on
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -47,6 +48,11 @@ reach the flax it can see. The eighth was found the same way: it failed once
 in a full-suite run and then passed ten times running on its own, and what it
 asserts — that no honest agent is ever accused of lying — depends on where a
 random world happens to put its resources and who happens to walk over them.
+The sixteenth was found in a full-suite run and characterised the same way as
+the eighth: **0 failures in 15 runs on its own, and 0 in 15 on the commit
+before the change**, so it is a full-suite-parallelism flake rather than a
+regression. It asks that eight people living for a month leave some fouling on
+the ground, which depends on where a random world puts the food they eat.
 The last five were found the same way and characterised the same way: each
 was run twenty-odd times in the working tree and the same number of times on
 the commit before it, in a worktree, and each came out at the same rate on
@@ -2107,18 +2113,116 @@ nobody was dying of exposure at ten thousand ticks, so the roof buys comfort
 rather than lives at this timescale. Tents are unchanged — the burrow does not
 replace the better shelter, it fills in underneath it.
 
+### 33. An agent could only ever learn about a situation somebody had named
+
+`Lessons` has recorded what works since it was written, keyed on the thing
+attempted: `dry`, `gather:greens`, `fire:claypot`, `hunt`. Every one of those
+keys was **written out by hand by somebody who had already thought of it**, and
+what stood against it was a single flat number.
+
+So an agent could learn *that* gathering food does not pay, and could never
+learn that it does not pay *in the spring*. Everything in this model that
+depends on when a thing works therefore had to be a rule somebody wrote down:
+the bearing year is a table in `src/world/`, sun-drying is a discovery flag,
+the fire that fires clay is a precondition checked in the executor. The agents
+were never in a position to find out any of it. That is the ceiling this whole
+learning apparatus had been sitting under, and it is why the fish-strips-in-
+the-sun generalisation had to be hard-wired last time instead of falling out
+of the data.
+
+What is there instead is **the circumstances**: ten coarse facts about the
+afternoon — the sky, the season, a fire to hand, a roof overhead, water within
+a few paces, anybody else about — gathered by the simulation and written down
+against every attempt anybody makes. Nobody names the situation. Nothing in
+the arithmetic that reads them knows what a season is or what a fire is for.
+What an agent works out is which of them go with a thing working, by comparing
+its record under one circumstance against its own overall record of the same
+thing — so a man who has only ever dried fish in the sun learns nothing
+whatever about the sun, correctly, and it takes one wet afternoon to teach him
+anything at all.
+
+There are two touch points and that is the whole of it. Every attempt is
+recorded with the afternoon it was made in (`learn_from_this_here`), and every
+action the drives choose is judged where it stands rather than in the abstract
+(`how_this_agent_answers`). Where an agent has worked nothing out — which is
+every agent to begin with — the second is exactly the flat belief it was
+before.
+
+**What a settlement actually works out.** Nobody wrote any of these down. From
+one ten-thousand-tick world, counting how many of about forty people arrived
+at each independently:
+
+| what nobody wrote down | people | effect |
+|---|---|---|
+| gathering food pays in the autumn | 31 | +0.52 |
+| gathering food does not in the summer | 34 | -0.36 |
+| gathering food does not in the spring | 33 | -0.36 |
+| gathering food does not in the rain | 20 | -0.25 |
+| gathering food does not in the winter | 18 | -0.27 |
+| gathering food pays under a roof | 15 | +0.58 |
+
+The first five are **the bearing year**, which is a table in the world code
+that nothing has ever told an agent about, arrived at from experience by five
+sixths of the settlement. The sixth is a confound and worth saying so: a roof
+is where the camp is and the camp is where the harvest gets carried, and a
+correlational learner cannot tell that apart from a roof helping. That is an
+honest failure mode of this kind of learner rather than a bug in it.
+
+**Thirty-two worlds a side:**
+
+| | before | after | t |
+|---|---|---|---|
+| situation lessons worked out, per settlement | 0.0 | **258.3 ± 10.0** | 25.8 |
+| ...by the best-placed person in it | 0.0 | **15.9 ± 0.4** | 42.6 |
+| food in the ground through the winter | 154.9 | **203.7 ± 12.8** | 2.6 |
+| gathers | 8,480 | **11,382 ± 508** | 3.4 |
+| people at ten thousand ticks | 31.2 | 35.3 ± 1.3 | 1.6 |
+| hunts | 141.0 | 178.4 ± 20.9 | 1.3 |
+| burials of people | 13.4 | 13.7 | 0.3 |
+| turns refused | 16,462 | **21,493 ± 718** | 3.6 |
+| share of turns refused | 7.7% | **9.2%** | 4.0 |
+
+A settlement that has worked out the harvest **gathers a third more and puts a
+third more in the ground** (t = 2.6 and 3.4), which is the first time the
+winter store has moved past about a hundred and fifty in any measured arm.
+Population is up an eighth, directional rather than established. Burials do not
+move.
+
+**And it costs a fifth more refused turns** (t = 3.6), which is established and
+worth naming rather than burying. The cause is not mysterious. The asymmetric
+belief in `Lessons` — a failure counts for 0.10 and a success for 0.06 —
+saturates *any* activity below a 62.5% success rate at the floor, and gathering
+has always been well below it. So `gather:food` sits at `NEVER_QUITE_GIVES_UP`
+whatever happens, the negative lifts have nowhere to push it, and the whole
+effect of the circumstances is the autumn lift pushing it up. The settlement
+gathers very hard in the harvest, and a good share of those turns find a patch
+somebody has already picked out.
+
+That is two follow-ups rather than one. A `Gather` that knew the node was empty
+before spending the turn on it would take most of the refusals out; and the
+asymmetry in `Lessons` deserves looking at on its own, because a floor that
+everything reaches is a floor that carries no information.
+
+**What this does not reach.** The sun-drying case that prompted it is still not
+learnable, and the reason is worth writing down: the signal these lessons are
+built on is `ActionResult::success`, which in most executors means *the action
+was permitted*, not *the action paid*. Laying food out in the rain succeeds
+perfectly well; what fails is the food, three days later, somewhere the agent
+is no longer standing. Situation-keyed lessons cannot reach a delayed outcome,
+and giving them one is a separate piece of work from giving them a situation.
+
 ## Housekeeping
 
-### 33. Committed backup file
+### 34. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 34. Build warnings
+### 35. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 35. Placeholder package metadata
+### 36. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

@@ -40,6 +40,7 @@ pub use replay::{SessionRecorder, SessionPlayer, StateSnapshot, AgentSnapshot, W
 pub use storage::{StorageManager, StorageConfig, TimeSeriesStore, DocumentStore, DataPoint};
 pub use web_api::{ApiServer, ApiConfig, SimulationDataProvider, SimulationStatus, PopulationSummary, AgentSummary, AgentDetail};
 
+use crate::agents::practices::Circumstance;
 use crate::core::DriveType;
 use crate::world::{FoodDatabase, NutritionalContent, EatResult};
 use crate::environment::{Action, ActionResult};
@@ -810,13 +811,21 @@ impl Simulation {
                     }
                 }
 
+                // What the world was doing while that was attempted, taken
+                // before the agent is borrowed to be told about it
+                let what_it_was_like = {
+                    let agent = &self.population.agents[agent_index];
+                    self.what_it_is_like_here(agent, agent.state.position)
+                };
+
                 // Apply feedback to agent (drive satisfaction)
                 let agent = &mut self.population.agents[agent_index];
                 agent.apply_feedback(&action_result, drive_type);
 
                 // And note how it went, so the agent does more of what pays
-                // and less of what does not
-                agent.learn_from(&action, action_result.success);
+                // and less of what does not - and note what the afternoon was
+                // like, so it can work out for itself which afternoons pay
+                agent.learn_from_this_here(&action, action_result.success, &what_it_was_like);
 
                 // Then join the doing to the need it answered and the ground
                 // it was answered on, which is what lets a thirsty man walk
@@ -2212,8 +2221,15 @@ impl Simulation {
             b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        // What the world is doing, once, for the whole of this turn's
+        // deliberation: every drive's answer is judged against the same
+        // afternoon.
+        let here = self.what_it_is_like_here(agent, agent_position);
+
         for (drive_type, _) in ranked {
-            if let Some(action) = self.how_this_agent_answers(drive_type, agent, agent_position) {
+            if let Some(action) =
+                self.how_this_agent_answers(drive_type, agent, agent_position, &here)
+            {
                 return (action, false);
             }
         }
@@ -2265,6 +2281,7 @@ impl Simulation {
         drive_type: DriveType,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
+        here: &[Circumstance],
     ) -> Option<Action> {
         // "When an action fails to satisfy a drive, its odds of repeating
         // should decrease. Inversely, when an action satisfies a drive, its
@@ -2283,9 +2300,16 @@ impl Simulation {
         // and again, which is how he finds out the world has changed.
         let answer = self.what_this_drive_offers(drive_type, agent, agent_position)?;
 
+        // And judged where it stands, not in the abstract. What an agent has
+        // worked out about the circumstances moves this either way: a thing
+        // that mostly fails is still worth doing on the afternoon it works,
+        // and a thing that mostly pays is not worth doing on the afternoon it
+        // does not - see `Lessons::how_likely_to_try_this_here`. Where the
+        // agent has worked out nothing, which is every agent to begin with,
+        // this is exactly the flat belief it was before.
         if agent
             .lessons
-            .will_try_this_again(&crate::agents::Agent::what_was_tried(&answer))
+            .will_try_this_here(&crate::agents::Agent::what_was_tried(&answer), here)
         {
             Some(answer)
         } else {
@@ -3731,6 +3755,95 @@ impl Simulation {
                 | crate::environment::WeatherType::PartlyCloudy
         )
     }
+
+    /// What the world is doing where this agent is standing.
+    ///
+    /// Nobody chooses these and nobody is asked about them. They are written
+    /// down against every attempt an agent makes, and what the agent works out
+    /// afterwards is which of them go with a thing working - see
+    /// [`crate::agents::practices::Circumstance`].
+    ///
+    /// This is the whole of the mechanism by which a lesson can be about a
+    /// situation nobody named. Everything that had to be a rule or a discovery
+    /// flag before - laying fish out only pays under a clear sky, firing clay
+    /// only works at a fire, greens are a spring thing - is in principle
+    /// reachable from here without anybody writing it down, because the sky,
+    /// the fire and the season are all in this list and the arithmetic that
+    /// reads them does not know or care what any of them is for.
+    fn what_it_is_like_here(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Vec<Circumstance> {
+        use crate::environment::seasons::Season;
+        use crate::world::Position;
+
+        let mut here = Vec::with_capacity(4);
+
+        if self.is_the_sky_clear() {
+            here.push(Circumstance::ClearSky);
+        } else if self
+            .world
+            .climate
+            .weather
+            .weather_type
+            .precipitation_intensity()
+            > 0.0
+        {
+            here.push(Circumstance::Raining);
+        }
+
+        if self
+            .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+            .is_some()
+        {
+            here.push(Circumstance::AFireToHand);
+        }
+
+        // Standing under one, not within a walk of one: this is a fact about
+        // the afternoon, and a roof across the camp keeps nothing off you.
+        if self.world.buildings.iter().any(|building| {
+            building.position.x == agent_position.0 && building.position.y == agent_position.1
+        }) {
+            here.push(Circumstance::UnderARoof);
+        }
+
+        if self.population.agents.iter().any(|other| {
+            other.state.is_alive
+                && other.id != agent.id
+                && (other.state.position.0 - agent_position.0).abs() <= Self::WITHIN_SIGHT
+                && (other.state.position.1 - agent_position.1).abs() <= Self::WITHIN_SIGHT
+        }) {
+            here.push(Circumstance::OtherPeopleAbout);
+        }
+
+        let by_water = (-Self::WITHIN_A_FEW_PACES..=Self::WITHIN_A_FEW_PACES).any(|dy| {
+            (-Self::WITHIN_A_FEW_PACES..=Self::WITHIN_A_FEW_PACES).any(|dx| {
+                self.world
+                    .grid
+                    .get_tile(&Position::new(agent_position.0 + dx, agent_position.1 + dy))
+                    .is_some_and(|tile| tile.terrain.is_aquatic())
+            })
+        });
+        if by_water {
+            here.push(Circumstance::ByWater);
+        }
+
+        here.push(match self.world.climate.current_season() {
+            Season::Spring => Circumstance::InSpring,
+            Season::Summer => Circumstance::InSummer,
+            Season::Fall => Circumstance::InAutumn,
+            Season::Winter => Circumstance::InWinter,
+        });
+
+        here
+    }
+
+    /// How far off somebody else still counts as being about.
+    const WITHIN_SIGHT: i32 = 6;
+
+    /// And how far off water still counts as being here.
+    const WITHIN_A_FEW_PACES: i32 = 2;
 
     /// How far somebody will walk to a store, either to fill it or to draw on
     /// it.

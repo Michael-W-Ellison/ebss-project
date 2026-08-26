@@ -19,7 +19,7 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 247 source files, with 1,757 library tests.
+across 247 source files, with 1,778 library tests.
 
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
@@ -258,6 +258,35 @@ original specifications.
   bad wood do not have to run out of it. That was not a number anybody had
   looked at, and it was the largest single waste left in the model. See
   ISSUES_FOUND.md #29 and #30
+- ✅ A lesson about a situation rather than a hand-written string. `Lessons`
+  has recorded what works since it was written, keyed on the thing attempted —
+  `dry`, `gather:greens`, `hunt` — and every one of those keys was written out
+  by hand by somebody who had already thought of it. So an agent could learn
+  *that* gathering food does not pay and could never learn that it does not
+  pay *in the spring*, which is why everything in this model that depends on
+  when a thing works had to be a rule somebody wrote down: the bearing year is
+  a table, sun-drying is a discovery flag, the fire that fires clay is a
+  precondition in the executor.
+
+  What is there instead is ten coarse facts about the afternoon — the sky, the
+  season, a fire to hand, a roof overhead, water within a few paces, anybody
+  else about — written down against every attempt anybody makes. Nobody names
+  the situation, and nothing in the arithmetic knows what a season is. An agent
+  works out which of them go with a thing working by comparing its record under
+  one circumstance against its own overall record of the same thing, so a man
+  who has only ever dried fish in the sun learns nothing whatever about the
+  sun, and it takes one wet afternoon to teach him anything at all.
+
+  A settlement arrives at about **two hundred and sixty** such lessons that
+  nobody wrote down, and the strongest of them, reached independently by five
+  sixths of the people in it, is **the bearing year** — gathering pays in the
+  autumn and does not in the spring or the summer — which is a table in the
+  world code that nothing had ever told an agent about. A people that has
+  worked out the harvest **gathers a third more and puts a third more in the
+  ground** (t = 3.4 and 2.6, thirty-two worlds a side). It costs a fifth more
+  refused turns, which is established and written up rather than buried: they
+  gather very hard in the autumn and a good share of it finds a patch already
+  picked out. See ISSUES_FOUND.md #33
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the
@@ -622,6 +651,10 @@ original specifications.
   undertaking it was and shifts what they try next. Failures count for more
   than successes, nothing is written off before five attempts, and a hunter
   who never catches anything stops hunting
+- ✅ And learn *when* it pays: every attempt goes down with what the world was
+  doing at the time, so an agent can work out that a thing pays in the autumn
+  and not in the spring without anybody having written down that there is such
+  a thing as a season
 - 🚧 Agents cannot yet hear anything: that percept channel is built but unfed
 - ✅ Clothing: agents gather flax, cotton and bark, make garments and wear
   them. A garment is worth what its material is worth and what the hand that
