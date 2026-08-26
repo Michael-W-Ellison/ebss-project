@@ -2352,6 +2352,49 @@ impl Agent {
     /// cordage, and holds a spear three turns later. Nothing here asks for a
     /// thing already carried: two spears are no better than one until the
     /// first one breaks.
+    /// A vessel this agent would rather have than not, if it has none.
+    ///
+    /// **Nothing in this world had ever wanted one.** `what_i_would_make` asks
+    /// only after tools - something to hunt with, something to cut wood with,
+    /// something to work a hide with - so a bowl and a fired pot both declared
+    /// what they hold and neither was ever made by anybody. Which meant no
+    /// agent could carry water, so every drink was a walk to the river and
+    /// back; and it meant `Boil` was refused for want of something to hold the
+    /// sea in **two hundred and forty-seven times a world**, so salt was
+    /// effectively unreachable too.
+    ///
+    /// A vessel is the plainest preparation there is. The trip to the water is
+    /// the cost and the water is free, so a person who owns something to carry
+    /// it in pays that cost once and drinks for days.
+    pub fn what_vessel_i_would_rather_have(&self) -> Option<(&'static str, &'static str)> {
+        if self.what_i_can_hold_water_in() > 0 {
+            return None;
+        }
+
+        crate::environment::making::EVERY_WORKING
+            .iter()
+            .filter(|working| working.holds.is_some_and(|held| held > 0.0))
+            .filter(|working| working.obvious || self.found_out.contains(working.makes))
+            .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
+            .max_by(|a, b| {
+                a.holds
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.holds.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|working| (working.verb, working.to))
+    }
+
+    /// How many things this agent has that will hold a liquid.
+    pub fn what_i_can_hold_water_in(&self) -> u32 {
+        self.inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.is_container())
+            .map(|item| item.quantity)
+            .sum()
+    }
+
     pub fn what_i_would_make(&self) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
 

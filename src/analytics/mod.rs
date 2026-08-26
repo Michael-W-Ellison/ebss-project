@@ -2456,6 +2456,41 @@ impl Simulation {
             DriveType::Utility => agent
                 .what_i_would_work_on()
                 .map(|(verb, to)| Action::Work { verb, to })
+                // Something to carry water in. This belongs here, beside the
+                // tools, because it is the same kind of thing: a thing a
+                // person would rather have than not.
+                //
+                // Nothing in this world had ever wanted one. `what_i_would_make`
+                // asks only after tools - something to hunt with, to cut wood
+                // with, to work a hide with - so a bowl and a fired pot both
+                // declared what they hold and neither was ever made by
+                // anybody. No agent could carry water, so every drink was a
+                // walk to the river; and `Boil` was refused for want of
+                // something to hold the sea in two hundred and fifty times a
+                // world, which put salt out of reach on the same account.
+                //
+                // The first cut of this put it at the head of the provisioning
+                // branch, where it cost a settlement half its winter store and
+                // tripled its refused turns - an agent that wanted a bowl and
+                // had nothing to carve with returned a refused `Work` every
+                // turn instead of burying or drying anything. A branch that
+                // can refuse must not stand in front of branches that cannot.
+                .or_else(|| {
+                    // Gated on owning something to carve with. Without this
+                    // gate it was the single largest refused action in the
+                    // model - one thousand seven hundred turns a world spent
+                    // asking to carve a bowl bare-handed - because a bowl is
+                    // the only vessel most people can name and most people
+                    // have nothing to carve one with.
+                    agent
+                        .what_i_have_to_work_with(crate::agents::SkillType::Crafting)?;
+                    agent
+                        .what_vessel_i_would_rather_have()
+                        .map(|(verb, to)| Action::Work {
+                            verb: verb.to_string(),
+                            to: to.to_string(),
+                        })
+                })
                 .or_else(|| agent.what_i_would_make().map(|item_type| Action::Craft { item_type }))
                 .or_else(|| {
                     // Somebody standing here with the thing, who wants what is
@@ -3710,6 +3745,28 @@ impl Simulation {
         // Autumn with nowhere to put anything is reason enough to dig.
         if self.is_ground_a_pit_will_go_in(here) {
             return Some(Action::Excavate);
+        }
+
+        // And with nothing at all to put by, the trip is still worth making
+        // pay. Both of these sit at the *bottom* of this branch on purpose.
+        //
+        // The first cut of them sat at the top, and it cost a settlement half
+        // its winter store and tripled its refused turns: an agent that wanted
+        // a bowl and had nothing to carve with returned a refused `Work` every
+        // turn instead of burying, drying or storing anything at all. A branch
+        // that can refuse must never stand in front of the branches that
+        // cannot.
+        //
+        // Taking what can be carried while standing here anyway. "I am
+        // going here or doing this action anyway - is there anything I can do
+        // which decreases the time to satisfy a drive without detracting from
+        // the current one?" The trip out is the expensive part and the load is
+        // nearly free, so somebody standing on a salt flat takes what they can
+        // carry rather than what they need today.
+        if let Some(what) = self.what_i_should_take_while_i_am_here(agent, agent_position) {
+            return Some(Action::Gather {
+                resource_type: what,
+            });
         }
 
         None
@@ -7698,6 +7755,70 @@ impl Simulation {
     /// What one trip out brings back, as near as makes no difference. Below
     /// this much room in the pack there is no point setting off.
     const AS_MUCH_AS_ONE_TRIP_WEIGHS: f32 = 1.0;
+
+    /// Something worth taking while this one is standing here anyway.
+    ///
+    /// The whole of "make the trip pay". Three things have to be true and each
+    /// is doing work. It has to be **underfoot or a pace away**, because the
+    /// premise is that the walk has already been paid for - a thing nine paces
+    /// off is a trip, not a top-up. It has to be something that **keeps**, so
+    /// that a load put by is still a load in a fortnight; there is no sense
+    /// carrying home a fortnight of berries. And this one has to hold **less
+    /// than a working stock** of it already, or every agent in the world spends
+    /// its life at a woodpile.
+    ///
+    /// Salt is the case that shows why it matters: a salt flat is a long walk
+    /// and salt keeps for ever, so taking one lot is throwing away the walk.
+    fn what_i_should_take_while_i_am_here(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<String> {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let now = self.current_tick;
+
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| resource.amount > 0)
+            .filter(|resource| here.distance_to(&resource.position) <= Self::ALREADY_STANDING_HERE)
+            .filter(|resource| {
+                !agent
+                    .exploration_knowledge
+                    .is_it_picked_out(resource.position, now)
+            })
+            .filter_map(|resource| Self::gathered_as(resource.resource_type))
+            .filter(|named| Self::does_it_keep(named))
+            .find(|named| {
+                agent.how_many_i_have(named) < Self::WHAT_A_WORKING_STOCK_IS
+                    && self.could_this_gather_come_to_anything(agent, agent_position, named)
+            })
+            .map(|named| named.to_string())
+    }
+
+    /// Whether a load of this is still a load in a fortnight.
+    ///
+    /// Deliberately not "is it food": greens and roots go off and stone does
+    /// not, and the question here is about keeping rather than about eating.
+    fn does_it_keep(named: &str) -> bool {
+        matches!(
+            named,
+            "wood" | "stone" | "salt" | "clay" | "flax" | "cotton" | "iron"
+        )
+    }
+
+    /// How far off still counts as being here. A thing underfoot or a pace
+    /// away costs nothing to pick up; a thing nine paces off is a trip.
+    const ALREADY_STANDING_HERE: u32 = 1;
+
+    /// How much of a keeping thing is enough to stop topping up.
+    ///
+    /// Enough wood for several fires rather than one, and enough salt to see a
+    /// winter's meat put by. Above this an agent has better things to do than
+    /// stand at a woodpile.
+    const WHAT_A_WORKING_STOCK_IS: u32 = 12;
 
     /// What a request to gather names, in the world's own terms.
     ///

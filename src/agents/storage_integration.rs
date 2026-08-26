@@ -87,6 +87,16 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
 
         // Mineral
         "clay" => Some(ItemType::Clay),
+        // Salt, greens and roots all existed as `ItemType`s - salt has had a
+        // trade value of twelve since the economy was written - and none of
+        // the three was in this table, which is the one place that turns a
+        // thing in a pack into a thing the world can price or store. So an
+        // agent holding salt was refused when it tried to put any by, six
+        // hundred and sixty-six times a world. Third time this table has
+        // drifted from the vocabulary beside it.
+        "salt" => Some(ItemType::Salt),
+        "greens" => Some(ItemType::Greens),
+        "roots" => Some(ItemType::Roots),
         "sand" => Some(ItemType::Sand),
         "coal" => Some(ItemType::Coal),
 

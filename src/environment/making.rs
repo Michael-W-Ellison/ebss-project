@@ -431,9 +431,14 @@ pub const FIRE_BRICKS: Working = Working {
 
 /// What a fired pot will hold, in units of water.
 ///
-/// A little more than a carved wooden bowl, because it does not leak and it
-/// does not have to be hollowed out of anything.
-pub const WHAT_A_FIRED_POT_HOLDS: f32 = 4.0;
+/// More than twice what a carved wooden bowl holds, because it does not leak
+/// and it does not have to be hollowed out of anything.
+///
+/// This said "a little more than a carved wooden bowl" and was set to exactly
+/// what a carved wooden bowl holds, so firing clay bought a people nothing
+/// whatever over carving wood and there was no reason on earth to bother with
+/// pottery. The comment was right and the number was wrong.
+pub const WHAT_A_FIRED_POT_HOLDS: f32 = 9.0;
 
 /// A carcass taken apart into joints.
 ///
@@ -568,7 +573,12 @@ pub const CARVE_A_BOWL: Working = Working {
     how_many: 1,
     hands: SkillType::Crafting,
     effort: 10.0,
-    obvious: false,
+    // Obvious, where it used to want discovering. Weaving a basket out of
+    // flax is obvious in this table and hollowing out a block of wood is no
+    // greater a leap - and gating it kept the *entire fluid family* inert:
+    // no vessel meant no carried water, no boiling, and no salt. A people
+    // that carves a spear can hollow a log.
+    obvious: true,
     holds: Some(4.0),
     feeds: None,
     wants_water: 0.0,

@@ -19,7 +19,7 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 249 source files, with 1,847 library tests.
+across 250 source files, with 1,859 library tests.
 
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
@@ -374,6 +374,29 @@ original specifications.
   waste in the model — it gets filled and never drawn down. Every "winter
   store" headline above is measuring a stock that quietly loses about half of
   itself. Measured and written up, not yet fixed. See ISSUES_FOUND.md #39
+- 🚧 Making the trip pay, and a vessel nobody had ever wanted. `what_i_would_make`
+  asks only after **tools**, so a carved bowl and a fired pot both declared what
+  they hold and neither was ever made on purpose by anybody. No agent could
+  carry water, so every drink was a walk to the river; `Boil` was refused for
+  want of something to hold the sea in 250 times a world, putting salt out of
+  reach; and the fluid family built in an earlier batch *because vessels
+  existed* has been inert ever since. Two older faults sat underneath: carving
+  a bowl wanted discovering where weaving a basket is obvious, and a fired pot
+  was set to hold **exactly** what a wooden bowl holds, with a comment above it
+  saying "a little more than a carved wooden bowl".
+
+  The other half is taking what you can carry while you are standing there
+  anyway — the trip is the expensive part and the load is nearly free, so
+  somebody on a salt flat fills up rather than taking what they need today.
+
+  **Burials are down a fifth (t = -2.7), and that is the only established
+  result.** The vessel half is built, tested, and **does not reach the field**:
+  vessels per settlement did not move and boil refusals did not move. The
+  diagnosis and the next move are written up rather than guessed at, along with
+  two self-inflicted regressions caught by measurement and a third instance of
+  this project's recurring vocabulary defect — salt, greens and roots all
+  existed as item types and none was in the table that lets the world price or
+  store a thing. See ISSUES_FOUND.md #40
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the

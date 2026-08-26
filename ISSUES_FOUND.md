@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Eighteen tests fail intermittently
+### 1. Nineteen tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -34,6 +34,7 @@ and running the project.
     analytics::tests::midden_tests::a_settlement_fouls_the_ground_it_stands_on
     analytics::tests::survival_loop_tests::population_feeds_itself_over_a_long_run
     analytics::tests::clay_tests::a_curious_agent_with_clay_tries_molding_it
+    analytics::tests::barter_tests::two_people_with_opposite_problems_trade
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -55,6 +56,9 @@ the eighth: **0 failures in 15 runs on its own, and 0 in 15 on the commit
 before the change**, so it is a full-suite-parallelism flake rather than a
 regression. It asks that eight people living for a month leave some fouling on
 the ground, which depends on where a random world puts the food they eat.
+The nineteenth was found in a full-suite run and characterised the same way as
+the rest: **0 failures in 15 runs on its own here, and 1 in 15 on the commit
+before the change**.
 The eighteenth is the only one of the set with a **known mechanism** rather
 than a shrug about world layout, and it is worth stating because the same trap
 is waiting for any test of this shape. It asserts that a curious agent with
@@ -2541,18 +2545,98 @@ Not fixed here. It is the next thing to look at, and it wants its own batch:
 either people draw on the larder far too rarely, or the pit's rate is wrong, and
 telling those apart is a measurement rather than a guess.
 
+### 40. Nothing in this world had ever wanted a vessel
+
+`what_i_would_make` asks only after **tools** — something to hunt with, to cut
+wood with, to work a hide with. A carved bowl and a fired pot both declare what
+they hold, and neither was ever made by anybody on purpose, because nothing
+anywhere wanted one.
+
+Which cost three things at once. No agent could carry water, so every drink was
+a walk to the river and back. `Boil` was refused for want of something to hold
+the sea in **250 times a world**, so salt was effectively out of reach. And the
+whole fluid family — built deliberately in an earlier batch *because vessels
+existed* — has been inert ever since.
+
+Two things were wrong underneath it, and both were older than this batch.
+Carving a bowl wanted **discovering**, where weaving a flax basket is obvious
+and hollowing out a block of wood is no greater a leap; a people that carves a
+spear can hollow a log. And `WHAT_A_FIRED_POT_HOLDS` was set to **exactly what
+a carved wooden bowl holds**, with a doc comment directly above it reading "a
+little more than a carved wooden bowl". The comment was right and the number was
+wrong, so firing clay bought a people nothing over carving wood and there was no
+reason on earth to bother with pottery.
+
+The other half of the entry is **making the trip pay**. "I am going here or
+doing this action anyway — is there anything I can do which decreases the time
+to satisfy a drive without detracting from the current one?" The trip out is the
+expensive part and the load is nearly free, so somebody standing on a salt flat
+takes what they can carry rather than what they need today. Three conditions,
+each doing work: it has to be **underfoot**, because the premise is that the
+walk is already paid for; it has to **keep**, so there is no sense carrying home
+a fortnight of berries; and the agent has to hold **less than a working stock**,
+or everybody spends their life at a woodpile.
+
+**Sixteen worlds a side:**
+
+| | before | after | t |
+|---|---|---|---|
+| **burials of people** | 14.6 | **11.4 ± 0.7** | **-2.66** |
+| salt held | 0.6 | 5.1 ± 2.6 | 1.7 |
+| meat left in the field | 52.6 | 8.5 ± 7.1 | -1.6 |
+| food actually eaten | 3,472 | 3,519 | 0.1 |
+| share of what was got that fed somebody | 74% | 74% | 0.4 |
+| people at ten thousand ticks | 37.9 | 35.6 | -0.6 |
+| things that hold water, per settlement | 11.9 | 11.4 | -0.2 |
+| `Boil` refused for want of a vessel | 250 | 252 | 0.0 |
+
+**One established result: a fifth fewer burials.** Everything else is a null,
+and that includes the thing this entry is named after. **The vessel half does
+not reach the field.** Vessels per settlement did not move and boil refusals did
+not move, so salt is still mostly out of reach and water is still mostly a walk.
+
+The diagnosis, as far as it goes: `what_i_would_work_on` takes the **first**
+thing in the working table it can do and stops, and carving a bowl sits late in
+that table, so anything earlier with materials to hand wins the turn. That is
+the same trap that once had a whole people's discoveries decided by the order of
+a list, and which `what_working_i_would_try_out` fixed for itself by starting
+each agent at a different place in the table. The obvious next move is to do the
+same here — and it is a *next* move rather than this one, because it was tried
+in this batch, made things measurably worse, and was reverted rather than kept
+on a hunch.
+
+**Two self-inflicted regressions, both caught by measurement.** The first cut
+put the vessel and top-up branches at the **head** of the provisioning branch,
+where an agent that wanted a bowl and had nothing to carve with returned a
+refused `Work` every turn instead of burying, drying or storing anything: the
+winter store halved (t = -5.0), food eaten fell 38% (t = -3.7) and the failure
+rate tripled (t = 6.6). **A branch that can refuse must never stand in front of
+branches that cannot.** The second was subtler: with the vessel branch in place
+but ungated, "nothing in hand that is any use for Crafting" became the single
+largest refused action in the model at **1,739 turns a world**, all of them
+spent asking to carve a bowl bare-handed.
+
+**And a third instance of the vocabulary defect this project keeps producing.**
+`ItemType::Salt`, `Greens` and `Roots` all exist — salt has had a trade value of
+twelve since the economy was written — and none of the three was in
+`id_to_item_type`, the one table that turns a thing in a pack into a thing the
+world can price or store. So the moment agents actually started holding salt,
+they were refused when they tried to put any by, **666 times a world**. That is
+the third time a table has drifted from the vocabulary beside it, after the
+gather words and the executor's own list.
+
 ## Housekeeping
 
-### 40. Committed backup file
+### 41. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 41. Build warnings
+### 42. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 42. Placeholder package metadata
+### 43. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
