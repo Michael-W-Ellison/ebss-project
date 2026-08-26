@@ -961,6 +961,22 @@ pub const COMMUNICATE: Verb = verb(
     Some("shareinformation"),
 );
 
+/// Asking somebody how a thing of theirs came about.
+///
+/// The other half of `communicate`, and the half that was missing. Sharing is
+/// somebody deciding to say something; this is somebody deciding to ask, which
+/// is how a discovery gets out of the head that made it and into the head that
+/// needed it. A settlement of forty could work the same thing out forty times
+/// over and be no further on than the first man who worked it out.
+pub const ASK_ABOUT: Verb = verb(
+    "ask about",
+    Family::Exchange,
+    Targets::APerson,
+    Wants::BareHands,
+    &[Changes::WhatIsKnown],
+    Some("ask"),
+);
+
 // ---------------------------------------------------------------------------
 // 11. Equipment and utilities
 // ---------------------------------------------------------------------------
@@ -1061,7 +1077,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 9
     ATTACK_WITH, DEFEND_WITH, THROW, AIM, DODGE, PARRY, FREEZE,
     // 10
-    GIVE_TO, TAKE_FROM, TRADE, SHARE, COMMUNICATE,
+    GIVE_TO, TAKE_FROM, TRADE, SHARE, COMMUNICATE, ASK_ABOUT,
     // 11
     WEAR, EQUIP, UNEQUIP, USE,
     // 12

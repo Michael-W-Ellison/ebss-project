@@ -41,6 +41,7 @@ pub use storage::{StorageManager, StorageConfig, TimeSeriesStore, DocumentStore,
 pub use web_api::{ApiServer, ApiConfig, SimulationDataProvider, SimulationStatus, PopulationSummary, AgentSummary, AgentDetail};
 
 use crate::agents::practices::Circumstance;
+use crate::agents::wondering::Kept;
 use crate::core::DriveType;
 use crate::world::{FoodDatabase, NutritionalContent, EatResult};
 use crate::environment::{Action, ActionResult};
@@ -109,6 +110,9 @@ pub struct Simulation {
     /// question - see `who_came_back_to_look`. Nobody wrote any of these down
     /// either; they are whatever anybody happened to leave lying about.
     pub what_anybody_found_out: std::collections::HashMap<String, u64>,
+    /// And what one person told another, by discovery. The one way a thing
+    /// somebody worked out has ever had of leaving the head that made it.
+    pub what_anybody_was_told: std::collections::HashMap<String, u64>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -274,6 +278,7 @@ impl Simulation {
             actions_failed: std::collections::HashMap::new(),
             actions_failed_because: std::collections::HashMap::new(),
             what_anybody_found_out: std::collections::HashMap::new(),
+            what_anybody_was_told: std::collections::HashMap::new(),
         }
     }
 
@@ -402,6 +407,7 @@ impl Simulation {
         // And whoever was standing near enough to watch a thing dry out in
         // the sun now knows something they did not
         self.who_saw_that_dry();
+        self.what_the_fire_hardened();
         self.who_came_back_to_look();
 
         // And whoever has been living on a midden or beside a body may be
@@ -2515,6 +2521,19 @@ impl Simulation {
                 // turn and nothing else.
                 if let Some(what) = agent.what_i_would_look_at() {
                     return Some(Action::Examine { what });
+                }
+
+                // Asking somebody about a thing of theirs you have never
+                // seen the like of.
+                //
+                // First, because it is the cheapest way anybody ever finds
+                // anything out - somebody else has already spent the season
+                // finding it out the hard way - and because it is the only
+                // route a discovery has ever had out of the head that made it.
+                if let Some((who, what)) =
+                    self.somebody_to_ask_about_something(agent, agent_position)
+                {
+                    return Some(Action::AskAbout { who, what });
                 }
 
                 // What happens if I leave this here.
@@ -5725,19 +5744,47 @@ impl Simulation {
                 let close_enough = near
                     <= crate::agents::wondering::Wondering::CLOSE_ENOUGH_TO_GO_AND_LOOK;
 
-                let lying_here = self
-                    .world
-                    .what_is_lying_at(&wondering.where_it_is)
-                    .into_iter()
-                    .find(|left| {
-                        left.item.item_id == wondering.what
-                            || left.item.item_id != wondering.as_it_was.called
-                    })
-                    .map(|left| crate::agents::wondering::Watched::of(&left.item));
+                // Where to go and look depends on what was done. Burying
+                // puts a thing in a hole and salting leaves it in the pack;
+                // only leaving it out puts it on the grass.
+                let as_it_is = match wondering.where_to_look() {
+                    Kept::OnTheGround => self
+                        .world
+                        .what_is_lying_at(&wondering.where_it_is)
+                        .into_iter()
+                        .find(|left| {
+                            left.item.item_id == wondering.what
+                                || left.item.item_id != wondering.as_it_was.called
+                        })
+                        .map(|left| crate::agents::wondering::Watched::of(&left.item)),
+                    Kept::InThePit => self
+                        .world
+                        .pit_at(wondering.where_it_is)
+                        .and_then(|pit| {
+                            pit.holds
+                                .iter()
+                                .find(|item| item.item_id == wondering.what)
+                        })
+                        .map(crate::agents::wondering::Watched::of),
+                    // In the pack, which goes where its owner goes - so this
+                    // one is always answerable and never wants a walk back.
+                    Kept::InMyPack => self.population.agents[index]
+                        .inventory
+                        .get_item(&wondering.what)
+                        .map(crate::agents::wondering::Watched::of),
+                };
 
-                match (close_enough, lying_here) {
+                let can_see_it = close_enough
+                    || wondering.where_to_look() == Kept::InMyPack;
+                let waited = wondering.given_up_on(now);
+
+                match (can_see_it, as_it_is) {
                     (true, Some(as_it_is)) => {
-                        if let Some(became) = wondering.as_it_was.what_became_of_it(&as_it_is) {
+                        // What the verb makes of it - and the verb decides,
+                        // because a buried thing that has not changed is the
+                        // whole point of burying it and a thing left on the
+                        // grass that has not changed is nothing at all.
+                        if let Some(became) = wondering.what_it_means(&as_it_is, waited) {
                             answers.push((
                                 wondering.called(),
                                 became.for_the_better,
@@ -5745,23 +5792,13 @@ impl Simulation {
                                 Some(became.says),
                             ));
                             done.push(which);
-                        } else if wondering.given_up_on(now) {
-                            // Still there, still exactly as it was. That is a
-                            // result: leaving this about comes to nothing.
-                            answers.push((
-                                wondering.called(),
-                                false,
-                                wondering.in_this.clone(),
-                                None,
-                            ));
-                            done.push(which);
                         }
                     }
-                    // Somebody walked off with it, or it rotted away to
-                    // nothing. No answer, and none to be had.
+                    // Somebody walked off with it, it was eaten, or it rotted
+                    // away to nothing. No answer, and none to be had.
                     (true, None) => done.push(which),
                     (false, _) => {
-                        if wondering.given_up_on(now) {
+                        if waited {
                             done.push(which);
                         }
                     }
@@ -6083,6 +6120,150 @@ impl Simulation {
     /// at this stage does not reason its way to firing clay, it notices that
     /// firing has happened. What it costs is one lump of clay; what it buys
     /// is the first material this people can make that keeps something else.
+    /// What the person being asked could actually explain about this thing.
+    ///
+    /// They have to know it themselves - a man who has never dried anything
+    /// cannot tell you how - and what passes is the name of the discovery
+    /// rather than the thing. `None` where there is nothing to be said: most
+    /// of what anybody carries is obvious, and nobody explains a stick.
+    fn what_asking_about_would_teach(&self, them: usize, what: &str) -> Option<String> {
+        use crate::agents::Agent;
+
+        let telling = &self.population.agents[them];
+
+        // A meal that has been somewhere - dried, smoked - where what is worth
+        // knowing is where it was rather than how it was made
+        if let Some(item) = telling.inventory.get_item(what) {
+            if let Some(discovery) = Agent::what_asking_about_this_meal_would_teach(item) {
+                if telling.what_i_found_out().contains(discovery) {
+                    return Some(discovery.to_string());
+                }
+            }
+        }
+
+        let made = Agent::what_asking_about_this_would_teach(what)?;
+
+        telling.what_i_found_out().contains(&made).then_some(made)
+    }
+
+    /// Somebody near enough to ask, and a thing of theirs worth asking about.
+    ///
+    /// Worth asking about means: they are carrying it, this one has never seen
+    /// how it is done, and they can actually explain it. Nobody asks after a
+    /// stick.
+    ///
+    /// This is only ever reached under Curiosity, which is to say only when
+    /// nothing worse is pressing - a man does not stop to ask after somebody's
+    /// supper while his own children are hungry.
+    fn somebody_to_ask_about_something(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(uuid::Uuid, String)> {
+        for (index, other) in self.population.agents.iter().enumerate() {
+            if !other.state.is_alive || other.id == agent.id {
+                continue;
+            }
+
+            let apart = (other.state.position.0 - agent_position.0)
+                .abs()
+                .max((other.state.position.1 - agent_position.1).abs());
+
+            if apart > Self::NEAR_ENOUGH_TO_ASK {
+                continue;
+            }
+
+            for (item_id, _) in other.inventory.get_all_items().iter() {
+                let Some(teaches) = self.what_asking_about_would_teach(index, item_id) else {
+                    continue;
+                };
+
+                if agent.what_i_found_out().contains(&teaches) {
+                    continue;
+                }
+
+                return Some((other.id, item_id.clone()));
+            }
+        }
+
+        None
+    }
+
+    /// How near somebody has to be to be asked.
+    const NEAR_ENOUGH_TO_ASK: i32 = 2;
+
+    /// Clay left lying at a lit fire is not clay in the morning.
+    ///
+    /// The ember accident that already existed is somebody *carrying* clay
+    /// while they sit at a fire, and it happens to them rather than being
+    /// done. This is the deliberate version, and it is what makes "what
+    /// happens if I put clay in the fire" a question anybody can actually put
+    /// - the answer arrives a few days later at the place it was left, like
+    /// every other question of that kind.
+    fn what_the_fire_hardened(&mut self) {
+        let now = self.current_tick;
+        let mut hardened: Vec<crate::world::Position> = Vec::new();
+
+        for which in 0..self.world.dropped.len() {
+            let left = &self.world.dropped[which];
+
+            if left.item.item_id != crate::agents::Agent::THE_ONE_MATERIAL_A_FIRE_CHANGES {
+                continue;
+            }
+
+            if now.saturating_sub(left.since) < Self::HOW_LONG_THE_FIRE_TAKES_TO_HARDEN_IT {
+                continue;
+            }
+
+            let where_it_is = left.where_it_is;
+            let at_a_fire = self
+                .nearest_fire_from(
+                    (where_it_is.x, where_it_is.y, 0),
+                    Self::WITHIN_REACH_OF_THE_HEARTH,
+                    true,
+                )
+                .is_some();
+
+            if !at_a_fire {
+                continue;
+            }
+
+            let how_many = self.world.dropped[which].item.quantity;
+            self.world.dropped[which].item = crate::agents::InventoryItem::new_container(
+                "stoneware".to_string(),
+                how_many,
+                crate::environment::making::WHAT_A_FIRED_POT_HOLDS,
+            );
+
+            hardened.push(where_it_is);
+        }
+
+        // And whoever is near enough to see it saw it.
+        for where_it_was in hardened {
+            for agent in self.population.agents.iter_mut() {
+                if !agent.state.is_alive {
+                    continue;
+                }
+
+                let paces = (agent.state.position.0 - where_it_was.x)
+                    .abs()
+                    .max((agent.state.position.1 - where_it_was.y).abs());
+
+                if paces <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                    agent.found_out_how_to(Self::THAT_FIRE_HARDENS_CLAY);
+                }
+            }
+        }
+    }
+
+    /// How long a lump has to sit in the embers before it comes out hard.
+    ///
+    /// A day. Long enough that it is something the fire did rather than
+    /// something that happened, short enough that somebody who left it there
+    /// on purpose is still about to see it.
+    const HOW_LONG_THE_FIRE_TAKES_TO_HARDEN_IT: u32 =
+        crate::environment::seasons::TICKS_PER_DAY;
+
     fn what_the_embers_did(&mut self) {
         use rand::Rng;
 
@@ -11970,8 +12151,43 @@ impl Simulation {
                 let now = self.current_tick;
                 food.set_preparation(PreparationState::Salted, now);
 
+                // And what becomes of it afterwards, which is the only thing
+                // about salting that is worth knowing. The salting itself is
+                // over in a turn; whether the meat is still good in a week is
+                // the question, and it stays in the pack where its owner can
+                // see it.
+                let watch_it = crate::agents::wondering::Watched::of(
+                    agent.inventory.get_item(what).expect("it is in there"),
+                );
+                let asking = agent.would_i_wonder_what_becomes_of(
+                    crate::agents::wondering::Wondering::SALTING_IT,
+                    what,
+                );
+
                 agent.inventory.remove_item("salt", Self::WHAT_IT_TAKES_TO_SALT_A_LOT);
                 agent.lessons.record_particular("salt", true);
+
+                if asking {
+                    let where_i_am = {
+                        let at = self.population.agents[agent_index].state.position;
+                        crate::world::Position::new(at.0, at.1)
+                    };
+                    let in_this = {
+                        let agent = &self.population.agents[agent_index];
+                        self.what_it_is_like_here(agent, agent.state.position)
+                    };
+
+                    self.population.agents[agent_index].now_i_wonder(
+                        crate::agents::wondering::Wondering {
+                            did: crate::agents::wondering::Wondering::SALTING_IT.to_string(),
+                            what: what.to_string(),
+                            where_it_is: where_i_am,
+                            since: now,
+                            as_it_was: watch_it,
+                            in_this,
+                        },
+                    );
+                }
 
                 ActionResult::success()
                     .with_drive_change(DriveType::Preparedness, -0.2)
@@ -12161,6 +12377,38 @@ impl Simulation {
 
                 let mut going_in = mine.clone();
                 going_in.quantity = putting_by;
+
+                // What happens if I bury it. Nobody is born knowing that a
+                // hole in the cold ground keeps food, and the answer does not
+                // arrive for a week - so it is a question, remembered the same
+                // way as any other.
+                //
+                // What makes it a *different* question from leaving something
+                // on the grass is what counts as a good answer: coming back to
+                // find it exactly as it went in is the entire point here, and
+                // is nothing at all there.
+                if self.population.agents[agent_index].would_i_wonder_what_becomes_of(
+                    crate::agents::wondering::Wondering::BURYING_IT,
+                    what,
+                ) && going_in.food_data.is_some()
+                {
+                    let as_it_was = crate::agents::wondering::Watched::of(&going_in);
+                    let in_this = {
+                        let agent = &self.population.agents[agent_index];
+                        self.what_it_is_like_here(agent, agent.state.position)
+                    };
+
+                    self.population.agents[agent_index].now_i_wonder(
+                        crate::agents::wondering::Wondering {
+                            did: crate::agents::wondering::Wondering::BURYING_IT.to_string(),
+                            what: what.to_string(),
+                            where_it_is: here,
+                            since: tick_now,
+                            as_it_was,
+                            in_this,
+                        },
+                    );
+                }
 
                 {
                     let agent = &mut self.population.agents[agent_index];
@@ -12362,6 +12610,63 @@ impl Simulation {
                     .with_energy_cost(1.0)
                     .with_message(format!("Put down {how_many} {what}"))
             },
+
+            Action::AskAbout { who, what } => {
+                let Some(them) = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == *who && other.state.is_alive)
+                else {
+                    return ActionResult::failure("Nobody there to ask".to_string());
+                };
+
+                if them == agent_index {
+                    return ActionResult::failure("Asking yourself teaches nothing".to_string());
+                }
+
+                let Some(teaches) = self.what_asking_about_would_teach(them, what) else {
+                    return ActionResult::failure(format!(
+                        "They could not say how the {what} came about"
+                    ));
+                };
+
+                // Whether this one takes their word for it. A settlement where
+                // everybody believes everybody is a settlement one liar can
+                // ruin, and the machinery for deciding whose word is worth
+                // anything has been there since the gossip work.
+                let their_traits = self.population.agents[them].traits.clone();
+                let believed = {
+                    let asker = &self.population.agents[agent_index];
+                    asker.would_take_their_word(*who, &their_traits)
+                };
+
+                if !believed {
+                    return ActionResult::failure(format!(
+                        "Would not take their word about the {what}"
+                    ));
+                }
+
+                let told_me_something_new =
+                    self.population.agents[agent_index].found_out_how_to(&teaches);
+
+                if told_me_something_new {
+                    *self.what_anybody_was_told.entry(teaches.clone()).or_insert(0) += 1;
+                    debug!(
+                        "Agent {} was told about {what} by {who}",
+                        self.population.agents[agent_index].id
+                    );
+                }
+
+                // Both of them got something out of it. Being asked after a
+                // thing you worked out is the one moment in this model where
+                // having worked something out is worth anything socially.
+                ActionResult::success()
+                    .with_drive_change(DriveType::Curiosity, -0.3)
+                    .with_drive_change(DriveType::Social, -0.1)
+                    .with_energy_cost(1.0)
+                    .with_message(format!("Asked about the {what}"))
+            }
 
             Action::Trade { with } => {
                 let Some(them) = self
@@ -14206,6 +14511,7 @@ impl Simulation {
             actions_failed: std::collections::HashMap::new(),
             actions_failed_because: std::collections::HashMap::new(),
             what_anybody_found_out: std::collections::HashMap::new(),
+            what_anybody_was_told: std::collections::HashMap::new(),
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);

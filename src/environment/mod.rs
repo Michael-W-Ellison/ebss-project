@@ -263,6 +263,15 @@ pub enum Action {
     PickUp { what: String },
     /// Set something down on the ground here
     PutDown { what: String },
+    /// Ask somebody about a thing they are carrying that you have never seen
+    /// the like of.
+    ///
+    /// The one way a discovery has ever had of leaving the head that made it.
+    /// Everything else in this model is found out first-hand or watched being
+    /// done; nothing anywhere let a man who had worked something out *tell*
+    /// anybody. A settlement of forty could work the same thing out forty
+    /// times over and be no further on.
+    AskAbout { who: uuid::Uuid, what: String },
     /// Swap something there is too much of for something there is not enough
     /// of, with somebody who has the opposite problem
     Trade { with: uuid::Uuid },
@@ -338,6 +347,9 @@ impl Action {
             Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),
             Action::PutDown { .. } => Some(DriveType::Utility),
+            // Asking after a thing is curiosity, and it is only ever done
+            // when nothing worse is pressing
+            Action::AskAbout { .. } => Some(DriveType::Curiosity),
             Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing
             Action::GiveTo { .. } => Some(DriveType::Social), // A gift is not
             Action::GoWithout { .. } => Some(DriveType::Protection),

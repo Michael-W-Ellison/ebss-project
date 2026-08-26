@@ -178,6 +178,9 @@ fn every_verb_is_performed_by_something_real() {
         // fire until it stops being clay, and digging yourself into the
         // ground because there is nothing to build with
         "mold", "fire", "burrow",
+        // And asking somebody how a thing of theirs came about, which is the
+        // only way a discovery has of leaving the head that made it
+        "ask",
     ];
 
     for one in EVERY_VERB {

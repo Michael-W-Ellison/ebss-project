@@ -161,6 +161,18 @@ pub struct World {
     /// tick by the simulation - see `Simulation::who_saw_that_dry`.
     #[serde(default, skip)]
     pub what_dried_in_the_sun: Vec<(Position, String)>,
+    /// Food that went off before anybody ate it, where it lay and in the
+    /// ground.
+    ///
+    /// The wasted half of whatever was spent getting it. If half the meat rots
+    /// before it is eaten then half the hunt was wasted, and until this was
+    /// counted every preservation change in this project had to be judged on
+    /// how much was *in* the store rather than on how much of what was got was
+    /// ever any use to anybody.
+    #[serde(default)]
+    pub food_that_rotted_where_it_lay: u64,
+    #[serde(default)]
+    pub food_that_rotted_in_the_ground: u64,
 
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
@@ -497,6 +509,7 @@ impl World {
     /// What has gone off in there rots away like anything else.
     fn what_is_buried_keeps(&mut self) {
         let now = self.tick;
+        let mut buried_and_lost = 0u64;
 
         for pit in self.pits.iter_mut() {
             // Bare earth is cool and dark and keeps a thing rather better
@@ -523,13 +536,22 @@ impl World {
             }
 
             pit.holds.retain(|item| {
-                item.quantity > 0
+                let keeps = item.quantity > 0
                     && item
                         .food_data
                         .as_ref()
-                        .is_none_or(|food| food.freshness > 0.0)
+                        .is_none_or(|food| food.freshness > 0.0);
+
+                if !keeps && item.food_data.is_some() {
+                    buried_and_lost += item.quantity as u64;
+                }
+
+                keeps
             });
         }
+
+        self.food_that_rotted_in_the_ground =
+            self.food_that_rotted_in_the_ground.saturating_add(buried_and_lost);
     }
 
     /// One tick in this many is the only one that tells on food buried in
@@ -745,6 +767,8 @@ impl World {
 
         self.what_dried_in_the_sun.extend(dried);
 
+        let mut wasted = 0u64;
+
         self.dropped.retain(|left| {
             // Food that has gone off entirely is not food any more, whatever
             // the clock says about how long it has lain there
@@ -755,6 +779,7 @@ impl World {
                 .is_some_and(|food| food.freshness <= 0.0)
             {
                 back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
+                wasted += left.item.quantity as u64;
                 return false;
             }
 
@@ -768,10 +793,14 @@ impl World {
 
             if gone && left.item.food_data.is_some() {
                 back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
+                wasted += left.item.quantity as u64;
             }
 
             !gone
         });
+
+        self.food_that_rotted_where_it_lay =
+            self.food_that_rotted_where_it_lay.saturating_add(wasted);
 
         for (where_it_is, worth) in back_to_the_ground {
             if let Some(tile) = self.grid.get_tile_mut(&where_it_is) {
@@ -836,6 +865,8 @@ impl World {
             dropped: Vec::new(),
             pits: Vec::new(),
             what_dried_in_the_sun: Vec::new(),
+            food_that_rotted_where_it_lay: 0,
+            food_that_rotted_in_the_ground: 0,
         };
 
         // The ground under the terrain that was just generated

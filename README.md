@@ -19,7 +19,7 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 248 source files, with 1,813 library tests.
+across 248 source files, with 1,835 library tests.
 
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
@@ -318,6 +318,40 @@ original specifications.
   arranged, at no measurable cost. It is at the edge of what the pattern
   arithmetic can use rather than past it, and that number is in the write-up.
   See ISSUES_FOUND.md #35
+- ✅ Counting the waste. The point of preserving anything is that the time
+  spent getting it was not wasted: **if half the meat rots before it is eaten
+  then half the hunt was wasted**, and an hour spent hunting is an hour not
+  spent doing anything else. Nothing in this project had ever counted that —
+  every preservation change for a dozen entries was judged on how much was
+  *in* the store, which measures activity rather than whether the activity was
+  any use. Food goes off in a pack, in a pit and where it lies, and all three
+  simply deleted it. Counted in all three now, and the number nobody had is
+  that **a settlement throws away a quarter of everything it gets**: 3,382
+  units eaten against 1,135 rotted. See ISSUES_FOUND.md #36
+- ✅ Burying and salting as questions, and somebody to ask. The other verbs put
+  questions the same way leaving a thing out does, and **the verb decides what
+  counts as a good answer** — a thing left on the grass that is unchanged a
+  week later teaches nothing, and a thing *buried* that is unchanged a week
+  later is the entire point of burying it. Each question knows where to look:
+  a hole, a pack, or the grass. Firing clay was already a same-turn experiment,
+  so what was added is the version that is genuinely a question — a lump left
+  at a lit fire is not a lump of clay in the morning.
+
+  And somebody carrying a thing you have never seen the like of can now be
+  asked about it, under Curiosity, which is to say only when nothing worse is
+  pressing. They have to actually understand it, and what passes between them
+  is the *name of the discovery* rather than a belief — so being told lets the
+  hearer go and try it, and trying it is what decides whether they believe it.
+  Nothing anywhere had ever let a man who worked something out tell anybody: a
+  settlement of forty could work the same thing out forty times over.
+
+  Questions asked and answered more than trebled (196 → **661**, t = 17.8) and
+  **a quarter of a thousand discoveries a world now pass from one head to
+  another** (t = 22.8). Nothing else moves, and the reason is worth knowing
+  rather than shrugging at: this people's one load-bearing discovery already
+  reached 36.6 of 37.1 people by being *watched*. Telling is redundant for the
+  only thing worth telling — until there is a discovery that does not announce
+  itself to everybody standing nearby. See ISSUES_FOUND.md #37
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the

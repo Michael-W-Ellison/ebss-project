@@ -982,6 +982,19 @@ pub struct Agent {
     /// three days and does not answer where you are standing.
     #[serde(default)]
     pub wonderings: Vec<super::wondering::Wondering>,
+    /// How much food this one has actually eaten, and how much went off on it
+    /// before it could.
+    ///
+    /// The whole point of preserving anything is that the time spent getting
+    /// it was not wasted. If half the meat rots before it is eaten, half the
+    /// hunt was wasted - the hours are gone either way and only one of them
+    /// fed anybody. Nothing in this project had ever counted that, so every
+    /// preservation change had to be judged on how much was *in* the store
+    /// rather than on how much of what was got was ever any use.
+    #[serde(default)]
+    pub food_i_ate: u32,
+    #[serde(default)]
+    pub food_that_rotted_on_me: u32,
     /// What is actually in this agent's hands, as against what is in the pack.
     ///
     /// A pair of them, which is what `verbs::A_PAIR_OF_HANDS` has always said
@@ -1061,6 +1074,8 @@ impl Agent {
             times_laid_up: std::collections::HashMap::new(),
             found_out: std::collections::HashSet::new(),
             wonderings: Vec::new(),
+            food_i_ate: 0,
+            food_that_rotted_on_me: 0,
             patterns: super::patterns::Patterns::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
@@ -1597,6 +1612,9 @@ impl Agent {
     pub fn watched_food_go_off(&mut self, what: &str, how_much: u32) {
         use super::EmotionSource;
 
+        // The wasted half of whatever was spent getting it
+        self.food_that_rotted_on_me = self.food_that_rotted_on_me.saturating_add(how_much);
+
         let worth_minding = (how_much as f32 * Self::WHAT_A_LOST_MEAL_IS_WORTH)
             .min(Self::AS_MUCH_AS_ONE_LOT_CAN_COST);
 
@@ -1838,7 +1856,7 @@ impl Agent {
             .get_all_items()
             .iter()
             .map(|(_, item)| item)
-            .filter(|item| item.food_data.is_some())
+            .filter(|item| Self::is_it_worth_watching(item))
             .filter(|item| item.quantity > Self::MORE_THAN_ANYBODY_WOULD_RISK)
             .filter(|item| !self.am_i_wondering_about(Self::LEAVING_IT_OUT, &item.item_id))
             .filter(|item| !self.do_i_know_what_becomes_of(Self::LEAVING_IT_OUT, &item.item_id))
@@ -1846,9 +1864,74 @@ impl Agent {
             .next()
     }
 
+    /// Whether this one would put a question to the world about this thing,
+    /// having done this to it.
+    ///
+    /// The same three conditions for every verb: not already asking it, not
+    /// already sure of the answer, and something whose fate is worth watching.
+    pub fn would_i_wonder_what_becomes_of(&self, did: &str, what: &str) -> bool {
+        !self.am_i_wondering_about(did, what) && !self.do_i_know_what_becomes_of(did, what)
+    }
+
+    /// What asking after this thing would actually teach somebody.
+    ///
+    /// Not the thing itself - you cannot be handed a pot by being told about
+    /// one. What passes between two people is the *name of the discovery* the
+    /// thing depends on, which is exactly the gate the making machinery
+    /// already checks: an agent who has that name can attempt the working, and
+    /// an agent who has not cannot.
+    ///
+    /// Which means being told does not make anybody believe anything. It lets
+    /// them go and try it, and what happens when they try it is what decides
+    /// whether they believe it - which is how it should be, and is the whole
+    /// difference between being told a thing works and finding out.
+    pub fn what_asking_about_this_would_teach(item_id: &str) -> Option<String> {
+        use crate::environment::making;
+
+        // Something somebody worked out how to make
+        if making::EVERY_WORKING
+            .iter()
+            .any(|working| working.makes == item_id && !working.obvious)
+        {
+            return Some(item_id.to_string());
+        }
+
+        if making::how_to_make(item_id).is_some_and(|step| !step.obvious) {
+            return Some(item_id.to_string());
+        }
+
+        None
+    }
+
+    /// And what asking about a *meal* would teach, which is a different
+    /// question: dried meat is not a thing anybody makes, it is meat that has
+    /// been somewhere.
+    pub fn what_asking_about_this_meal_would_teach(item: &InventoryItem) -> Option<&'static str> {
+        use crate::world::nutrition::PreparationState;
+
+        let how = item.food_data.as_ref()?.preparation;
+
+        matches!(how, PreparationState::Dried | PreparationState::Smoked)
+            .then_some(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
+    }
+
+    /// Whether leaving this somewhere could come to anything.
+    ///
+    /// Food, because the weather and the ground get at it. And clay, because
+    /// a fire does - a lump left in the embers is not a lump of clay in the
+    /// morning, which is the one thing in this world that a *material* left
+    /// lying about turns into something else. A flint left in a field is a
+    /// flint in a field a week later and nobody learns anything.
+    fn is_it_worth_watching(item: &InventoryItem) -> bool {
+        item.food_data.is_some() || item.item_id == Self::THE_ONE_MATERIAL_A_FIRE_CHANGES
+    }
+
     /// What an experiment is called when it is somebody leaving a thing
     /// somewhere and coming back to look.
     pub const LEAVING_IT_OUT: &'static str = "leave";
+
+    /// Clay, and nothing else so far.
+    pub const THE_ONE_MATERIAL_A_FIRE_CHANGES: &'static str = "clay";
 
     /// How many of a thing somebody has to have before they will spare one to
     /// find something out. Curiosity is not hunger and must not act like it.
@@ -4629,6 +4712,7 @@ impl Agent {
             Action::PlantCutting => "plantcutting".to_string(),
             Action::SpreadMuck => "spreadmuck".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
+            Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
             other => format!("{:?}", other)
                 .split(|c: char| c == ' ' || c == '{' || c == '(')
@@ -5663,6 +5747,7 @@ impl Agent {
             None => {
                 // Not a tracked food item - consume 1 with flat nutrition
                 self.inventory.remove_item(item_id, 1);
+                self.food_i_ate = self.food_i_ate.saturating_add(1);
                 let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
                 self.nutrition.consume(&flat_nutrition);
                 self.state.took_a_meal(
@@ -5679,6 +5764,7 @@ impl Agent {
         // Check if food is harmful (severely spoiled)
         if food_data.is_harmful() {
             self.inventory.remove_item(item_id, 1);
+            self.food_i_ate = self.food_i_ate.saturating_add(1);
             let damage = 10.0;
             self.state.health = (self.state.health - damage).max(0.0);
             return EatResult::MadeSick(damage);
@@ -5691,6 +5777,7 @@ impl Agent {
 
         // Consume the food
         self.inventory.remove_item(item_id, 1);
+        self.food_i_ate = self.food_i_ate.saturating_add(1);
 
         // And what it might cost. Two gambles, both of which a fire settles:
         // raw flesh, and food that has started to go but has not gone far

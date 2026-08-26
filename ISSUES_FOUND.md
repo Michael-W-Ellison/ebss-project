@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Seventeen tests fail intermittently
+### 1. Eighteen tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -33,6 +33,7 @@ and running the project.
     analytics::tests::personality_tests::a_congenital_trait_survives_inheritance
     analytics::tests::midden_tests::a_settlement_fouls_the_ground_it_stands_on
     analytics::tests::survival_loop_tests::population_feeds_itself_over_a_long_run
+    analytics::tests::clay_tests::a_curious_agent_with_clay_tries_molding_it
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -54,6 +55,16 @@ the eighth: **0 failures in 15 runs on its own, and 0 in 15 on the commit
 before the change**, so it is a full-suite-parallelism flake rather than a
 regression. It asks that eight people living for a month leave some fouling on
 the ground, which depends on where a random world puts the food they eat.
+The eighteenth is the only one of the set with a **known mechanism** rather
+than a shrug about world layout, and it is worth stating because the same trap
+is waiting for any test of this shape. It asserts that a curious agent with
+clay in the pack proposes molding it — and the gate it goes through,
+`Lessons::will_try_this_again`, is *probabilistic by design*: an untried thing
+is tried with probability `NEVER_QUITE_CERTAIN`, which is 0.95. So a test that
+asserts the gate returns `Some` fails one run in twenty, exactly. Measured at
+**1 failure in 20 on this commit and 2 in 20 on the one before**, which is that
+rate and not a regression. The fix, when somebody wants it, is for the test to
+sample rather than to assert once.
 The seventeenth was found in a full-suite run and characterised the same way:
 **0 failures in 15 runs on its own, and 0 in 15 on the commit before the
 change**. It was worth a hard look rather than a shrug, because it landed in
@@ -2352,18 +2363,113 @@ paces and four days to five paces and a week took the best single record from 4
 to 20 and the answers from 65 to 188, and that is as far as this goes without
 either more curiosity turns or somebody telling somebody else what they found.
 
+### 36. Nothing had ever counted the waste
+
+The point of preserving anything is that the time spent getting it was not
+wasted. **If half the meat rots before it is eaten then half the hunt was
+wasted** — the hours are gone either way and only one of them fed anybody, and
+an hour spent hunting is an hour not spent doing anything else.
+
+Nothing in this project had ever counted that. Every preservation change for
+the last dozen entries has been judged on how much was *in* the store, which
+is a measure of activity rather than of whether the activity was any use. Food
+goes off in three places — in a pack, in a pit, and where it lies — and all
+three simply deleted it.
+
+Counted now, in all three. And the number, which nobody had:
+
+| | |
+|---|---|
+| food eaten, per settlement per ten thousand ticks | 3,382 |
+| food that rotted first | 1,135 |
+| **share of what was got that was any use to anybody** | **74%** |
+
+**A settlement throws away a quarter of everything it acquires.** That is the
+yardstick this whole line of work should have been measured against from the
+beginning, and it is the one to hold the next batch to.
+
+### 37. Only leaving a thing out was a question, and nobody could tell anybody
+
+Three things, and they belong together.
+
+**The other verbs.** Burying and salting are questions like leaving a thing on
+the grass is a question, and the answer arrives days later in the same way. The
+catch is that **the verb has to decide what counts as a good answer.** A thing
+left on the grass that is exactly as it was left a week later teaches nothing:
+nothing came of leaving it there. A thing *buried* that is exactly as it was
+left a week later is the entire point of burying it. Getting that backwards
+would have taught a settlement that its own larder was useless — which is the
+same efficiency argument as #36 read from the other end: no rot is the win,
+because rot is the wasted half of the hunt.
+
+Each question now knows where to go and look, too: burying puts a thing in a
+hole, salting leaves it in the pack — so that one travels with its owner and
+never wants a walk back — and only leaving it out puts it on the grass.
+
+**Firing.** Working clay is immediate in this model: the pot comes out of the
+fire in the turn it went in, so it was already a same-turn experiment and not
+this kind of question at all. What was missing is the version that *is* one — a
+lump left lying at a lit fire is not a lump of clay in the morning. That was
+already in the model as an accident that happens to somebody carrying clay; it
+is a thing anybody can deliberately do now, and clay is the one material in
+this world worth leaving somewhere to see what becomes of it.
+
+**And telling.** Nothing anywhere let a man who had worked something out *tell*
+anybody. Everything in this model is found out first-hand or watched being
+done, so a settlement of forty could work the same thing out forty times over
+and be no further on than the first man who worked it out.
+
+Somebody carrying a thing you have never seen the like of is worth asking
+about — under Curiosity, which is to say only when nothing worse is pressing,
+because a man does not stop to ask after somebody's supper while his own
+children are hungry. They have to actually understand it: a man holding dried
+meat who has never dried anything cannot tell you how. And what passes between
+them is the *name of the discovery*, not a belief — which means being told lets
+the hearer go and try it, and what happens when they try it is what decides
+whether they believe it. That is the whole difference between being told a
+thing works and finding out.
+
+**Thirty-two worlds a side:**
+
+| | before | after | t |
+|---|---|---|---|
+| questions put to the world and answered | 196.4 | **661.3 ± 24.3** | 17.8 |
+| discoveries passed from one head to another | 0.0 | **249.5 ± 11.0** | 22.8 |
+| people at ten thousand ticks | 37.1 | 39.0 ± 1.5 | 0.9 |
+| food in the ground through the winter | 186.9 | 181.0 | -0.4 |
+| burials of people | 14.1 | 13.2 | -1.1 |
+| share of turns refused | 3.4% | 3.5% | 1.0 |
+
+Questions asked and answered **more than trebled**, and a quarter of a thousand
+discoveries a world now pass from the head that made one to a head that needed
+it. **Nothing else moves.**
+
+That null is worth understanding rather than shrugging at, and the reason is in
+the table above it. The settlement's one load-bearing discovery is that laying
+cut food out keeps it, and **it was already reaching essentially everybody** —
+36.6 people out of 37.1 alive, before any of this. Watching somebody else's
+fish dry has saturated that channel for as long as it has existed. Telling is
+redundant for the only thing worth telling.
+
+So the channel is built, it works, and it will be worth something the first
+time this people has a discovery that is *hard to witness* — one that does not
+announce itself to everybody standing nearby. There is not one yet. Sixteen
+worlds a side had population, store and burials all leaning favourably; at
+thirty-two all three came back to nothing, which is the honest reading and the
+reason for running the second sixteen.
+
 ## Housekeeping
 
-### 36. Committed backup file
+### 38. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 37. Build warnings
+### 39. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 38. Placeholder package metadata
+### 40. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
