@@ -19,7 +19,7 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 250 source files, with 1,859 library tests.
+across 251 source files, with 1,868 library tests.
 
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
@@ -397,6 +397,28 @@ original specifications.
   this project's recurring vocabulary defect — salt, greens and roots all
   existed as item types and none was in the table that lets the world price or
   store a thing. See ISSUES_FOUND.md #40
+- 🚧 The order of a list, and what was actually wrong. `what_i_would_work_on`
+  took the **first** thing in the working table it could do and stopped, so
+  whatever sits early and has materials to hand won every turn for every agent
+  for ever — the same trap already found and fixed once in the function beside
+  it, and never carried across. Each agent starts at its own place now, worked
+  out *before* the belief is consulted so that a man's trade does not change
+  by the hour.
+
+  Leatherworking is scraping a hide, not cutting one: a flint takes the hair
+  off and turns skin into leather, where cutting gets you two smaller hides.
+  Sewing a bag out of the leather afterwards is crafting — the skill sits one
+  step earlier and putting it on both paid a man twice for one trade.
+
+  **And the previous entry's diagnosis was wrong.** The block on vessels was
+  not the table order. Counted directly, of thirty-one people: **26 wanted a
+  vessel and could make one, 28 held the wood, and 4 owned anything to carve
+  with.** The list of trades a pair of hands wants to be equipped for held
+  hunting, woodcutting and leatherworking — and nothing anywhere else in the
+  model ever wanted a tool, so no crafting or mining tool was ever made on
+  purpose. Vessels are up 29% (t = 1.8) and **nothing is established**; a
+  settlement still does not make vessels. What is established is why not.
+  See ISSUES_FOUND.md #41
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the

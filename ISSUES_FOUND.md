@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Nineteen tests fail intermittently
+### 1. Twenty tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -35,6 +35,7 @@ and running the project.
     analytics::tests::survival_loop_tests::population_feeds_itself_over_a_long_run
     analytics::tests::clay_tests::a_curious_agent_with_clay_tries_molding_it
     analytics::tests::barter_tests::two_people_with_opposite_problems_trade
+    analytics::tests::asking_tests::being_told_lets_you_try_it_rather_than_making_you_believe_it
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -59,6 +60,13 @@ the ground, which depends on where a random world puts the food they eat.
 The nineteenth was found in a full-suite run and characterised the same way as
 the rest: **0 failures in 15 runs on its own here, and 1 in 15 on the commit
 before the change**.
+The twentieth is the second with a known mechanism rather than a shrug about
+world layout, and it is the same mechanism as the eighteenth: it asserts once
+that somebody takes a stranger's word for something, and `would_take_their_word`
+turns on trust built out of traits drawn at random when a founder is made. **1
+failure in 15 on this commit against 3 in 15 on the one before.** Both want the
+same fix - sample rather than assert once - and both are tests written in this
+run, which is worth saying plainly: two of the twenty are mine.
 The eighteenth is the only one of the set with a **known mechanism** rather
 than a shrug about world layout, and it is worth stating because the same trap
 is waiting for any test of this shape. It asserts that a curious agent with
@@ -2625,18 +2633,87 @@ they were refused when they tried to put any by, **666 times a world**. That is
 the third time a table has drifted from the vocabulary beside it, after the
 gather words and the executor's own list.
 
+### 41. The order of a list, a hide that wanted cutting, and the thing that was actually wrong
+
+Three things, and the third is the one that matters.
+
+**The order of a list.** `what_i_would_work_on` took the *first* thing in the
+working table it could do and stopped, so whatever sits early in that table and
+has materials to hand won every turn, for every agent, for ever. This exact trap
+had already been found and fixed once, in `what_working_i_would_try_out` —
+retting flax sits above fermenting fruit, so over eight worlds nobody ever
+fermented anything, because somebody always had flax — and the fix was never
+carried across to the function beside it. Each agent starts at its own place in
+the table now.
+
+Worth noting how it had to be done: the starting place is worked out *before*
+the belief is consulted. `will_try_this_again` is a coin toss, so folding it in
+first changes the list's length from turn to turn and a man's trade changes with
+it. Where he starts is his own and fixed; whether he can be bothered today is
+not.
+
+**A hide that wanted cutting.** Taking a flint to a hide removes the hair and
+turns skin into leather; *cutting* a hide gets you two smaller hides. It is
+`scrape` now, which is what leatherworking is. And sewing a bag out of the
+leather afterwards is crafting rather than leatherworking — the skill sits one
+step earlier, on the scraping, and putting it on both steps paid a man twice for
+one trade. What gates the bag is the material, not the hand.
+
+**And the thing that was actually wrong.** The previous entry said the block on
+vessels was that carving a bowl sits late in the working table. **That diagnosis
+was wrong**, and the fix for it measures a clean null. What was wrong is this,
+counted directly in one world of thirty-one people:
+
+| | |
+|---|---|
+| people who wanted a vessel *and could make one* | 26 |
+| people holding the two wood it takes | 28 |
+| people owning anything to carve with | **4** |
+
+`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO` — the list of trades a person wants to be
+equipped for — held Hunting, Woodcutting and Leatherworking, and **nothing
+anywhere else in the model ever wanted a tool.** So no Crafting tool was ever
+made on purpose; the four who had one had made a knife for skinning, which
+happens to serve both. The same for Mining: "nothing in hand that is any use for
+Mining" was six hundred refused turns a world at the digging alone.
+
+**Thirty-two worlds a side, all three changes together:**
+
+| | before | after | t |
+|---|---|---|---|
+| things that hold water, per settlement | 10.9 | 14.1 ± 1.3 | 1.8 |
+| food lost to rot | 1,159 | 1,095 | -0.9 |
+| burials of people | 14.8 | 13.8 | -1.1 |
+| share of what was got that fed somebody | 72% | 75% | 1.3 |
+| `Boil` refused for want of a vessel | 262 | 253 | -0.3 |
+| people at ten thousand ticks | 35.7 | 35.8 | 0.0 |
+
+**Nothing is established.** Vessels are up 29% and that is the nearest thing to
+a result at t = 1.8; rot, burials and the used-share all lean the right way and
+none of them reaches. Two rounds of sixteen were run rather than one, because
+the first sixteen had vessels at t = 1.95 and that was worth checking rather
+than reporting.
+
+So the honest state after two batches on this: **a settlement still does not
+make vessels**, water is still a walk, and salt is still mostly out of reach.
+What has been established is why *not*, which is worth having and is not the
+same as a fix. The residual is that agents do not make stone knives even now
+that a pair of hands wants one for carving — the want reaches the list and does
+not reach the pack — and that is a question about `what_i_would_make` and the
+step chain under it rather than about any of the three things changed here.
+
 ## Housekeeping
 
-### 41. Committed backup file
+### 42. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 42. Build warnings
+### 43. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 43. Placeholder package metadata
+### 44. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

@@ -296,9 +296,15 @@ pub const SMASH_A_CORE: Working = Working {
     over_a_fire: false,
 };
 
-/// A hide cut down into workable leather.
-pub const CUT_A_HIDE: Working = Working {
-    verb: "cut",
+/// A hide scraped down into workable leather.
+///
+/// Scraping, not cutting. Taking a flint to a hide removes the hair and turns
+/// the skin into leather; cutting a hide gets you two smaller hides. This is
+/// what leatherworking *is*, and it is the one step in the chain where the
+/// skill belongs - what comes afterwards is sewing, which is making like any
+/// other making.
+pub const SCRAPE_A_HIDE: Working = Working {
+    verb: "scrape",
     to: "hides",
     how_much: 1,
     makes: "leather",
@@ -540,18 +546,21 @@ pub const WEAVE_A_BASKET: Working = Working {
 /// than their arms hold.
 ///
 /// A basket is flax and holds what flax holds. A leather bag is the other
-/// answer to the same problem and a better one, and it is behind a skill and
-/// behind an animal: hides come off something that had to be killed, and
-/// turning one into leather wants a leatherworker. That is the point of it -
-/// carrying capacity is the thing this people is shortest of, and being good
-/// at something ought to buy you more of what everybody is short of.
+/// answer to the same problem and a better one, and what it costs is the
+/// *material*: hides come off something that had to be killed, and a hide is
+/// not leather until somebody has scraped the hair off it.
+///
+/// Sewing a bag is crafting, not leatherworking. The skill sits one step
+/// earlier, on the scraping - which is what leatherworking is. Putting it here
+/// as well would have paid a man twice for one trade, and it is the material
+/// that gates this rather than the hand.
 pub const SEW_A_BAG: Working = Working {
     verb: "weave",
     to: "leather",
     how_much: 3,
     makes: "leatherbag",
     how_many: 1,
-    hands: SkillType::Leatherworking,
+    hands: SkillType::Crafting,
     effort: 10.0,
     obvious: true,
     holds: None,
@@ -651,7 +660,7 @@ pub const BOIL_FLOUR: Working = Working {
 /// Everything that can be done to a thing to make it another thing.
 pub const EVERY_WORKING: &[Working] = &[
     SMASH_A_CORE,
-    CUT_A_HIDE,
+    SCRAPE_A_HIDE,
     SCRAPE_A_STICK,
     CRUSH_GRAIN,
     MOLD_CLAY,

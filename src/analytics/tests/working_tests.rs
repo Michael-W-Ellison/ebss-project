@@ -227,11 +227,11 @@ fn a_hide_with_a_knife_becomes_leather() {
     empty_the_pack(&mut simulation);
     give(&mut simulation, "hides", 3);
 
-    let barehanded = simulation.execute_action(&work("cut", "hides"), 0);
+    let barehanded = simulation.execute_action(&work("scrape", "hides"), 0);
     assert!(!barehanded.success, "nobody cuts a hide with their fingers");
 
     give_a_tool(&mut simulation, "stoneknife");
-    let result = simulation.execute_action(&work("cut", "hides"), 0);
+    let result = simulation.execute_action(&work("scrape", "hides"), 0);
 
     assert!(result.success, "with a knife it comes apart: {:?}", result.message);
     assert!(
@@ -255,7 +255,7 @@ fn the_edge_that_did_it_is_the_worse_for_it() {
         .unwrap_or(0.0);
 
     for _ in 0..5 {
-        simulation.execute_action(&work("cut", "hides"), 0);
+        simulation.execute_action(&work("scrape", "hides"), 0);
     }
 
     let after = simulation.population.agents[0]

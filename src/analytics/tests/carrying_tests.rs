@@ -232,8 +232,8 @@ fn somebody_with_a_bag_carries_more_of_it_home() {
 // What a bag is
 // --------------------------------------------------------------------------
 
-/// A leather bag holds more than a flax basket, and costs an animal and a
-/// leatherworker to make.
+/// A leather bag holds more than a flax basket, and costs an animal and the
+/// scraping of a hide.
 #[test]
 fn a_leather_bag_holds_more_than_a_basket() {
     use crate::agents::Inventory;
@@ -248,10 +248,16 @@ fn a_leather_bag_holds_more_than_a_basket() {
     assert_eq!(sewing.makes, "leatherbag");
     assert_eq!(
         sewing.hands,
-        crate::agents::SkillType::Leatherworking,
-        "being good at something ought to buy you more of what everybody is \
-         short of"
+        crate::agents::SkillType::Crafting,
+        "sewing is making; the leatherworking is the scraping, one step back"
     );
+
+    // And what actually gates it is the material: a hide is not leather until
+    // somebody has taken the hair off it.
+    let scraping = crate::environment::making::how_to_work("scrape", "hides")
+        .expect("a hide scrapes into leather");
+    assert_eq!(scraping.makes, "leather");
+    assert_eq!(scraping.hands, crate::agents::SkillType::Leatherworking);
 }
 
 /// And both of them actually raise what a person can carry.

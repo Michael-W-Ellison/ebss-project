@@ -2017,16 +2017,29 @@ impl Agent {
     /// wants them.
     ///
     /// Hunting first: a spear is the difference between eating meat and not.
-    /// Then cutting wood, then cutting meat.
+    /// Then cutting wood, then cutting meat, then something to carve and
+    /// something to dig with.
     ///
     /// This is stated as the work rather than as the tool because what the
     /// best tool for a job *is* changes as a people finds things out. A man
     /// who has never seen metal wants a stone knife; a man who has wants a
     /// metal one, and the same line of code asks for both.
-    pub const WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO: [super::SkillType; 3] = [
+    pub const WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO: [super::SkillType; 5] = [
         super::SkillType::Hunting,
         super::SkillType::Woodcutting,
         super::SkillType::Leatherworking,
+        // Crafting and mining were not on this list, and nothing else in the
+        // model ever wanted a tool for either. Measured directly: of thirty-one
+        // people, **twenty-six wanted a vessel and could make one, twenty-eight
+        // held the wood for it, and four owned anything to carve with.** The
+        // block on the whole fluid family was never the order of the working
+        // table or where the branch sat in the decision - it was that a pair of
+        // hands never once thought to want a knife for carving.
+        //
+        // The same for mining: "nothing in hand that is any use for Mining" was
+        // six hundred refused turns a world at the digging alone.
+        super::SkillType::Crafting,
+        super::SkillType::Mining,
     ];
 
     /// The best tool this agent knows how to make for a kind of work, if it
@@ -2124,16 +2137,40 @@ impl Agent {
     pub fn what_i_would_work_on(&self) -> Option<(String, String)> {
         use crate::environment::making;
 
-        making::EVERY_WORKING
+        let could: Vec<&'static making::Working> = making::EVERY_WORKING
             .iter()
             .filter(|working| working.obvious || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
             .filter(|working| self.how_many_i_have(working.makes) < making::A_FEW_SPARE)
-            .find(|working| {
+            .filter(|working| {
                 self.lessons
                     .will_try_this_again(&format!("{}:{}", working.verb, working.to))
             })
+            .collect();
+
+        if could.is_empty() {
+            return None;
+        }
+
+        // Where a man starts in the list is his own business.
+        //
+        // This took the *first* thing in the table it could do and stopped, so
+        // the order of a hand-written list decided what a whole people ever
+        // made. Carving a bowl sits late in that table: anything earlier with
+        // materials to hand won every turn, and measured, a settlement made
+        // essentially no vessels at all however badly it wanted one - no
+        // carried water, no boiling, no salt.
+        //
+        // `what_working_i_would_try_out` hit exactly this and fixed it exactly
+        // this way, for exactly this reason: retting flax sits above fermenting
+        // fruit, so over eight worlds nobody ever fermented anything, because
+        // somebody always had flax. The fix did not get carried across to its
+        // neighbour.
+        let mine = (self.id.as_u128() % could.len() as u128) as usize;
+
+        could
+            .get(mine)
             .map(|working| (working.verb.to_string(), working.to.to_string()))
     }
 
