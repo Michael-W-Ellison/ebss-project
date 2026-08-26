@@ -1601,6 +1601,48 @@ impl Simulation {
             return Some(Action::Eat { food_type: "generic".to_string() });
         }
 
+        // An animal standing right here, when the nearest food anybody knows
+        // of is a walk away.
+        //
+        // Hunting had been put behind everything: behind eating what you
+        // carry, behind foraging, behind walking to a known patch, behind
+        // moving the whole camp, behind walking back to ground that fed you
+        // once - and then behind being *desperate* on top of all that. It was
+        // never reached. Measured, forty agents in forty-seven still believed
+        // hunting paid and none of them had done any, which is what a belief
+        // with nothing to update it looks like.
+        //
+        // The rule that makes sense of it: a deer at your feet beats a berry
+        // patch twelve tiles off. Not a deer across the valley - that is the
+        // expedition that does not pay and never did - and not while there is
+        // something to pick up where you stand, which is the branch above.
+        //
+        // The learning gate is the existing one: somebody who has thrown at
+        // six animals and hit none stops throwing.
+        if !putting_by && agent.lessons.will_try_this_again("hunt") {
+            if let Some((animal_id, animal_position)) = self.nearest_prey(agent, agent_position) {
+                let reach = (animal_position.0 - agent_position.0)
+                    .abs()
+                    .max((animal_position.1 - agent_position.1).abs());
+
+                if reach <= Self::AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER {
+                    if reach <= Self::HUNT_REACH {
+                        return Some(Action::Hunt {
+                            animal_id,
+                            weapon: agent
+                                .equipment
+                                .get_weapon()
+                                .map(|weapon| weapon.name.clone()),
+                        });
+                    }
+
+                    return Some(Action::Move {
+                        target: (animal_position.0, animal_position.1, agent_position.2),
+                    });
+                }
+            }
+        }
+
         // Otherwise head for the closest source the agent knows of
         if let Some(target) = self.known_source_position(
             agent,
@@ -4305,6 +4347,17 @@ impl Simulation {
     /// How close a hunter has to be to strike: a spear's throw, not a
     /// line of sight across the valley
     const HUNT_REACH: i32 = 2;
+
+    /// How close an animal has to be before a hungry agent turns aside for
+    /// it.
+    ///
+    /// Short, and deliberately so. Crossing the valley after a deer is the
+    /// expedition that does not pay and never did - measured, agents that
+    /// went after every animal because their pack was empty starved for it
+    /// and two settlements in forty died out. What this is for is the other
+    /// case: something standing in front of you while the nearest berry is a
+    /// walk away.
+    const AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER: i32 = 5;
 
 
 

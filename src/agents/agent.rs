@@ -5700,8 +5700,27 @@ impl Agent {
                     crate::world::NutrientType::Micronutrients => nutrition.micronutrients,
                 };
 
-                // Prefer fresher food (multiply by freshness)
-                let adjusted_score = score * food_data.freshness;
+                // Prefer fresher food, and prefer food that will not keep.
+                //
+                // Freshness alone was exactly backwards for a people with a
+                // store. A person eats the thing that is about to be lost and
+                // saves the thing that will last, which is the whole reason
+                // for preserving anything - and until now nothing did that.
+                // Agents spent three turns drying a lot of fish and then ate
+                // it the same afternoon, so a settlement held 0.56 units of
+                // preserved food through a whole winter.
+                //
+                // `spoilage_multiplier` is how fast a thing goes off, so it
+                // is already the number wanted: raw is 1.0 and dried is 0.05,
+                // which makes a dried strip a twentieth as attractive as
+                // today's supper and exactly as attractive in February, when
+                // there is nothing else.
+                //
+                // Freshness stays in, so that "eat what will be lost first"
+                // does not become "eat the rot first": a raw thing at 0.35
+                // still scores below a raw thing at 1.0.
+                let adjusted_score =
+                    score * food_data.freshness * food_data.preparation.spoilage_multiplier();
 
                 if best_item.is_none() || adjusted_score > best_item.as_ref().unwrap().1 {
                     best_item = Some((item_id.clone(), adjusted_score));

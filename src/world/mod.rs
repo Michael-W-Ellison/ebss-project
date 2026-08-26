@@ -657,34 +657,66 @@ impl World {
         // down and laid out keeps for a season. That difference is the whole
         // of what a people here can learn about preserving anything, and it
         // is the world that teaches it rather than anything written down.
-        let raining = self.climate.weather.weather_type.precipitation_intensity() > 0.0;
+        // How hard it is coming down, rather than whether it is. A drizzle
+        // and a thunderstorm were the same event: `WHAT_THE_WEATHER_ADDS` was
+        // a constant and the intensity - which the weather has always
+        // reported - was thrown away at the first comparison.
+        let how_hard_it_rains = self.climate.weather.weather_type.precipitation_intensity();
         let sunny = matches!(
             self.climate.weather.weather_type,
             crate::environment::WeatherType::Clear
                 | crate::environment::WeatherType::PartlyCloudy
         );
 
+        // What is lying under a roof, which the sky cannot get at either way.
+        //
+        // "Nothing yet distinguishes food under a roof from food in the
+        // open": shade was a constant rather than a question about where the
+        // thing was lying. It is a question now, and it cuts both ways - a
+        // thing under a roof does not rot in the rain and does not dry in the
+        // sun either.
+        let under_a_roof: std::collections::HashSet<Position> = self
+            .buildings
+            .iter()
+            .map(|building| building.position)
+            .collect();
+
         for left in self.dropped.iter_mut() {
             if left.item.food_data.is_none() {
                 continue;
             }
 
+            let sheltered = under_a_roof.contains(&left.where_it_is);
             let thin_enough_to_dry = Self::will_this_dry(&left.item.item_id);
-            let drying = sunny && thin_enough_to_dry;
+            let drying = sunny && thin_enough_to_dry && !sheltered;
 
             if drying {
                 left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
             } else {
-                // Rain gets at everything; sun gets at anything too thick to
-                // dry through before it turns
-                let harder = raining || (sunny && !thin_enough_to_dry);
-                let adds = if harder {
-                    Self::WHAT_THE_WEATHER_ADDS
+                // Rain gets at everything, and how much depends on how hard
+                // it is coming down. Sun gets at anything too thick to dry
+                // through before it turns, and at full strength - there is
+                // nothing gentle about a hot afternoon and a whole carcass.
+                let in_the_open = if sheltered {
+                    // The sky gets at nothing under a roof. What is left is
+                    // the shade case, which still costs something, because
+                    // nothing keeps out of doors.
+                    0.0
+                } else if sunny && !thin_enough_to_dry {
+                    1.0
                 } else {
-                    Self::WHAT_SHADE_ADDS
+                    how_hard_it_rains
                 };
+
+                // Shade is the floor and the open sky is the ceiling; a
+                // drizzle sits between them rather than at the top of the
+                // range with a thunderstorm.
+                let shade = Self::WHAT_SHADE_ADDS as f32;
+                let worst = Self::WHAT_THE_WEATHER_ADDS as f32;
+                let adds = shade + (worst - shade) * in_the_open.clamp(0.0, 1.0);
+
                 left.weathered +=
-                    (adds - 1) * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+                    ((adds - 1.0) * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT as f32) as u32;
             }
 
             let weathered = left.weathered;

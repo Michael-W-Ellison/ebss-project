@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Fourteen tests fail intermittently
+### 1. Fifteen tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -30,6 +30,7 @@ and running the project.
     analytics::tests::relationship_tests::a_settlement_ends_up_with_enemies_in_it
     analytics::tests::nutrient_loop_tests::what_a_settlement_eats_reaches_the_ground_it_stands_on
     analytics::tests::survival_pressure_tests::the_children_of_a_settlement_live_past_infancy
+    analytics::tests::personality_tests::a_congenital_trait_survives_inheritance
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -64,10 +65,13 @@ decaying with nothing added at all: ten agents pinned to a tile still wander
 off it during the tick they are pinned for, and where what they leave behind
 lands is up to the world. The sixth,
 `the_children_of_a_settlement_live_past_infancy`, came out at 1-in-15 on both
-sides the same way. None of the six is a regression; all six had simply never
-been written down.
+sides the same way. The seventh,
+`a_congenital_trait_survives_inheritance`, failed once in a full-suite run and
+then passed fifteen times running on its own, on both sides — too rare to put
+a rate on, which is worth saying rather than inventing one. None of the seven
+is a regression; all seven had simply never been written down.
 
-All fourteen build a world through
+All fifteen build a world through
 `World::new`, which draws from `thread_rng`, and
 then assert on a property a random world does not always have — for example
 that clay deposits happen to be clustered, or that a forge finds somewhere near
@@ -75,7 +79,7 @@ the iron to stand.
 
 The fix is to give world generation a seed, which the project wants anyway for
 reproducible runs. Until then, a red build is not necessarily a real failure,
-which is corrosive: check whether the failing test is one of these fourteen
+which is corrosive: check whether the failing test is one of these fifteen
 before assuming a regression, and if it is not, check it against the previous
 commit in a worktree before calling it one.
 
@@ -2002,18 +2006,75 @@ The clay chain is doing real work at the same time and the two cannot be
 separated at this sample; both are in one commit and the population figure is
 the two together.
 
+### 31. Three things that were meant to fix the store, and what each actually did
+
+Three of the open issues, taken together, and the results are not uniform. They
+are written up separately because two of them worked and one of them is a null.
+
+**Hunting had been put behind everything, and now is not.** It sat behind
+eating what you carry, behind foraging, behind walking to a known patch, behind
+moving the whole camp, behind walking back to ground that fed you once — and
+then behind being *desperate* on top of all that. It was never reached.
+Measured before this, forty agents in forty-seven still believed hunting paid
+and none of them had ever done any, which is what a belief with nothing to
+update it looks like.
+
+The rule that makes sense of it is narrow on purpose: **a deer at your feet
+beats a berry patch twelve tiles off.** Not a deer across the valley — that is
+the expedition that does not pay, and measured long ago it starved two
+settlements in forty. Five paces, and only when there is nothing to pick up
+where you stand, and only for somebody the lessons have not put off it.
+
+Hunting attempts went from **6.8 a world to 148.1 (t = 5.0)**. Population and
+burials did not move (t = -1.1 and -1.0). So it is reached, and it is close to
+free — which is the honest reading, not that it is now profitable: hides held
+at the end are 0.31 either way. What has changed is that the belief now has
+something to update it.
+
+**A drizzle and a thunderstorm were the same event.** `WHAT_THE_WEATHER_ADDS`
+was a constant, and the intensity the weather has always reported was thrown
+away at the first comparison — `precipitation_intensity() > 0.0`. Shade is the
+floor now and the open sky under a downpour is the ceiling, with a drizzle
+between them. And food under a roof is a question about where the thing is
+lying rather than a constant: a roof keeps the rain off, and — cutting both
+ways — stops the sun drying anything under it.
+
+That second half found a live trap in the tests. A default world puts exactly
+one building at the middle of the map, which is where several fixtures stand
+somebody and drop food, so `whoever_is_standing_near_learns_what_the_sun_did`
+began failing 10 runs out of 10 the moment a roof meant something. The code was
+right and the fixture was unlucky; the weather fixtures clear the buildings now.
+
+**And the one that did not work.** The reading was that agents ate the food
+they had spent three turns preserving: a settlement held 0.56 units of dried or
+salted food through a whole winter. The fix is right in itself and is tested —
+`find_best_food_to_eat` weighted freshness alone, which is exactly backwards
+for a people with a store, and now weights by `spoilage_multiplier` too, so a
+dried strip is a twentieth as attractive as today's supper and exactly as
+attractive in February when there is nothing else. Agents demonstrably prefer
+the perishable thing now.
+
+**It made no difference at settlement level:** preserved food carried through
+winter went 0.81 → 0.94 (t = 0.7), and the store went 105.2 → 97.9 (t = -0.7).
+The diagnosis was wrong rather than the fix. What gets preserved does not stay
+in packs to be eaten — it goes **into the ground**, and the store has been
+holding around a hundred units since the ordering was fixed two batches ago.
+`carried` was never a measure of the problem. The change is kept because it is
+correct and costs nothing, but it should not be described as having fixed
+anything.
+
 ## Housekeeping
 
-### 31. Committed backup file
+### 32. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 32. Build warnings
+### 33. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 33. Placeholder package metadata
+### 34. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

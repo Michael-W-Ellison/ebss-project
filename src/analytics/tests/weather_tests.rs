@@ -30,6 +30,12 @@ fn a_meal(of: ItemType, called: &str, how_many: u32, made_at: u32) -> InventoryI
 fn one_person() -> Simulation {
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
+    // And no roof over anything. A default world puts one building at the
+    // middle of the map, which is exactly where these tests stand somebody,
+    // and food under a roof deliberately does not dry - see
+    // `what_is_lying_about_weathers`. Tests about the sky should not be
+    // quietly testing the eaves.
+    world.buildings.clear();
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let mut simulation = Simulation::new(world, population);
@@ -281,6 +287,7 @@ fn whoever_is_standing_near_learns_what_the_sun_did() {
         simulation.world.tick();
         simulation.who_saw_that_dry();
     }
+
 
     assert!(
         simulation.population.agents[0]

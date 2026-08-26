@@ -19,10 +19,10 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 247 source files, with 1,739 library tests.
+across 247 source files, with 1,748 library tests.
 
 Every build configuration compiles: default, `--features gui`,
-`--features bevy_gui` and `--workspace`, with 1,776 tests across the workspace.
+`--features bevy_gui` and `--workspace`, with 1,785 tests across the workspace.
 The work left is connecting rather than building — several analytics
 components are libraries with no caller, and agents cannot yet hear anything.
 See
@@ -165,6 +165,37 @@ original specifications.
   out of 1,525 for want of anything to bury. Winter stores went from nothing
   at all to 42 units standing through the lean season, pits from 2 to 10,
   burials from 4 to 86, and food dried or smoked from 2.8 a world to 666
+- ✅ Hunting is reachable at last. It had been put behind eating what you
+  carry, behind foraging, behind walking to a known patch, behind moving the
+  whole camp, behind walking back to ground that fed you once — and then
+  behind being *desperate* on top of all that, so it was never reached. Forty
+  agents in forty-seven believed it paid and none had ever done any, which is
+  what a belief with nothing to update it looks like. The rule is narrow on
+  purpose: a deer at your feet beats a berry patch twelve tiles off, and a
+  deer across the valley is the expedition that starved two settlements in
+  forty. Attempts went from 6.8 a world to 148, with population and burials
+  unmoved — so it is reached and close to free, which is the honest reading
+  rather than that it is now profitable
+- ✅ A drizzle and a thunderstorm are no longer the same event, and a roof
+  means something. What food lying out in the rain lost was a constant, and
+  the intensity the weather has always reported was thrown away at the first
+  comparison. Shade is the floor now and the open sky under a downpour the
+  ceiling. A roof keeps the rain off what is under it and — cutting both ways
+  — stops the sun drying it. That second half turned up a live trap: a default
+  world puts exactly one building at the middle of the map, which is where
+  several test fixtures stand somebody and drop food, so a passing test began
+  failing ten runs in ten the moment a roof meant anything
+- 🚧 Eating what will be lost before what will keep. `find_best_food_to_eat`
+  weighted freshness alone, which is exactly backwards for a people with a
+  store: a person eats the thing that is about to go and saves the thing that
+  lasts, and that is the whole reason for preserving anything. It weights how
+  fast a thing goes off as well now, so a dried strip is a twentieth as
+  attractive as today's supper and exactly as attractive in February. **It
+  made no measurable difference**, and the reason is that the diagnosis was
+  wrong rather than the fix: what gets preserved does not sit in packs waiting
+  to be eaten, it goes into the ground, and the store has been holding around
+  a hundred units since the provisioning order was fixed. Kept because it is
+  correct and costs nothing, and written up as a null. See ISSUES_FOUND.md #31
 - ✅ Clay, and a fire that stops it being clay. `ResourceType::Clay`,
   `Pottery` and `Bricks` were three enum variants with nothing behind them:
   clay had been spawning on every riverbank and every marsh in every world
