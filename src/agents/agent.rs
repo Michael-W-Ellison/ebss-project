@@ -1201,11 +1201,13 @@ impl Agent {
 
     /// And how much food, which is a different question.
     ///
-    /// Lower than `ENOUGH_TO_HAND`, because food is not flint: six armfuls of
-    /// berries is not a sensible thing to be carrying about once berries
-    /// actually go off. Anything past a couple of meals is worth putting by
-    /// rather than walking around with.
-    pub const A_MEAL_OR_TWO_IN_HAND: u32 = 3;
+    /// Food is not flint: six armfuls of berries is not a sensible thing to
+    /// be carrying about once berries actually go off. Anything past a meal
+    /// is worth putting by rather than walking around with, and a settlement
+    /// living hand to mouth rarely holds even that - which is why this was
+    /// three and had to come down. At three, `Cover` was refused 1,513 times
+    /// out of 1,525 for want of anything to bury.
+    pub const WHAT_IS_NOT_WORTH_A_TRIP: u32 = 1;
 
     /// The thing this agent has most of beyond what it needs about it, if any.
     ///
@@ -1243,12 +1245,12 @@ impl Agent {
             .get_all_items()
             .iter()
             .filter(|(name, item)| {
-                item.quantity > Self::A_MEAL_OR_TWO_IN_HAND
+                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP
                     && (item.is_food() || name.contains("food") || name.contains("grain"))
             })
             // What keeps worst is what most wants burying
             .max_by_key(|(_, item)| item.quantity)
-            .map(|(name, item)| (name.clone(), item.quantity - Self::A_MEAL_OR_TWO_IN_HAND))
+            .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
     }
 
     /// Whether a thing in the pack is raw food still good enough to be worth

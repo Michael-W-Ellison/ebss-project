@@ -148,8 +148,25 @@ original specifications.
   fire smokes it, which is twenty times and ten times the keeping. The cost is
   in ISSUES_FOUND.md #24 and it is not small — 52 people against 66 — and the
   reason is not the clock but what the clock exposed
-- 🚧 A hole in the cold ground, which is a larder and does not pay for itself
-  yet. A settlement had nowhere to put anything it ate: what a person could
+- ✅ A settlement provisions. Nothing in this model had ever gathered *for the
+  winter*: it gathered because it was hungry, ate what it picked in the same
+  breath, and put away whatever happened to be left over. Probed directly in
+  autumn, three agents in a hundred were carrying any food at all, so there
+  was never a load to carry home — forty pits a world got dug and not one of
+  them ever had anything in it. Three separate things were in the way, and all
+  three were deadlocks rather than tuning. `Preparedness` stood behind
+  `Sustenance`, so a forager could not store anything until it had solved
+  farming, and food production is never answered in a people that does not
+  farm — it sat below its threshold in eight agents out of eight for a whole
+  settlement's life. What is in the pack in autumn is a harvest rather than
+  supper, and carrying it home has to beat Hunger, which is a primary drive
+  that wins every contest it enters. And `Cover` kept back three days' food
+  while the agent was standing on its own larder, which refused 1,513 burials
+  out of 1,525 for want of anything to bury. Winter stores went from nothing
+  at all to 42 units standing through the lean season, pits from 2 to 10,
+  burials from 4 to 86, and food dried or smoked from 2.8 a world to 666
+- 🚧 A hole in the cold ground, which is a larder. It pays for itself now that
+  anything reaches it — A settlement had nowhere to put anything it ate: what a person could
   put by explicitly excluded food, and the only place to put anything was a
   single global bag of counts with no position that nothing ever spoiled in.
   A pit is dug with a stone tool, food goes in, the earth goes back over it,

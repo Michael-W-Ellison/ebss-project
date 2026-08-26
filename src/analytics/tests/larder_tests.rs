@@ -151,7 +151,15 @@ fn what_is_put_by_goes_in_and_is_covered() {
     assert!(pit.how_much_is_in_it() > 0, "and there is food in it");
 }
 
-/// A person keeps a couple of days about them rather than burying the lot.
+/// A person standing on their own store keeps a meal about them and buries
+/// the rest.
+///
+/// This used to keep back three days' food, which is nonsense when you are
+/// standing on the larder — you can take more out tomorrow, that is what it
+/// is for — and it was what stopped anything ever being stored: measured
+/// directly, `Cover` was refused 1,513 times out of 1,525 for want of
+/// anything to bury, because a settlement living hand to mouth rarely holds
+/// more than three of anything.
 #[test]
 fn nobody_buries_their_whole_supper() {
     let mut simulation = a_digger();
@@ -169,8 +177,12 @@ fn nobody_buries_their_whole_supper() {
 
     assert_eq!(
         simulation.population.agents[0].how_many_i_have("food"),
-        Agent::ENOUGH_TO_HAND,
+        Simulation::WHAT_A_PERSON_KEEPS_ON_THEM,
         "he walks away from the pit with something to eat on the way home"
+    );
+    assert!(
+        simulation.world.pits[0].how_much_is_in_it() > 0,
+        "and the rest of it is in the ground"
     );
 }
 
@@ -596,5 +608,153 @@ fn digging_a_store_wants_a_tool() {
             verbs::Wants::AToolFor(crate::agents::SkillType::Mining)
         )),
         "you do not dig a storage pit with your hands: {wanted:?}"
+    );
+}
+
+
+// --------------------------------------------------------------------------
+// A harvest is not supper
+// --------------------------------------------------------------------------
+
+/// The provisioning gap, and the whole reason forty pits a world got dug and
+/// none of them ever had anything in it.
+///
+/// Nothing in this model gathered *for the winter*. It gathered because it
+/// was hungry, ate what it picked in the same breath, and put away whatever
+/// happened to be left over. Probed directly in autumn, only 108 agent-samples
+/// in 3,254 were carrying any food at all — three in a hundred — so there was
+/// never a load to carry home.
+#[test]
+fn a_load_gathered_in_autumn_is_not_eaten_on_the_spot() {
+    let mut simulation = a_digger();
+    simulation.execute_action(&Action::Excavate, 0);
+    turn_the_year_to(&mut simulation, Season::Fall);
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(4, simulation.world.tick));
+
+    let here = simulation.population.agents[0].state.position;
+
+    assert!(
+        simulation.is_this_lot_for_the_store(&simulation.population.agents[0], here),
+        "autumn, a store within reach and a man who is not desperate: that is a harvest"
+    );
+}
+
+/// And in summer it is simply supper.
+#[test]
+fn the_same_armful_in_summer_is_just_supper() {
+    let mut simulation = a_digger();
+    simulation.execute_action(&Action::Excavate, 0);
+    turn_the_year_to(&mut simulation, Season::Summer);
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(4, simulation.world.tick));
+
+    let here = simulation.population.agents[0].state.position;
+
+    assert!(
+        !simulation.is_this_lot_for_the_store(&simulation.population.agents[0], here),
+        "nobody carries their dinner past their own mouth in June"
+    );
+}
+
+/// A man who will be dead by morning eats what is in his hand, and the store
+/// can wait.
+#[test]
+fn a_starving_man_eats_the_harvest() {
+    let mut simulation = a_digger();
+    simulation.execute_action(&Action::Excavate, 0);
+    turn_the_year_to(&mut simulation, Season::Fall);
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(4, simulation.world.tick));
+    simulation.population.agents[0].state.energy = 1.0;
+    simulation.population.agents[0].nutrition.energy_reserves = 1.0;
+
+    let here = simulation.population.agents[0].state.position;
+
+    assert!(
+        !simulation.is_this_lot_for_the_store(&simulation.population.agents[0], here),
+        "the store can wait"
+    );
+}
+
+/// Once the load is worth carrying, it gets carried — and that beats hunger,
+/// because a person filling a store is a person carrying food past their own
+/// mouth and Hunger wins every contest it enters.
+#[test]
+fn a_full_load_gets_taken_to_the_store() {
+    let mut simulation = a_digger();
+    simulation.execute_action(&Action::Excavate, 0);
+    turn_the_year_to(&mut simulation, Season::Fall);
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(20, simulation.world.tick));
+
+    let here = simulation.population.agents[0].state.position;
+    let answer = simulation
+        .is_the_load_worth_carrying_home(&simulation.population.agents[0], here)
+        .expect("that is a load");
+
+    assert!(
+        matches!(&answer, Action::Dry { .. } | Action::Cover { .. }),
+        "he is standing on the pit, so it goes in: {answer:?}"
+    );
+}
+
+/// And a load with the store a walk away gets walked.
+#[test]
+fn a_full_load_with_the_store_across_the_camp_gets_walked_over() {
+    use crate::world::Pit;
+
+    let mut simulation = a_digger();
+    turn_the_year_to(&mut simulation, Season::Fall);
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(30, 25),
+        holds: Vec::new(),
+        covered: false,
+        dug: 0,
+    });
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(20, simulation.world.tick));
+
+    let here = simulation.population.agents[0].state.position;
+    let answer = simulation
+        .is_the_load_worth_carrying_home(&simulation.population.agents[0], here)
+        .expect("that is a load");
+
+    assert!(
+        matches!(answer, Action::Move { .. }),
+        "five paces to the store: {answer:?}"
+    );
+}
+
+/// Putting something by waits on being neither hungry nor parched today, and
+/// on nothing else.
+///
+/// It used to stand behind Sustenance, on the reasoning that a people puts by
+/// what it grows. It does not: a people puts by what it finds, and it has
+/// been doing that far longer than it has been growing anything. Behind
+/// Sustenance, a forager could never store — measured directly, Preparedness
+/// sat below its threshold in eight agents out of eight for a whole
+/// settlement's life.
+#[test]
+fn putting_by_waits_on_hunger_and_thirst_and_nothing_else() {
+    use crate::core::DriveType;
+
+    let waits_on = DriveType::Preparedness.unlocked_by();
+
+    assert!(waits_on.contains(&DriveType::Hunger));
+    assert!(waits_on.contains(&DriveType::Thirst));
+    assert!(
+        !waits_on.contains(&DriveType::Sustenance),
+        "a forager stores food and does not farm it"
     );
 }

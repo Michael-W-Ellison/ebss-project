@@ -582,6 +582,22 @@ impl Simulation {
                         );
                         (survival_action, false)
                     }
+                    // PRIORITY -0.6: an armful of the harvest, and somewhere
+                    // to put it.
+                    //
+                    // Above hunger on purpose, and only in autumn. A person
+                    // filling a store is a person carrying food past their
+                    // own mouth, and Hunger is a primary drive that wins
+                    // every contest it enters - so while this sat below it, a
+                    // load never survived long enough to reach the pit. The
+                    // starving branch above still beats it: a man who will be
+                    // dead by morning eats what is in his hand.
+                    else if let Some(carrying_home) =
+                        self.is_the_load_worth_carrying_home(agent, agent_position)
+                    {
+                        debug!("Agent {agent_id} is taking a load to the store");
+                        (carrying_home, false)
+                    }
                     // PRIORITY -0.5: somebody of this agent's own who will
                     // not last the week, and food in the pack it is going to
                     // want itself.
@@ -1488,11 +1504,25 @@ impl Simulation {
 
         let carrying_food = agent.has_edible_food();
 
+        // What is in the pack in autumn is not necessarily supper.
+        //
+        // This is the provisioning gap, and it is why forty pits a world got
+        // dug and none of them ever had anything in it. Nothing in this model
+        // gathered *for the winter*: it gathered because it was hungry, ate
+        // what it picked in the same breath, and put away whatever happened
+        // to be left over. Probed directly in autumn, only 108 agent-samples
+        // in 3,254 were carrying any food at all - three in a hundred - so
+        // there was never a load to carry home.
+        let putting_by = self.is_this_lot_for_the_store(agent, agent_position);
+
         // A fire right here turns a third of what is in raw meat into nearly
         // all of it, so one tick spent cooking buys back several meals' worth.
         // Not when starving: then the difference between a poor meal now and a
-        // good one next tick is the difference between eating and dying.
+        // good one next tick is the difference between eating and dying. And
+        // not on a harvest, because cooking a thing stops it being dried, and
+        // drying is worth twenty times what cooking is.
         if !desperate
+            && !putting_by
             && Self::has_food_worth_cooking(agent)
             && self
                 .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
@@ -1505,7 +1535,9 @@ impl Simulation {
 
         // Eat what we carry as soon as we are hungry; an agent that walks
         // around starving with a full pack is the bug this guards against.
-        if carrying_food {
+        // Unless this lot is for the store, in which case being a bit hungry
+        // is the price of eating in February.
+        if carrying_food && !putting_by {
             return Some(Action::Eat { food_type: "generic".to_string() });
         }
 
@@ -2875,6 +2907,11 @@ impl Simulation {
     /// How much a person carries away from a store in one go.
     const WHAT_A_PERSON_TAKES_OUT: u32 = 8;
 
+    /// And how much they keep on them when they are standing on it.
+    ///
+    /// One meal. The store is right there.
+    const WHAT_A_PERSON_KEEPS_ON_THEM: u32 = 1;
+
     /// How far somebody will walk for a thing they can see lying on the ground.
     const WORTH_WALKING_OVER_FOR: u32 = 12;
 
@@ -3052,6 +3089,143 @@ impl Simulation {
             .filter(|(_, them)| them.what_i_am_short_of().contains(&spare.0.as_str()))
             .find(|(them, _)| self.what_i_would_hand_over(me, *them).is_some())
             .map(|(_, them)| them.id)
+    }
+
+    /// Whether what this agent is carrying is a harvest rather than supper.
+    ///
+    /// True only in autumn, only when there is somewhere within reach to put
+    /// it, only while the load is still short of a proper one, and only for
+    /// somebody who is not in real trouble. A man who will be dead by morning
+    /// eats what is in his hand and the store can wait - that is the same
+    /// line `would_i_take_it` uses, and for the same reason.
+    fn is_this_lot_for_the_store(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> bool {
+        use crate::world::Position;
+
+        if !matches!(
+            self.world.climate.current_season(),
+            crate::environment::seasons::Season::Fall
+        ) {
+            return false;
+        }
+
+        if agent.state.is_starving() || agent.nutrition.is_starving() {
+            return false;
+        }
+
+        // And a man who is properly hungry eats what is in his hand.
+        //
+        // The first cut used the desperation line - the same 0.85 that decides
+        // whether somebody will rob a neighbour - and that is far too late.
+        // It had agents carrying food past their own mouths until they were
+        // nearly done for, and burials went from 13.8 a world to 17.9 for it.
+        // Being a bit peckish is the price of eating in February. Being
+        // hungry is not.
+        if Self::how_hungry_is_this_one(agent) > Self::WHAT_HUNGER_STOPS_A_HARVEST {
+            return false;
+        }
+
+        // Once the load is big enough it stops being worth adding to and
+        // starts being worth carrying home
+        if Self::how_much_food_is_in_the_pack(agent) >= Self::WHAT_A_HARVEST_TRIP_IS {
+            return false;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        self.world
+            .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
+            .is_some()
+    }
+
+    /// Whether this agent is carrying a load worth taking to the store.
+    fn is_the_load_worth_carrying_home(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        if !matches!(
+            self.world.climate.current_season(),
+            crate::environment::seasons::Season::Fall
+        ) {
+            return None;
+        }
+
+        if agent.state.is_starving() || agent.nutrition.is_starving() {
+            return None;
+        }
+
+        // A hungry man eats the load rather than carrying it home
+        if Self::how_hungry_is_this_one(agent) > Self::WHAT_HUNGER_STOPS_A_HARVEST {
+            return None;
+        }
+
+        if Self::how_much_food_is_in_the_pack(agent) < Self::WHAT_A_HARVEST_TRIP_IS {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let (pit, paces) = self
+            .world
+            .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)?;
+
+        if paces > 0 {
+            return Some(Action::Move {
+                target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+            });
+        }
+
+        // Standing on it. Dry it first if it is worth drying, because a hole
+        // makes a thing keep four times as long and drying makes it keep
+        // twenty.
+        let what = agent.what_food_i_can_spare().map(|(what, _)| what)?;
+
+        if agent.is_it_worth_drying(&what) {
+            return Some(Action::Dry { what });
+        }
+
+        Some(Action::Cover { what })
+    }
+
+    /// How much of what is in the pack is something to eat.
+    fn how_much_food_is_in_the_pack(agent: &crate::agents::Agent) -> u32 {
+        agent
+            .inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.is_food())
+            .map(|item| item.quantity)
+            .sum()
+    }
+
+    /// How much somebody picks before they stop picking and carry it home.
+    ///
+    /// Small enough that a trip is a few turns rather than a season, and
+    /// comfortably above what `Cover` keeps back, so that every trip actually
+    /// puts something in the ground.
+    const WHAT_A_HARVEST_TRIP_IS: u32 = 10;
+
+    /// How hard hunger has to be pressing before somebody stops filling the
+    /// store and eats what is in their hand.
+    ///
+    /// Well short of desperation. A person puts food by while they are
+    /// comfortable, not while they are going short - and a settlement that
+    /// provisions right up to the edge of starving buries more people than it
+    /// saves.
+    const WHAT_HUNGER_STOPS_A_HARVEST: f32 = 0.5;
+
+    /// How hard hunger is pressing on this one, on the scale a drive is
+    /// weighed on.
+    fn how_hungry_is_this_one(agent: &crate::agents::Agent) -> f32 {
+        agent
+            .drives
+            .get(DriveType::Hunger)
+            .map(|hunger| hunger.urgency())
+            .unwrap_or(0.0)
     }
 
     /// Digging a store, filling it, or going out for something to fill it
@@ -10501,10 +10675,15 @@ impl Simulation {
                     return ActionResult::failure("The pit is full".to_string());
                 }
 
-                // A person keeps a couple of days about them and buries the
-                // rest. Burying the lot would have them walk away from a full
-                // pit with nothing to eat on the way home.
-                let keeping_back = crate::agents::Agent::ENOUGH_TO_HAND.min(mine.quantity);
+                // A person standing on their own store keeps one meal about
+                // them and buries the rest. Keeping three days' food in the
+                // pack while standing on the larder is nonsense - you can
+                // take more out tomorrow, that is what it is for - and it was
+                // what stopped anything ever being stored: measured directly,
+                // `Cover` was refused 1,513 times out of 1,525 for "not
+                // enough to be worth burying", because a settlement living
+                // hand to mouth rarely holds more than three of anything.
+                let keeping_back = Self::WHAT_A_PERSON_KEEPS_ON_THEM.min(mine.quantity);
                 let putting_by = (mine.quantity - keeping_back).min(room);
 
                 if putting_by == 0 {

@@ -1632,18 +1632,90 @@ missing, and it is upstream of the larder, of the sacrifice in #21 and of the
 dinner never builds anything, which is why `shelters built` is zero in both
 columns and always has been.
 
+### 26. Nothing ever gathered for the winter
+
+The last four batches all ended at the same wall: the store was built, the
+scarcity was built, and the store stayed empty. Forty pits a world dug and not
+one of them with anything in it. This is why, and it was three deadlocks in a
+row rather than a number that wanted tuning.
+
+Probed directly in autumn: of 3,254 agent-samples, **108 were carrying any
+food at all** — three in a hundred. There was never a load to carry home,
+because nothing in this model gathered *for the winter*. It gathered because
+it was hungry, ate what it picked in the same breath, and put away whatever
+happened to be left over.
+
+**First: putting by waited on farming.** `Preparedness` stood behind
+`Sustenance` in the drive chain, on the reasoning that a people puts by what
+it grows. It does not — a people puts by what it *finds*, and it has been
+doing that far longer than it has been growing anything. Behind Sustenance,
+Preparedness could not build until food production was answered, and food
+production is never answered in a settlement that forages. Measured: it sat
+below its threshold in eight agents out of eight, at values of 0.00 to 0.14
+against thresholds of 0.26 to 0.40, for the whole of a settlement's life. It
+now waits on Hunger and Thirst — on being neither hungry nor parched today,
+and on nothing else.
+
+**Second: a harvest is not supper, and nothing knew the difference.** `Hunger`
+is a primary drive and wins every contest it enters, so the instant an agent
+had food in the pack it ate it. Carrying food past your own mouth is what
+provisioning *is*, so it has to sit above Hunger — as a preempt, alongside the
+one that has a parent go without for a starving child. In autumn, with a store
+within reach and no real hunger pressing, what is in the pack is a harvest: it
+does not get eaten and it does not get cooked, because cooking a thing stops
+it being dried and drying is worth twenty times what cooking is. Once the load
+is worth carrying it goes home.
+
+The first cut of that guard used the desperation line — the same 0.85 that
+decides whether somebody will rob a neighbour — and that is far too late. It
+had agents carrying food past their own mouths until they were nearly done
+for, and burials went from 13.8 a world to 17.9. Being a bit peckish is the
+price of eating in February; being hungry is not.
+
+**Third: the keep-back ate the harvest.** `Cover` kept back three days' food
+before burying anything, which is nonsense when you are standing on your own
+larder — you can take more out tomorrow, that is what it is for. A settlement
+living hand to mouth rarely holds three of anything, so `Cover` was refused
+**1,513 times out of 1,525** for want of anything to bury. It keeps back one
+meal now.
+
+**What it does, sixteen worlds against sixteen:**
+
+| | before | after |
+|---|---|---|
+| units in the ground through winter | 0.0 ± 0.0 | 42.4 ± 4.3 |
+| pits standing | 2.1 | 10.0 |
+| burials | 4.3 | 86.4 |
+| food dried or smoked | 2.8 | 666.5 |
+| pits dug | 34.2 | 72.4 |
+| spears made | 48.2 | 38.4 |
+| people at ten thousand ticks | 33.3 ± 4.9 | 29.1 ± 3.5 |
+| burials of people | 13.8 ± 1.2 | 17.1 ± 1.5 |
+
+The store holds through the lean season for the first time (t = 10), and every
+part of the chain that had been built and never used — the pit, the covering,
+the drying, the smoking — is now routine.
+
+It costs something and the cost is the thing worth looking at: **spears made
+fell from 48 to 38**. That is the efficiency trade showing up on its own. A
+settlement that spends its autumn laying in stores makes a fifth fewer tools
+for it, which is exactly what a time budget ought to do and what could not be
+seen while nobody provisioned at all. Burials of people are up 13.8 to 17.1
+(t = 1.7, not significant at this sample) and population is down four (t =
+-0.7); both are consistent in sign and neither is established.
+
 ## Housekeeping
 
-### 26. Committed backup file
+### 27. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 27. Build warnings
+### 28. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 28. Placeholder package metadata
+### 29. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
