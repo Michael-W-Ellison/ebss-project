@@ -114,6 +114,19 @@ pub struct ExplorationKnowledge {
     /// and when.
     #[serde(default)]
     pub where_i_last_saw: HashMap<uuid::Uuid, (Position, u32)>,
+    /// And where this one went for something and found the place picked bare.
+    ///
+    /// The map knew *what* was at a place and never whether there was any of
+    /// it left, so an agent would walk back to a patch it had stripped itself
+    /// the day before, find nothing, and walk back again the day after. "No
+    /// food sources nearby" was ten thousand refused turns a world, which is
+    /// half of everything a settlement ever got refused.
+    ///
+    /// It fades, and it has to: a berry patch picked out in June is bearing
+    /// again by September, and a man who writes it off for life is as wrong
+    /// as the man who goes back every morning.
+    #[serde(default)]
+    pub where_it_ran_out: HashMap<Position, u32>,
 }
 
 /// Something met on a particular piece of ground, and how badly it went.
@@ -201,6 +214,7 @@ impl ExplorationKnowledge {
             explored_tiles: HashSet::new(),
             known_resources: HashMap::new(),
             who_told_me: HashMap::new(),
+            where_it_ran_out: HashMap::new(),
             known_buildings: HashMap::new(),
             known_storage: HashMap::new(),
             encountered_terrains: HashSet::new(),
@@ -310,6 +324,51 @@ impl ExplorationKnowledge {
             self.where_it_went_badly.remove(&oldest);
         }
     }
+
+    /// This one went for something here and there was none of it.
+    pub fn found_none_at(&mut self, where_it_is: Position, now: u32) {
+        self.where_it_ran_out.insert(where_it_is, now);
+
+        while self.where_it_ran_out.len() > Self::AS_MANY_BARE_PLACES_AS_ANYBODY_HOLDS {
+            let Some(oldest) = self
+                .where_it_ran_out
+                .iter()
+                .min_by_key(|(_, when)| **when)
+                .map(|(where_it_was, _)| *where_it_was)
+            else {
+                break;
+            };
+            self.where_it_ran_out.remove(&oldest);
+        }
+    }
+
+    /// And this one went for something here and got it, which settles the
+    /// question whatever it used to think.
+    pub fn found_some_at(&mut self, where_it_is: Position) {
+        self.where_it_ran_out.remove(&where_it_is);
+    }
+
+    /// Whether this one believes there is anything left here.
+    ///
+    /// Belief, not fact: the ground may have grown back and this one would not
+    /// know until it walked over and looked. That is the point of it.
+    pub fn is_it_picked_out(&self, where_it_is: Position, now: u32) -> bool {
+        self.where_it_ran_out
+            .get(&where_it_is)
+            .is_some_and(|when| now.saturating_sub(*when) <= Self::HOW_LONG_A_PLACE_STAYS_PICKED_OUT)
+    }
+
+    /// How long a place stays written off.
+    ///
+    /// Half a season. Long enough that a settlement stops walking back to
+    /// ground it stripped last week, short enough that it finds the same
+    /// hedgerow bearing again in the autumn.
+    pub const HOW_LONG_A_PLACE_STAYS_PICKED_OUT: u32 =
+        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TICKS_PER_DAY
+            / 2;
+
+    /// And how many bare places anybody carries about with them.
+    const AS_MANY_BARE_PLACES_AS_ANYBODY_HOLDS: usize = 32;
 
     /// This one laid eyes on somebody.
     pub fn saw_somebody(&mut self, who: uuid::Uuid, where_they_were: Position, now: u32) {

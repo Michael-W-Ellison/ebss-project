@@ -61,3 +61,5 @@ pub mod sacrifice_tests;
 pub mod theft_tests;
 pub mod threat_tests;
 pub mod situation_tests;
+pub mod picked_out_tests;
+pub mod wondering_tests;

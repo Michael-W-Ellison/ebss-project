@@ -974,6 +974,14 @@ pub struct Agent {
     /// hunting.
     #[serde(default)]
     pub lessons: super::practices::Lessons,
+    /// Questions this one has put to the world and is waiting on the answer
+    /// to - see [`super::wondering::Wondering`].
+    ///
+    /// Curiosity was a thing that answered in the same turn it was spent, and
+    /// most of what a stone-age people has to find out does not answer for
+    /// three days and does not answer where you are standing.
+    #[serde(default)]
+    pub wonderings: Vec<super::wondering::Wondering>,
     /// What is actually in this agent's hands, as against what is in the pack.
     ///
     /// A pair of them, which is what `verbs::A_PAIR_OF_HANDS` has always said
@@ -1052,6 +1060,7 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::HashMap::new(),
             found_out: std::collections::HashSet::new(),
+            wonderings: Vec::new(),
             patterns: super::patterns::Patterns::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
@@ -1760,6 +1769,94 @@ impl Agent {
     /// Write down that this agent has found out how to do something.
     ///
     /// Returns false if it already knew.
+    /// Put a question to the world and start waiting on the answer.
+    pub fn now_i_wonder(&mut self, wondering: super::wondering::Wondering) {
+        if self.am_i_wondering_about(&wondering.did, &wondering.what) {
+            return;
+        }
+
+        // Nobody holds more than a few questions open at once. The oldest
+        // goes, which is also the one most likely to have been answered by
+        // somebody walking off with the thing.
+        while self.wonderings.len() >= Self::AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS {
+            self.wonderings.remove(0);
+        }
+
+        self.wonderings.push(wondering);
+    }
+
+    /// Whether this one already has this question open.
+    pub fn am_i_wondering_about(&self, did: &str, what: &str) -> bool {
+        self.wonderings
+            .iter()
+            .any(|wondering| wondering.did == did && wondering.what == what)
+    }
+
+    /// Whether this one has put this question often enough to have a view.
+    ///
+    /// Not "has ever got an answer", which was the first cut of this and made
+    /// the whole mechanism useless: one answer is one afternoon, and one
+    /// afternoon can no more tell you what becomes of meat left out than one
+    /// throw can tell you what a dice does. What is being found out here is
+    /// that it depends on the weather, and *that* cannot be found out at all
+    /// without leaving meat out in several sorts of weather.
+    ///
+    /// Measured, the first cut asked and answered sixty-five questions a world
+    /// and drew exactly nought conclusions from them, because no agent ever
+    /// held more than a single instance of any of them.
+    pub fn do_i_know_what_becomes_of(&self, did: &str, what: &str) -> bool {
+        self.lessons.tried_this(&format!("{did}:{what}")) >= Self::ENOUGH_TIMES_TO_HAVE_A_VIEW
+    }
+
+    /// How many times somebody has to have left a thing out before they stop
+    /// wondering what becomes of it.
+    ///
+    /// Enough that both the wet afternoons and the dry ones have a run behind
+    /// them, because the answer this is reaching for is not "it goes off" but
+    /// "it goes off *in the rain*".
+    const ENOUGH_TIMES_TO_HAVE_A_VIEW: u32 = 20;
+
+    /// Something in the pack this one would leave somewhere to see what
+    /// becomes of it.
+    ///
+    /// The whole of "what happens if I leave meat in the rain". Three things
+    /// have to be true and all three matter: it has to be something whose
+    /// fate this one has never watched, there has to be more than one of it
+    /// so the experiment does not cost the experimenter its dinner, and it
+    /// has to be food, because a lump of flint left in a field is a lump of
+    /// flint in a field a week later and nobody learns anything.
+    ///
+    /// What it emphatically does *not* check is the weather. The branch this
+    /// replaces would only put something down under a clear sky, which is to
+    /// say the code already knew the answer and only let anybody run the
+    /// experiment on the days it comes out well. Finding out that meat left
+    /// in the rain is ruined is the *same discovery* as finding out that meat
+    /// left in the sun keeps, and a people that can only make the second one
+    /// has not found anything out at all.
+    pub fn what_i_would_leave_out(&self) -> Option<String> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .map(|(_, item)| item)
+            .filter(|item| item.food_data.is_some())
+            .filter(|item| item.quantity > Self::MORE_THAN_ANYBODY_WOULD_RISK)
+            .filter(|item| !self.am_i_wondering_about(Self::LEAVING_IT_OUT, &item.item_id))
+            .filter(|item| !self.do_i_know_what_becomes_of(Self::LEAVING_IT_OUT, &item.item_id))
+            .map(|item| item.item_id.clone())
+            .next()
+    }
+
+    /// What an experiment is called when it is somebody leaving a thing
+    /// somewhere and coming back to look.
+    pub const LEAVING_IT_OUT: &'static str = "leave";
+
+    /// How many of a thing somebody has to have before they will spare one to
+    /// find something out. Curiosity is not hunger and must not act like it.
+    const MORE_THAN_ANYBODY_WOULD_RISK: u32 = 2;
+
+    /// And how many questions anybody keeps open at once.
+    const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
+
     pub fn found_out_how_to(&mut self, what: &str) -> bool {
         self.found_out.insert(what.to_string())
     }

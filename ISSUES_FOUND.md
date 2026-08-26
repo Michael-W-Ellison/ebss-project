@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Sixteen tests fail intermittently
+### 1. Seventeen tests fail intermittently
 
     world::tdd_tests::naturalistic_resource_tests::test_resource_clustering
     world::tdd_tests::spatial_planning_tests::test_minimize_travel_time_from_agent_position
@@ -32,6 +32,7 @@ and running the project.
     analytics::tests::survival_pressure_tests::the_children_of_a_settlement_live_past_infancy
     analytics::tests::personality_tests::a_congenital_trait_survives_inheritance
     analytics::tests::midden_tests::a_settlement_fouls_the_ground_it_stands_on
+    analytics::tests::survival_loop_tests::population_feeds_itself_over_a_long_run
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -53,6 +54,12 @@ the eighth: **0 failures in 15 runs on its own, and 0 in 15 on the commit
 before the change**, so it is a full-suite-parallelism flake rather than a
 regression. It asks that eight people living for a month leave some fouling on
 the ground, which depends on where a random world puts the food they eat.
+The seventeenth was found in a full-suite run and characterised the same way:
+**0 failures in 15 runs on its own, and 0 in 15 on the commit before the
+change**. It was worth a hard look rather than a shrug, because it landed in
+the same batch as a change to how gathering is chosen - but the arms measured
+either side of that change have population and winter store *up* rather than
+down, so what it is is another full-suite-parallelism flake.
 The last five were found the same way and characterised the same way: each
 was run twenty-odd times in the working tree and the same number of times on
 the commit before it, in a worktree, and each came out at the same rate on
@@ -2211,18 +2218,152 @@ perfectly well; what fails is the food, three days later, somewhere the agent
 is no longer standing. Situation-keyed lessons cannot reach a delayed outcome,
 and giving them one is a separate piece of work from giving them a situation.
 
+### 34. Nobody knew a patch was bare, so everybody walked back to it
+
+Refused turns, one world, before this:
+
+| why a turn was refused | count |
+|---|---|
+| Gather: no food sources nearby | 10,127 |
+| Gather: inventory full | 5,255 |
+| Gather: no generic sources nearby | 2,209 |
+
+**More than half of everything a settlement ever got refused**, and two
+separate faults with the same shape.
+
+The map an agent carries knew *what* was at a place and never whether there
+was any of it left. `known_resources` is a position and a resource type, and
+nothing anywhere held "I stripped that hedgerow on Tuesday". So somebody would
+pick a patch bare, walk home, and walk back to the same bare ground the next
+morning, and the morning after, for as long as the drive kept asking.
+
+And several of the paths that produce a `Gather` cannot see the world at all.
+`generate_action_for_drive` is a static table that answers Sustenance with
+"gather food" and Industry with "gather generic" with no notion of whether
+there is any food or any wood in the county, or whether the asker has room in
+their pack for it.
+
+Three things. A place goes on the map when somebody strips the last of it —
+and it is not a private fact, so everybody standing near watches the ground go
+bare. It fades after half a season, because a patch picked out in June is
+bearing again by September and a man who writes it off for life is as wrong as
+the man who goes back every morning. And a gather that could not come to
+anything is refused on the way past, so the drive stands aside and the next one
+takes the turn, which is the doctrine the decision already ran on.
+
+The vocabulary `Gather` answers to came out of the executor while this was
+being done. It had lived where nothing that had to *decide* whether a gather
+was worth asking for could read it, which is the same defect that had clay
+spawning in every world for a year with nobody able to pick any of it up.
+
+**Sixteen worlds a side:**
+
+| | before | after | t |
+|---|---|---|---|
+| turns refused | 20,430 | **8,885 ± 1,096** | -7.9 |
+| share of turns refused | 9.0% | **3.9%** | -11.1 |
+| gathers attempted | 10,026 | **3,513 ± 302** | -8.1 |
+| turns taken | 229,811 | 235,768 | 0.5 |
+| food in the ground through the winter | 184.5 | 206.1 ± 19.6 | 0.9 |
+| people at ten thousand ticks | 34.4 | 37.8 ± 3.3 | 0.9 |
+| hunts | 223.5 | 143.6 ± 20.7 | -2.4 |
+| burials of people | 13.7 | 15.3 | 0.9 |
+
+**Refusals more than halved** and the failure rate went from nine per cent to
+under four. The settlement takes the same number of turns and wastes far fewer
+of them; store and population are up and neither is established. Hunting is
+down (t = -2.4), which is the one established cost and is what you would
+expect: with fewer turns burned on gathers that were going to fail, hunger gets
+answered by gathering more often and by setting off after a deer less often.
+
+One number in the previous entry has to be corrected in the light of this.
+**The situation lessons a settlement works out fell from 258 to 59.** Nothing
+is wrong with the learning; there is simply far less waste left to learn about.
+Most of what agents had been working out was *when gathering fails*, and a good
+share of the failing was this. A measurement of emergent knowledge that is
+partly a measurement of a defect is worth flagging as such.
+
+### 35. Curiosity could not ask a question whose answer arrives later
+
+Curiosity in this model was always the same shape: pick a working nobody here
+has tried, do it, and get the answer back in the same turn. That is right for
+"what does this lump of clay do if I press it" and wrong for most of what a
+stone-age people has to find out, because most of it does not answer for three
+days and does not answer where you are standing.
+
+There was one branch that reached for the later kind — putting food down to see
+whether the sun keeps it — and it was **gated on the sky being clear**. Which
+is to say the code already knew the answer and only let anybody run the
+experiment on the days it comes out well. Finding out that meat left in the
+rain is ruined is the same discovery as finding out that meat left in the sun
+keeps, and a people that can only make the second one has not found anything
+out at all.
+
+So: a question somebody has open. What was done, to what, where, when, what it
+was like then, and **what the sky was doing at the time** — that last carried
+rather than looked up on the way back, because by the time anybody returns the
+rain has stopped. Coming back and finding it changed is the lesson. Coming back
+a week later and finding it exactly as it was left is also a lesson, and an
+important one: it is what stops a man doing the same pointless thing every week
+for the rest of his life. Somebody walking off with it ends the question and
+teaches nothing, which is right — the experiment was interfered with, not
+concluded.
+
+Two things were wrong with the first cut and both were found by measuring it.
+
+It asked each question **once**: an agent that had got a single answer was
+marked as knowing. Sixty-five questions a world were asked and answered and
+**exactly nought conclusions were drawn from any of them**, because no agent
+ever held more than one instance and the pattern arithmetic wants eight. One
+answer is one afternoon, and the thing being reached for here is that it
+depends on the afternoon.
+
+And it tipped the whole pack on the grass. `PutDown` drops the entire stack, so
+a curious man with six fish left six fish out. Measured, that cost an eighth of
+the people and a seventh of the winter store — directional rather than
+established, but consistent across four correlated measures. An experiment
+costs a portion now.
+
+**Sixteen worlds a side, against the entry above:**
+
+| | before | after | t |
+|---|---|---|---|
+| questions put to the world and answered | 0 | **187.9 ± 9.0** | — |
+| people at ten thousand ticks | 37.8 | 35.6 ± 1.8 | -0.6 |
+| food in the ground through the winter | 206.1 | 186.4 ± 13.8 | -0.8 |
+| share of turns refused | 3.9% | 3.4% | -1.7 |
+| burials of people | 15.3 | 14.4 | -0.5 |
+
+A settlement puts and answers **a hundred and eighty-eight questions to the
+world** that nobody arranged, and nothing else moves in either direction. The
+mechanism runs and costs nothing measurable, which for a new kind of curiosity
+is the result to want.
+
+**What it does not yet reach, and the number is worth stating.** The answers
+feed two things. The first is the existing drying discovery, which is immediate
+and works: somebody who leaves cut fish out and comes back to find it dried has
+found out what the sun does, and so has everybody standing near. The second is
+the situation record from #33, and there it is **at the edge of the threshold
+rather than past it**. The best-placed person in a world accumulates 13 to 20
+answers about one thing, against the eight-per-circumstance the pattern
+arithmetic wants for a contrast; situation lessons drawn from wondering appear
+in about **one world in three**, held by one person. Widening the look from two
+paces and four days to five paces and a week took the best single record from 4
+to 20 and the answers from 65 to 188, and that is as far as this goes without
+either more curiosity turns or somebody telling somebody else what they found.
+
 ## Housekeeping
 
-### 34. Committed backup file
+### 36. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 35. Build warnings
+### 37. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 36. Placeholder package metadata
+### 38. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

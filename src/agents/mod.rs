@@ -18,6 +18,7 @@ pub mod pregnancy;
 pub mod childcare;
 pub mod fatigue;
 pub mod practices;
+pub mod wondering;
 pub mod patterns;
 
 pub use agent::{Agent, AgentConfig, AgentState, Ailment, Inventory, InventoryItem, LifeStage};

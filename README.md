@@ -19,7 +19,7 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 247 source files, with 1,778 library tests.
+across 248 source files, with 1,813 library tests.
 
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
@@ -287,6 +287,37 @@ original specifications.
   refused turns, which is established and written up rather than buried: they
   gather very hard in the autumn and a good share of it finds a patch already
   picked out. See ISSUES_FOUND.md #33
+- ✅ A place that has run out, and somebody who knows it has. The map an agent
+  carries knew *what* was at a place and never whether there was any of it
+  left, so somebody would pick a patch bare, walk home, and walk back to the
+  same bare ground the next morning. "No food sources nearby" was **ten
+  thousand refused turns a world** and "inventory full" another five thousand
+  — between them more than half of everything a settlement ever got refused,
+  because several of the paths that produce a gather cannot see the world at
+  all. Stripping the last of something goes on the map, and it is not a private
+  fact: everybody standing near watches the ground go bare. It fades after half
+  a season, because a patch picked out in June is bearing again by September.
+  And a gather that could not come to anything is refused on the way past
+  rather than after the turn is spent. **Refusals more than halved, from nine
+  per cent of every turn to under four** (t = -11.1). See ISSUES_FOUND.md #34
+- ✅ Curiosity as a question whose answer arrives later. "What happens if I
+  leave meat in the rain?" is not a turn: it is a thing put down, a state
+  remembered, and somebody walking back in a few days to look. Every other
+  kind of curiosity here answers in the turn it was spent, which is right for
+  a lump of clay and wrong for most of what a stone-age people has to find out.
+  The one branch that reached for the later kind was gated on the sky being
+  clear — the code already knew the answer and only let anybody run the
+  experiment on the days it comes out well.
+
+  What is remembered is what the thing was like and **what the sky was doing at
+  the time**, carried rather than looked up on the way back, because by then
+  the rain has stopped. Coming back to find it changed is the lesson; coming
+  back a week later to find it exactly as it was left is also a lesson, and the
+  one that stops a man repeating a pointless thing for life. A settlement puts
+  and answers **a hundred and eighty-eight such questions** that nobody
+  arranged, at no measurable cost. It is at the edge of what the pattern
+  arithmetic can use rather than past it, and that number is in the write-up.
+  See ISSUES_FOUND.md #35
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the
