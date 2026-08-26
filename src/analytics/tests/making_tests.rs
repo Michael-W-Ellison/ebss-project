@@ -287,7 +287,7 @@ fn a_founder_sets_about_getting_himself_a_spear() {
     carrying(agent, "flax", 4);
 
     let what = agent
-        .what_i_would_make()
+        .what_i_would_make(true)
         .expect("a man with wood, stone and flax has something to be getting on with");
     assert!(
         ["spear", "knappedtip", "lashing"].contains(&what.as_str()),
@@ -308,7 +308,7 @@ fn a_man_with_his_tools_about_him_asks_for_nothing() {
     carrying(agent, "stone", 9);
     carrying(agent, "flax", 9);
 
-    assert_eq!(agent.what_i_would_make(), None);
+    assert_eq!(agent.what_i_would_make(true), None);
     assert_eq!(agent.what_i_must_find(), None);
 }
 
@@ -350,7 +350,7 @@ fn a_spear_can_be_made_out_of_what_was_made_before_it() {
 
     // Whatever he decides to do, he should end up holding a spear.
     for tick in 1..=6u32 {
-        let Some(what) = simulation.population.agents[0].what_i_would_make() else {
+        let Some(what) = simulation.population.agents[0].what_i_would_make(true) else {
             break;
         };
         let result = simulation.execute_action(&Action::Craft { item_type: what.clone() }, 0);

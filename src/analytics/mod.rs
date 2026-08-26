@@ -2453,9 +2453,43 @@ impl Simulation {
             // Reducing first, then assembling: a core has to be broken before
             // there is a flake to haft. What each of these wants in the hand
             // is the matrix's business and is enforced before it runs.
+            // Working whatever is in the pack into whatever it makes, first.
+            //
+            // I moved this to the *bottom* of the chain on the reasoning that
+            // being equipped ought to come before pottering, since it is
+            // undirected and nearly always answerable. Measured, that cost a
+            // settlement **two thirds of its vessels** (t = -4.6) and put its
+            // rot up (t = 2.1), and the reason is worth writing down: the
+            // undirected working is *where bowls come from*. `carve:wood` is a
+            // working, so the pottering is the only route to a vessel anybody
+            // actually takes. Demoting it did not redirect the turns, it
+            // deleted the thing they were producing.
+            //
+            // Reverted. What survives from that attempt is the two things that
+            // were good on their own terms and are kept below: not naming a
+            // step that cannot be taken, and getting the hammerstone out
+            // before trying to use it.
             DriveType::Utility => agent
                 .what_i_would_work_on()
                 .map(|(verb, to)| Action::Work { verb, to })
+                .or_else(|| {
+                    agent
+                        .what_i_have_to_work_with(crate::agents::SkillType::Crafting)?;
+                    agent
+                        .what_vessel_i_would_rather_have()
+                        .map(|(verb, to)| Action::Work {
+                            verb: verb.to_string(),
+                            to: to.to_string(),
+                        })
+                })
+                .or_else(|| {
+                    agent
+                        .what_i_would_make(
+                            self.nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+                                .is_some(),
+                        )
+                        .map(|item_type| Action::Craft { item_type })
+                })
                 // Something to carry water in. This belongs here, beside the
                 // tools, because it is the same kind of thing: a thing a
                 // person would rather have than not.
@@ -2475,23 +2509,6 @@ impl Simulation {
                 // had nothing to carve with returned a refused `Work` every
                 // turn instead of burying or drying anything. A branch that
                 // can refuse must not stand in front of branches that cannot.
-                .or_else(|| {
-                    // Gated on owning something to carve with. Without this
-                    // gate it was the single largest refused action in the
-                    // model - one thousand seven hundred turns a world spent
-                    // asking to carve a bowl bare-handed - because a bowl is
-                    // the only vessel most people can name and most people
-                    // have nothing to carve one with.
-                    agent
-                        .what_i_have_to_work_with(crate::agents::SkillType::Crafting)?;
-                    agent
-                        .what_vessel_i_would_rather_have()
-                        .map(|(verb, to)| Action::Work {
-                            verb: verb.to_string(),
-                            to: to.to_string(),
-                        })
-                })
-                .or_else(|| agent.what_i_would_make().map(|item_type| Action::Craft { item_type }))
                 .or_else(|| {
                     // Somebody standing here with the thing, who wants what is
                     // going spare. A trade is quicker than a walk.
@@ -8348,6 +8365,25 @@ impl Simulation {
 
         let tried = crate::agents::Agent::what_was_tried(&action);
         let named = tried.split(':').next().unwrap_or(&tried);
+
+        // A making can name a tool that has to be in the hand and is not used
+        // up - a hammerstone is not part of the blade, it is what the blade is
+        // beaten out with. The matrix does not know about those, because it is
+        // keyed on the verb rather than on the recipe, so an agent who owned
+        // the hammerstone and had not got it out was refused every time.
+        if let Action::Craft { item_type } = &action {
+            let wants = crate::environment::making::every_way_to_make(item_type)
+                .filter(|step| agent.knows_how_to(step))
+                .find_map(|step| step.wants_in_hand)
+                .filter(|tool| agent.how_many_i_have(tool) > 0)
+                .filter(|tool| !agent.is_in_my_hand(tool));
+
+            if let Some(tool) = wants {
+                return Action::Equip {
+                    what: tool.to_string(),
+                };
+            }
+        }
 
         let wanted = verbs::what_this_action_cannot_do_without(named);
 

@@ -19,7 +19,7 @@ Unlike game-specific implementations, EBSS is environment-agnostic, allowing res
 **Current state**: all four planned phases are implemented. A default
 simulation runs a society that feeds itself, waters itself, shelters from the
 weather, and reproduces over tens of thousands of ticks. Roughly 135,000 lines
-across 251 source files, with 1,868 library tests.
+across 252 source files, with 1,878 library tests.
 
 Every build configuration compiles: default, `--features gui`,
 `--features bevy_gui` and `--workspace`, with 1,794 tests across the workspace.
@@ -419,6 +419,24 @@ original specifications.
   purpose. Vessels are up 29% (t = 1.8) and **nothing is established**; a
   settlement still does not make vessels. What is established is why not.
   See ISSUES_FOUND.md #41
+- ✅ Every wasted craft turn in the model, gone. `Craft` was refused almost
+  never and simply **never attempted** — 110 taken against 1,896 workings in a
+  world — because the tool a man wants and the material that tool wants both
+  sat behind the undirected "work whatever is in the pack". Naming a step now
+  checks that the step can actually be taken (a fire where a fire is wanted, a
+  hammerstone owned where one is wanted), and the tool-getting-out machinery
+  has been taught about a recipe's own tool, which the verb matrix cannot
+  express. **Refusals went to exactly nought in all sixteen worlds**, against a
+  mean of 68.6, at no cost anywhere.
+
+  The reverted half is the more useful finding. Putting the directed wants
+  ahead of the undirected working — "being equipped before pottering", which
+  sounds obviously right — cost a settlement **two thirds of its vessels**
+  (t = -4.6). **The pottering is where bowls come from**: carving a bowl is a
+  *working*, so that branch is the only route to a vessel anybody takes.
+  Demoting it deleted what it was producing rather than redirecting the turns.
+  A branch that looks like idling may be the sole producer of something.
+  See ISSUES_FOUND.md #42
 - ✅ You cannot eat a deer. Agents ate raw flesh in two-kilo lumps with nothing
   in the way: one `Eat` swallowed one unit off a kill, the only gates were
   "is it spoiled" and "is it poison", and cooking was worth 2.7 times the

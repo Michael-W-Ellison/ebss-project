@@ -2702,18 +2702,80 @@ that a pair of hands wants one for carving — the want reaches the list and doe
 not reach the pack — and that is a question about `what_i_would_make` and the
 step chain under it rather than about any of the three things changed here.
 
+### 42. A want that reached the list and not the pack
+
+Of thirty-two people: **twenty-seven wanted something to carve with, thirty-two
+knew how to make one, and five owned one.** The want was there, the knowledge
+was there, and the knife was not.
+
+`Action::Craft` was refused almost never — 110 taken and 0 refused in a whole
+world. It was simply **never attempted**. `what_i_would_make` (the tool a man
+wants) and `what_i_must_find` (the material that tool wants) both sat behind
+`what_i_would_work_on`, which is "work any material I happen to be holding into
+whatever it makes". That is undirected and nearly always answerable, so it was
+the answer every single turn: 1,896 workings against 110 crafts.
+
+**Two things came out of trying to fix it, one kept and one reverted.**
+
+**Kept.** `what_to_do_first_knowing` checks the *materials* and nothing else, so
+it will name a step wanting a hammerstone in the hand of a man with none, or one
+wanting a fire where there is no fire. With the ordering changed so the branch
+actually ran, that became **2,378 refused crafts a world out of 2,719
+attempted** — 1,421 "wants a handaxe" and 957 "no fire burning here". A refusal
+is worse than a wasted turn, because it goes into the record and teaches a man
+that making knives does not work. There is a `what_to_do_first_that_can_be_done`
+now that asks the fuller question, and the tool-getting-out machinery has been
+taught about a making's `wants_in_hand` — the matrix could not express it,
+because it is keyed on the verb rather than on the recipe, so a man who owned
+the hammerstone and had not got it out was refused every time.
+
+**Reverted, and this is the useful part.** Putting the directed wants ahead of
+the undirected working — "being equipped comes before pottering", which sounds
+obviously right — cost a settlement **two thirds of its vessels** (11.4 to 4.3,
+t = -4.6) and put its rot up (t = 2.1). Trying it the other way round, with the
+vessel branch at the very head, changed nothing: still 4.3.
+
+The reason is worth writing down. **The pottering is where bowls come from.**
+Carving a bowl is a *working*, not a *making*, so the undirected branch is the
+only route to a vessel anybody actually takes. Demoting it did not redirect
+those turns to something better; it deleted the thing they were producing. That
+is a general lesson about this decision tree and not a fact about bowls: a
+branch that looks like idle behaviour may be the sole producer of something, and
+the way to find out is to move it and count what disappears.
+
+**Sixteen worlds a side, with the ordering reverted and the proposals kept:**
+
+| | before | after | t |
+|---|---|---|---|
+| **crafts refused** | 68.6 | **0.0** | — |
+| food lost to rot | 1,126 | 966 | -1.3 |
+| things that hold water | 11.4 | 12.2 | 0.3 |
+| crafts attempted | 209 | 152 | -1.2 |
+| people at ten thousand ticks | 33.6 | 36.3 | 0.6 |
+
+**Every wasted craft turn in the model is gone** — exactly nought in all sixteen
+worlds against a mean of 68.6, which is a mechanical result rather than a
+statistical one and is why the t is not worth quoting. Nothing else moves, and
+nothing is harmed.
+
+What is *not* fixed is the thing the entry is named after. A settlement still
+holds three or four knives between thirty-odd people. The chain is clean now and
+still shallow: crafting sits fourth of five in the trades a pair of hands wants,
+behind hunting, woodcutting and leatherworking, and a stone knife is three steps
+deep. Most people never get past a spear.
+
 ## Housekeeping
 
-### 42. Committed backup file
+### 43. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 43. Build warnings
+### 44. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 44. Placeholder package metadata
+### 45. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

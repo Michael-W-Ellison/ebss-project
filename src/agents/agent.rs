@@ -2432,19 +2432,29 @@ impl Agent {
             .sum()
     }
 
-    pub fn what_i_would_make(&self) -> Option<String> {
+    pub fn what_i_would_make(&self, a_fire_is_to_hand: bool) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
 
         let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+
+        // Owning it, not holding it: the executor asks for ownership and the
+        // tool gets taken in hand on the way - see `get_the_tool_out_for`.
+        let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
         Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
             .iter()
             .filter_map(|trade| self.what_i_would_rather_have(*trade))
             .find_map(|want| {
-                crate::environment::making::what_to_do_first_knowing(
+                // Only a step that could actually be carried out. Asking for
+                // one that could not is worse than a wasted turn: the refusal
+                // goes into the record, and a man learns from it that making
+                // knives does not work.
+                crate::environment::making::what_to_do_first_that_can_be_done(
                     want.called,
                     &holding,
                     &knows,
+                    &in_hand,
+                    a_fire_is_to_hand,
                 )
             })
             .map(|step| step.makes.to_string())
