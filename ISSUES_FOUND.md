@@ -3963,18 +3963,104 @@ being equipped is upstream of everything the model is for.
   the wiser" and the same for clay, iron and grain. An agent re-examines what
   it has already learned nothing from. Filed as #192.
 
+### 70. The effort economy is decorative: nobody in this model is ever tired
+
+A specification arrived describing an efficiency architecture - tools that make
+work faster, an agent weighing "eight hours with this axe, or two hours making
+a better one and six with that", preparation cascades, tool ownership, and
+specialisation into trades. The first piece of it looked small and obvious, so
+it was built first. It measured **null**, and finding out why was worth more
+than the change.
+
+#### What was built
+
+`Tool::how_much_better` multiplies what comes *off* a job - more wood a swing,
+more fish a cast - and touches nothing else. So a stone axe and a bronze axe
+felled a tree at the same price, and `Excavate` cost a flat
+`WHAT_DIGGING_A_PIT_COSTS = 22.0` whether the hole was dug with an axe or with
+bare hands. An agent weighing an upgrade had one number and needed two.
+
+So: `Agent::what_this_job_costs_me(trade)`, the other side of
+`how_much_my_tools_help` - bare hands pay 1.6x, a tool divides that by how good
+it is, floored so no tool makes work free - applied in one place, where the
+action result comes back, rather than across forty `with_energy_cost` arms.
+Seven tests, all passing.
+
+#### It measured nothing
+
+32 worlds a side: alive 47.1 -> 48.8 (t = 0.67), eaten 4,999 -> 4,950
+(t = -0.17), deaths 21.3 -> 22.2 (t = 0.65), pits 7.6 -> 7.4 (t = -0.50),
+knives 9.3 -> 8.6 (t = -0.88). Not one column significant, and two of them
+drifting the wrong way: short-handed refusals 1,536 -> 1,726 (t = 1.86) and the
+failure rate 0.019 -> 0.021 (t = 1.50).
+
+#### And here is why
+
+One probe, 45,000 samples of a living agent's energy across three worlds:
+
+| energy | share of samples |
+|---|---|
+| 80-100 | **97.2%** |
+| 60-80 | 2.7% |
+| 40-60 | 0.10% |
+| 20-40 | 0.00% |
+| 0-20 | **0%** |
+
+**Mean energy 96.6 out of 100. Nothing in a settlement ever drops below forty.**
+
+The mechanism is two lines. Eating restores `amount * 20.0` energy, capped at
+100 - so a meal of five units refills the entire pool - and `Eat` is **9.85% of
+every turn taken**. One meal pays for four pit-diggings, and everybody eats
+constantly.
+
+So every `with_energy_cost` in this codebase - forty-odd call sites, with
+carefully tuned constants and comments like *"the most expensive single act in
+the model, because it is the one that buys a settlement a February"* - is
+charging against a pool that is always full. **The effort economy is
+decorative.** Making work cheaper in a currency with no scarcity cannot do
+anything, and it did not.
+
+#### Reverted, and what it means for the specification
+
+The change is correct modelling and it is not shipping, because shipping an
+inert balance change is how a model becomes something nobody can reason about.
+Filed as #200 with the probe.
+
+It also relocates the specification's central idea. The user talks in hours -
+"eight hours of work", "reduces hours of sleep needed to ten", "fifteen minutes
+to walk". This model's currency for time is the **turn**, and almost every
+action takes exactly one turn whatever it is done with. So a tool's yield
+multiplier *is* the time economy already: gathering four wood a turn instead of
+two is eight turns of work instead of sixteen, and that part works today.
+
+What does not exist is the reckoning - nothing compares the turns an upgrade
+costs against the turns it saves - and that is #194, which is the piece of the
+specification with no equivalent anywhere in the model. `Excavate` is the one
+place where a tool genuinely buys nothing at all, in either currency, and wants
+either a yield or a duration.
+
+#### The rest of the specification, filed rather than guessed at
+
+#193 the trip as part of the errand's cost; #194 the upgrade reckoning;
+#195 the tool ladder the spec asks for (sling, bow, pole, net, shovel, wheel,
+and a flint tier between stone and metal, plus butchering as a hard
+requirement); #196 barter for a tool as the cascade's third arm; #197 tool
+ownership and lending; #198 anticipating a loss of drive satisfaction rather
+than reacting to it; #199 specialisation into trades. #190 - fetching the
+material a tool wants - was already open and is the next link after #69.
+
 ## Housekeeping
 
-### 70. Committed backup file
+### 71. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 71. Build warnings
+### 72. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 72. Placeholder package metadata
+### 73. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

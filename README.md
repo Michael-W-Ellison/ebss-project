@@ -438,6 +438,37 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- 🚧 The effort economy is decorative: nobody in this model is ever tired. A
+  specification arrived describing tools that make work faster, an agent
+  weighing *"eight hours with this axe, or two hours making a better one and six
+  with that"*, preparation cascades and specialisation into trades. The first
+  piece looked obvious, so it was built first: `Tool::how_much_better`
+  multiplies what comes *off* a job and touches nothing else, so a stone axe and
+  a bronze axe fell a tree at the same price and a pit costs a flat 22 energy
+  whether it is dug with an axe or with bare hands. `what_this_job_costs_me` is
+  the other side of it, applied in one place, with seven tests.
+
+  **It measured null.** 32 worlds a side: alive t = 0.67, eaten t = -0.17,
+  deaths t = 0.65, pits t = -0.50, not one column significant and two drifting
+  the wrong way. Then one probe, 45,000 samples of a living agent's energy:
+  **mean 96.6 out of 100, 97.2% of samples above 80, and nothing in a settlement
+  ever below 40.** Eating restores `amount * 20.0` capped at 100 — a meal of
+  five units refills the whole pool — and `Eat` is 9.85% of every turn. One meal
+  pays for four pit-diggings.
+
+  So forty-odd tuned `with_energy_cost` constants, including one commented as
+  *"the most expensive single act in the model"*, charge against a pool that is
+  always full. **Reverted rather than shipped inert**, and filed as #200 with
+  the probe: either effort binds or the model should stop pricing in it and use
+  the turn, which is what the specification actually means by hours.
+
+  It also relocates the specification's central idea. Almost every action takes
+  exactly one turn whatever it is done with, so a tool's *yield* multiplier
+  already is the time economy — four wood a turn instead of two is eight turns
+  instead of sixteen — and that part works. What has no equivalent anywhere is
+  the reckoning that compares them (#194). The rest of the specification is
+  filed rather than guessed at: #193 #195 #196 #197 #198 #199. See
+  ISSUES_FOUND.md #70
 - ✅ Every man knew how to make an axe and one in thirty-five owned one. "They
   struggle to complete simple tasks" — so the first thing built was an
   instrument for where a settlement's day goes, and the first thing it did was
