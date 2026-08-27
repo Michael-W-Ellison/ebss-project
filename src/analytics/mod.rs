@@ -1497,6 +1497,17 @@ impl Simulation {
             if resource.resource_type != ResourceType::Water {
                 return false;
             }
+
+            // A spring that has given what it has this hour is not somewhere
+            // to go for a drink. It is still a spring and it will be running
+            // again shortly - see `ResourceNode::what_can_be_taken` - but
+            // walking to it now buys a refusal, and walking to the next one
+            // over buys water. Without this the flow model put the failure
+            // rate up by a fifth on its own.
+            if resource.what_can_be_taken() == 0 {
+                return false;
+            }
+
             if would_drink_the_sea {
                 return true;
             }
@@ -1798,6 +1809,13 @@ impl Simulation {
     /// one picked-over hedgerow does not empty a village.
     const HUNGRY_ENOUGH_TO_LEAVE: u32 = 120;
 
+    /// What a man expects of the country he is standing in, in the order that
+    /// running out of it kills him.
+    ///
+    /// Both of these are reasons to walk away from a place, and only the
+    /// second was ever treated as one.
+    const WHAT_A_COUNTRY_HAS_TO_PROVIDE: [DriveType; 2] = [DriveType::Thirst, DriveType::Hunger];
+
     /// How far off counts as somewhere else rather than the next field over.
     const FAR_ENOUGH_TO_BE_WORTH_THE_WALK: i32 = 20;
 
@@ -2085,15 +2103,35 @@ impl Simulation {
     ) -> Option<Action> {
         use crate::core::memory::SpatialMemoryType;
 
-        let starved_for = agent
-            .drives
-            .get(DriveType::Hunger)
-            .map(|hunger| hunger.denied_ticks())
-            .unwrap_or(0);
+        // What this country has failed to give him.
+        //
+        // Hunger was the only thing here, and thirst kills a man three times
+        // faster than hunger does. A settlement whose springs had gone dry
+        // and whose hedgerows were full had no reason anywhere in this model
+        // to pick up and leave, and did not: measured, eight of twenty-one
+        // water sources drawn to nothing and a people still standing over
+        // them at the end of the world. See ISSUES_FOUND #53.
+        let going_without = Self::WHAT_A_COUNTRY_HAS_TO_PROVIDE
+            .into_iter()
+            .find(|drive| {
+                agent
+                    .drives
+                    .get(*drive)
+                    .map(|it| it.denied_ticks())
+                    .unwrap_or(0)
+                    >= Self::HUNGRY_ENOUGH_TO_LEAVE
+            });
 
-        if starved_for < Self::HUNGRY_ENOUGH_TO_LEAVE {
+        let Some(going_without) = going_without else {
             return None;
-        }
+        };
+
+        // And what he would be walking towards. A man leaving for want of
+        // water is not looking for a berry bush.
+        let worth_walking_to = std::mem::discriminant(&match going_without {
+            DriveType::Thirst => SpatialMemoryType::Water,
+            _ => SpatialMemoryType::Food,
+        });
 
         let far_off = |candidate: &(i32, i32, i32)| {
             (candidate.0 - agent_position.0)
@@ -2108,7 +2146,7 @@ impl Simulation {
             .memory
             .spatial_memories
             .iter()
-            .filter(|memory| matches!(memory.memory_type, SpatialMemoryType::Food))
+            .filter(|memory| std::mem::discriminant(&memory.memory_type) == worth_walking_to)
             .map(|memory| (memory.position.0, memory.position.1, agent_position.2))
             .filter(|candidate| far_off(candidate) >= Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK)
             .max_by_key(far_off);
@@ -8918,7 +8956,20 @@ impl Simulation {
 
                     // Harvest resource
                     let where_it_grew = self.world.resources[resource_index].position;
-                    let harvested = self.world.resources[resource_index].harvest(harvest_amount);
+                    let harvested = {
+                        let node = &mut self.world.resources[resource_index];
+                        let taken = node.harvest(harvest_amount);
+
+                        // A spring down to its springline still gives a drink:
+                        // you take it from the water coming out of the ground
+                        // rather than from the pool, so the pool does not move
+                        // and nobody is turned away from a running spring.
+                        if taken == 0 {
+                            node.a_mouthful_from_the_flow()
+                        } else {
+                            taken
+                        }
+                    };
 
                     // What everybody standing here can see about this patch.
                     // Stripping the last of something is not a private fact:
@@ -9095,6 +9146,15 @@ impl Simulation {
                             ActionResult::failure("Inventory full - cannot carry more".to_string())
                         }
                     } else {
+                        // Including a spring that has given what it has this
+                        // hour. Exempting water from this - on the reasoning
+                        // that a spring is running again in ten ticks and
+                        // should not be written off for half a season - was
+                        // measured and was **worse**: the failure rate went up
+                        // rather than down, because a man who does not
+                        // remember the spring was low walks back to it and is
+                        // refused again. Remembering where the water was not
+                        // is what sends him to the next one.
                         {
                             let now = self.current_tick;
                             self.population.agents[agent_index]

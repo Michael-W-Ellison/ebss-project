@@ -302,3 +302,166 @@ fn water_is_fed_by_where_it_lies() {
     let berries = ResourceNode::new(ResourceType::Food, Position::new(10, 10), 100);
     assert_eq!(berries.water_inflow(TerrainType::Water, wet, false), 0.0);
 }
+
+// --------------------------------------------------------------------------
+// A spring is a flow, not a barrel
+//
+// Raising the rate (ISSUES #46) was only half of it. Water was still a stock
+// with a `max_amount` that drinking decremented, so a big enough camp could
+// still draw one down inside a single pass. A spring does not hold a set
+// amount of water: it recharges, out of a catchment that is not in this model,
+// and what limits what you can draw from it in an afternoon is its rate.
+// Twelve people cannot drain a decent spring. See ISSUES_FOUND #53.
+// --------------------------------------------------------------------------
+
+/// A spring cannot be drunk below what it puts out.
+#[test]
+fn a_spring_cannot_be_drunk_below_what_it_puts_out() {
+    use crate::world::{Position, ResourceNode};
+
+    let mut spring = ResourceNode::new(ResourceType::Water, Position::new(0, 0), 400);
+    spring.flow = 20.0;
+
+    let all_of_it = spring.harvest(10_000);
+
+    assert_eq!(all_of_it, 380, "he draws everything above the springline");
+    assert_eq!(spring.amount, 20, "and the spring goes on running");
+
+    let and_again = spring.harvest(10_000);
+
+    assert_eq!(and_again, 0, "there is nothing more to be had out of it today");
+    assert_eq!(spring.amount, 20, "and it is still there tomorrow");
+}
+
+/// Everything that is a stock still is one. A berry patch stripped bare is
+/// bare and a seam mined out is mined out; that is what those things are.
+#[test]
+fn everything_that_is_a_stock_can_still_be_taken_to_nothing() {
+    use crate::world::{Position, ResourceNode};
+
+    for what in [ResourceType::Food, ResourceType::Clay, ResourceType::Wood] {
+        let mut node = ResourceNode::new(what, Position::new(0, 0), 40);
+        node.flow = 20.0;
+
+        assert_eq!(node.harvest(10_000), 40, "{what:?} is a stock");
+        assert_eq!(node.amount, 0, "{what:?} strips bare");
+    }
+}
+
+/// And a spring knows its own rate before anybody has drunk from it. The
+/// regeneration pass sets this and does not run until the tenth tick, which
+/// is ten ticks in which the founders could drink one dry.
+#[test]
+fn a_spring_knows_its_rate_from_the_moment_the_world_is_made() {
+    let world = World::new(WorldConfig::default());
+
+    let springs: Vec<f32> = world
+        .resources
+        .iter()
+        .filter(|resource| resource.resource_type == ResourceType::Water)
+        .map(|resource| resource.flow)
+        .collect();
+
+    assert!(!springs.is_empty(), "a world should have water in it");
+    assert!(
+        springs.iter().all(|flow| *flow > 0.0),
+        "every source should be running before anybody drinks: {springs:?}"
+    );
+}
+
+/// Which together mean a world cannot lose its water, however many people
+/// stand in it.
+#[test]
+fn a_settlement_cannot_drink_a_world_dry() {
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    for _ in 0..24 {
+        population.spawn_agent(AgentConfig::default());
+    }
+
+    let mut simulation = Simulation::new(world, population);
+
+    for _ in 0..3000 {
+        simulation.tick();
+    }
+
+    let emptiest = simulation
+        .world
+        .resources
+        .iter()
+        .filter(|resource| resource.resource_type == ResourceType::Water)
+        .map(|resource| resource.amount)
+        .min()
+        .expect("a world should have water in it");
+
+    assert!(
+        emptiest > 0,
+        "no source anywhere should be drunk to nothing, and the emptiest \
+         holds {emptiest}"
+    );
+}
+
+/// A reach of running water keeps nothing back, because there is nothing to
+/// protect: it is full again by morning whatever was taken out of it.
+///
+/// The first cut of the springline set it to the flow for every source, and a
+/// river's flow is larger than its bed — so rivers became undrinkable and the
+/// failure rate went up rather than down. See ISSUES_FOUND #53.
+#[test]
+fn a_river_holds_nothing_back() {
+    use crate::world::{Position, ResourceNode};
+
+    let mut river = ResourceNode::new(ResourceType::Water, Position::new(0, 0), 400);
+    river.flow = ResourceNode::WHATEVER_WAS_DRAWN;
+
+    assert_eq!(
+        river.what_can_be_taken(),
+        400,
+        "a man at a river can drink his fill"
+    );
+    assert_eq!(river.harvest(10_000), 400, "and does");
+}
+
+/// A spring down to its springline still gives a drink. The pool is what has
+/// gathered; the springline is what is arriving, and a man kneeling at a
+/// running spring drinks it as it comes.
+///
+/// This is the difference between a spring having a rate and a spring having a
+/// closing time. Without it, "Gather: Resource source was empty" became the
+/// fourth largest refusal in the model — a strange thing to be able to say
+/// about a running spring — and the flow model cost half a point of failure
+/// rate on its own. See ISSUES_FOUND #53.
+#[test]
+fn nobody_is_turned_away_from_a_running_spring() {
+    use crate::world::{Position, ResourceNode};
+
+    let mut spring = ResourceNode::new(ResourceType::Water, Position::new(0, 0), 400);
+    spring.flow = 20.0;
+    spring.harvest(10_000);
+
+    assert_eq!(spring.what_can_be_taken(), 0, "the pool is down to its springline");
+    assert_eq!(spring.a_mouthful_from_the_flow(), 1, "and it is still running");
+
+    let pool = spring.amount;
+    for _ in 0..50 {
+        assert_eq!(
+            spring.a_mouthful_from_the_flow(),
+            1,
+            "a queue at a spring all get a drink"
+        );
+    }
+    assert_eq!(spring.amount, pool, "and none of it comes out of the pool");
+}
+
+/// A source that really has nothing in it — a seep frozen solid in February —
+/// gives nothing, and should not pretend otherwise.
+#[test]
+fn a_spring_that_is_not_running_gives_nothing() {
+    use crate::world::{Position, ResourceNode};
+
+    let mut frozen = ResourceNode::new(ResourceType::Water, Position::new(0, 0), 400);
+    frozen.flow = 0.0;
+    frozen.amount = 0;
+
+    assert_eq!(frozen.a_mouthful_from_the_flow(), 0, "there is nothing there");
+}

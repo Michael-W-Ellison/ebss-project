@@ -526,6 +526,24 @@ pub struct ResourceNode {
     /// may be supper and the other of which may not.
     #[serde(default)]
     pub kind: u8,
+
+    /// What a spring puts out between one pass of the resource tick and the
+    /// next, and the least that can be standing in it.
+    ///
+    /// Water is the one thing here that is a **flow and not a stock**. A
+    /// spring does not hold a set amount of water: it recharges, steadily, out
+    /// of a catchment that is not in this model, and what limits what you can
+    /// draw from it in an afternoon is its rate. Twelve people cannot drain a
+    /// decent spring, and this is the sentence in the code that says so.
+    ///
+    /// Kept on the node because the number is worked out from terrain in
+    /// `World::regenerate_resources`, which knows what tile a source is
+    /// standing on, and spent in `harvest`, which does not.
+    ///
+    /// Zero on everything that is not water, and on a water source nobody has
+    /// regenerated yet, in which case it is simply not yet a floor.
+    #[serde(default)]
+    pub flow: f32,
 }
 
 impl ResourceNode {
@@ -537,6 +555,7 @@ impl ResourceNode {
             max_amount: amount,
             inflow_carried: 0.0,
             kind: 0,
+            flow: 0.0,
         }
     }
 
@@ -555,9 +574,81 @@ impl ResourceNode {
 
     /// Harvest resource from this node
     pub fn harvest(&mut self, amount: u32) -> u32 {
-        let harvested = amount.min(self.amount);
+        let harvested = amount.min(self.what_can_be_taken());
         self.amount -= harvested;
         harvested
+    }
+
+    /// How much of what is standing here can actually be taken away.
+    ///
+    /// All of it, for everything that is a stock. A berry patch stripped bare
+    /// is bare, a seam mined out is mined out, and that is what those things
+    /// are.
+    ///
+    /// Not water. A spring cannot be drunk below what it puts out, because
+    /// what is standing in it is not a barrel of water but this pass's flow
+    /// arriving - so drawing it down to nothing would be drawing tomorrow's
+    /// water out of it today. Twelve people at a spring take twelve people's
+    /// worth and the spring goes on running.
+    ///
+    /// Before this, a settlement drank eight of its twenty-one sources down to
+    /// two units out of four hundred and left them there for the rest of the
+    /// world's life. See ISSUES_FOUND #46 and #53.
+    pub fn what_can_be_taken(&self) -> u32 {
+        if self.resource_type != ResourceType::Water {
+            return self.amount;
+        }
+
+        self.amount.saturating_sub(self.springline())
+    }
+
+    /// A drink taken from the flow itself, at a spring that is down to its
+    /// springline.
+    ///
+    /// The pool is what has gathered; the springline is what is arriving. A
+    /// man kneeling at a spring that is down to its springline is not looking
+    /// at a dry hole - he is looking at water coming out of the ground - and
+    /// what he does is drink it as it comes. So he gets his mouthful and the
+    /// pool does not move.
+    ///
+    /// This is the difference between a spring having a *rate* and a spring
+    /// having a *closing time*. Without it the flow model put the failure rate
+    /// up by half a point on its own and left "Gather: Resource source was
+    /// empty" as the fourth largest refusal in the model, which is a strange
+    /// thing to be able to say about a running spring.
+    pub fn a_mouthful_from_the_flow(&self) -> u32 {
+        if self.resource_type != ResourceType::Water {
+            return 0;
+        }
+
+        // A source that has run right down to nothing has nothing arriving
+        // either - a frozen seep in February, say - and there is genuinely
+        // no drink to be had there.
+        u32::from(self.amount > 0 && self.flow >= 1.0)
+    }
+
+    /// What a water source keeps back, so that tomorrow's water is not drunk
+    /// today.
+    ///
+    /// A source whose flow fills its whole bed between one pass and the next
+    /// keeps back **nothing**, because there is nothing to protect: a reach of
+    /// running water is full again by morning whatever was taken out of it.
+    /// Getting this wrong is worth writing down - the first cut set the
+    /// springline to the flow for every source, and a river's flow is larger
+    /// than its bed, so **rivers became undrinkable** and the failure rate
+    /// went up rather than down.
+    ///
+    /// A spring or a pool, whose flow is a fraction of its bed, keeps back one
+    /// pass's worth. That is the sentence that says twelve people cannot drain
+    /// a spring.
+    fn springline(&self) -> u32 {
+        let flow = self.flow.max(0.0);
+
+        if flow >= self.max_amount as f32 {
+            return 0;
+        }
+
+        flow as u32
     }
 
     /// Shed what is on it, because the season it bears in has gone by.

@@ -938,6 +938,8 @@ impl World {
         ));
 
         // Stock the country with what grows on it
+        world.prime_the_springs();
+
         world.plants.spawn_naturalistic(&world.grid);
 
         // Spawn initial wildlife based on terrain
@@ -1175,6 +1177,34 @@ impl World {
 
     /// How many places along a coast a person can get down to the water.
     const HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED: u32 = 3;
+
+    /// Work out what every spring in this world puts out, before anybody
+    /// drinks from one.
+    ///
+    /// `regenerate_resources` sets this, and it does not run until the tenth
+    /// tick. A source with no flow on it yet has no floor under it, so the
+    /// founders could drink one dry in the first morning of the world - which
+    /// is the whole failure this is meant to prevent, arriving ten ticks early.
+    fn prime_the_springs(&mut self) {
+        let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+
+        for resource in &mut self.resources {
+            if resource.resource_type != ResourceType::Water {
+                continue;
+            }
+
+            let terrain_type = self
+                .grid
+                .get_tile(&resource.position)
+                .map(|tile| tile.terrain.terrain_type)
+                .unwrap_or(TerrainType::Plains);
+
+            let temperature = self.climate.get_temperature(resource.position, terrain_type);
+            let inflow = resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+
+            resource.flow = inflow;
+        }
+    }
 
     /// Generate naturalistic resources for technology progression
     fn generate_naturalistic_resources(&mut self, config: &ResourceConfig) {
@@ -2098,6 +2128,12 @@ impl World {
             if resource.resource_type == ResourceType::Water {
                 let inflow =
                     resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+
+                // The rate is also the floor. What is standing in a spring is
+                // this pass's flow arriving, not a barrel somebody filled, so
+                // it is the one resource in this world that cannot be taken
+                // away - see `ResourceNode::what_can_be_taken`.
+                resource.flow = inflow;
                 resource.take_inflow(inflow);
                 continue;
             }

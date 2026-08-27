@@ -46,6 +46,13 @@ run more than a handful of times on their own.
     analytics::tests::barter_tests::two_people_with_opposite_problems_trade
     analytics::tests::asking_tests::being_told_lets_you_try_it_rather_than_making_you_believe_it
 
+`test_minimize_travel_time_from_agent_position` was re-characterised while
+checking whether the spring work had broken it, and its recorded rate is a
+considerable underestimate: **10 failures in 20 runs here and 7 in 20 on the
+commit before**, which is a coin toss rather than a one-in-fifteen. Both arms
+are equally bad, so it is not a regression, but it is much the worst offender
+on this list and it is the one to fix first.
+
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
 before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
@@ -3066,18 +3073,95 @@ The clustering fix stands. The world was misgenerating and now is not; what it
 exposed is a fault in the agents, and hiding it behind a broken world was never
 a fix.
 
+### 53. A spring is a flow, not a barrel
+
+Raising the rate in #46 was only half the fix, and the half that was left is
+the one that matters. Water was still a `ResourceNode` with an `amount` and a
+`max_amount` — a stock that drinking decrements and inflow refills. It is not
+a stock. **A spring does not have a set amount of water in it**: it recharges,
+steadily, out of a catchment that is not in this model, and what limits what
+you can draw from it in an afternoon is its rate. Twelve people cannot drain a
+decent spring, and there was no sentence anywhere in this code that said so.
+
+Three things went in.
+
+**A source cannot be drawn below what it puts out.** The rate is worked out
+from terrain in `regenerate_resources`, which knows what tile a spring sits on;
+it is now recorded on the node and spent in `harvest`, which does not.
+Everything that is a stock still is one — a berry patch stripped bare is bare,
+a seam mined out is mined out — and water alone has a springline under it.
+Measured over six thousand ticks: at twelve founders a world keeps 99% of its
+water and the emptiest source holds 214 of 400; at eighty founders, a hundred
+and forty-one people alive, it keeps 67% and **the emptiest source still holds
+twelve**. Nothing can be drunk to nothing at any population.
+
+**Springs know their rate before anybody drinks.** `regenerate_resources` does
+not run until the tenth tick, which was ten ticks in which the founders could
+drink one dry — the whole failure arriving early.
+
+**Thirst is a reason to leave a country.** `migration_action` read the Hunger
+drive and nothing else, and `moving_on` counts what is *edible* standing within
+reach. So a settlement whose springs had gone dry and whose hedgerows were full
+had no reason anywhere in this model to pick up and move, and did not — which
+is the answer to "why did the agents not migrate?" There is even a constant
+named `HOW_FAR_A_PEOPLE_WILL_MOVE`, documented as "how far a people will pick
+up and move for water they can count on", which was used only by a food-seeking
+branch. A man leaving for want of water now walks towards water he remembers
+rather than towards a berry bush.
+
+#### Two things measured wrong on the way, both worth keeping
+
+**A river's flow is bigger than its bed.** The springline was first set to
+`inflow.min(max_amount)`, and running water's inflow is deliberately larger
+than any bed — so a river's springline became its entire capacity and **rivers
+were undrinkable**. A source whose flow refills its whole bed between one pass
+and the next keeps back nothing, because there is nothing to protect.
+
+**Exempting springs from the picked-out memory made things worse.** A place
+found empty is remembered as empty for half a season, which looks obviously
+wrong for a spring that will be running again in ten ticks. Backing it out for
+water put the failure rate **up** rather than down (t = 3.75 against 2.56):
+a man who does not remember that the spring was low walks back to it and is
+refused again, and remembering is what sends him to the next one. Left alone.
+
+#### What actually fixed the cost
+
+The flow model cost half a point of failure rate on its own, and "Gather:
+Resource source was empty" became the fourth largest refusal in the model —
+a strange thing to be able to say about a running spring. The pool is what has
+gathered and the springline is what is *arriving*; a man kneeling at a spring
+that is down to its springline is not looking at a dry hole, he is looking at
+water coming out of the ground, and what he does is drink it as it comes. So a
+source at its springline gives a mouthful taken from the flow, and the pool
+does not move. A queue at a spring all get a drink and none of it comes out of
+the pool.
+
+Measured at thirty-two worlds a side against the commit before: **the failure
+rate regression goes to nothing, t = 0.01**, and every other column is null —
+population, food eaten, waste, the store. Which is the right result for a batch
+whose whole purpose is that the world should stop doing something impossible.
+
+#### Still not modelled
+
+Water is conserved by fiat here rather than by circulation. Waste and the dead
+return litter and fouling to the soil — `return_what_the_living_and_the_dead_leave`
+— and no water term goes with them, so a body's water is not returned to the
+ground it falls on; it simply never left, because a source cannot be drawn
+below its flow. That is the computationally cheap version of the right answer
+and it is worth writing down as such.
+
 ## Housekeeping
 
-### 50. Committed backup file
+### 54. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 51. Build warnings
+### 55. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 52. Placeholder package metadata
+### 56. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

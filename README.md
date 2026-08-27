@@ -438,6 +438,38 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ A spring is a flow, not a barrel. The entry above raised the rate; this is
+  the half that matters. Water was a `ResourceNode` with an `amount` that
+  drinking decremented — a stock — and **a spring does not have a set amount of
+  water in it**. It recharges, and what limits what you can draw from it in an
+  afternoon is its rate. A source now cannot be drawn below what it puts out:
+  at eighty founders and a hundred and forty-one people alive, a world keeps
+  two thirds of its water and **the emptiest source still holds twelve**.
+  Nothing can be drunk to nothing at any population.
+
+  And thirst is now a reason to leave a country. `migration_action` read the
+  Hunger drive and nothing else, so a settlement whose springs had gone dry and
+  whose hedgerows were full had no reason in this model to move, and did not —
+  which is why nobody migrated. There is a constant called
+  `HOW_FAR_A_PEOPLE_WILL_MOVE`, documented as "how far a people will pick up and
+  move for water they can count on", which was used only by a food-seeking
+  branch.
+
+  Two things measured wrong on the way and are recorded rather than quietly
+  fixed: the first springline made **rivers undrinkable** (running water's flow
+  is deliberately bigger than its bed), and exempting springs from the
+  picked-out memory — which looks obviously right, since a spring is running
+  again in ten ticks — put the failure rate **up** rather than down, because
+  remembering the spring was low is what sends a man to the next one.
+
+  What fixed the last of the cost was a physical reading rather than a number:
+  the pool is what has gathered and the springline is what is *arriving*, so a
+  source at its springline gives a mouthful taken from the flow and the pool
+  does not move. A queue at a spring all get a drink. Measured at thirty-two
+  worlds a side: **the failure-rate regression goes to nothing (t = 0.01)** and
+  every other column is null, which is the right result for a batch whose whole
+  purpose is that the world should stop doing something impossible.
+  See ISSUES_FOUND.md #53
 - ✅ Three "known flaky" tests, and two of them were not flaky. The suite had
   twenty tests on a list of intermittent failures. Run on their own,
   `water_is_not_used_up` failed **twelve times out of twelve** and
