@@ -272,6 +272,32 @@ impl Pit {
         self.holds.iter().any(|item| Self::is_it_a_meal(item))
     }
 
+    /// How many ticks apart two lots of the same thing were laid down.
+    ///
+    /// Anything without a clock counts as of an age with anything else, so
+    /// materials still stack the way they always did.
+    fn how_far_apart_in_age(
+        one: &crate::agents::InventoryItem,
+        other: &crate::agents::InventoryItem,
+    ) -> u32 {
+        match (&one.food_data, &other.food_data) {
+            (Some(mine), Some(theirs)) => mine.created_tick.abs_diff(theirs.created_tick),
+            _ => 0,
+        }
+    }
+
+    /// How close in age two lots have to be before they go in as one.
+    ///
+    /// A few days. Loads put by in the same week are the same load; loads put
+    /// by a season apart are not, and pretending otherwise throws the older
+    /// one's clock over the newer.
+    const CLOSE_ENOUGH_IN_AGE_TO_JOIN: u32 =
+        crate::environment::seasons::TICKS_PER_DAY * 4;
+
+    /// And how many separate lots of one thing a hole keeps before it starts
+    /// joining them up. A store is a hole in the ground, not a ledger.
+    const AS_MANY_SEPARATE_LOTS_AS_A_PIT_KEEPS: usize = 6;
+
     /// Whether a thing in the pit is something to eat rather than the vessel
     /// it is kept in.
     fn is_it_food(item: &crate::agents::InventoryItem) -> bool {
@@ -336,17 +362,42 @@ impl Pit {
 
     /// Put something in.
     pub fn put_in(&mut self, item: crate::agents::InventoryItem) {
-        if let Some(already) = self
+        // A pit is not a pack, and this is where the difference tells.
+        //
+        // A pack has one slot per name and has to merge; `holds` is a list and
+        // does not. What a person actually does with a store is put this
+        // autumn's load in beside last autumn's, not tip it in on top - and
+        // making a pit merge everything under one name meant a fresh load
+        // inherited the clock of whatever had been down there since the last
+        // harvest, went off almost at once, and the store collapsed: measured,
+        // a settlement held **130 units** against 937 and rotted nearly twice
+        // as much in the ground. See ISSUES_FOUND #65.
+        //
+        // So a load goes in beside what is already there unless there is
+        // something of the same age to join, and a pit that has collected too
+        // many separate lots joins the nearest rather than growing without
+        // bound.
+        let same_name: Vec<usize> = self
             .holds
-            .iter_mut()
-            .find(|held| held.item_id == item.item_id)
-        {
-            // A pit keeps one stack of a thing, and that stack is as old as
-            // its oldest part - see `InventoryItem::absorb`. Burying a fresh
-            // load into a pit that has been holding one since autumn does not
-            // make the pit fresh.
-            already.absorb(item);
-            return;
+            .iter()
+            .enumerate()
+            .filter(|(_, held)| held.item_id == item.item_id)
+            .map(|(at, _)| at)
+            .collect();
+
+        let of_an_age = same_name.iter().copied().min_by_key(|at| {
+            Self::how_far_apart_in_age(&self.holds[*at], &item)
+        });
+
+        if let Some(at) = of_an_age {
+            let apart = Self::how_far_apart_in_age(&self.holds[at], &item);
+
+            if apart <= Self::CLOSE_ENOUGH_IN_AGE_TO_JOIN
+                || same_name.len() >= Self::AS_MANY_SEPARATE_LOTS_AS_A_PIT_KEEPS
+            {
+                self.holds[at].absorb(item);
+                return;
+            }
         }
 
         self.holds.push(item);

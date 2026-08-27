@@ -438,6 +438,33 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ There was no sink. The settlement was living on food that never aged. The
+  entry below held the food-clock rule back because eaten plus waste fell from
+  12,874 to 6,692 with it on, and concluded six thousand units were leaking.
+  **Wrong.** The obvious instrument — sum every unit of food anywhere once a tick
+  and compare what leaves against what is booked — was built last instead of
+  first, and says food is conserved to **under a hundred units over six thousand
+  ticks**. Nothing leaks. The settlement acquires less: `Gather` falls a third
+  and the difference goes into preserving, with `Dry` rising from nowhere in the
+  top sixteen actions to 1,678 and burying up 76%. Before, a stack's clock was
+  whatever the first thing in it had, so a pack topped up all day never aged —
+  a people was living on food that could not go off.
+
+  Four hypotheses were measured and each was wrong, and two of them were real
+  bugs worth fixing anyway: `add_item` added only the incoming item's weight
+  while merging could change what the whole stack weighs, so a stale
+  `current_weight` could silently destroy food (worth ~9 units a world); and
+  `more_food_than_he_will_get_through` asked `is_food`, which is true of mould,
+  so a man with eight units of rot declined to forage — the same mistake #43
+  fixed once already, made again one entry later. A pit also now puts this
+  autumn's load **beside** last autumn's rather than tipping it in on top.
+
+  Shipped, with the cost stated plainly: **a settlement is a sixth smaller and
+  eats less than half as much (t = -8.3), and wastes a quarter of what it used
+  to** in packs (1,532 to 388) and on the ground (1,438 to 640). The model's
+  central quantity halves. It ships because the alternative is a pack that lies
+  to the agent reading it, and every decision this simulation exists to make is
+  made off that reading. See ISSUES_FOUND.md #65
 - 🚧 A thing rebuilt from its name is not the thing. Four places took an item's
   *name* and count and constructed a fresh item, discarding everything else
   about it. **Giving** somebody a week-old fish handed them a fish that would
@@ -447,20 +474,10 @@ original specifications.
   rots, which is where the immortal food in ISSUES_FOUND #45 came from. All four
   fixed, and measured null together.
 
-  The **clock rule is written, unit tested, and deliberately not shipped**, and
-  that is the useful part of the entry. Fresh food tipped into a basket going
-  over ought to come down to meet it — mould spreads. With that rule on, a
-  settlement ate **less than half as much** (9,703 to 4,638, t = -8.4) and lost
-  seven people, and the loss turns up in no waste column: eaten plus waste falls
-  from 12,874 to 6,692, so ~6,000 units leave the ledger without being eaten,
-  rotting anywhere, or still being held. Attributed across three arms — with the
-  rule off and everything else on, eaten is 9,389 against 9,703 (t = -0.3) — so
-  the rule is responsible and the hole is unexplained. Two severities of the rule
-  measured within 1% of each other, so it is not a matter of tuning.
-
-  Shipping a rule that loses half a settlement's food to a sink nobody has found
-  is worse than shipping a stack that lies about its age. A test says so out loud
-  so the current behaviour is not read as intended. See ISSUES_FOUND.md #61
+  The clock rule — fresh food tipped into a basket going over comes down to meet
+  it, because mould spreads — was held back for one commit on the reading that it
+  lost ~6,000 units from the ledger. **That reading was wrong and the next entry
+  corrects it.** See ISSUES_FOUND.md #61
 - 🚧 Making food scarcer does not make a people careful. Thinning what there is
   to gather and capping what one person takes, done together and measured
   separately. **Mostly a negative result, and the negatives are the valuable

@@ -3343,35 +3343,108 @@ each:
 - Without the clock merge, everything else on: eaten **9,389** against a
   baseline 9,703, t = −0.32, and every other column null.
 
-So the clock merge is responsible on its own, and the six-thousand-unit hole is
-unexplained. Two readings of the rule were tried — the strict one (always take
-the older tick) and a quantity-weighted blend with mould-that-has-manifested
-taking the whole basket — and they measured within 1% of each other, so the
-pathology is not the severity of the rule.
+So the clock merge is responsible on its own.
 
-**Shipping a rule that loses half a settlement's food to a sink nobody has
-found is worse than shipping a stack that lies about its age.** A stack still
-keeps the clock of whatever was there first, which is wrong, is known to be
-wrong, and is the lesser wrong. `stacking_tests::a_stack_still_keeps_the_clock_of_whatever_was_there_first`
-says so out loud so that nobody reads the current behaviour as intended.
+> **This entry was wrong, and #65 corrects it.** It concluded that six thousand
+> units were leaving the ledger and held the rule back on that basis. There is
+> no sink: measured directly, food is conserved to within a hundred units over
+> six thousand ticks. The settlement does not lose food, it **acquires less**.
+> The rule ships. See ISSUES_FOUND #65.
 
 The reason to come back to it is the first paragraph of this entry: this is a
 behavioural model, and an agent's decisions are only as good as what its pack
 tells it. A settlement that has been told its winter store is fresh has no
 reason to dry anything.
 
+### 65. There was no sink. The settlement was living on food that never aged
+
+#61 held the food-clock rule back because eaten plus waste fell from 12,874 to
+6,692 with it on, and concluded that six thousand units were leaving the ledger.
+**That conclusion was wrong.** This entry corrects it and ships the rule.
+
+#### Food is conserved
+
+The obvious instrument, built last instead of first: sum every unit of food
+anywhere a person could get at it — packs and pits — once a tick, and compare
+what leaves the stock against what is booked as eaten or rotted. Over six
+thousand ticks, twice:
+
+    in 2923  out 1927  booked 3005  unexplained -96
+    in 2978  out 1794  booked 3021  unexplained -92
+
+**Unexplained: under a hundred units, and negative** (double-counting on ticks
+where the stock rose and something was eaten in the same pass). Nothing is
+leaking. The settlement does not lose food with the rule on; it **acquires far
+less of it** — `Gather` falls from 45,380 actions to 30,622, a third — and
+spends the difference preserving: `Dry` goes from nowhere in the top sixteen
+actions to 1,678, and burying rises 76%.
+
+That is a coherent response to honest information rather than a fault. Before,
+a stack's clock was whatever the first thing in it had, and a pack topped up
+all day was a pack that never aged; a settlement was living on food that could
+not go off. Now it can, so a people preserves what it has instead of picking
+more, and settles smaller.
+
+#### Four hypotheses, each measured and each wrong
+
+Recorded because the hunting was most of the work, and because a list of things
+that are *not* the cause is worth as much as the thing that is.
+
+1. **The harvest clock.** Arm without it: eaten 4,184. Not it.
+2. **Weight.** `absorb` can change a stack's preparation, and preparation
+   decides weight — a dried stack weighs a third of the same thing raw — while
+   `add_item` only ever added the *incoming* item's weight, so `current_weight`
+   read low until the next `recalculate_weight` corrected it in one jump. If
+   that jump put a pack over its limit, every later `add_item` returned false
+   and the food was destroyed, because almost every caller ignores the bool.
+   A real bug, **fixed**, and worth about **nine units a world**. Not it.
+3. **The gate counted rot.** `more_food_than_he_will_get_through` asked
+   `is_food`, which is true of mould, so a man with eight units of spoiled
+   berries declined to pick anything. Exactly the mistake #43 fixed once
+   already, made again one entry later. A real bug, **fixed** with
+   `how_much_good_food_i_have`. Measured: no material change. Not it.
+4. **Pits merging a season's loads into one.** A pit is a list, not a pack, and
+   has no need to merge; a fresh load inheriting last autumn's clock rots at
+   once. Now this autumn's load goes in **beside** last autumn's unless there
+   is something of an age to join. Right, and **fixed**. Measured: no material
+   change. Not it.
+
+#### What shipping it costs
+
+Thirty-two worlds a side, everything in:
+
+| | before | after | |
+|---|---|---|---|
+| food eaten | 10,375 | 4,283 | t = −8.3 |
+| people alive | 52.1 | 43.6 | t = −2.1 |
+| rotted in packs | 1,532 | **388** | t = −11.3 |
+| rotted on the ground | 1,438 | **640** | t = −10.5 |
+| rotted in pits | 490 | 915 | t = 6.6 |
+| left where it fell | 99 | **27** | t = −2.8 |
+| winter store | 363 | 94 | t = −12.1 |
+
+A settlement is about a sixth smaller and eats less than half as much, and
+**wastes a quarter of what it used to** in packs and on the ground. The rot
+moves into the pits, which is where a people that preserves rather than picks
+would put it.
+
+This is a large change and it is stated plainly rather than buried: the model's
+central quantity halves. It ships because the alternative is a pack that lies
+to the agent reading it, and every decision this simulation exists to make —
+eat now, dry it, bury it, leave it — is made off that reading.
+
 ## Housekeeping
 
-### 62. Committed backup file
+### 66. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 63. Build warnings
+### 67. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 64. Placeholder package metadata
+### 68. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

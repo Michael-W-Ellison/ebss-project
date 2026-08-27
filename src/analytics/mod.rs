@@ -3641,7 +3641,7 @@ impl Simulation {
     /// by the smell it gives off. What it is not is supper, and going back to
     /// the river for more of it is the mistake this stops.
     fn more_food_than_he_will_get_through(agent: &crate::agents::Agent) -> bool {
-        Self::how_much_food_is_in_the_pack(agent) >= Self::WHAT_A_PERSON_GETS_THROUGH
+        agent.how_much_good_food_i_have() >= Self::WHAT_A_PERSON_GETS_THROUGH
     }
 
     /// Whether this agent is carrying a load worth taking to the store.

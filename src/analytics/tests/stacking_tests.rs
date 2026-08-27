@@ -31,40 +31,59 @@ fn a_lot_of(what: &str, how_many: u32, picked_on: u32) -> InventoryItem {
     lot
 }
 
-/// The clock rule is **not** shipped, and this says so on purpose.
-///
-/// Fresh food tipped into a basket that has been going over ought to come
-/// down to meet it — mould spreads — and `FoodData::the_older_clock` was
-/// written and unit tested for exactly that. Measured at thirty-two worlds a
-/// side it cost a settlement **more than half of everything it ate** (9,703
-/// to 4,638, t = -8.4) and seven of its people, and the loss turns up in no
-/// waste column at all: eaten plus waste falls from 12,874 to 6,692, so some
-/// six thousand units leave the ledger without being eaten, rotting or being
-/// left anywhere. Every other change in the batch measured null with the rule
-/// off, so it is responsible and the hole is unexplained.
-///
-/// So a stack still keeps the clock of whatever was there first. That is
-/// wrong, it is *known* to be wrong, and it is less wrong than losing half a
-/// settlement's food to a sink nobody has found. See ISSUES_FOUND #61.
+/// Fresh food tipped into a basket that has been going over comes down to
+/// meet it. Mould spreads.
 #[test]
-fn a_stack_still_keeps_the_clock_of_whatever_was_there_first() {
+fn fresh_food_tipped_onto_old_comes_down_to_meet_it() {
     let mut older = a_lot_of("food", 10, 0);
     let this_morning = a_lot_of("food", 10, 4_000);
 
     older.absorb(this_morning);
 
     assert_eq!(older.quantity, 20, "it is all one basket now");
-    assert_eq!(
-        older.food_data.as_ref().unwrap().created_tick,
-        0,
-        "and it reads as old as the stack that was already there"
+
+    let clock = older.food_data.as_ref().unwrap().created_tick;
+    assert!(clock < 4_000, "the new food does not keep its own timer: {clock}");
+    assert!(
+        clock > 0,
+        "and the basket is not pinned at the age of its very first berry: {clock}"
     );
 }
 
-/// A stack keeps the preparation of whatever was there first, for the same
-/// reason and with the same reservation as the clock above.
+/// And it cuts both ways: an older handful tipped onto a fresh stack drags the
+/// stack down rather than being made new by it. Nobody would think to ask for
+/// that half, and it is the same bug seen from the other side.
 #[test]
-fn a_stack_keeps_the_preparation_of_whatever_was_there_first() {
+fn old_food_tipped_onto_fresh_does_not_come_up_to_meet_it() {
+    let mut this_morning = a_lot_of("food", 10, 4_000);
+    this_morning.absorb(a_lot_of("food", 10, 0));
+
+    let clock = this_morning.food_data.as_ref().unwrap().created_tick;
+    assert!(clock < 4_000, "a stale handful tells on the basket: {clock}");
+}
+
+/// Once mould has actually manifested it takes the whole basket. Nothing
+/// rescues a basket that has gone over by putting good fruit into it.
+#[test]
+fn good_fruit_does_not_rescue_a_basket_that_has_gone_over() {
+    let mut gone_over = a_lot_of("food", 2, 0);
+    if let Some(ref mut clock) = gone_over.food_data {
+        clock.freshness = 0.0;
+    }
+
+    gone_over.absorb(a_lot_of("food", 100, 9_000));
+
+    assert_eq!(
+        gone_over.food_data.as_ref().unwrap().created_tick,
+        0,
+        "a hundred fresh berries do not save two mouldy ones - they join them"
+    );
+}
+
+/// A stack keeps no better than its worst part. A dried strip dropped into a
+/// raw stack does not make the raw stack keep.
+#[test]
+fn a_stack_keeps_no_better_than_its_worst_part() {
     let mut dried = a_lot_of("food", 10, 0);
     if let Some(ref mut clock) = dried.food_data {
         clock.preparation = PreparationState::Dried;
@@ -74,7 +93,8 @@ fn a_stack_keeps_the_preparation_of_whatever_was_there_first() {
 
     assert_eq!(
         dried.food_data.as_ref().unwrap().preparation,
-        PreparationState::Dried,
+        PreparationState::Raw,
+        "a basket with raw food in it is a raw basket"
     );
 }
 
@@ -115,17 +135,17 @@ fn a_pack_stacks_on_the_same_terms() {
     let stack = pack.get_item("food").expect("he is carrying berries");
 
     assert_eq!(stack.quantity, 20);
-    assert_eq!(
-        stack.food_data.as_ref().unwrap().created_tick,
-        0,
-        "a pack keeps the clock of what it was already carrying"
+    assert!(
+        stack.food_data.as_ref().unwrap().created_tick < 5_000,
+        "a pack does not forget what it was already carrying"
     );
 }
 
-/// And so does the store. Burying a fresh load into a pit that has held one
-/// since autumn does not make the pit fresh.
+/// A pit is not a pack, and that is the whole difference. A pack has one slot
+/// per name and has to merge; a pit is a list and does not. What a person does
+/// with a store is put this autumn's load in **beside** last autumn's.
 #[test]
-fn a_pit_stacks_on_the_same_terms() {
+fn a_pit_puts_this_load_beside_the_last_one() {
     let mut pit = Pit {
         where_it_is: Position::new(0, 0),
         holds: vec![a_lot_of("food", 40, 0)],
@@ -135,12 +155,33 @@ fn a_pit_stacks_on_the_same_terms() {
 
     pit.put_in(a_lot_of("food", 10, 5_000));
 
-    assert_eq!(pit.how_much_is_in_it(), 50);
+    assert_eq!(pit.how_much_is_in_it(), 50, "it is all in the hole");
+    assert_eq!(
+        pit.holds.len(),
+        2,
+        "and a season apart is two loads, not one"
+    );
     assert_eq!(
         pit.holds[0].food_data.as_ref().unwrap().created_tick,
         0,
-        "burying a fresh load into an old pit does not make the pit fresh"
+        "last autumn's load is untouched by this autumn's"
     );
+}
+
+/// Loads put by in the same week are the same load.
+#[test]
+fn a_pit_joins_up_what_went_in_together() {
+    let mut pit = Pit {
+        where_it_is: Position::new(0, 0),
+        holds: vec![a_lot_of("food", 40, 1_000)],
+        covered: true,
+        dug: 0,
+    };
+
+    pit.put_in(a_lot_of("food", 10, 1_001));
+
+    assert_eq!(pit.holds.len(), 1, "a day apart is one load");
+    assert_eq!(pit.how_much_is_in_it(), 50);
 }
 
 /// What is handed over is the thing itself.

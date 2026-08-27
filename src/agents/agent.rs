@@ -171,11 +171,17 @@ impl InventoryItem {
     ///
     /// See ISSUES_FOUND #61, and the task that goes with it.
     pub fn absorb(&mut self, other: InventoryItem) {
+        let mine = self.quantity;
+        let theirs = other.quantity;
         self.quantity += other.quantity;
 
-        if self.food_data.is_none() {
-            self.food_data = other.food_data;
-        }
+        self.food_data = match (self.food_data.take(), other.food_data) {
+            (Some(clock), Some(other_clock)) => {
+                Some(clock.the_older_clock(other_clock, mine, theirs))
+            }
+            (Some(only), None) | (None, Some(only)) => Some(only),
+            (None, None) => None,
+        };
     }
 
     pub fn is_food(&self) -> bool {
@@ -299,6 +305,15 @@ impl InventoryItem {
 /// Agent inventory system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inventory {
+    /// How much food this pack has refused for want of room, in units.
+    ///
+    /// A refused `add_item` returns `false` and almost every caller ignores
+    /// it, so the food simply stops existing. That is a real sink and it had
+    /// no counter anywhere: a whole batch's worth of missing food was traced
+    /// to it. See ISSUES_FOUND #65.
+    #[serde(default)]
+    pub what_would_not_go_in: u32,
+
     /// Items stored by item_id
     items: HashMap<String, InventoryItem>,
     /// Maximum number of item stacks
@@ -316,6 +331,7 @@ impl Inventory {
             max_slots,
             max_weight,
             current_weight: 0.0,
+            what_would_not_go_in: 0,
         }
     }
 
@@ -330,16 +346,31 @@ impl Inventory {
         // Check weight limit
         let item_weight = item.total_weight();
         if self.current_weight + item_weight > self.effective_max_weight() {
+            // What will not go in is not carried, and something ought to know
+            // it happened - see `what_would_not_go_in`.
+            if item.is_food() {
+                self.what_would_not_go_in += item.quantity;
+            }
             return false; // Too heavy
         }
 
-        // Update weight
-        self.current_weight += item_weight;
-
-        // Add or stack item
+        // Add or stack item, and weigh the pack by what is actually in it.
+        //
+        // The weight added is **not** the incoming item's weight when the two
+        // stacks merge, because merging can change what the whole stack is:
+        // `absorb` settles the preparation, and preparation is what decides
+        // weight - a dried stack weighs a third of the same thing raw. Adding
+        // only the newcomer's weight left `current_weight` reading low, and
+        // the next `recalculate_weight` corrected it in one jump. If that jump
+        // put the pack over its limit, **every subsequent `add_item` returned
+        // false and the food was silently destroyed**, because almost every
+        // caller ignores the bool. See ISSUES_FOUND #65.
         if let Some(existing) = self.items.get_mut(&item.item_id) {
+            let before = existing.total_weight();
             existing.absorb(item);
+            self.current_weight += existing.total_weight() - before;
         } else {
+            self.current_weight += item_weight;
             self.items.insert(item.item_id.clone(), item);
         }
 
@@ -6031,6 +6062,33 @@ impl Agent {
             .items
             .iter()
             .filter(|(item_id, _)| self.is_this_a_meal(item_id))
+            .map(|(_, item)| item.quantity)
+            .sum()
+    }
+
+    /// How much food about this person is still worth something to them.
+    ///
+    /// Not the same question as `how_many_meals_i_have`, and not the same as
+    /// how much food is in the pack. A whole fish nobody has taken a knife to
+    /// is not a meal, but it is a fish and it will be a meal shortly, so a man
+    /// carrying six of them has no business going back to the river. A fish
+    /// that has **gone over** is neither.
+    ///
+    /// Anything deciding whether somebody has enough about them to stop
+    /// getting more wants this. Asking `is_food` instead counts the rot, and
+    /// the effect of that is savage once food actually keeps an honest clock:
+    /// a settlement gathered **a third less** and ate **less than half as
+    /// much**, because men stood next to hedges declining to pick anything
+    /// with eight units of mould in the pack. See ISSUES_FOUND #65.
+    pub fn how_much_good_food_i_have(&self) -> u32 {
+        self.inventory
+            .items
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| match item.food_data {
+                Some(ref food) => !food.is_spoiled() && !food.is_harmful(),
+                None => false,
+            })
             .map(|(_, item)| item.quantity)
             .sum()
     }

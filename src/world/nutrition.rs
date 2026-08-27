@@ -436,6 +436,72 @@ impl FoodData {
         }
     }
 
+    /// What a stack's clock becomes when fresh food is put on top of old.
+    ///
+    /// The older clock, near enough. Tipping this morning's berries into a
+    /// basket that has been going over for a week does not give you a basket
+    /// of this morning's berries — mould spreads, and it spreads quickly once
+    /// it is there. The new food comes down to meet the old.
+    ///
+    /// A stack ages as a mixture of what is in it, so that a basket topped up
+    /// a hundred times over a world is not pinned for ever at the tick its
+    /// very first berry was picked. But once mould has actually manifested it
+    /// takes the whole basket outright: nothing rescues a basket that has gone
+    /// over by putting good fruit into it.
+    ///
+    /// Freshness is *derived* from `created_tick` by `update_freshness`, so
+    /// the timer is the thing that has to move; the freshness is set as well
+    /// only so that the stack reads right before the next pass.
+    ///
+    /// See ISSUES_FOUND #61 and #65.
+    pub fn the_older_clock(self, other: Self, mine: u32, theirs: u32) -> Self {
+        // The state that spoils faster, on the same reasoning: a stack is as
+        // good as its worst part.
+        let preparation = if self.preparation.spoilage_multiplier()
+            >= other.preparation.spoilage_multiplier()
+        {
+            self.preparation
+        } else {
+            other.preparation
+        };
+
+        let gone_over = self.is_spoiled() || other.is_spoiled();
+
+        let created_tick = if gone_over {
+            self.created_tick.min(other.created_tick)
+        } else {
+            Self::weighted(self.created_tick, mine, other.created_tick, theirs)
+        };
+
+        let freshness = if gone_over {
+            self.freshness.min(other.freshness)
+        } else {
+            let mine = mine.max(1) as f32;
+            let theirs = theirs.max(1) as f32;
+            (self.freshness * mine + other.freshness * theirs) / (mine + theirs)
+        };
+
+        Self {
+            base_nutrition: self.base_nutrition,
+            preparation,
+            freshness,
+            created_tick,
+            base_spoilage_ticks: self.base_spoilage_ticks.min(other.base_spoilage_ticks),
+        }
+    }
+
+    /// One tick blended into another by how much of each there is.
+    fn weighted(mine: u32, how_much_of_mine: u32, theirs: u32, how_much_of_theirs: u32) -> u32 {
+        let how_much_of_mine = how_much_of_mine.max(1) as u64;
+        let how_much_of_theirs = how_much_of_theirs.max(1) as u64;
+
+        let total = how_much_of_mine + how_much_of_theirs;
+        let blended =
+            (mine as u64 * how_much_of_mine + theirs as u64 * how_much_of_theirs) / total;
+
+        blended as u32
+    }
+
     /// Change preparation state (e.g., cooking raw meat)
     /// Resets created_tick to current tick for spoilage calculations
     pub fn set_preparation(&mut self, new_state: PreparationState, current_tick: u32) {
