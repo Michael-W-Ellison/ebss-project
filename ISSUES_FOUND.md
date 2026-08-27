@@ -69,6 +69,12 @@ commit before**, which is a coin toss rather than a one-in-fifteen. Both arms
 are equally bad, so it is not a regression, but it is much the worst offender
 on this list and it is the one to fix first.
 
+`being_told_lets_you_try_it_rather_than_making_you_believe_it` was the single
+failure in the suite run for the flee fix, and characterised the same way:
+**3 failures in 20 runs here and 1 in 20 on the commit before**. Not
+distinguishable at that sample, and the change it was checked against touches
+nothing an agent does with somebody else's word.
+
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
 before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
@@ -2909,6 +2915,9 @@ failure. Left alone deliberately: it is a combat change, it wants its own
 measurement, and folding it into the larder batch would have confounded the
 result above.
 
+**Fixed and measured. See #66 below** — and the cause was neither of the two
+things guessed at here.
+
 ### 45. Stacking a thing onto a thing keeps the wrong clock
 
 `Pit::put_in` and `Inventory::add_item` both merge by name and keep the
@@ -3433,18 +3442,108 @@ central quantity halves. It ships because the alternative is a pack that lies
 to the agent reading it, and every decision this simulation exists to make —
 eat now, dry it, bury it, leave it — is made off that reading.
 
+### 66. Two words for one question, and a man who could not get off the beach
+
+#44 recorded 76,644 refusals in one world — three quarters of every turn taken
+in the settlement, and by a distance the largest single refusal this model has
+produced — and guessed at two possible causes: too few directions tried, or
+standing your ground not counting as an answer. Both guesses were about the
+running. Neither was the cause.
+
+#### The cause
+
+Two things asked whether there was anywhere to run, and they asked it in
+different words.
+
+`how_this_one_answers_a_threat` asked `is_there_anywhere_to_run`, which tried
+three directions at **three paces**. Having got a yes, it returned
+`Action::FleeFrom`. The executor for `Action::FleeFrom` then tried the same
+three directions at **nineteen paces** — `HOW_FAR_A_FRIGHTENED_PERSON_GETS`,
+which is deliberately far enough that a man does not run one pace, look round,
+and run one pace again.
+
+Between those two numbers sits a shoreline. A man three paces from open water
+with the thing inland has somewhere to go at three paces and nothing but water
+at nineteen. The decision said run; the running said `"Nowhere to run"`. Nothing
+about the next turn was different, so it said it again, and again, for the rest
+of that agent's life.
+
+This is the project's duplicated-vocabulary defect for the **fifth** time, and
+the third in four commits: two verification sweeps, two resource spawners,
+`is_food` against meals twice, and now two answers to "is there anywhere to
+run". The pattern each time is the same — a question asked in two places, in
+words that agree on the day they are written and drift apart afterwards.
+
+#### The fix
+
+One function answers it. `where_this_one_would_run` returns the tile, the
+decision asks it whether there is one, and the executor uses the one it
+returns. There is no second opinion to drift from.
+
+While it was open, both of #44's guesses were taken as well, because both are
+right about the running even though neither was the cause:
+
+- **Eight ways out rather than three**, each tried at the full bolt and then at
+  every shorter distance down to a single pace. A narrow gap is a gap. Behind
+  is in the list too: running past the thing is a poor answer and the scoring
+  says so, but it beats being caught standing.
+- **Standing your ground is an answer, not a refusal.** Where there genuinely is
+  nowhere — a tile with water on all four sides — the action costs the turn and
+  the agent stays put, which is exactly what `Action::Freeze` does. A branch
+  that can refuse must not stand in front of branches that cannot, and this one
+  no longer refuses at all.
+- Ranking now weighs getting clear against what the agent remembers. It used to
+  rank the three landings by remembered danger alone, which was fine with three
+  and would have been wrong with eight, since running towards the thing scores
+  as well as running away from it on danger alone.
+
+#### Measured, 32 worlds a side, 10,000 ticks, 12 founders
+
+| | baseline | with the fix | t |
+|---|---|---|---|
+| refusals ("nowhere to run") | 613.3 ± 613.3 | **0.0 ± 0.0** | — |
+| worst world's refusals | **19,626** | **0** | — |
+| worst world's failure rate | **0.0984** | **0.0262** | — |
+| runs actually taken | 0.25 ± 0.11 | **2.22 ± 0.79** | **2.48** |
+| failure rate | 0.0245 ± 0.003 | 0.0228 ± 0.000 | -0.69 |
+| alive | 48.7 ± 2.5 | 52.2 ± 2.8 | 0.93 |
+| eaten | 4,557 ± 273 | 5,098 ± 287 | 1.37 |
+| deaths | 21.3 ± 1.2 | 21.8 ± 0.9 | 0.31 |
+| fights | 2.4 ± 1.3 | 2.8 ± 1.1 | 0.20 |
+
+The mean failure rate barely moves and the standard error tells you why: **the
+defect is a tail, not a level.** One world in thirty-two had it, and that world
+alone ran at a 9.8% failure rate against 2.2% for the other thirty-one. Its
+whole standard error is that one world. Afterwards no world in thirty-two
+produces a single refusal and the worst failure rate in the arm is 2.6%.
+
+Everything else is null, which is what a fix to a rare pathology should look
+like. The one non-null column is the point: **running happens nine times as
+often**, because the decision's yes is now a yes the running can act on.
+
+#### And a thing worth knowing that came out of it
+
+`Freeze` was taken **zero times in sixty-four worlds**, and `FleeFrom` a
+quarter of a time per world before the fix. The whole threat-response tree
+built for #133-#135 — fight, flee, cornered, helpless, freeze — fires a
+handful of times in ten thousand ticks. The likely reason is the change two
+commits ago that made animals shy away from people, which is in both arms
+here: an animal that keeps its distance is never appraised as a threat. That
+is realistic and it may also have quietly retired a subsystem. Not
+investigated; recorded so somebody does.
+
 ## Housekeeping
 
-### 66. Committed backup file
+### 67. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 67. Build warnings
+### 68. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 68. Placeholder package metadata
+### 69. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

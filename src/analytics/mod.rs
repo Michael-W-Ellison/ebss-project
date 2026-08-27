@@ -5822,7 +5822,11 @@ impl Simulation {
         }
 
         let could_run = agent.could_i_run_at_all(Self::WHAT_RUNNING_COSTS)
-            && self.is_there_anywhere_to_run(agent_position, where_it_is);
+            && self.is_there_anywhere_to_run(
+                &agent.exploration_knowledge,
+                agent_position,
+                where_it_is,
+            );
 
         let fight = || {
             if paces <= Self::HUNT_REACH {
@@ -5906,41 +5910,123 @@ impl Simulation {
     /// his back to a cliff has nowhere to go however much he would like to.
     /// The other half is the body, and belongs to the agent - see
     /// `Agent::could_i_run_at_all`.
+    ///
+    /// It asks the running itself, rather than asking the same question in
+    /// its own words. It used to have its own: three ways out at three
+    /// paces, where the running tried three ways out at nineteen. A man
+    /// three paces from a shoreline with the thing inland has somewhere to
+    /// go at three paces and nothing but water at nineteen, so the decision
+    /// said run and the running said there was nowhere to run - and nothing
+    /// about the next turn was different, so it said it again. One measured
+    /// world produced 76,644 of those refusals, three quarters of every turn
+    /// taken in the settlement. Two vocabularies for one question is the
+    /// recurring defect; this is the fifth time it has cost something.
     fn is_there_anywhere_to_run(
         &self,
+        remembers: &crate::agents::exploration::ExplorationKnowledge,
         from: (i32, i32, i32),
         away_from: (i32, i32),
     ) -> bool {
+        self.where_this_one_would_run(remembers, from, away_from)
+            .is_some()
+    }
+
+    /// Where a frightened person actually goes, if anywhere.
+    ///
+    /// Eight ways out rather than three, and each of them tried at the full
+    /// bolt first and then at every shorter distance down to a single pace.
+    /// Both of those are the same point: the ways out that exist are not
+    /// always the ways out somebody would choose, and a person hemmed in by
+    /// water on three sides does not stand still because the gap is narrow.
+    /// Behind is in the list too - running past the thing is a poor answer,
+    /// and the scoring says so, but it beats being caught standing.
+    fn where_this_one_would_run(
+        &self,
+        remembers: &crate::agents::exploration::ExplorationKnowledge,
+        from: (i32, i32, i32),
+        away_from: (i32, i32),
+    ) -> Option<(i32, i32, i32)> {
         let dx = from.0 - away_from.0;
         let dy = from.1 - away_from.1;
         let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
 
-        // The way it would actually go, and the two quarters either side of
-        // it. Anything behind is running towards the thing.
         let straight = (dx as f32 / span, dy as f32 / span);
-        let ways = [
-            straight,
-            (-straight.1, straight.0),
-            (straight.1, -straight.0),
-        ];
 
-        ways.iter().any(|(wx, wy)| {
-            let landed = (
-                from.0 + (wx * Self::FAR_ENOUGH_TO_COUNT_AS_AWAY) as i32,
-                from.1 + (wy * Self::FAR_ENOUGH_TO_COUNT_AS_AWAY) as i32,
-            );
+        // Straight away, then an eighth-turn either side, then a quarter,
+        // and so round to behind. Listed nearest-to-away first, so that
+        // where the scoring cannot separate two landings the one that was
+        // asked about first wins.
+        let ways = [0i32, 1, -1, 2, -2, 3, -3, 4].map(|eighths| {
+            let (sin, cos) = (eighths as f32 * std::f32::consts::FRAC_PI_4).sin_cos();
+            (
+                straight.0 * cos - straight.1 * sin,
+                straight.0 * sin + straight.1 * cos,
+            )
+        });
 
-            landed.0 >= 0
-                && landed.1 >= 0
-                && landed.0 < self.world.grid.width as i32
-                && landed.1 < self.world.grid.height as i32
-                && self.is_passable_tile(landed.0, landed.1)
-        })
+        let bolt = Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS;
+
+        ways.iter()
+            .filter_map(|(wx, wy)| {
+                // The furthest this way goes. Getting clear is the point of
+                // running, so a short bolt is a fallback and not a choice.
+                (1..=bolt).rev().find_map(|paces| {
+                    let landed = (
+                        (from.0 as f32 + wx * paces as f32).round() as i32,
+                        (from.1 as f32 + wy * paces as f32).round() as i32,
+                        from.2,
+                    );
+
+                    let moved = landed.0 != from.0 || landed.1 != from.1;
+
+                    (moved && self.is_passable_tile(landed.0, landed.1)).then_some(landed)
+                })
+            })
+            .min_by(|one, other| {
+                self.how_poor_a_way_out(remembers, from, away_from, *one)
+                    .partial_cmp(&self.how_poor_a_way_out(remembers, from, away_from, *other))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     }
 
-    /// How far off a person has to be able to get before it counts as
-    /// somewhere to run to.
-    const FAR_ENOUGH_TO_COUNT_AS_AWAY: f32 = 3.0;
+    /// What is wrong with running that way.
+    ///
+    /// Two things, and they pull against each other: what this one remembers
+    /// happening where it would land, and how much ground it puts between
+    /// itself and the thing. Running headlong into the wood where the pack
+    /// lives is how somebody gets away from one animal and into four.
+    fn how_poor_a_way_out(
+        &self,
+        remembers: &crate::agents::exploration::ExplorationKnowledge,
+        from: (i32, i32, i32),
+        away_from: (i32, i32),
+        landed: (i32, i32, i32),
+    ) -> f32 {
+        let bad = remembers.how_bad_is_it_there(
+            crate::world::Position::new(landed.0, landed.1),
+            self.current_tick,
+        );
+
+        let off = |where_it_is: (i32, i32)| {
+            let dx = (where_it_is.0 - away_from.0) as f32;
+            let dy = (where_it_is.1 - away_from.1) as f32;
+            (dx * dx + dy * dy).sqrt()
+        };
+
+        let gained =
+            (off((landed.0, landed.1)) - off((from.0, from.1))) / Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS as f32;
+
+        bad - Self::WHAT_GETTING_CLEAR_IS_WORTH * gained.clamp(-1.0, 1.0)
+    }
+
+    /// What a full bolt's worth of ground is worth against a place somebody
+    /// remembers going badly.
+    ///
+    /// Less than the worst thing that can be remembered and more than the
+    /// least, which is the whole of what it has to be: a wood a man was
+    /// mauled in is not worth running into to gain nineteen paces, and a
+    /// field he once went hungry in is not worth staying put for.
+    const WHAT_GETTING_CLEAR_IS_WORTH: f32 = 0.5;
 
     /// What share of what an agent has left counts as having got off lightly
     const A_SCRATCH: f32 = 0.25;
@@ -12429,59 +12515,30 @@ impl Simulation {
                 // being a `Move` the matrix cannot tell from a stroll.
                 let stood = self.population.agents[agent_index].state.position;
 
-                let dx = stood.0 - away_from.0;
-                let dy = stood.1 - away_from.1;
-                let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
-
-                let bolt = Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS as f32;
-
-                // Straight away from the thing, or a quarter-turn either side
-                // of that. Which of the three depends on what this one knows
-                // about the ground: running headlong into the wood where the
-                // pack lives is how somebody gets away from one animal and
-                // into four, and until the map had danger on it there was no
-                // way to prefer otherwise.
-                let straight = (dx as f32 / span, dy as f32 / span);
-                let ways = [
-                    straight,
-                    (-straight.1, straight.0),
-                    (straight.1, -straight.0),
-                ];
-
-                let now = self.current_tick;
-                let remembers = &self.population.agents[agent_index].exploration_knowledge;
-
-                let landed = ways
-                    .iter()
-                    .map(|(wx, wy)| {
-                        (
-                            (stood.0 as f32 + wx * bolt) as i32,
-                            (stood.1 as f32 + wy * bolt) as i32,
-                            stood.2,
-                        )
-                    })
-                    .map(|landed| {
-                        (
-                            landed.0.clamp(0, self.world.grid.width as i32 - 1),
-                            landed.1.clamp(0, self.world.grid.height as i32 - 1),
-                            landed.2,
-                        )
-                    })
-                    .filter(|landed| self.is_passable_tile(landed.0, landed.1))
-                    .min_by(|one, other| {
-                        let bad = |where_it_is: &(i32, i32, i32)| {
-                            remembers.how_bad_is_it_there(
-                                crate::world::Position::new(where_it_is.0, where_it_is.1),
-                                now,
-                            )
-                        };
-                        bad(one)
-                            .partial_cmp(&bad(other))
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    });
+                // Where it goes is the decision's question as well as this
+                // one's, and both of them ask it here.
+                let landed = self.where_this_one_would_run(
+                    &self.population.agents[agent_index].exploration_knowledge,
+                    stood,
+                    (away_from.0, away_from.1),
+                );
 
                 let Some(landed) = landed else {
-                    return ActionResult::failure("Nowhere to run".to_string());
+                    // Standing your ground, which is not the same as refusing
+                    // to answer. This was a failure, and a failure nothing
+                    // about the next turn could change: the same agent, in
+                    // the same corner, with the same thing in front of it,
+                    // refused again. Whatever a person hemmed in does, it is
+                    // not nothing, forever - so it costs a turn and stands,
+                    // which is what freezing is.
+                    debug!(
+                        "Agent {} had nowhere to run and stood",
+                        self.population.agents[agent_index].id
+                    );
+
+                    return ActionResult::success()
+                        .with_energy_cost(Self::WHAT_FREEZING_COSTS)
+                        .with_message("Nowhere to run, and stood".to_string());
                 };
 
                 let agent = &mut self.population.agents[agent_index];

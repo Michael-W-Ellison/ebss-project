@@ -438,6 +438,32 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ Two words for one question, and a man who could not get off the beach. The
+  largest single refusal this model has produced — **76,644 in one world**, three
+  quarters of every turn taken in the settlement — and the cause was neither of
+  the two things the report guessed at. Two things asked whether there was
+  anywhere to run: the decision tried three directions at **three paces**, the
+  running tried the same three at **nineteen**. Between those numbers sits a
+  shoreline. A man three paces from open water with the thing inland has
+  somewhere to go at three and nothing but water at nineteen, so the decision
+  said run and the running said "Nowhere to run" — and nothing about the next
+  turn was different, so it said it again, for the rest of that agent's life.
+  The project's duplicated-vocabulary defect for the **fifth** time.
+
+  One function answers it now, and both callers ask it. It tries **eight ways
+  out rather than three**, each at the full bolt and then at every shorter
+  distance down to a single pace, so a narrow gap counts as a gap; and where
+  there genuinely is nowhere, **standing your ground is an answer that costs a
+  turn** rather than a refusal that repeats forever.
+
+  Measured 32 worlds a side: refusals **19,626 in the worst baseline world to
+  zero in every world of the arm**, worst-world failure rate 9.8% to 2.6%, and
+  **running actually happens nine times as often** (0.25 to 2.22 a world,
+  t = 2.48) because the decision's yes is now one the running can act on.
+  Everything else null, which is what a fix to a rare tail should look like.
+  Also recorded: `Freeze` was taken **zero times in sixty-four worlds**, so the
+  whole threat tree may have been quietly retired by shy animals two commits
+  ago. See ISSUES_FOUND.md #66
 - ✅ There was no sink. The settlement was living on food that never aged. The
   entry below held the food-clock rule back because eaten plus waste fell from
   12,874 to 6,692 with it on, and concluded six thousand units were leaking.

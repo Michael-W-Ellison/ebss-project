@@ -41,6 +41,7 @@ pub mod swap_tests;
 pub mod verb_tests;
 pub mod burrow_tests;
 pub mod clay_tests;
+pub mod cornered_tests;
 pub mod danger_map_tests;
 pub mod keeping_it_tests;
 pub mod portion_tests;
