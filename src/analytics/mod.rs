@@ -2258,6 +2258,19 @@ impl Simulation {
         // Somewhere it remembers food that is not on this doorstep. Anything
         // near enough to walk to in the ordinary way has already been tried by
         // the code above, and found wanting.
+        //
+        // Somewhere it remembers food that is not on this doorstep. Anything
+        // near enough to walk to in the ordinary way has already been tried by
+        // the code above, and found wanting.
+        //
+        // Which of them is decided by distance, which is unsatisfying and is
+        // staying that way for now. A memory carries how much was standing
+        // there, and choosing the richest instead - with and without weighing
+        // it by how long ago he saw it - produced a rare world in which a
+        // settlement refused for want of water 3,092, 851 and 13,004 times
+        // against a worst case of seven, in three arms of thirty-two. The
+        // reporting this belongs to is worth having on its own; this half
+        // wants its own investigation and its own arm. See ISSUES_FOUND #68.
         let remembered = agent
             .memory
             .spatial_memories
@@ -14251,6 +14264,35 @@ impl Simulation {
                     }
                 }
 
+                // And what he was told was here, and is. Both copies of this
+                // sweep only ever asked whether a claim had failed - see
+                // ISSUES_FOUND #48 for why there are two of them - so a man's
+                // standing could only ever fall.
+                let borne_out = agent.exploration_knowledge.hearsay_borne_out(
+                    centre,
+                    exploration_radius,
+                    &really_here,
+                );
+
+                for (where_it_is, said) in borne_out {
+                    agent.exploration_knowledge.who_told_me.remove(&where_it_is);
+
+                    let how_much = self
+                        .world
+                        .resources
+                        .iter()
+                        .find(|resource| resource.position == where_it_is)
+                        .map(|resource| resource.amount)
+                        .unwrap_or(0);
+                    agent
+                        .exploration_knowledge
+                        .saw_it_again(where_it_is, how_much, self.current_tick);
+
+                    if said.who != agent_id {
+                        agent.found_out_they_were_right(said.who);
+                    }
+                }
+
                 // Discover nearby resources (within exploration radius)
                 let mut discoveries = Vec::new();
                 for resource in &self.world.resources {
@@ -15551,4 +15593,5 @@ impl Simulation {
 
 #[cfg(test)]
 mod tests;
+
 

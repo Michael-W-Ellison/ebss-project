@@ -1694,9 +1694,20 @@ impl Population {
                         .who_told_me
                         .contains_key(where_it_is)
                 {
+                    // And how much of it was standing. A man who walks past a
+                    // seam knows whether it is a seam or the last of one, and
+                    // until now the only thing he took away was that it was
+                    // there at all.
+                    let how_much = world
+                        .resources
+                        .iter()
+                        .find(|resource| resource.position == *where_it_is)
+                        .map(|resource| resource.amount)
+                        .unwrap_or(0);
+
                     agent
                         .exploration_knowledge
-                        .saw_it_again(*where_it_is, current_tick);
+                        .saw_it_again(*where_it_is, how_much, current_tick);
                 }
             }
 
@@ -1708,6 +1719,10 @@ impl Population {
             if !found_out.is_empty() {
                 for (where_it_is, _, _) in found_out.iter() {
                     agent.exploration_knowledge.known_resources.remove(where_it_is);
+                    agent
+                        .exploration_knowledge
+                        .how_much_was_there
+                        .remove(where_it_is);
                     agent.exploration_knowledge.who_told_me.remove(where_it_is);
                 }
 
@@ -1736,6 +1751,39 @@ impl Population {
                     } else {
                         agent.found_out_they_were_out_of_date(said.who);
                     }
+                }
+            }
+
+            // And the other half of the same look: what he was told was here,
+            // and is. The sweep only ever asked whether a claim had *failed*,
+            // so being right was unrecordable in a running settlement -
+            // `correct_count` was zero across thirty-two worlds against 1,646
+            // wrong ones, and a man's standing could only ever fall.
+            let borne_out =
+                agent
+                    .exploration_knowledge
+                    .hearsay_borne_out(agent_pos, range, &really_here);
+
+            let me = agent.id;
+            for (where_it_is, said) in borne_out {
+                // He has walked to it and looked at it, so it stops being
+                // something he was told: he can pass it on as his own now, and
+                // whoever told him is credited once rather than every tick he
+                // stands there.
+                agent.exploration_knowledge.who_told_me.remove(&where_it_is);
+
+                let how_much = world
+                    .resources
+                    .iter()
+                    .find(|resource| resource.position == where_it_is)
+                    .map(|resource| resource.amount)
+                    .unwrap_or(0);
+                agent
+                    .exploration_knowledge
+                    .saw_it_again(where_it_is, how_much, current_tick);
+
+                if said.who != me {
+                    agent.found_out_they_were_right(said.who);
                 }
             }
 
@@ -1797,7 +1845,7 @@ impl Population {
             // exploration record, so without this an agent would have a patch
             // catalogued and still starve walking past it.
             let sight = vision_range as i32;
-            let in_view: Vec<(crate::world::Position, SpatialMemoryType)> = world
+            let in_view: Vec<(crate::world::Position, SpatialMemoryType, u32)> = world
                 .resources
                 .iter()
                 .filter(|resource| resource.amount > 0)
@@ -1814,14 +1862,18 @@ impl Population {
                     } else {
                         return None;
                     };
-                    Some((resource.position, memory_type))
+                    Some((resource.position, memory_type, resource.what_can_be_taken()))
                 })
                 .collect();
 
-            for (pos, memory_type) in in_view {
+            // How much of it, as well as where. A remembered place was worth
+            // exactly as much as any other remembered place, so a man who left
+            // camp for want of water walked to whichever waterhole was
+            // furthest off rather than to the one he remembered as a spring.
+            for (pos, memory_type, how_much) in in_view {
                 agent
                     .memory
-                    .remember_location(memory_type, (pos.x, pos.y, 0));
+                    .remember_how_much_is_there(memory_type, (pos.x, pos.y, 0), how_much);
             }
 
             // Learn skills from discovered buildings, on the tick of finding
@@ -2082,6 +2134,14 @@ impl Population {
     /// lets him find out he was lied to.
     const A_LIE_PUTS_IT_WRONG_BY: i32 = 9;
 
+    /// And how much he says is there.
+    ///
+    /// Enough to be worth the walk, because that is the entire point of the
+    /// lie. Above `Hearsay::THE_LAST_OF_IT` by a wide margin, so that the
+    /// excuse made for an honest man reporting a worked-out place can never be
+    /// claimed by somebody who invented a place.
+    pub const WHAT_A_LIAR_SAYS_IS_THERE: u32 = 20;
+
     /// One agent tells another where something is.
     ///
     /// The listener decides whether to take his word for it - see
@@ -2124,13 +2184,20 @@ impl Population {
             // was there this morning. An honest man says when he was actually
             // there, which may have been last season - and if the patch has
             // been picked since, that is the patch's fault and not his.
-            let (named, when_he_saw_it) = if a_lie {
+            let (named, when_he_saw_it, how_much_he_said) = if a_lie {
                 (
                     crate::world::Position::new(
                         where_it_is.x + Self::A_LIE_PUTS_IT_WRONG_BY,
                         where_it_is.y + Self::A_LIE_PUTS_IT_WRONG_BY,
                     ),
                     current_tick,
+                    // A liar claims a place worth walking to. That is what a
+                    // lie is *for* here - it buys him a hearing - and it is
+                    // also what keeps `he_did_say_it_was_nearly_gone` from
+                    // sheltering him: nobody invents a seam with nothing in
+                    // it. The lie in this model is about where, never about
+                    // how much.
+                    Some(Self::WHAT_A_LIAR_SAYS_IS_THERE),
                 )
             } else {
                 (
@@ -2142,6 +2209,13 @@ impl Population {
                         // claiming to have just passed it, and cannot be held
                         // to it as though he had
                         .unwrap_or(0),
+                    // And what he remembers standing there, which may be the
+                    // last handful of it. An honest report of a poor place is
+                    // still worth making, and the listener can now tell it
+                    // from a report of a good one.
+                    self.agents[speaker]
+                        .exploration_knowledge
+                        .how_much_was_there_then(where_it_is),
                 )
             };
 
@@ -2153,6 +2227,7 @@ impl Population {
                     *what_it_is,
                     speaker_id,
                     when_he_saw_it,
+                    how_much_he_said,
                     current_tick,
                 );
 

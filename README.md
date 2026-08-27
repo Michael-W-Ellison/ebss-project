@@ -438,6 +438,39 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ A place, a date, and how much was on it — and being right, which nothing
+  recorded. Everything one agent could tell another was a position, a resource
+  type and a date. A listener already weighed the *age* of a claim and had no
+  way at all to weigh either against **"the last handful of a worked-out one"**.
+  The remembered amount now travels with the sighting: in a man's own map, in
+  what he tells people, and in `SpatialMemory::value`, a field that has existed
+  since the model had memories and was `1.0` for everything, so a spring and a
+  puddle were remembered alike.
+
+  The measurement that mattered was not the one I set out to take.
+  **`correct_count` was zero across thirty-two worlds** against 1,646 wrong
+  ones: nobody in a running settlement had ever been recorded as having told
+  the truth. Both copies of the verification sweep call `hearsay_in_view`,
+  which filters to claims where the ground is *bare* and is incapable of
+  returning one that held up, so a man's standing could only ever fall.
+  `hearsay_borne_out` is the other half and both sweeps call it now — **0 to
+  19,494 a world** (t = 21.1). That is also half of what #185 wants: "true
+  statements strengthen trust" needs true statements to be recorded.
+
+  And an honest report of a poor place is safe to make. Bare ground had two
+  excuses — stale news, or somebody stripped it first — and now has a third:
+  **he did say it was nearly gone**. It cannot shelter a liar, because a liar
+  claims twenty and the excuse stops at three. Accusations fall about a quarter
+  (51.4 to 35.8 times caught out) and that is **not significant at thirty-two
+  worlds a side**; the direction is right and no more is claimed.
+
+  **The obvious half is not shipping.** Walking to the place you remember most
+  of, rather than to whichever is furthest off, produced one world in each of
+  three arms that refused for want of water **3,092, 851 and 13,004 times**
+  against a baseline worst case of seven — and weighing the amount by staleness,
+  the obvious guess, made the worst of them worse. Reverting that one branch put
+  the worst world's failure rate back to exactly the baseline's. Held back with
+  its numbers as #189. See ISSUES_FOUND.md #68
 - ✅ Two names for one action, and the two claims it cost. The entry below
   ended by wondering whether shy animals had retired the threat tree, and the
   answer to that was in ten lines of the function it accused: `shy_away_from`

@@ -244,6 +244,7 @@ fn a_lie_is_found_out_by_going_there() {
         ResourceType::Food,
         liar,
         0,
+        Some(20),
         0,
     );
 
@@ -293,7 +294,7 @@ fn nobody_passes_on_hearsay_as_though_they_had_seen_it() {
         .discover_resource(seen, ResourceType::Wood, 0);
     middleman
         .exploration_knowledge
-        .take_their_word_for_it(heard, ResourceType::Food, liar, 0, 0);
+        .take_their_word_for_it(heard, ResourceType::Food, liar, 0, None, 0);
 
     let would_pass_on = middleman.exploration_knowledge.seen_for_myself();
 

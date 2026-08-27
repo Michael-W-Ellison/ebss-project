@@ -127,6 +127,15 @@ pub struct ExplorationKnowledge {
     /// as the man who goes back every morning.
     #[serde(default)]
     pub where_it_ran_out: HashMap<Position, u32>,
+    /// And how much was standing at each place this one last laid eyes on.
+    ///
+    /// `where_it_ran_out` is the same question asked as a yes or no, and a
+    /// yes-or-no cannot be passed on usefully: everything an agent told
+    /// anybody else was a place and a date. This is what lets a man say "a
+    /// rich seam, last week" rather than "a seam, last week", and lets the
+    /// man hearing it tell that from "the last handful, this morning".
+    #[serde(default)]
+    pub how_much_was_there: HashMap<Position, u32>,
 }
 
 /// Something met on a particular piece of ground, and how badly it went.
@@ -186,6 +195,15 @@ pub struct Hearsay {
     pub they_saw_it_on: u32,
     /// The tick they said so
     pub told_me_on: u32,
+    /// And how much they said was there.
+    ///
+    /// A place-name and a date was the whole of what one agent could tell
+    /// another, so a listener could weigh "a seam I passed last week" against
+    /// "a seam I passed this morning" and had no way at all to weigh either
+    /// against "the last handful of a worked-out one". `None` is somebody who
+    /// did not say — old saves, and a speaker who cannot remember.
+    #[serde(default)]
+    pub how_much_they_said: Option<u32>,
 }
 
 impl Hearsay {
@@ -222,8 +240,33 @@ impl Hearsay {
     /// because there are two copies of the verification sweep and the first
     /// fix went into one of them. See ISSUES_FOUND #48.
     pub fn does_bare_ground_convict_him(&self, now: u32, somebody_got_here_first: bool) -> bool {
-        self.was_he_answerable_for_it(now) && !somebody_got_here_first
+        self.was_he_answerable_for_it(now)
+            && !somebody_got_here_first
+            && !self.he_did_say_it_was_nearly_gone()
     }
+
+    /// Whether what he said was, in effect, "there is hardly anything there".
+    ///
+    /// The third way bare ground fails to convict, and the one the other two
+    /// could not cover. A man who says he saw the last handful of a seam this
+    /// morning, and is found to have told the truth about the last handful of
+    /// a seam, is plainly not lying - somebody took the handful. Holding him
+    /// to it makes honesty about a poor place more dangerous than silence,
+    /// which is the opposite of what the reporting is for.
+    ///
+    /// It cannot shelter a liar, because a liar claims a place worth walking
+    /// to - see `Population::tell_them_where_it_is`. Nobody invents a seam
+    /// with nothing in it.
+    pub fn he_did_say_it_was_nearly_gone(&self) -> bool {
+        self.how_much_they_said
+            .is_some_and(|how_much| how_much <= Self::THE_LAST_OF_IT)
+    }
+
+    /// What counts as the last of a place.
+    ///
+    /// A handful. Small enough that one person clears it in a turn or two,
+    /// which is exactly the case this is about.
+    pub const THE_LAST_OF_IT: u32 = 3;
 }
 
 impl ExplorationKnowledge {
@@ -232,6 +275,7 @@ impl ExplorationKnowledge {
             explored_tiles: HashSet::new(),
             known_resources: HashMap::new(),
             who_told_me: HashMap::new(),
+            how_much_was_there: HashMap::new(),
             where_it_ran_out: HashMap::new(),
             known_buildings: HashMap::new(),
             known_storage: HashMap::new(),
@@ -436,6 +480,7 @@ impl ExplorationKnowledge {
         resource_type: ResourceType,
         who_said_so: uuid::Uuid,
         they_saw_it_on: u32,
+        how_much_they_said: Option<u32>,
         current_tick: u32,
     ) -> bool {
         if self.discover_resource(position, resource_type, current_tick) {
@@ -445,8 +490,20 @@ impl ExplorationKnowledge {
                     who: who_said_so,
                     they_saw_it_on,
                     told_me_on: current_tick,
+                    how_much_they_said,
                 },
             );
+
+            // What he said is what this one now thinks is there, until it goes
+            // and looks. Kept in the same book as a first-hand sighting on
+            // purpose: everything downstream that weighs a place - what to
+            // keep in mind, where to walk - should weigh a reported seam and a
+            // seen one on the same scale, and `who_told_me` is what says which
+            // it was when that matters.
+            if let Some(how_much) = how_much_they_said {
+                self.how_much_was_there.insert(position, how_much);
+            }
+
             true
         } else {
             false
@@ -500,6 +557,30 @@ impl ExplorationKnowledge {
             .collect()
     }
 
+    /// And what it was told is here, and is.
+    ///
+    /// The other half of `hearsay_in_view`, which filters to claims that have
+    /// *failed* and is therefore structurally incapable of noticing one that
+    /// held up. Being right was unrecordable in a running settlement:
+    /// `TrustRating::correct_count` was zero across thirty-two worlds while
+    /// `wrong_count` ran to 1,646, so trust could only ever fall.
+    pub fn hearsay_borne_out(
+        &self,
+        centre: Position,
+        radius: i32,
+        really_here: &std::collections::HashSet<Position>,
+    ) -> Vec<(Position, Hearsay)> {
+        self.who_told_me
+            .iter()
+            .filter(|(where_it_is, _)| {
+                (where_it_is.x - centre.x).abs() <= radius
+                    && (where_it_is.y - centre.y).abs() <= radius
+            })
+            .filter(|(where_it_is, _)| really_here.contains(*where_it_is))
+            .map(|(where_it_is, said)| (*where_it_is, *said))
+            .collect()
+    }
+
     /// When this agent last saw a place for itself, if it ever did.
     ///
     /// What an honest man passes on: not "there is food there" but "there was
@@ -511,9 +592,19 @@ impl ExplorationKnowledge {
             .copied()
     }
 
-    /// Note that this agent has just laid eyes on a place again.
-    pub fn saw_it_again(&mut self, where_it_is: Position, current_tick: u32) {
+    /// Note that this agent has just laid eyes on a place again, and what was
+    /// standing there when it did.
+    pub fn saw_it_again(&mut self, where_it_is: Position, how_much: u32, current_tick: u32) {
         self.last_seen_ticks.insert(where_it_is, current_tick);
+        self.how_much_was_there.insert(where_it_is, how_much);
+    }
+
+    /// How much was there when this one last looked, if it knows.
+    ///
+    /// What an honest man can say about a place beyond where it is: not "there
+    /// is clay there" but "there was a good seam of it there when I went past".
+    pub fn how_much_was_there_then(&self, where_it_is: &Position) -> Option<u32> {
+        self.how_much_was_there.get(where_it_is).copied()
     }
 
     /// Discover a resource at a position

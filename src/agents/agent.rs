@@ -8163,6 +8163,13 @@ impl Agent {
     ///
     /// Hearsay is let go before first-hand knowledge of equal interest, on the
     /// principle that a man is surer of what he saw.
+    /// What counts as a place worth carrying about in your head, by how much
+    /// is standing on it.
+    ///
+    /// Anything at or above this is remembered as richly as anything else can
+    /// be; the scale only has to separate a seam from the last of one.
+    const A_PLACE_WORTH_REMEMBERING: u32 = 12;
+
     pub fn forget_what_does_not_matter(&mut self, current_tick: u32) {
         if self.exploration_knowledge.known_resources.len()
             <= Self::WHAT_A_MAN_CAN_HOLD_IN_MIND
@@ -8198,7 +8205,23 @@ impl Agent {
                     .who_told_me
                     .contains_key(where_it_is);
 
-                let keeping = wanted * 4.0 + freshness - if heard_not_seen { 0.5 } else { 0.0 };
+                // And how much was standing there, which decides between two
+                // things wanted equally and known equally well. A head only
+                // holds so many places; the last handful of a worked-out seam
+                // is the one to let go of, and a man who has been told it is
+                // the last handful can now know that about it.
+                let how_rich = self
+                    .exploration_knowledge
+                    .how_much_was_there_then(where_it_is)
+                    .map(|how_much| {
+                        (how_much as f32 / Self::A_PLACE_WORTH_REMEMBERING as f32).clamp(0.0, 1.0)
+                    })
+                    // Nothing said about it either way is not the same as
+                    // being told it is bare
+                    .unwrap_or(0.5);
+
+                let keeping = wanted * 4.0 + freshness + how_rich
+                    - if heard_not_seen { 0.5 } else { 0.0 };
                 (*where_it_is, keeping)
             })
             .collect();
@@ -8214,6 +8237,9 @@ impl Agent {
                 .remove(&where_it_is);
             self.exploration_knowledge
                 .last_seen_ticks
+                .remove(&where_it_is);
+            self.exploration_knowledge
+                .how_much_was_there
                 .remove(&where_it_is);
         }
     }

@@ -29,6 +29,7 @@ fn a_week_old_sighting_found_empty_is_not_a_lie() {
         who: uuid::Uuid::new_v4(),
         they_saw_it_on: 100,
         told_me_on: 110,
+        how_much_they_said: Some(20),
     };
 
     // A week is eighty-four ticks
@@ -46,6 +47,7 @@ fn a_patch_just_passed_and_found_empty_is_a_lie() {
         who: uuid::Uuid::new_v4(),
         they_saw_it_on: 1000,
         told_me_on: 1000,
+        how_much_they_said: Some(20),
     };
 
     assert!(
@@ -61,6 +63,7 @@ fn a_fresh_claim_stops_being_answerable_once_it_is_old() {
         who: uuid::Uuid::new_v4(),
         they_saw_it_on: 1000,
         told_me_on: 1000,
+        how_much_they_said: Some(20),
     };
 
     assert!(said.was_he_answerable_for_it(1010));

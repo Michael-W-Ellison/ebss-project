@@ -47,6 +47,7 @@ run more than a handful of times on their own.
     analytics::tests::clay_tests::a_curious_agent_with_clay_tries_molding_it
     analytics::tests::barter_tests::two_people_with_opposite_problems_trade
     analytics::tests::asking_tests::being_told_lets_you_try_it_rather_than_making_you_believe_it
+    analytics::tests::table_order_tests::the_same_man_reaches_for_the_same_thing
 
 `a_deer_at_your_feet_beats_a_berry_patch_a_walk_away` was found the same way
 and characterised the same way: **0 failures in 20 runs here and 1 in 20 on the
@@ -74,6 +75,12 @@ failure in the suite run for the flee fix, and characterised the same way:
 **3 failures in 20 runs here and 1 in 20 on the commit before**. Not
 distinguishable at that sample, and the change it was checked against touches
 nothing an agent does with somebody else's word.
+
+`the_same_man_reaches_for_the_same_thing` turned up in the suite run for the
+deposit-reporting work, which changes what a man keeps in his head and could
+plausibly change what he reaches for - so it was worth the forty runs.
+**3 failures in 20 here and 3 in 20 on the commit before**: identical, and an
+undocumented flake rather than a regression.
 
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
@@ -3709,18 +3716,135 @@ its own arm and its own measurement, and folding it into a counting fix would
 confound both — the same reason #44 was held back from the larder batch.
 Filed as #188.
 
+### 68. A place, a date, and how much was on it — and being right, which nothing recorded
+
+Everything one agent could tell another was a position, a resource type and a
+date. A listener already weighed the age of a claim - "a seam I passed last
+week" against "one I passed this morning" - and had no way at all to weigh
+either against **"the last handful of a worked-out one"**. The two sound
+identical and are worth walking to on completely different terms.
+
+#### What now travels
+
+`ExplorationKnowledge::how_much_was_there` holds what was standing at each
+place this agent last laid eyes on, written wherever a sighting is recorded.
+`Hearsay::how_much_they_said` carries it between people. `SpatialMemory::value`
+- a field that has existed since the model had memories and was set to `1.0`
+for everything, so a spring and a puddle were remembered alike - now holds it
+too.
+
+An honest man reports what he remembers, which may be the last handful. A liar
+claims `WHAT_A_LIAR_SAYS_IS_THERE`, twenty, because a lie is *for* something:
+it buys him a hearing, and nobody invents a seam with nothing in it. The lie in
+this model is about where, never about how much.
+
+#### Being right was unrecordable
+
+The measurement that mattered was not the one I set out to take.
+`TrustRating::correct_count` was **zero across thirty-two worlds**, against
+1,646 wrong ones. Nobody in a running settlement had ever been recorded as
+having told the truth.
+
+The cause is structural. Both copies of the verification sweep call
+`hearsay_in_view`, which filters to claims where the ground is *bare* - it is
+incapable of returning one that held up. `found_out_they_were_right` exists, is
+tested, and had one caller in a function nothing in a live settlement reaches.
+The recurring defect: a complete subsystem with no live caller, and this time
+it meant **a man's standing could only ever fall**.
+
+`hearsay_borne_out` is the other half, and both sweeps now call it. A confirmed
+place also stops being hearsay - he has walked to it and looked at it, so he
+can pass it on as his own, and whoever told him is credited once rather than
+every tick he stands there.
+
+This is also half of what #185 is for. "They might dip temporarily, but they
+should recover over time as true statements strengthen trust" needs true
+statements to be recorded, and there were none.
+
+#### And an honest report of a poor place is safe to make
+
+`Hearsay::does_bare_ground_convict_him` had two excuses - his news is stale, or
+somebody stripped the place first. It has a third: **he did say it was nearly
+gone**. A man who reports the last handful of a seam this morning and is found
+to have told the truth about the last handful of a seam is plainly not lying;
+somebody took the handful. Holding him to it makes honesty about a poor place
+more dangerous than silence, which is the opposite of what reporting is for.
+
+It cannot shelter a liar, because a liar claims twenty and the excuse stops at
+three.
+
+#### Measured, 32 baseline worlds against 31 in the arm
+
+One arm world was lost to a container restart mid-run.
+
+| | baseline | with the change | t |
+|---|---|---|---|
+| **vouched for (`correct_count`)** | **0.0 ± 0.0** | **19,494 ± 924** | **21.09** |
+| people on record as liars | 33.9 ± 5.8 | 26.5 ± 5.6 | -0.93 |
+| times caught out | 51.4 ± 8.7 | 35.8 ± 8.0 | -1.33 |
+| gathers | 36,004 ± 1,140 | 39,128 ± 965 | **2.09** |
+| alive | 47.1 ± 2.0 | 50.5 ± 1.9 | 1.20 |
+| eaten | 4,632 ± 219 | 4,818 ± 192 | 0.64 |
+| deaths | 22.3 ± 1.0 | 21.3 ± 0.8 | -0.71 |
+| failure rate | 0.0225 | 0.0227 | 0.36 |
+| worst world's failure rate | 0.0268 | **0.0268** | — |
+
+Accusations fall about a quarter and it is **not significant at this sample**;
+the direction is right and no claim is made beyond that. Two mechanisms could
+produce it and they are not separated here: the new excuse, and the fact that a
+confirmed claim is now retired from the hearsay book rather than left standing
+to be falsified later.
+
+#### The half that is not shipping, and why
+
+The obvious use for a remembered amount is the one the task asked for: walk to
+the place you remember most of, rather than to whichever is furthest off, which
+is what `migration_action` did on no better ground than that distance was the
+one thing a memory could be sorted by.
+
+**Three arms of thirty-two worlds each produced one world that refused for want
+of water 3,092, 851 and 13,004 times, against a baseline worst case of seven.**
+Weighing the remembered amount by how stale the memory was - the obvious guess,
+and the one the task's "the same way staleness does" points at - made the worst
+of them worse rather than better, which means the guess was wrong about the
+mechanism.
+
+Reverting that one branch and re-running put the worst world's failure rate
+back to 0.0268, exactly the baseline's, and left the failure-rate distributions
+indistinguishable end to end. So it is that branch and not the rest.
+
+It is held back for the same reason #44 was held back from the larder batch: it
+is a real behaviour change, it wants its own investigation and its own arm, and
+folding it into a reporting change would confound both. Filed as #189. The
+memory carries the amount now, so whoever picks it up has something to work
+with.
+
+One thing left unexplained and stated rather than buried: "Gather: No water
+sources nearby" still runs at 42.8 a world against 0.5 (t = 1.91), on a fat
+tail of four or five worlds. Those worlds are otherwise ordinary - failure
+rates of 0.022 to 0.026, and in every one of them the *largest* refusal is a
+tool refusal two to twenty times bigger. It is not the pathology above, and it
+is not explained.
+
+#### And a dead subsystem noticed in passing
+
+`PlanningContext::from_exploration_knowledge`, `find_nearest_resource` and
+`Planner::generate_best_plan` have **no callers anywhere in the project**.
+`find_nearest_resource` picks purely by distance and is the other place the
+remembered amount would belong, if anything reached it. Recorded, not fixed.
+
 ## Housekeeping
 
-### 68. Committed backup file
+### 69. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 69. Build warnings
+### 70. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 70. Placeholder package metadata
+### 71. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
