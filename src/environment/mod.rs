@@ -230,18 +230,57 @@ pub enum Action {
     /// Go over a standing field pulling weeds out of it and picking pests off
     /// it, which is most of what growing a crop actually consists of
     TendField,
+    /// Help yourself to something of somebody else's
+    TakeFrom { from: uuid::Uuid },
+    /// Put ground between yourself and something, at a run
+    FleeFrom { away_from: (i32, i32, i32) },
+    /// Neither fight nor run, because neither is possible. The third answer
+    /// to a threat, and the one nobody chooses on purpose
+    Freeze,
     /// Look closely at something in the pack, and sometimes work out what it
     /// is for
     Examine { what: String },
+    /// Take a tool out of the pack and into a hand, so it is there when the
+    /// work starts rather than being dug out mid-job
+    Equip { what: String },
+    /// Put back into the pack whatever is occupying a hand
+    Unequip { what: String },
+    /// Lay food out to dry, or hang it over a fire to smoke. The only thing
+    /// anybody here can do to make food outlast the week it was got in
+    Dry { what: String },
+    /// Boil sea or salt-marsh water down for what is in it. The one route to
+    /// salt for a people with no flat and no seam, and the reason a coast is
+    /// worth living on
+    Boil,
+    /// Rub salt into food, which keeps it about seven times as long as
+    /// leaving it alone and does not need a week of sun
+    Salt { what: String },
+    /// Dig a pit in the ground here, to keep things in
+    Excavate,
+    /// Put something into the pit here and put the earth back over it
+    Cover { what: String },
     /// Take something lying on the ground here into the pack
     PickUp { what: String },
     /// Set something down on the ground here
     PutDown { what: String },
+    /// Ask somebody about a thing they are carrying that you have never seen
+    /// the like of.
+    ///
+    /// The one way a discovery has ever had of leaving the head that made it.
+    /// Everything else in this model is found out first-hand or watched being
+    /// done; nothing anywhere let a man who had worked something out *tell*
+    /// anybody. A settlement of forty could work the same thing out forty
+    /// times over and be no further on.
+    AskAbout { who: uuid::Uuid, what: String },
     /// Swap something there is too much of for something there is not enough
     /// of, with somebody who has the opposite problem
     Trade { with: uuid::Uuid },
     /// Hand something over, wanting nothing back
     GiveTo { to: uuid::Uuid },
+    /// Give away food you need yourself, to somebody of your own who needs it
+    /// more. The other half of laying down your life for them, and the half
+    /// that happens more often than the fighting
+    GoWithout { for_them: uuid::Uuid },
     /// Work a thing in the pack down into another thing with an edge or a
     /// hammer: smashing, cutting, scraping. What each wants in the hand is
     /// declared in the verb matrix and enforced there.
@@ -295,11 +334,25 @@ impl Action {
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
+            Action::TakeFrom { .. } => Some(DriveType::Utility),
+            Action::FleeFrom { .. } => Some(DriveType::Safety),
+            Action::Freeze => Some(DriveType::Safety),
             Action::Examine { .. } => Some(DriveType::Curiosity),
+            Action::Equip { .. } => Some(DriveType::Utility),
+            Action::Unequip { .. } => Some(DriveType::Utility),
+            Action::Dry { .. } => Some(DriveType::Preparedness),
+            Action::Boil => Some(DriveType::Preparedness),
+            Action::Salt { .. } => Some(DriveType::Preparedness),
+            Action::Excavate => Some(DriveType::Preparedness),
+            Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),
             Action::PutDown { .. } => Some(DriveType::Utility),
+            // Asking after a thing is curiosity, and it is only ever done
+            // when nothing worse is pressing
+            Action::AskAbout { .. } => Some(DriveType::Curiosity),
             Action::Trade { .. } => Some(DriveType::Utility), // A trade is how you get the thing
             Action::GiveTo { .. } => Some(DriveType::Social), // A gift is not
+            Action::GoWithout { .. } => Some(DriveType::Protection),
             Action::Work { .. } => Some(DriveType::Utility),
             Action::Taste => Some(DriveType::Curiosity), // Nobody eats a strange plant for the nutrition
             Action::TrySwapping { .. } => Some(DriveType::Curiosity),

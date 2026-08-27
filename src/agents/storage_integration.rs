@@ -44,8 +44,21 @@ pub fn butchered_item_id(material_id: &str) -> &str {
 /// `burnt_meat` - because one inventory stack can hold only one preparation
 /// state. Underneath it is still fish and still meat.
 pub fn base_item_id(id: &str) -> &str {
-    id.strip_prefix("cooked_")
+    let id = id
+        .strip_prefix("cooked_")
         .or_else(|| id.strip_prefix("burnt_"))
+        .unwrap_or(id);
+
+    // And a thing that has been cut up is still the thing it was cut off.
+    //
+    // Without this, `meatstrips` and `fishportions` resolved to no item type
+    // at all, so nothing downstream would cook them, price them or put them
+    // in a store - the same defect that had a kill dropping `mutton` and
+    // `deer_meat` that nothing knew what to do with. See
+    // `nutrition::Piece`, which reads the other half of the same name.
+    id.strip_suffix("portions")
+        .or_else(|| id.strip_suffix("strips"))
+        .filter(|base| !base.is_empty())
         .unwrap_or(id)
 }
 
@@ -74,6 +87,16 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
 
         // Mineral
         "clay" => Some(ItemType::Clay),
+        // Salt, greens and roots all existed as `ItemType`s - salt has had a
+        // trade value of twelve since the economy was written - and none of
+        // the three was in this table, which is the one place that turns a
+        // thing in a pack into a thing the world can price or store. So an
+        // agent holding salt was refused when it tried to put any by, six
+        // hundred and sixty-six times a world. Third time this table has
+        // drifted from the vocabulary beside it.
+        "salt" => Some(ItemType::Salt),
+        "greens" => Some(ItemType::Greens),
+        "roots" => Some(ItemType::Roots),
         "sand" => Some(ItemType::Sand),
         "coal" => Some(ItemType::Coal),
 
@@ -84,6 +107,10 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "linen" => Some(ItemType::Linen),
         "glass" => Some(ItemType::Glass),
         "bricks" => Some(ItemType::Bricks),
+        // What clay becomes on the way to being a pot, and what it becomes
+        // when the fire has had it
+        "claypot" => Some(ItemType::Clay),
+        "stoneware" => Some(ItemType::Pottery),
         "charcoal" => Some(ItemType::Charcoal),
         "rope" => Some(ItemType::Rope),
         "paper" => Some(ItemType::Paper),

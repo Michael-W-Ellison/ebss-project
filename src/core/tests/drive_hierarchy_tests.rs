@@ -374,7 +374,13 @@ fn every_chain_is_the_one_that_was_asked_for() {
     use DriveType::*;
 
     assert_eq!(Sustenance.unlocked_by(), &[Hunger]);
-    assert_eq!(Preparedness.unlocked_by(), &[Sustenance, Thirst]);
+    // Putting something by waits on being neither hungry nor parched today,
+    // and on nothing else. It used to stand behind Sustenance, which meant a
+    // forager could never store anything - Preparedness sat below its
+    // threshold in eight agents out of eight for a whole settlement's life,
+    // because food production is never answered in a people that does not
+    // farm.
+    assert_eq!(Preparedness.unlocked_by(), &[Hunger, Thirst]);
     assert_eq!(Luxury.unlocked_by(), &[Preparedness]);
     assert_eq!(Shelter.unlocked_by(), &[Rest, Safety]);
     assert_eq!(Protection.unlocked_by(), &[Safety, Reproduction]);

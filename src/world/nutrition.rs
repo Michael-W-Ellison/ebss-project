@@ -76,6 +76,130 @@ pub enum CookingOutcome {
     NotFood,
 }
 
+/// How big the piece is.
+///
+/// "Can they just absorb an entire side of beef? Should they not have to cut
+/// it into smaller pieces so they can cook and eat it?" - and they could, and
+/// they should. A kill dropped two-kilo lumps of `meat` that an agent ate raw,
+/// one lump per bite, with nothing in between the carcass and the mouth.
+///
+/// A piece is not a property an item carries about with it; it is a thing you
+/// can read off what the item *is*, the same way `World::will_this_dry` reads
+/// off an id. A carcass is whole until somebody takes a knife to it, and what
+/// comes off the knife says so in its name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Piece {
+    /// A carcass, or a fish out of the water with its head still on. Too much
+    /// to put in your mouth and too much to put over a fire.
+    Whole,
+    /// A joint: what one person takes off a carcass to cook and eat now.
+    Portion,
+    /// Cut down thin, which is what you do to a thing you mean to keep rather
+    /// than to eat.
+    Strip,
+    /// What arrives at about the size of a mouthful and needs no butchering
+    /// at all: a berry, a handful of grain, a root.
+    ///
+    /// Distinct from a joint because thickness and bulk are two different
+    /// questions and the first cut of this merged them. A berry has the bulk
+    /// of a mouthful and the thickness of nothing, so it dries as fast as a
+    /// strip and goes over a fire in the same quantities everything always
+    /// did.
+    Small,
+}
+
+impl Piece {
+    /// What size the thing with this id is.
+    ///
+    /// Flesh is whole until it is cut. Everything else - a berry, a handful of
+    /// grain, a root - arrives at about the size of a mouthful and needs no
+    /// butchering, so it counts as a portion from the start.
+    pub fn of(item_id: &str) -> Self {
+        let id = item_id.to_lowercase();
+
+        if id.ends_with("strips") {
+            return Self::Strip;
+        }
+        if id.ends_with("portions") {
+            return Self::Portion;
+        }
+        if Self::is_it_flesh(&id) {
+            return Self::Whole;
+        }
+
+        Self::Small
+    }
+
+    /// Whether this is the kind of thing that comes off an animal in one
+    /// piece and has to be taken apart.
+    ///
+    /// Kept here, in one place, rather than spread across the dozen call
+    /// sites that want to know.
+    pub fn is_it_flesh(item_id: &str) -> bool {
+        let id = item_id.to_lowercase();
+        let base = id
+            .strip_prefix("cooked_")
+            .or_else(|| id.strip_prefix("burnt_"))
+            .unwrap_or(&id);
+
+        // And a joint of it is still flesh, which the first cut of this got
+        // wrong: it stripped the cooking prefix and not the cutting suffix,
+        // so `meatportions` read as something that had never been an animal
+        // and eating it raw carried no risk at all.
+        let base = base
+            .strip_suffix("portions")
+            .or_else(|| base.strip_suffix("strips"))
+            .unwrap_or(base);
+
+        matches!(base, "meat" | "fish")
+    }
+
+    /// Whether a person can put this in their mouth as it is.
+    pub fn can_it_be_eaten(&self) -> bool {
+        !matches!(self, Self::Whole)
+    }
+
+    /// Whether this will go over a fire.
+    ///
+    /// A whole carcass will not: what happens to a beast laid on a fire is
+    /// that the outside chars and the inside stays raw, which is the same
+    /// thing as not cooking it.
+    pub fn can_it_be_cooked(&self) -> bool {
+        !matches!(self, Self::Whole)
+    }
+
+    /// How many of these fit over the flames at once.
+    ///
+    /// This is what "smaller portions cook faster" comes to in a model where
+    /// an action is a tick: cut small, and more of your supper is ready at the
+    /// end of the same turn.
+    ///
+    /// A portion is deliberately the same five that everything was before
+    /// this existed, so that a basket of berries cooks exactly as it always
+    /// did and the only thing that has changed is what a carcass costs you.
+    pub fn how_many_fit_over_a_fire(&self) -> u32 {
+        match self {
+            Self::Whole => 0,
+            Self::Portion | Self::Small => 5,
+            Self::Strip => 10,
+        }
+    }
+
+    /// How long this has to lie in the sun before it is dry, in weathering
+    /// passes.
+    ///
+    /// A strip is dry in a couple of days and a joint takes most of a week,
+    /// which is the whole reason anybody bothers cutting a thing into strips
+    /// rather than just quartering it.
+    pub fn how_long_it_takes_to_dry(&self) -> u32 {
+        match self {
+            Self::Whole => u32::MAX,
+            Self::Portion => 72,
+            Self::Strip | Self::Small => 24,
+        }
+    }
+}
+
 /// Preparation state of food affecting utilization and spoilage
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum PreparationState {
@@ -118,6 +242,30 @@ impl PreparationState {
     }
 
     /// Get spoilage rate multiplier (lower = longer lasting)
+    /// What preparing a thing this way does to what it weighs.
+    ///
+    /// Drying takes the water out, and water is most of what meat weighs. This
+    /// is not decoration: an agent can only carry so much, so a hunter who
+    /// dries what he kills before he walks home carries more of the animal
+    /// home. Preserving buys carrying capacity as well as time, and the two
+    /// are the same thing seen from different ends - a deer left behind at the
+    /// kill because it would not fit in the pack is exactly as wasted as a
+    /// deer that rotted in it.
+    ///
+    /// Cooking drives some water off too, and less of it. Salting and pickling
+    /// add as much as they take.
+    pub fn what_it_does_to_the_weight(&self) -> f32 {
+        match self {
+            Self::Dried => 0.35,
+            Self::Smoked => 0.5,
+            Self::Cooked => 0.8,
+            Self::Ground => 0.9,
+            // Salt and brine put back roughly what they draw out
+            Self::Salted | Self::Pickled | Self::Fermented => 1.0,
+            Self::Raw | Self::Ruined => 1.0,
+        }
+    }
+
     pub fn spoilage_multiplier(&self) -> f32 {
         match self {
             Self::Raw => 1.0,        // Baseline
@@ -349,20 +497,71 @@ impl FoodDatabase {
         self.entries.contains_key(item_type)
     }
 
+    /// How many ticks a given number of days is, on the calendar this world
+    /// actually keeps.
+    ///
+    /// Every one of these tables was written as a day-count and stored as a
+    /// number of ticks at 1440 ticks to the day. The calendar was later put on
+    /// a scale a life fits inside - `TICKS_PER_DAY` is 12, a season is
+    /// twenty-four days and a year is 1,152 ticks - and the food tables were
+    /// not brought with it. So meat, written down as lasting a day, lasted a
+    /// hundred and twenty of them; grain written down as ten days lasted
+    /// twelve and a half years.
+    ///
+    /// Nothing in this world spoiled, and everything downstream followed from
+    /// that: nobody ever went hungry, a larder was insurance against nothing,
+    /// and six of the nine preparation states had never been reachable
+    /// because there was no reason to preserve anything. Stating the intent
+    /// in days and converting here is what keeps the two from drifting apart
+    /// again.
+    /// A first cut of this used the day-counts the tables were written with -
+    /// meat a day, berries a day and a half - and that turned out to be a
+    /// different thing on this calendar than it was on the old one. A tick
+    /// here is an *action*, not a minute: an agent gets twelve of them in a
+    /// day, and walking out to a berry patch and back is thirty or forty. Food
+    /// that lasts two days lasts less than the trip that fetches it, so
+    /// nobody ever held a surplus, nothing was ever dried or buried, and a
+    /// settlement lost a fifth of its people. These are on the scale of the
+    /// season instead, which is the unit a store is actually against.
+    const fn days(how_many: u32) -> u32 {
+        how_many * crate::environment::seasons::TICKS_PER_DAY
+    }
+
     fn register_all_foods(&mut self) {
         // === MEAT & FISH (High protein, moderate energy) ===
 
         // Meat - high protein, moderate energy, low micronutrients
         self.entries.insert(ItemType::Meat, FoodTemplate {
             base_nutrition: NutritionalContent::new(30.0, 50.0, 10.0, 0.6),
-            base_spoilage_ticks: 1440, // 1 day raw
+            base_spoilage_ticks: Self::days(10), // Under a season raw, and then it is carrion
             default_preparation: PreparationState::Raw,
         });
 
         // Fish - high protein, moderate energy, good micronutrients (omega-3, etc.)
         self.entries.insert(ItemType::Fish, FoodTemplate {
             base_nutrition: NutritionalContent::new(25.0, 45.0, 20.0, 0.7),
-            base_spoilage_ticks: 720, // 0.5 day - spoils very fast
+            base_spoilage_ticks: Self::days(6), // Fish spoils faster than anything else anybody catches
+            default_preparation: PreparationState::Raw,
+        });
+
+        // === WHAT A HEDGEROW GIVES, BY SEASON ===
+
+        // Wild leaf and shoot. Almost nothing in it by way of energy and a
+        // great deal of what a body needs a little of, which is exactly what
+        // a person who has lived on stored grain all winter is short of. It
+        // does not keep at all: greens are a thing you eat where you pick
+        // them.
+        self.entries.insert(ItemType::Greens, FoodTemplate {
+            base_nutrition: NutritionalContent::new(6.0, 3.0, 45.0, 0.9),
+            base_spoilage_ticks: Self::days(3),
+            default_preparation: PreparationState::Raw,
+        });
+
+        // The first roots and pods to come on. Better than greens and nothing
+        // like a harvest, and they keep about as well as a berry does.
+        self.entries.insert(ItemType::Roots, FoodTemplate {
+            base_nutrition: NutritionalContent::new(30.0, 8.0, 20.0, 0.7),
+            base_spoilage_ticks: Self::days(14),
             default_preparation: PreparationState::Raw,
         });
 
@@ -371,14 +570,25 @@ impl FoodDatabase {
         // Grain - high energy, low protein, moderate micronutrients
         self.entries.insert(ItemType::Grain, FoodTemplate {
             base_nutrition: NutritionalContent::new(60.0, 15.0, 15.0, 0.1),
-            base_spoilage_ticks: 14400, // 10 days - lasts long when dry
+            base_spoilage_ticks: Self::days(60), // Two seasons and a half, which is what a dry seed does
+            default_preparation: PreparationState::Raw,
+        });
+
+        // Flour - grain opened up between two stones. A third more of what is
+        // in a seed comes out in the eating once the husk is off it, and it
+        // keeps rather less well than the whole seed does, which is the whole
+        // reason to grind it when you mean to eat it rather than when you
+        // bring it in.
+        self.entries.insert(ItemType::Flour, FoodTemplate {
+            base_nutrition: NutritionalContent::new(80.0, 16.0, 14.0, 0.1),
+            base_spoilage_ticks: Self::days(30), // Rather less than the whole seed, which is why you grind it when you mean to eat it
             default_preparation: PreparationState::Raw,
         });
 
         // Bread - processed grain, already cooked
         self.entries.insert(ItemType::Bread, FoodTemplate {
             base_nutrition: NutritionalContent::new(55.0, 12.0, 10.0, 0.3),
-            base_spoilage_ticks: 2880, // 2 days
+            base_spoilage_ticks: Self::days(20),
             default_preparation: PreparationState::Cooked,
         });
 
@@ -387,14 +597,14 @@ impl FoodDatabase {
         // Milk - balanced nutrition, high water
         self.entries.insert(ItemType::Milk, FoodTemplate {
             base_nutrition: NutritionalContent::new(25.0, 20.0, 25.0, 0.85),
-            base_spoilage_ticks: 360, // 0.25 day - spoils very fast
+            base_spoilage_ticks: Self::days(4), // Sours faster than anything but fish
             default_preparation: PreparationState::Raw,
         });
 
         // Cheese - preserved milk, concentrated nutrients
         self.entries.insert(ItemType::Cheese, FoodTemplate {
             base_nutrition: NutritionalContent::new(40.0, 35.0, 20.0, 0.35),
-            base_spoilage_ticks: 10080, // 7 days
+            base_spoilage_ticks: Self::days(50), // Which is most of the point of making it
             default_preparation: PreparationState::Fermented,
         });
 
@@ -403,14 +613,14 @@ impl FoodDatabase {
         // Honey - pure energy, practically never spoils
         self.entries.insert(ItemType::Honey, FoodTemplate {
             base_nutrition: NutritionalContent::new(80.0, 0.0, 5.0, 0.2),
-            base_spoilage_ticks: 100000, // Effectively never
+            base_spoilage_ticks: Self::days(3000), // Effectively never, and true of honey
             default_preparation: PreparationState::Raw, // Honey is special - raw but fully usable
         });
 
         // Ale - fermented grain beverage
         self.entries.insert(ItemType::Ale, FoodTemplate {
             base_nutrition: NutritionalContent::new(45.0, 5.0, 10.0, 0.9),
-            base_spoilage_ticks: 20160, // 14 days
+            base_spoilage_ticks: Self::days(80),
             default_preparation: PreparationState::Fermented,
         });
 
@@ -420,7 +630,7 @@ impl FoodDatabase {
         // High in micronutrients (vitamins from fruits/vegetables)
         self.entries.insert(ItemType::Food, FoodTemplate {
             base_nutrition: NutritionalContent::new(20.0, 5.0, 35.0, 0.8),
-            base_spoilage_ticks: 2160, // 1.5 days
+            base_spoilage_ticks: Self::days(12), // Berries off the bush. Half a season and they are jam on the inside of the pack
             default_preparation: PreparationState::Raw,
         });
     }
@@ -799,13 +1009,17 @@ mod tests {
         let db = FoodDatabase::new();
         let honey = db.get(&ItemType::Honey).unwrap();
 
-        // Honey has very long spoilage time
-        assert!(honey.base_spoilage_ticks > 50000);
+        // Honey outlasts the person carrying it, which is what "never spoils"
+        // means on a calendar where a life is about eight thousand ticks.
+        // This used to be written as a bare number of ticks against the old
+        // 1440-tick day - see `FoodDatabase::days`.
+        let a_life = 8000;
+        assert!(honey.base_spoilage_ticks > a_life * 2);
 
         let mut food = db.create_food_data(&ItemType::Honey, 0).unwrap();
-        food.update_freshness(5000); // 5000 ticks later
+        food.update_freshness(a_life / 4);
 
-        // Still fresh (at 5% degradation, should be 0.95)
+        // Still fresh a couple of years on
         assert!(food.freshness > 0.9);
         assert_eq!(food.freshness_description(), "Fresh");
     }

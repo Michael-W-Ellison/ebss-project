@@ -20,7 +20,12 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
         | TerrainType::Riverbank
         | TerrainType::Beach
         | TerrainType::Farmland
-        | TerrainType::Water => ClimateZone::Temperate,
+        | TerrainType::Water
+        | TerrainType::Sea
+        | TerrainType::SaltMarsh => ClimateZone::Temperate,
+        // A salt flat is a shallow sea that dried up, and it dried up for a
+        // reason
+        TerrainType::SaltFlat => ClimateZone::Desert,
         // Mountains can be cold (arctic adjacent)
         TerrainType::Mountain => ClimateZone::Arctic,
     }
@@ -87,6 +92,55 @@ pub enum AnimalBehavior {
     Defensive,  // Attacks when cornered
     Aggressive, // Attacks on sight
     Territorial, // Attacks near den/territory
+}
+
+impl AnimalBehavior {
+    /// How much of a thing's teeth count against somebody who is simply
+    /// standing there.
+    ///
+    /// A rabbit has an `attack_damage` of 1.0 and a deer of 5.0, because both
+    /// will defend themselves if you go at them. Neither is a threat to a man
+    /// walking past, and reading danger off `attack_damage` alone said they
+    /// were: once several of a thing began adding up, a herd of twenty
+    /// reindeer registered as about as dangerous as a wolf.
+    ///
+    /// What menaces somebody who has done nothing is a thing that comes after
+    /// people. What defends itself is a question for whoever attacks it.
+    ///
+    /// What it cost, measured over twenty-four worlds: a settlement ran 465
+    /// times where it should have run 213, and froze 194 times where it should
+    /// have frozen 27 - most of that being children hemmed in by deer.
+    /// How readily a thing of this temper turns and faces what is coming at
+    /// it, rather than running.
+    ///
+    /// The other side of `how_much_it_menaces_you`, and the whole of an
+    /// animal's courage. A rabbit never stands its ground whatever the odds
+    /// are - that is what Passive means, and a rabbit that fights a wolf
+    /// because the arithmetic came out that way is not a rabbit. Everything
+    /// else weighs the odds, and weighs them more kindly the fiercer it is.
+    pub fn how_readily_it_stands_its_ground(&self) -> f32 {
+        match self {
+            AnimalBehavior::Passive => 0.0,
+            AnimalBehavior::Neutral => 0.6,
+            AnimalBehavior::Defensive => 0.9,
+            AnimalBehavior::Aggressive => 1.2,
+            AnimalBehavior::Territorial => 1.3,
+        }
+    }
+
+    pub fn how_much_it_menaces_you(&self) -> f32 {
+        match self {
+            // Runs away. Not a threat to anybody, whatever it would do if
+            // cornered
+            AnimalBehavior::Passive => 0.0,
+            // Minds its own business, and is worth an eye
+            AnimalBehavior::Neutral => 0.25,
+            // Will not start it, but is a bad thing to be near
+            AnimalBehavior::Defensive => 0.4,
+            // Comes after you
+            AnimalBehavior::Aggressive | AnimalBehavior::Territorial => 1.0,
+        }
+    }
 }
 
 /// Animal diet type
@@ -2250,6 +2304,99 @@ impl AnimalManager {
         }
     }
 
+    /// What a wild animal does about people.
+    ///
+    /// Nothing, until now. There was predator hunting in this module and no
+    /// other awareness of agents at all, so a deer stood where it stood while
+    /// a settlement walked up to it - which is what made a stone-age hunt a
+    /// matter of finding an animal rather than of stalking one, and is half of
+    /// why food was too easy to come by.
+    ///
+    /// Most things that live in a wood get out of a person's way. The ones
+    /// that do not are the ones that mean to do something about the person:
+    /// an aggressive or territorial beast holds its ground, and a tame one
+    /// has no reason to run.
+    ///
+    /// Takes bare positions rather than agents, so that nothing in here has to
+    /// know what an agent is.
+    pub fn shy_away_from(&mut self, people: &[(i32, i32)]) {
+        if people.is_empty() {
+            return;
+        }
+
+        // Which of them would move off, worked out before the animals are
+        // borrowed to be moved. The registry lives beside them and cannot be
+        // read while they are held mutably, which is the same dance the AI
+        // pass does.
+        let skittish: Vec<usize> = {
+            let Some(registry) = &self.registry else {
+                return;
+            };
+
+            self.animals
+                .iter()
+                .enumerate()
+                .filter(|(_, animal)| animal.is_alive() && animal.is_wild())
+                .filter(|(_, animal)| {
+                    registry.get(&animal.species_id).is_some_and(|species| {
+                        matches!(
+                            species.behavior,
+                            AnimalBehavior::Passive
+                                | AnimalBehavior::Neutral
+                                | AnimalBehavior::Defensive
+                        )
+                    })
+                })
+                .map(|(idx, _)| idx)
+                .collect()
+        };
+
+        for idx in skittish {
+            let animal = &mut self.animals[idx];
+
+            // The nearest person, and only if they are near enough to have
+            // been noticed
+            let Some(nearest) = people
+                .iter()
+                .min_by_key(|(x, y)| {
+                    (x - animal.position.0).abs().max((y - animal.position.1).abs())
+                })
+            else {
+                continue;
+            };
+
+            let how_close = (nearest.0 - animal.position.0)
+                .abs()
+                .max((nearest.1 - animal.position.1).abs());
+
+            if how_close > Self::NEAR_ENOUGH_TO_SPOOK_IT || how_close == 0 {
+                continue;
+            }
+
+            // One step directly away. A stone-age hunter is faster over a
+            // short dash than a deer is over a long one, which is why hunting
+            // works at all; what this does is make him spend the dash.
+            let away = |them: i32, it: i32| -> i32 {
+                match it.cmp(&them) {
+                    std::cmp::Ordering::Less => -1,
+                    std::cmp::Ordering::Greater => 1,
+                    std::cmp::Ordering::Equal => 0,
+                }
+            };
+
+            animal.position.0 += away(nearest.0, animal.position.0);
+            animal.position.1 += away(nearest.1, animal.position.1);
+            animal.use_stamina(0.2);
+        }
+    }
+
+    /// How near somebody has to be before a wild animal thinks better of
+    /// standing there.
+    ///
+    /// A little further than a man can throw, so that walking up to a deer
+    /// costs something even when the throw itself would have been easy.
+    const NEAR_ENOUGH_TO_SPOOK_IT: i32 = 4;
+
     /// Process births for pregnant animals
     fn process_births(&mut self) {
         use rand::Rng;
@@ -3267,6 +3414,69 @@ mod tests {
 
         // Animal should have aged
         assert!(manager.animals[0].age > initial_age);
+    }
+
+    // ========================================================================
+    // WHAT A WILD ANIMAL DOES ABOUT PEOPLE
+    //
+    // Nothing, until ISSUES_FOUND #57. There was predator hunting in this
+    // module and no other awareness of agents at all, so a deer stood where it
+    // stood while a settlement walked up to it.
+    // ========================================================================
+
+    #[test]
+    fn a_deer_does_not_stand_still_while_you_walk_up_to_it() {
+        let mut manager = AnimalManager::new(100);
+        manager.spawn_animal("deer".to_string(), (10, 10));
+
+        let was = manager.animals[0].position;
+        manager.shy_away_from(&[(8, 10)]);
+        let now = manager.animals[0].position;
+
+        assert_ne!(was, now, "it should have moved");
+        assert!(
+            (now.0 - 8).abs() > (was.0 - 8).abs(),
+            "and moved away from the man, not towards him: {was:?} -> {now:?}"
+        );
+    }
+
+    #[test]
+    fn something_across_the_valley_has_not_noticed_you() {
+        let mut manager = AnimalManager::new(100);
+        manager.spawn_animal("deer".to_string(), (10, 10));
+
+        let was = manager.animals[0].position;
+        manager.shy_away_from(&[(10 + AnimalManager::NEAR_ENOUGH_TO_SPOOK_IT + 1, 10)]);
+
+        assert_eq!(
+            manager.animals[0].position, was,
+            "a man a long way off is not a reason to move"
+        );
+    }
+
+    #[test]
+    fn a_wolf_does_not_get_out_of_your_way() {
+        let mut manager = AnimalManager::new(100);
+        manager.spawn_animal("wolf".to_string(), (10, 10));
+
+        let was = manager.animals[0].position;
+        manager.shy_away_from(&[(9, 10)]);
+
+        assert_eq!(
+            manager.animals[0].position, was,
+            "a thing that means to do something about you holds its ground"
+        );
+    }
+
+    #[test]
+    fn an_empty_country_spooks_nothing() {
+        let mut manager = AnimalManager::new(100);
+        manager.spawn_animal("deer".to_string(), (10, 10));
+
+        let was = manager.animals[0].position;
+        manager.shy_away_from(&[]);
+
+        assert_eq!(manager.animals[0].position, was);
     }
 
     #[test]

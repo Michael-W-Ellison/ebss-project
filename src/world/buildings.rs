@@ -18,6 +18,19 @@ pub enum BuildingType {
     /// no stone at all, and not one building was ever raised. A tent is what
     /// stands between a stone-age people and the weather.
     SkinTent,
+
+    /// A hole in the ground with a roof of turf over it.
+    ///
+    /// What a people with neither timber nor skins can put up, which turns
+    /// out to be most of them: a tent wants eight wood and four hides, hides
+    /// come off animals and nothing else, and hunting was unreachable for the
+    /// whole life of this project - so `shelters built` was nought in every
+    /// arm ever measured. Three deadlocked things, and this is the way out
+    /// that does not depend on any of them.
+    ///
+    /// It costs a morning's digging and nothing else, and it is worse than a
+    /// tent in every way except that it can actually be built.
+    Burrow,
     Longhouse,         // Basic: Shared housing (10 capacity)
     UpgradedLonghouse, // Improved longhouse (15 capacity)
     SmallHouse,        // Personal 1-2 person home
@@ -74,6 +87,9 @@ impl BuildingType {
                 Resource::new(ResourceType::Wood, 8),
                 Resource::new(ResourceType::Hides, 4),
             ],
+            // Earth, and a morning. There is nothing to fetch and nothing to
+            // be short of, which is the entire point of it.
+            BuildingType::Burrow => vec![],
             BuildingType::Longhouse => vec![
                 Resource::new(ResourceType::Wood, 100),
                 Resource::new(ResourceType::Stone, 50),
@@ -246,6 +262,8 @@ impl BuildingType {
         match self {
             // Housing
             BuildingType::SkinTent => 40,
+            // Longer than a tent: a tent is put up, and a burrow is dug.
+            BuildingType::Burrow => 90,
             BuildingType::Longhouse => 500,
             BuildingType::UpgradedLonghouse => 700,
             BuildingType::SmallHouse => 300,
@@ -326,6 +344,7 @@ impl BuildingType {
         match self {
             // Housing
             BuildingType::SkinTent => 't',
+            BuildingType::Burrow => 'o',
             BuildingType::Longhouse => 'L',
             BuildingType::UpgradedLonghouse => 'Ł',
             BuildingType::SmallHouse => 'h',
@@ -378,7 +397,7 @@ impl BuildingType {
     pub fn color_code(&self) -> &'static str {
         match self {
             // Housing - Magenta
-            BuildingType::SkinTent |
+            BuildingType::SkinTent | BuildingType::Burrow |
             BuildingType::Longhouse | BuildingType::UpgradedLonghouse |
             BuildingType::SmallHouse | BuildingType::MediumHouse |
             BuildingType::LargeHouse | BuildingType::Manor => "\x1b[35m",
@@ -518,6 +537,7 @@ impl BuildingType {
         match self {
             // Housing
             BuildingType::SkinTent => "Hides stretched over poles. Sleeps two, keeps the weather off, and can be put up by people who have only what they can carry.",
+            BuildingType::Burrow => "A hole in the ground with turf over it. Cold, dark, damp and cramped, and it can be dug by people who have nothing at all.",
             BuildingType::Longhouse => "Basic shared housing for up to 10 agents. Provides shelter and increases well-being.",
             BuildingType::UpgradedLonghouse => "Improved shared housing for up to 15 agents. Better comfort and amenities.",
             BuildingType::SmallHouse => "Personal dwelling for 1-2 agents. Provides privacy and personal space.",
@@ -570,7 +590,7 @@ impl BuildingType {
     pub fn prerequisites(&self) -> Vec<BuildingType> {
         match self {
             // Basic buildings have no prerequisites
-            BuildingType::SkinTent |
+            BuildingType::SkinTent | BuildingType::Burrow |
             BuildingType::Longhouse | BuildingType::SmallHouse | BuildingType::Workshop |
             BuildingType::Storehouse | BuildingType::Farm | BuildingType::Shrine => vec![],
 

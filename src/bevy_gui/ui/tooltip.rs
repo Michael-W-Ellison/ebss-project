@@ -74,6 +74,9 @@ pub fn terrain_color(terrain: TerrainType) -> Color32 {
         TerrainType::Desert => Color32::from_rgb(238, 203, 173),
         TerrainType::Wetland => Color32::from_rgb(85, 107, 47),
         TerrainType::Beach => Color32::from_rgb(238, 214, 175),
+        TerrainType::Sea => Color32::from_rgb(20, 60, 120),
+        TerrainType::SaltMarsh => Color32::from_rgb(96, 128, 116),
+        TerrainType::SaltFlat => Color32::from_rgb(232, 232, 224),
         TerrainType::Riverbank => Color32::from_rgb(107, 142, 35),
         TerrainType::Farmland => Color32::from_rgb(205, 170, 90),
     }
@@ -90,6 +93,9 @@ pub fn resource_color(resource_type: ResourceType) -> Color32 {
         ResourceType::Food => Color32::from_rgb(255, 99, 71),
         ResourceType::Water => Color32::from_rgb(0, 191, 255),
         ResourceType::Grain => Color32::from_rgb(255, 215, 0),
+        // What a hedgerow gives before anything has ripened
+        ResourceType::Greens => Color32::from_rgb(124, 205, 124),
+        ResourceType::Roots => Color32::from_rgb(205, 133, 63),
         ResourceType::Flax => Color32::from_rgb(245, 245, 220),
         ResourceType::Herbs => Color32::from_rgb(0, 128, 0),
         ResourceType::Cotton => Color32::from_rgb(255, 250, 250),
@@ -100,6 +106,7 @@ pub fn resource_color(resource_type: ResourceType) -> Color32 {
         ResourceType::Fish => Color32::from_rgb(70, 130, 180),
         ResourceType::Honey => Color32::from_rgb(255, 185, 15),
         ResourceType::Clay => Color32::from_rgb(205, 133, 63),
+        ResourceType::Salt => Color32::from_rgb(245, 245, 245),
         ResourceType::Sand => Color32::from_rgb(238, 214, 175),
         ResourceType::Coal => Color32::from_rgb(47, 79, 79),
         ResourceType::Flour => Color32::from_rgb(255, 248, 220),
@@ -133,6 +140,7 @@ pub fn building_color(building_type: BuildingType, completed: bool) -> Color32 {
     }
     match building_type {
         BuildingType::SkinTent => Color32::from_rgb(160, 130, 96),
+        BuildingType::Burrow => Color32::from_rgb(92, 74, 52),
         BuildingType::Longhouse => Color32::from_rgb(139, 90, 43),
         BuildingType::UpgradedLonghouse => Color32::from_rgb(160, 82, 45),
         BuildingType::SmallHouse => Color32::from_rgb(160, 82, 45),
@@ -183,6 +191,9 @@ pub fn terrain_name(terrain: TerrainType) -> &'static str {
         TerrainType::Meadow => "Meadow",
         TerrainType::Hills => "Hills",
         TerrainType::Beach => "Beach",
+        TerrainType::Sea => "Sea",
+        TerrainType::SaltMarsh => "Salt marsh",
+        TerrainType::SaltFlat => "Salt flat",
         TerrainType::Riverbank => "Riverbank",
         TerrainType::Farmland => "Farmland",
     }

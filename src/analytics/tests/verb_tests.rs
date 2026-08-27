@@ -155,13 +155,32 @@ fn every_verb_is_performed_by_something_real() {
         "collectanimalproduct", "harvestplant",
         // Working a thing down into another thing: `Action::Work` carries the
         // verb in it, so the verb's own name is what the action is called
-        "smash", "crush", "cut", "scrape", "drill", "split",
+        "smash", "crush", "cut", "scrape", "drill", "split", "weave", "carve",
+        // And the ones done with a vessel of water
+        "soak", "ferment", "boil",
         // Handing things over
         "trade", "giveto",
         // And putting things down and taking them up
         "pickup", "putdown",
         // And turning a strange thing over in your hands
         "examine",
+        // And helping yourself to what somebody else is carrying, and running
+        "takefrom", "fleefrom",
+        // And getting the tool out, and putting it away again
+        "equip", "unequip",
+        // And the third answer to a thing that would kill you
+        "freeze",
+        // And digging a store and filling it in
+        "excavate", "cover",
+        // And making food outlast the week it was got in
+        "dry", "salt",
+        // And pressing a lump of clay into a shape it keeps, holding it in a
+        // fire until it stops being clay, and digging yourself into the
+        // ground because there is nothing to build with
+        "mold", "fire", "burrow",
+        // And asking somebody how a thing of theirs came about, which is the
+        // only way a discovery has of leaving the head that made it
+        "ask",
     ];
 
     for one in EVERY_VERB {
@@ -216,16 +235,19 @@ fn the_matrix_admits_what_nothing_does_yet() {
         "and the matrix should say so where nothing does yet"
     );
 
-    // The families that are all declaration and no mechanism yet are worth
-    // being able to name
-    let untouched: Vec<&str> = verbs::everything_still_to_build()
-        .filter(|verb| verb.family == Family::Fluid)
+    // The subterranean family is finished, which is worth asserting rather
+    // than leaving to chance: tilling, burrowing, excavating a store and
+    // putting the earth back over it are all four of it and all four are
+    // carried out by something. It was the family that was all declaration
+    // and no mechanism, and burrowing was the last of it.
+    let subterranean_left: Vec<&str> = verbs::everything_still_to_build()
+        .filter(|verb| verb.family == Family::Subterranean)
         .map(|verb| verb.called)
         .collect();
 
     assert!(
-        !untouched.is_empty(),
-        "the fluid family is not built; the matrix should not pretend it is"
+        subterranean_left.is_empty(),
+        "the subterranean family is finished; these are still waiting: {subterranean_left:?}"
     );
 }
 
@@ -273,14 +295,17 @@ fn a_trade_requirement_takes_any_tool_for_that_trade() {
         true
     ));
 }
-
-/// A hand is free until the arms are full.
+/// A hand is free until it is holding something.
 ///
-/// Owning tools does not take your hands away — a pack is not a pair of hands,
-/// and that mistake cost a settlement its coats once already. Being loaded to
-/// the limit of what you can carry does.
+/// This used to be a question about the pack: a person counted as having a
+/// hand free if they had spare carrying capacity. That was written down as a
+/// fudge and it turned out to be a bad one - a settlement lives at or over
+/// the limit of what it can carry, so nobody in the model ever had a hand
+/// free for anything, and every action the matrix said wanted one was quietly
+/// refused for everybody. There are two hands now and they hold particular
+/// things.
 #[test]
-fn a_hand_is_free_until_the_arms_are_full() {
+fn a_hand_is_free_until_it_is_holding_something() {
     let mut simulation = a_person();
     empty_the_pack(&mut simulation);
 
@@ -296,16 +321,29 @@ fn a_hand_is_free_until_the_arms_are_full() {
         "a man who owns an axe and a spear still has hands"
     );
 
-    // Loaded to the limit, and there is nowhere to put anything
+    simulation.population.agents[0].take_in_hand("handaxe");
+    assert!(
+        simulation.population.agents[0].a_hand_to_spare(),
+        "one hand on the axe leaves the other"
+    );
+
+    simulation.population.agents[0].take_in_hand("spear");
+    assert!(
+        !simulation.population.agents[0].a_hand_to_spare(),
+        "an axe in one hand and a spear in the other is no hands"
+    );
+
+    // And a full pack is not the same question. What a load costs is paid in
+    // the walking - see `Simulation::what_this_load_costs`.
+    simulation.population.agents[0].put_away("spear");
     let room = simulation.population.agents[0]
         .inventory
         .weight_capacity_remaining();
-    give(&mut simulation, "stone", (room / 1.0).ceil() as u32);
+    give(&mut simulation, "stone", room.ceil() as u32);
 
     assert!(
-        !simulation.population.agents[0].a_hand_to_spare(),
-        "arms full of rock is no hands: {:.1} spare",
-        simulation.population.agents[0].inventory.weight_capacity_remaining()
+        simulation.population.agents[0].a_hand_to_spare(),
+        "a heavy pack is a heavy pack, not a missing hand"
     );
 }
 

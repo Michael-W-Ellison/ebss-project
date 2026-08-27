@@ -314,6 +314,11 @@ impl Population {
             agent.tick_with_percepts(current_tick); // Process percepts with timestamp
             // Aging, metabolism, food spoilage and fatigue (pregnancy modifier applied inside)
             agent.process_survival_tick(current_tick);
+            // A hand cannot go on holding a spear that has been given away,
+            // stolen, worn through or eaten. Everything leaves the pack
+            // through the inventory, which knows nothing about hands, so the
+            // hands are reconciled against it once a tick.
+            agent.let_go_of_what_i_no_longer_have();
         }
 
         // Update relationships between nearby agents
@@ -1707,7 +1712,7 @@ impl Population {
                 }
 
                 let me = agent.id;
-                for (_, said, what_they_said) in found_out {
+                for (where_it_is, said, what_they_said) in found_out {
                     if said.who == me {
                         continue;
                     }
@@ -1720,9 +1725,13 @@ impl Population {
                     // worked out. Somebody who reported what was there last
                     // season told the truth about last season, and the most
                     // it should cost him is that his word keeps less well
-                    // than a fresh man's.
+                    // than a fresh man's - and somebody stripping the place
+                    // this morning should cost him nothing at all.
                     let subject = format!("{:?}", what_they_said).to_lowercase();
-                    if said.was_he_answerable_for_it(current_tick) {
+                    if said.does_bare_ground_convict_him(
+                        current_tick,
+                        world.where_it_was_worked_out.contains(&where_it_is),
+                    ) {
                         agent.found_out_i_was_lied_to(said.who, &subject, current_tick);
                     } else {
                         agent.found_out_they_were_out_of_date(said.who);
@@ -1878,6 +1887,8 @@ impl Population {
             BuildingType::SkinTent => {
                 vec![(SkillType::Construction, 5), (SkillType::Leatherworking, 5)]
             }
+            // And digging one in teaches the same hands, without the hides
+            BuildingType::Burrow => vec![(SkillType::Construction, 5), (SkillType::Mining, 5)],
             BuildingType::Workshop => vec![(SkillType::Crafting, 10)],
             BuildingType::Farm => vec![(SkillType::Farming, 10)],
             BuildingType::Bakery => vec![(SkillType::Cooking, 10)],

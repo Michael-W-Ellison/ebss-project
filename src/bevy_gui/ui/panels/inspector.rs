@@ -1273,6 +1273,9 @@ fn terrain_type_color(terrain: crate::world::TerrainType) -> egui::Color32 {
         TerrainType::Desert => egui::Color32::from_rgb(238, 203, 173),
         TerrainType::Wetland => egui::Color32::from_rgb(85, 107, 47),
         TerrainType::Beach => egui::Color32::from_rgb(238, 214, 175),
+        TerrainType::Sea => egui::Color32::from_rgb(20, 60, 120),
+        TerrainType::SaltMarsh => egui::Color32::from_rgb(96, 128, 116),
+        TerrainType::SaltFlat => egui::Color32::from_rgb(232, 232, 224),
         TerrainType::Riverbank => egui::Color32::from_rgb(107, 142, 35),
         TerrainType::Farmland => egui::Color32::from_rgb(205, 170, 90),
     }

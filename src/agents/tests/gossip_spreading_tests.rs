@@ -351,6 +351,7 @@ fn test_trust_affects_belief_confidence() {
             trust: 0.2, // Low trust
             correct_count: 0,
             wrong_count: 5,
+            took_from_me: 0,
         },
     );
 

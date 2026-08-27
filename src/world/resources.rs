@@ -24,6 +24,18 @@ pub enum ResourceType {
     /// agent can read. The only way to find out is for somebody to eat one.
     StrangePlant,
 
+    /// Wild leafy greens and fresh shoots: what a hedgerow gives in spring.
+    ///
+    /// Thin stuff - almost no energy in it and a great deal of what a body
+    /// needs a little of - and it is what there is to eat in the months when
+    /// nothing has ripened yet.
+    Greens,
+
+    /// The first roots and pods to come on, which is what summer gives.
+    ///
+    /// Better than greens and nothing like a harvest.
+    Roots,
+
     // === Raw Materials (Agricultural) ===
     Grain,      // Wheat, barley, etc. - for flour, bread, beer
     Flax,       // For linen, rope
@@ -42,6 +54,13 @@ pub enum ResourceType {
     Clay,       // For bricks, pottery
     Sand,       // For glass
     Coal,       // For fuel/charcoal
+
+    /// What is left where a shallow sea dried up, and what sits in rare seams
+    /// in the hills. The one thing that will keep meat through a winter
+    /// without a fire and without a week of sun, and until now there was none
+    /// of it anywhere in this world - so `PreparationState::Salted` was
+    /// written, tested and unreachable.
+    Salt,
 
     // === Processed Materials ===
     Flour,      // Grain → Miller → Flour
@@ -135,6 +154,82 @@ impl ResourceType {
             _ => 0.0,
         }
     }
+    /// When this thing bears something a person can eat.
+    ///
+    /// Growth was seasonal from the beginning and what was *standing* was
+    /// not, so a berry bush that had grown all summer still had its berries
+    /// on it in February. A hedgerow does not work like that. It carries
+    /// nothing at all for most of the year and then, for a few weeks,
+    /// everything at once.
+    ///
+    /// The year, as this world keeps it:
+    ///
+    /// - **Spring** gives leaf and shoot, and almost no energy in any of it
+    /// - **Summer** gives the first roots and pods, which is not a harvest
+    /// - **Autumn** is when everything else comes on at once
+    /// - **Winter** gives nothing, and that is the whole point of a store
+    ///
+    /// Anything that is not a growing thing - stone, clay, water - bears all
+    /// year, because it is not bearing at all.
+    pub fn when_it_bears(&self) -> &'static [crate::environment::seasons::Season] {
+        use crate::environment::seasons::Season;
+
+        const SPRING: &[Season] = &[Season::Spring];
+        const SUMMER: &[Season] = &[Season::Summer];
+        const AUTUMN: &[Season] = &[Season::Fall];
+        const THE_GROWING_HALF: &[Season] = &[Season::Spring, Season::Summer];
+        const ALL_YEAR: &[Season] = &[
+            Season::Spring,
+            Season::Summer,
+            Season::Fall,
+            Season::Winter,
+        ];
+
+        match self {
+            ResourceType::Greens => SPRING,
+            ResourceType::Roots => SUMMER,
+
+            // What ripens, and when everybody knows it ripens
+            ResourceType::Food | ResourceType::Grain | ResourceType::Honey => AUTUMN,
+
+            // Fibre and physic are cut green
+            ResourceType::Flax | ResourceType::Cotton | ResourceType::Herbs => THE_GROWING_HALF,
+
+            // Nobody has any idea what these do, including when they bear
+            ResourceType::StrangePlant => AUTUMN,
+
+            // Everything that is not a growing thing. Wood off a standing
+            // tree, stone out of the ground, water in a river: none of it
+            // bears, so none of it stops.
+            _ => ALL_YEAR,
+        }
+    }
+
+    /// Whether there is anything on it to take, this time of year.
+    pub fn is_it_bearing(&self, now: crate::environment::seasons::Season) -> bool {
+        self.when_it_bears().contains(&now)
+    }
+
+
+    /// Whether this is a thing that grows out of the ground, and so a thing
+    /// the ground's condition has a say in.
+    ///
+    /// A seam of clay does not care how rich the topsoil over it is; a
+    /// hedgerow does.
+    pub fn is_it_grown(&self) -> bool {
+        matches!(
+            self,
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Herbs
+                | ResourceType::Flax
+                | ResourceType::Cotton
+                | ResourceType::StrangePlant
+                | ResourceType::Wood
+        )
+    }
 
     /// Whether an agent can eat this straight from the land.
     ///
@@ -143,7 +238,12 @@ impl ResourceType {
     pub fn is_edible(&self) -> bool {
         matches!(
             self,
-            ResourceType::Food | ResourceType::Grain | ResourceType::Fish | ResourceType::Meat
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Fish
+                | ResourceType::Meat
         )
     }
 
@@ -152,6 +252,9 @@ impl ResourceType {
         match self {
             // Something nobody has tried
             ResourceType::StrangePlant => '?',
+            ResourceType::Greens => 'v',
+            ResourceType::Roots => 'r',
+            ResourceType::Salt => '*',
 
             // Basic
             ResourceType::Wood => 't',
@@ -212,6 +315,9 @@ impl ResourceType {
     pub fn color_code(&self) -> &'static str {
         match self {
             ResourceType::StrangePlant => "\x1b[35m",  // Magenta: unknown
+            ResourceType::Greens => "\x1b[92m",        // Bright green: new leaf
+            ResourceType::Roots => "\x1b[33m",         // Yellow/brown
+            ResourceType::Salt => "\x1b[97m",          // Bright white
 
             // Basic - Original colors
             ResourceType::Wood => "\x1b[33m",      // Yellow/Brown
@@ -274,6 +380,11 @@ impl ResourceType {
     pub fn gather_time(&self) -> u32 {
         match self {
             ResourceType::StrangePlant => 25,
+            // Picking leaves is quicker than anything else anybody does
+            ResourceType::Greens => 8,
+            ResourceType::Roots => 18,
+            // Scraping a crust off a flat, or breaking it out of a seam
+            ResourceType::Salt => 25,
 
             // Basic - gathering
             ResourceType::Wood => 20,
@@ -391,7 +502,8 @@ impl ResourceType {
         matches!(
             self,
             ResourceType::Food | ResourceType::Bread | ResourceType::Ale |
-            ResourceType::Cheese | ResourceType::Meat | ResourceType::Fish | ResourceType::Honey
+            ResourceType::Cheese | ResourceType::Meat | ResourceType::Fish | ResourceType::Honey |
+            ResourceType::Greens | ResourceType::Roots
         )
     }
 
@@ -401,9 +513,10 @@ impl ResourceType {
             ResourceType::StrangePlant => "Unidentified",
             ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food | ResourceType::Water => "Basic Resource",
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton => "Agricultural",
+            ResourceType::Greens | ResourceType::Roots => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",
-            ResourceType::Clay | ResourceType::Sand | ResourceType::Coal => "Mineral",
+            ResourceType::Clay | ResourceType::Sand | ResourceType::Coal | ResourceType::Salt => "Mineral",
             ResourceType::Flour | ResourceType::Leather | ResourceType::Cloth | ResourceType::Linen |
             ResourceType::Glass | ResourceType::Bricks | ResourceType::Charcoal | ResourceType::Rope |
             ResourceType::Paper | ResourceType::Dye => "Processed Material",
@@ -433,6 +546,24 @@ pub struct ResourceNode {
     /// may be supper and the other of which may not.
     #[serde(default)]
     pub kind: u8,
+
+    /// What a spring puts out between one pass of the resource tick and the
+    /// next, and the least that can be standing in it.
+    ///
+    /// Water is the one thing here that is a **flow and not a stock**. A
+    /// spring does not hold a set amount of water: it recharges, steadily, out
+    /// of a catchment that is not in this model, and what limits what you can
+    /// draw from it in an afternoon is its rate. Twelve people cannot drain a
+    /// decent spring, and this is the sentence in the code that says so.
+    ///
+    /// Kept on the node because the number is worked out from terrain in
+    /// `World::regenerate_resources`, which knows what tile a source is
+    /// standing on, and spent in `harvest`, which does not.
+    ///
+    /// Zero on everything that is not water, and on a water source nobody has
+    /// regenerated yet, in which case it is simply not yet a floor.
+    #[serde(default)]
+    pub flow: f32,
 }
 
 impl ResourceNode {
@@ -444,6 +575,7 @@ impl ResourceNode {
             max_amount: amount,
             inflow_carried: 0.0,
             kind: 0,
+            flow: 0.0,
         }
     }
 
@@ -462,9 +594,95 @@ impl ResourceNode {
 
     /// Harvest resource from this node
     pub fn harvest(&mut self, amount: u32) -> u32 {
-        let harvested = amount.min(self.amount);
+        let harvested = amount.min(self.what_can_be_taken());
         self.amount -= harvested;
         harvested
+    }
+
+    /// How much of what is standing here can actually be taken away.
+    ///
+    /// All of it, for everything that is a stock. A berry patch stripped bare
+    /// is bare, a seam mined out is mined out, and that is what those things
+    /// are.
+    ///
+    /// Not water. A spring cannot be drunk below what it puts out, because
+    /// what is standing in it is not a barrel of water but this pass's flow
+    /// arriving - so drawing it down to nothing would be drawing tomorrow's
+    /// water out of it today. Twelve people at a spring take twelve people's
+    /// worth and the spring goes on running.
+    ///
+    /// Before this, a settlement drank eight of its twenty-one sources down to
+    /// two units out of four hundred and left them there for the rest of the
+    /// world's life. See ISSUES_FOUND #46 and #53.
+    pub fn what_can_be_taken(&self) -> u32 {
+        if self.resource_type != ResourceType::Water {
+            return self.amount;
+        }
+
+        self.amount.saturating_sub(self.springline())
+    }
+
+    /// A drink taken from the flow itself, at a spring that is down to its
+    /// springline.
+    ///
+    /// The pool is what has gathered; the springline is what is arriving. A
+    /// man kneeling at a spring that is down to its springline is not looking
+    /// at a dry hole - he is looking at water coming out of the ground - and
+    /// what he does is drink it as it comes. So he gets his mouthful and the
+    /// pool does not move.
+    ///
+    /// This is the difference between a spring having a *rate* and a spring
+    /// having a *closing time*. Without it the flow model put the failure rate
+    /// up by half a point on its own and left "Gather: Resource source was
+    /// empty" as the fourth largest refusal in the model, which is a strange
+    /// thing to be able to say about a running spring.
+    pub fn a_mouthful_from_the_flow(&self) -> u32 {
+        if self.resource_type != ResourceType::Water {
+            return 0;
+        }
+
+        // A source that has run right down to nothing has nothing arriving
+        // either - a frozen seep in February, say - and there is genuinely
+        // no drink to be had there.
+        u32::from(self.amount > 0 && self.flow >= 1.0)
+    }
+
+    /// What a water source keeps back, so that tomorrow's water is not drunk
+    /// today.
+    ///
+    /// A source whose flow fills its whole bed between one pass and the next
+    /// keeps back **nothing**, because there is nothing to protect: a reach of
+    /// running water is full again by morning whatever was taken out of it.
+    /// Getting this wrong is worth writing down - the first cut set the
+    /// springline to the flow for every source, and a river's flow is larger
+    /// than its bed, so **rivers became undrinkable** and the failure rate
+    /// went up rather than down.
+    ///
+    /// A spring or a pool, whose flow is a fraction of its bed, keeps back one
+    /// pass's worth. That is the sentence that says twelve people cannot drain
+    /// a spring.
+    fn springline(&self) -> u32 {
+        let flow = self.flow.max(0.0);
+
+        if flow >= self.max_amount as f32 {
+            return 0;
+        }
+
+        flow as u32
+    }
+
+    /// Shed what is on it, because the season it bears in has gone by.
+    ///
+    /// Fruit falls, leaf goes over, and a seed head that nobody cut shatters.
+    /// Always takes at least one, so a patch actually empties rather than
+    /// creeping down by fractions for ever.
+    pub fn what_it_carries_falls_off(&mut self, share: f32) {
+        if self.amount == 0 {
+            return;
+        }
+
+        let falling = ((self.amount as f32) * share).ceil() as u32;
+        self.amount = self.amount.saturating_sub(falling.max(1));
     }
 
     /// Check if node is depleted
@@ -589,6 +807,13 @@ impl ResourceNode {
     /// more than half its water in fifteen thousand ticks.
     ///
     /// Returns units per regeneration pass, which runs every ten world ticks.
+    /// What a reach of running water gives back in a pass: all of it.
+    ///
+    /// Not a number so much as a statement that a river is not a stock. It is
+    /// larger than any water source's `max_amount`, so `take_inflow` fills the
+    /// source and drops the rest.
+    pub const WHATEVER_WAS_DRAWN: f32 = 1000.0;
+
     pub fn water_inflow(&self, terrain: TerrainType, precipitation: f32, freezing: bool) -> f32 {
         if self.resource_type != ResourceType::Water {
             return 0.0;
@@ -598,23 +823,41 @@ impl ResourceNode {
         // the map rather than sitting on water tiles - they are the streams,
         // springs and ponds of the country they are in, and what feeds them
         // depends on which.
+        //
+        // These are reckoned per pass of the resource tick, which comes round
+        // once every ten ticks, and they have to be read against what a
+        // settlement draws: a drink is a unit or two, and forty people drink
+        // something like thirty units in the time between two passes. The
+        // first cut of this had a spring giving back **1.5**, which is a
+        // twentieth of that. Measured over six thousand ticks, eight of a
+        // world's twenty-one sources were drawn down to 2 units out of four
+        // hundred and stayed there, and "no water sources nearby" was the
+        // single largest refusal in the model - a settlement standing in the
+        // middle of its own dry springs, walking further every year for a
+        // drink.
+        //
+        // A stream is a flow and not a stock. What limits what you can draw
+        // from a spring in an afternoon is the spring's rate, and that rate is
+        // why a village sits on one.
         let source = match terrain {
-            // Running water: whatever is drawn is replaced from upstream
-            TerrainType::Water | TerrainType::Riverbank => 3.0,
+            // Running water: whatever is drawn is replaced from upstream.
+            // The comment said this before the numbers did.
+            TerrainType::Water | TerrainType::Riverbank => Self::WHATEVER_WAS_DRAWN,
 
-            // Springs and snowmelt come off high ground
-            TerrainType::Mountain | TerrainType::Hills => 1.5,
+            // Springs and snowmelt come off high ground, and will carry a
+            // camp
+            TerrainType::Mountain | TerrainType::Hills => 20.0,
 
-            // Seeps and marsh hold what they get
-            TerrainType::Wetland | TerrainType::Forest => 1.2,
+            // Seeps and marsh hold what they get, which is less
+            TerrainType::Wetland | TerrainType::Forest => 12.0,
 
-            // Anywhere else it is open water, and lives mostly on the sky
-            _ => 0.8,
+            // Anywhere else it is standing water, and lives mostly on the sky
+            _ => 6.0,
         };
 
         // Rain tops everything up; a dry spell is felt most by the pools
         let rain = precipitation.clamp(0.0, 1.0);
-        let from_sky = rain * 0.6;
+        let from_sky = rain * 6.0;
 
         // Frozen ground gives nothing up, and the rain falls as snow
         let flow = source + from_sky;
@@ -761,6 +1004,19 @@ impl ResourceNode {
         // and no more, which is what a settlement of a dozen lives on and what
         // a settlement of forty starves against. Ground that has been broken
         // and sown is a different matter - see `cultivated_multiplier`.
+        // This is the flow, and the standing crop above is only a buffer on
+        // top of it - which is why thinning the hedgerows by half, a world's
+        // edible standing crop from 7,413 to 3,944, changed **nothing
+        // measurable** at thirty-two worlds a side. A patch tops out sooner
+        // and goes on producing at the same pace.
+        //
+        // Halving these numbers as well was measured and **reverted**. It did
+        // not make a winter bite: the population did not move, and efficiency
+        // went from 0.74 to 0.70 (t = -3.0) with more rotting in packs and
+        // more left on the ground. Scarcer food did not make a settlement
+        // careful, it made it range further and hoard worse. The waste in this
+        // model is a behaviour and not a supply artefact, and starving people
+        // does not fix a behaviour. See ISSUES_FOUND #57.
         let base_rate = match self.resource_type {
             // Renewable resources
             ResourceType::Wood => 0.01,       // Trees grow slowly

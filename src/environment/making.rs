@@ -96,6 +96,21 @@ pub const LASHING: Making = Making {
     wants_in_hand: None,
 };
 
+/// And from flax that has been left in water until the stem let go of it.
+///
+/// Three times the cordage out of the same field, which is what retting is
+/// for - see `SOAK_FLAX`.
+pub const LASHING_FROM_RETTED: Making = Making {
+    makes: "lashing",
+    how_many: 3,
+    needs: &[("rettedflax", 1)],
+    hands: SkillType::Crafting,
+    effort: 3.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
 /// The same, from the other fibrous thing that grows here.
 pub const LASHING_FROM_COTTON: Making = Making {
     makes: "lashing",
@@ -242,6 +257,26 @@ pub struct Working {
     pub effort: f32,
     /// Whether a people arriving here already know it
     pub obvious: bool,
+    /// How much liquid what comes out will hold, if it holds any.
+    ///
+    /// A carved bowl is not a lump of wood with a name; it is a thing you can
+    /// put water in and walk away from the river with. The container machinery
+    /// was written long ago and nothing in the world ever made one.
+    pub holds: Option<f32>,
+    /// What comes out, as the food tables know it, if it is food.
+    ///
+    /// Ground grain is not grain. A third more of what is in it comes out in
+    /// the eating, and it keeps rather less well, which is the whole reason to
+    /// grind it when you mean to eat it rather than when you harvest it.
+    pub feeds: Option<crate::world::ItemType>,
+    /// How much liquid out of a carried vessel it takes.
+    ///
+    /// The whole fluid family wants water, and water has to be carried to
+    /// where the work is - which is why nothing in this family could be built
+    /// until somebody could hollow out a bowl.
+    pub wants_water: f32,
+    /// Whether it wants a fire burning where the work is done
+    pub over_a_fire: bool,
 }
 
 /// A core broken down into flakes. Half the work of a stone tool, and the
@@ -255,11 +290,21 @@ pub const SMASH_A_CORE: Working = Working {
     hands: SkillType::Mining,
     effort: 5.0,
     obvious: true,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
 };
 
-/// A hide cut down into workable leather.
-pub const CUT_A_HIDE: Working = Working {
-    verb: "cut",
+/// A hide scraped down into workable leather.
+///
+/// Scraping, not cutting. Taking a flint to a hide removes the hair and turns
+/// the skin into leather; cutting a hide gets you two smaller hides. This is
+/// what leatherworking *is*, and it is the one step in the chain where the
+/// skill belongs - what comes afterwards is sewing, which is making like any
+/// other making.
+pub const SCRAPE_A_HIDE: Working = Working {
+    verb: "scrape",
     to: "hides",
     how_much: 1,
     makes: "leather",
@@ -267,6 +312,10 @@ pub const CUT_A_HIDE: Working = Working {
     hands: SkillType::Leatherworking,
     effort: 6.0,
     obvious: true,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
 };
 
 /// Shavings off a stick, which catch where a log will not.
@@ -283,10 +332,351 @@ pub const SCRAPE_A_STICK: Working = Working {
     hands: SkillType::Leatherworking,
     effort: 3.0,
     obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// Grain between two stones. A third more of what is in it comes out in the
+/// eating, and it keeps rather less well.
+///
+/// Not obvious. That a seed can be opened rather than swallowed whole is a
+/// thing somebody works out with a hammerstone in his hand.
+pub const CRUSH_GRAIN: Working = Working {
+    verb: "crush",
+    to: "grain",
+    how_much: 3,
+    makes: "flour",
+    how_many: 3,
+    hands: SkillType::Mining,
+    effort: 7.0,
+    obvious: false,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Flour),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// Wet clay worked into a shape and left to stand.
+///
+/// The first half of "playing with it". Clay is the one material in this
+/// world that will hold whatever shape you press it into, and finding that
+/// out costs nothing but an idle afternoon with a lump of it - which is why
+/// this is a `Working` rather than a `Making`: no other material, no tool, no
+/// fire. Just somebody turning a thing over in their hands.
+///
+/// What comes out is worth almost nothing. A shape in unfired clay holds
+/// nothing, keeps nothing and comes apart in the rain. All of its value is in
+/// what a fire does to it afterwards, and nobody here knows that yet.
+pub const MOLD_CLAY: Working = Working {
+    verb: "mold",
+    to: "clay",
+    how_much: 2,
+    makes: "claypot",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    // Clay out of a riverbank is already wet, and asking for carried water
+    // here would be a circular precondition of the kind this project keeps
+    // turning up: you would need a vessel to carry the water to make the
+    // vessel.
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// And the same shape put in a fire, which stops it being clay.
+///
+/// This is the technology. A fired pot holds water, holds food, and does not
+/// come apart in the rain - the first thing this people can make that keeps
+/// something else. `ResourceType::Pottery` has been an enum variant with
+/// nothing behind it since the project began.
+///
+/// It can be found out two ways. A curious agent sitting at a fire with a
+/// shape in unfired clay tries putting it in - that is this working. Or a
+/// lump of clay in somebody's pack comes out of the embers hard, which nobody
+/// intended and everybody sees: see `Simulation::what_the_embers_did`.
+pub const FIRE_A_POT: Working = Working {
+    verb: "fire",
+    to: "claypot",
+    how_much: 1,
+    makes: "stoneware",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 8.0,
+    obvious: false,
+    holds: Some(WHAT_A_FIRED_POT_HOLDS),
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: true,
+};
+
+/// And clay fired in a block rather than a pot, which is a brick.
+///
+/// "Other developments like bricks could emerge from similar exploration and
+/// curiosity." So it does: it is a separate thing to find out, off the same
+/// material and the same fire, and nothing hands it down. A people that has
+/// fired a pot has not thereby learned to make a wall.
+pub const FIRE_BRICKS: Working = Working {
+    verb: "fire",
+    to: "clay",
+    how_much: 4,
+    makes: "bricks",
+    how_many: 2,
+    hands: SkillType::Crafting,
+    effort: 10.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: true,
+};
+
+/// What a fired pot will hold, in units of water.
+///
+/// More than twice what a carved wooden bowl holds, because it does not leak
+/// and it does not have to be hollowed out of anything.
+///
+/// This said "a little more than a carved wooden bowl" and was set to exactly
+/// what a carved wooden bowl holds, so firing clay bought a people nothing
+/// whatever over carving wood and there was no reason on earth to bother with
+/// pottery. The comment was right and the number was wrong.
+pub const WHAT_A_FIRED_POT_HOLDS: f32 = 9.0;
+
+/// A carcass taken apart into joints.
+///
+/// Everybody is born knowing this. There is nothing to discover about a
+/// carcass coming apart - it is what a knife and an afternoon are for - and
+/// before this existed an agent ate a two-kilo lump of raw beast in one bite
+/// straight off the kill, because nothing in the model stood between the
+/// animal and the mouth.
+///
+/// A joint is what one person cooks and eats now. What it is *not* is a thing
+/// worth keeping, which is what the strips below are for.
+pub const CUT_MEAT_INTO_PORTIONS: Working = Working {
+    verb: "cut",
+    to: "meat",
+    how_much: 1,
+    makes: "meatportions",
+    how_many: 3,
+    hands: SkillType::Leatherworking,
+    effort: 3.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Meat),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// And a fish, which comes apart more easily and gives less.
+pub const CUT_FISH_INTO_PORTIONS: Working = Working {
+    verb: "cut",
+    to: "fish",
+    how_much: 1,
+    makes: "fishportions",
+    how_many: 2,
+    hands: SkillType::Leatherworking,
+    effort: 2.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Fish),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// A fish opened out and cut down into strips.
+///
+/// Obvious - anybody with an edge and a fish works out that a fish comes
+/// apart - and worth nothing on its own. What it is worth is what the sun
+/// does to it afterwards: a whole fish left out in the sun goes off, and
+/// strips of the same fish dry. Nobody here knows that until they have seen
+/// it happen, which is the point.
+pub const CUT_FISH_INTO_STRIPS: Working = Working {
+    verb: "cut",
+    to: "fishportions",
+    how_much: 2,
+    makes: "fishstrips",
+    how_many: 2,
+    hands: SkillType::Leatherworking,
+    effort: 4.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Fish),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// And the same with a joint of meat.
+pub const CUT_MEAT_INTO_STRIPS: Working = Working {
+    verb: "cut",
+    to: "meatportions",
+    how_much: 2,
+    makes: "meatstrips",
+    how_many: 2,
+    hands: SkillType::Leatherworking,
+    effort: 5.0,
+    obvious: true,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Meat),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// Flax worked into a basket, which is how a person carries more than their
+/// arms hold.
+pub const WEAVE_A_BASKET: Working = Working {
+    verb: "weave",
+    to: "flax",
+    how_much: 3,
+    makes: "basket",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 8.0,
+    obvious: true,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// Leather sewn into a bag, which is how a person carries a great deal more
+/// than their arms hold.
+///
+/// A basket is flax and holds what flax holds. A leather bag is the other
+/// answer to the same problem and a better one, and what it costs is the
+/// *material*: hides come off something that had to be killed, and a hide is
+/// not leather until somebody has scraped the hair off it.
+///
+/// Sewing a bag is crafting, not leatherworking. The skill sits one step
+/// earlier, on the scraping - which is what leatherworking is. Putting it here
+/// as well would have paid a man twice for one trade, and it is the material
+/// that gates this rather than the hand.
+pub const SEW_A_BAG: Working = Working {
+    verb: "weave",
+    to: "leather",
+    how_much: 3,
+    makes: "leatherbag",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 10.0,
+    obvious: true,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// A block of wood hollowed out, which is how water travels.
+///
+/// Not obvious, and the thing the whole container machinery was waiting for:
+/// an agent with a bowl fills it at the river and drinks from it a day's walk
+/// away.
+pub const CARVE_A_BOWL: Working = Working {
+    verb: "carve",
+    to: "wood",
+    how_much: 2,
+    makes: "bowl",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 10.0,
+    // Obvious, where it used to want discovering. Weaving a basket out of
+    // flax is obvious in this table and hollowing out a block of wood is no
+    // greater a leap - and gating it kept the *entire fluid family* inert:
+    // no vessel meant no carried water, no boiling, and no salt. A people
+    // that carves a spear can hollow a log.
+    obvious: true,
+    holds: Some(4.0),
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// Flax left in water until the stem lets go of the fibre.
+///
+/// Retting: the first real step of making linen, and the one that turns a
+/// handful of stalks into three times the cordage they would otherwise give.
+/// It wants a vessel of water, which is why nobody could do it until somebody
+/// had carved a bowl.
+pub const SOAK_FLAX: Working = Working {
+    verb: "soak",
+    to: "flax",
+    how_much: 2,
+    makes: "rettedflax",
+    how_many: 3,
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 2.0,
+    over_a_fire: false,
+};
+
+/// Fruit and water left alone until it turns into something that keeps.
+///
+/// "The agents will need to plant, care for, harvest, and store crops to have
+/// a steady food supply." This is the storing: berries go over in hours and
+/// what they ferment into keeps a fortnight.
+pub const FERMENT_FRUIT: Working = Working {
+    verb: "ferment",
+    to: "food",
+    how_much: 4,
+    makes: "ale",
+    how_many: 3,
+    hands: SkillType::Cooking,
+    effort: 5.0,
+    obvious: false,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Ale),
+    wants_water: 3.0,
+    over_a_fire: false,
+};
+
+/// A pot of flour and water over a fire.
+///
+/// Flour is one of the things a fire on its own ruins - see
+/// `ItemType::cooking_outcome`, where whole grain improves and ground grain
+/// does not - so until there was a vessel there was no way to cook it at all.
+/// This is the last link of a chain that starts at a seed: grain, crushed
+/// between two stones, boiled in a pot, is bread.
+pub const BOIL_FLOUR: Working = Working {
+    verb: "boil",
+    to: "flour",
+    how_much: 3,
+    makes: "bread",
+    how_many: 3,
+    hands: SkillType::Cooking,
+    effort: 6.0,
+    obvious: false,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Bread),
+    wants_water: 2.0,
+    over_a_fire: true,
 };
 
 /// Everything that can be done to a thing to make it another thing.
-pub const EVERY_WORKING: &[Working] = &[SMASH_A_CORE, CUT_A_HIDE, SCRAPE_A_STICK];
+pub const EVERY_WORKING: &[Working] = &[
+    SMASH_A_CORE,
+    SCRAPE_A_HIDE,
+    SCRAPE_A_STICK,
+    CRUSH_GRAIN,
+    MOLD_CLAY,
+    FIRE_A_POT,
+    FIRE_BRICKS,
+    CUT_MEAT_INTO_PORTIONS,
+    CUT_FISH_INTO_PORTIONS,
+    CUT_FISH_INTO_STRIPS,
+    CUT_MEAT_INTO_STRIPS,
+    WEAVE_A_BASKET,
+    SEW_A_BAG,
+    CARVE_A_BOWL,
+    SOAK_FLAX,
+    FERMENT_FRUIT,
+    BOIL_FLOUR,
+];
 
 /// The working of that verb on that thing, if there is one.
 pub fn how_to_work(verb: &str, to: &str) -> Option<&'static Working> {
@@ -423,6 +813,7 @@ pub const METAL_SPEAR: Making = Making {
 pub const EVERY_STEP: &[Making] = &[
     LASHING,
     LASHING_FROM_COTTON,
+    LASHING_FROM_RETTED,
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
     SPEAR,
@@ -507,6 +898,39 @@ pub fn what_to_do_first_knowing(
     knows: &impl Fn(&Making) -> bool,
 ) -> Option<&'static Making> {
     step_towards(what, holding, knows, 0)
+}
+
+/// The same, but only proposing a step that could actually be carried out.
+///
+/// `what_to_do_first_knowing` checks the *materials* and nothing else, so it
+/// will happily name a step that wants a handaxe in the hand of a man who has
+/// none, or one that wants a fire where there is no fire. Measured, that was
+/// **2,378 refused crafts a world** out of 2,719 attempted: 1,421 of them
+/// "wants a handaxe" and 957 "no fire burning here".
+///
+/// A proposal that comes straight back refused is a turn gone, and the agent
+/// learns from the refusal, so it is worse than a turn gone - it teaches a man
+/// that making knives does not work.
+pub fn what_to_do_first_that_can_be_done(
+    what: &str,
+    holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
+    in_hand: &impl Fn(&str) -> bool,
+    a_fire_is_to_hand: bool,
+) -> Option<&'static Making> {
+    let step = step_towards(what, holding, knows, 0)?;
+
+    if step.over_a_fire && !a_fire_is_to_hand {
+        return None;
+    }
+
+    if let Some(wanted) = step.wants_in_hand {
+        if !in_hand(wanted) {
+            return None;
+        }
+    }
+
+    Some(step)
 }
 
 fn step_towards(

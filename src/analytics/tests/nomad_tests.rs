@@ -31,7 +31,12 @@ fn bare_country() -> World {
     world.resources.retain(|resource| {
         !matches!(
             resource.resource_type,
-            ResourceType::Food | ResourceType::Grain | ResourceType::Fish | ResourceType::Herbs
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Fish
+                | ResourceType::Herbs
         )
     });
     world
@@ -221,5 +226,118 @@ fn a_stroll_is_not_a_move() {
             .moving_on(&simulation.population.agents[0], position)
             .is_none(),
         "a patch six tiles off is somewhere to forage, not somewhere to move to"
+    );
+}
+
+// --------------------------------------------------------------------------
+// Leaving for want of water
+//
+// `migration_action` read the Hunger drive and nothing else, and `moving_on`
+// counts what is edible standing within reach. So a settlement whose springs
+// had gone dry and whose hedgerows were full had no reason anywhere in this
+// model to pick up and leave — and did not. Thirst kills a man three times
+// faster than hunger does. See ISSUES_FOUND #53.
+// --------------------------------------------------------------------------
+
+use crate::core::memory::{SpatialMemory, SpatialMemoryType};
+use crate::core::DriveType;
+
+/// Somebody who has been going without water long enough sets out.
+#[test]
+fn thirst_is_a_reason_to_leave_a_country() {
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 1);
+
+    let position = simulation.population.agents[0].state.position;
+    assert!(
+        simulation
+            .migration_action(&simulation.population.agents[0], position)
+            .is_none(),
+        "a man with nothing wrong with him stays where he is"
+    );
+
+    if let Some(thirst) = simulation.population.agents[0]
+        .drives
+        .get_mut(DriveType::Thirst)
+    {
+        thirst.denied_ticks = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
+    }
+
+    assert!(
+        matches!(
+            simulation.migration_action(&simulation.population.agents[0], position),
+            Some(Action::Move { .. })
+        ),
+        "ten days without a drink is a reason to be somewhere else"
+    );
+}
+
+/// And a man leaving for want of water walks towards water, not towards a
+/// berry bush.
+#[test]
+fn a_man_leaving_for_water_walks_towards_water() {
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 1);
+    let position = simulation.population.agents[0].state.position;
+
+    let river = (20, 60, 0);
+    let hedgerow = (60, 20, 0);
+
+    {
+        let agent = &mut simulation.population.agents[0];
+        agent
+            .memory
+            .spatial_memories
+            .push(SpatialMemory::new(SpatialMemoryType::Water, river, 0));
+        agent
+            .memory
+            .spatial_memories
+            .push(SpatialMemory::new(SpatialMemoryType::Food, hedgerow, 0));
+
+        if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
+            thirst.denied_ticks = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
+        }
+    }
+
+    let answer = simulation
+        .migration_action(&simulation.population.agents[0], position)
+        .expect("he is leaving");
+
+    assert!(
+        matches!(answer, Action::Move { target } if target == river),
+        "he sets out for the water he remembers, not the berries: {answer:?}"
+    );
+}
+
+/// Hunger still works the same way, and still sends a man to food.
+#[test]
+fn hunger_still_sends_a_man_to_food() {
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 1);
+    let position = simulation.population.agents[0].state.position;
+
+    let river = (20, 60, 0);
+    let hedgerow = (60, 20, 0);
+
+    {
+        let agent = &mut simulation.population.agents[0];
+        agent
+            .memory
+            .spatial_memories
+            .push(SpatialMemory::new(SpatialMemoryType::Water, river, 0));
+        agent
+            .memory
+            .spatial_memories
+            .push(SpatialMemory::new(SpatialMemoryType::Food, hedgerow, 0));
+
+        if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
+            hunger.denied_ticks = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
+        }
+    }
+
+    let answer = simulation
+        .migration_action(&simulation.population.agents[0], position)
+        .expect("he is leaving");
+
+    assert!(
+        matches!(answer, Action::Move { target } if target == hedgerow),
+        "a hungry man walks to the berries: {answer:?}"
     );
 }

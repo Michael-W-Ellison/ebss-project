@@ -92,6 +92,13 @@ impl TerrainResourceMapper {
             ResourceType::Clay => vec![TerrainType::Wetland, TerrainType::Riverbank],
             ResourceType::Sand => vec![TerrainType::Desert, TerrainType::Beach],
             ResourceType::Coal => vec![TerrainType::Hills, TerrainType::Mountain],
+            // On the flats where a shallow sea dried up, and in rare seams in
+            // the hills for a people with no coast at all
+            ResourceType::Salt => vec![
+                TerrainType::SaltFlat,
+                TerrainType::Mountain,
+                TerrainType::Hills,
+            ],
 
             // Agricultural
             ResourceType::Grain => vec![TerrainType::Plains, TerrainType::Meadow],
@@ -103,7 +110,12 @@ impl TerrainResourceMapper {
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => vec![],
 
             // Gatherable
-            ResourceType::Fish => vec![TerrainType::Water, TerrainType::Beach, TerrainType::Riverbank],
+            ResourceType::Fish => vec![
+                TerrainType::Water,
+                TerrainType::Beach,
+                TerrainType::Riverbank,
+                TerrainType::Sea,
+            ],
             ResourceType::Honey => vec![TerrainType::Forest, TerrainType::Meadow],
 
             // Processed/finished goods don't spawn naturally
@@ -118,22 +130,37 @@ impl TerrainResourceMapper {
             ResourceType::Wood => (50, 150),
             ResourceType::Stone => (80, 200),
             ResourceType::Iron => (30, 100),
-            ResourceType::Food => (20, 60),
+
+            // A wild hedge, not an orchard.
+            //
+            // This was (20, 60), and a settlement with the crudest tools in
+            // the model buried **four years' eating** out of it - see
+            // ISSUES_FOUND #43. Wild berries feed a few people for a few
+            // weeks; that is the whole reason a people farms, and a bush that
+            // carries sixty is a bush nobody would ever break ground for.
+            ResourceType::Food => (8, 24),
 
             // Minerals
             ResourceType::Clay => (40, 120),
             ResourceType::Sand => (60, 180),
             ResourceType::Coal => (25, 80),
 
-            // Agricultural
-            ResourceType::Grain => (30, 80),
+            // Agricultural. Wild grain is thin stuff and the comment beside
+            // its regrowth rate already said so; the standing crop did not.
+            ResourceType::Grain => (12, 32),
             ResourceType::Flax => (20, 50),
             ResourceType::Herbs => (15, 40),
             ResourceType::Cotton => (25, 60),
 
             // Gatherable
             ResourceType::Fish => (40, 100),
-            ResourceType::Honey => (10, 30),
+            ResourceType::Honey => (4, 12),
+
+            // Wild leaf, shoot and the first roots. Thin stuff: a person
+            // living on greens has to pick a great many of them, which is
+            // why there are more patches of them than there are bushes.
+            ResourceType::Greens => (10, 28),
+            ResourceType::Roots => (8, 20),
 
             // Default for others
             _ => (10, 30),
@@ -150,6 +177,37 @@ impl TerrainResourceMapper {
             ResourceType::Fish        // Water edges
         )
     }
+}
+
+/// A patch of the size the ground it stands on will carry.
+///
+/// Free-standing, because there are **two** resource spawners in this project
+/// and they had two vocabularies. `TerrainResourceMapper::amount_range` covers
+/// the clustered minerals and crops; the basic spawner in `World` had its own
+/// hard-coded ranges for wood, stone, food, greens and roots. Thinning the
+/// hedgerows in one of them and measuring the result was measuring nothing:
+/// berries came out of the other one and a world still held 994 units of them
+/// against 1,000 before. That is the fourth time this project has been bitten
+/// by two copies of one vocabulary. See ISSUES_FOUND #57.
+pub fn what_this_ground_carries(
+    grid: &Grid,
+    resource_type: ResourceType,
+    pos: Position,
+    at_its_best: u32,
+) -> ResourceNode {
+    let mut node = ResourceNode::new(resource_type, pos, at_its_best);
+
+    if !resource_type.is_it_grown() {
+        return node;
+    }
+
+    let fertility = grid
+        .get_tile(&pos)
+        .map(|tile| tile.soil.fertility())
+        .unwrap_or(0.5);
+
+    node.amount = node.standing_capacity(fertility).max(1);
+    node
 }
 
 /// Spawns resources in naturalistic clusters
@@ -262,22 +320,44 @@ impl<'a> NaturalisticSpawner<'a> {
                 // Spawn nodes in cluster around center
                 for i in 0..nodes_per_cluster {
                     let pos = if i == 0 {
-                        center_pos.clone()
+                        Some(center_pos.clone())
                     } else {
-                        self.offset_position(&center_pos, cluster_radius)
+                        self.somewhere_near(&center_pos, cluster_radius, &preferred_terrains)
                     };
 
-                    // Verify position is valid terrain
-                    if self.is_valid_resource_position(&pos, &preferred_terrains) {
-                        let (min_amount, max_amount) = TerrainResourceMapper::amount_range(resource_type);
-                        let amount = self.rng.gen_range(min_amount..=max_amount);
-                        nodes.push(ResourceNode::new(resource_type, pos, amount));
-                    }
+                    let Some(pos) = pos else {
+                        continue;
+                    };
+
+                    let (min_amount, max_amount) = TerrainResourceMapper::amount_range(resource_type);
+                    let amount = self.rng.gen_range(min_amount..=max_amount);
+                    nodes.push(self.what_this_ground_carries(resource_type, pos, amount));
                 }
             }
         }
 
         nodes
+    }
+
+    /// A patch of the size the ground it stands on will carry.
+    ///
+    /// The amount range is what the *kind* of thing carries at its best;
+    /// what a particular bush carries is that, on the fertility of the tile
+    /// it is rooted in. `regenerate_in_ground` has always capped regrowth
+    /// this way - see `ResourceNode::how_heavy_a_crop_it_carries` - and the
+    /// crop a world *started* with ignored the soil entirely, so a hedge on
+    /// exhausted ground came up as heavy as one on a river meadow and then
+    /// shrank towards its real capacity over the following season.
+    ///
+    /// Only growing things. A seam of clay does not care how rich the topsoil
+    /// over it is.
+    fn what_this_ground_carries(
+        &self,
+        resource_type: ResourceType,
+        pos: Position,
+        at_its_best: u32,
+    ) -> ResourceNode {
+        what_this_ground_carries(self.grid, resource_type, pos, at_its_best)
     }
 
     /// Find a random position in one of the preferred terrain types
@@ -342,6 +422,40 @@ impl<'a> NaturalisticSpawner<'a> {
     }
 
     /// Offset a position randomly within a radius
+    /// Somewhere within the cluster radius of a centre that this resource
+    /// will actually sit on.
+    ///
+    /// One throw of the dice was not enough. Clay wants wetland or riverbank,
+    /// which is ribbon-shaped terrain a couple of tiles wide - so a single
+    /// offset of five in each direction usually lands on dry ground, and the
+    /// node was silently dropped. A cluster of three routinely came out as
+    /// one lone node: asked for five clusters of three, a world produced
+    /// **5.8 nodes**, and a quarter of worlds had no two clay nodes within
+    /// twenty paces of each other. Whatever else a cluster is, it is more
+    /// than one thing.
+    ///
+    /// Bounded, and it still gives up: a centre found at the very tip of a
+    /// spit may genuinely have nothing else near it, and inventing ground for
+    /// it would be worse than a small cluster.
+    fn somewhere_near(
+        &mut self,
+        center: &Position,
+        radius: i32,
+        preferred_terrains: &[TerrainType],
+    ) -> Option<Position> {
+        for _ in 0..Self::HOW_MANY_PLACES_ANYBODY_TRIES {
+            let pos = self.offset_position(center, radius);
+            if self.is_valid_resource_position(&pos, preferred_terrains) {
+                return Some(pos);
+            }
+        }
+
+        None
+    }
+
+    /// How many throws before a cluster gives up on its next node.
+    const HOW_MANY_PLACES_ANYBODY_TRIES: u32 = 24;
+
     fn offset_position(&mut self, center: &Position, radius: i32) -> Position {
         let dx = self.rng.gen_range(-radius..=radius);
         let dy = self.rng.gen_range(-radius..=radius);

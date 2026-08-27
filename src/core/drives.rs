@@ -300,8 +300,8 @@ impl DriveType {
     ///
     /// The chains, in full:
     ///
-    /// - Hunger, then Sustenance, then Preparedness, then Luxury
-    /// - Thirst, then Preparedness
+    /// - Hunger, then Sustenance, then Luxury
+    /// - Hunger and Thirst, then Preparedness
     /// - Rest, then Shelter
     /// - Safety, then Shelter, then Protection
     /// - Social, then Construction and Industry, then Utility
@@ -323,7 +323,24 @@ impl DriveType {
 
             // Next winter's grain waits on tonight's dinner
             DriveType::Sustenance => &[DriveType::Hunger],
-            DriveType::Preparedness => &[DriveType::Sustenance, DriveType::Thirst],
+
+            // And putting something by waits on the same thing, and on
+            // nothing else.
+            //
+            // This used to stand behind Sustenance, on the reasoning that a
+            // people puts by what it grows. It does not: a people puts by
+            // what it *finds*, and it has been doing that for a great deal
+            // longer than it has been growing anything. Standing behind
+            // Sustenance meant Preparedness could not build until food
+            // production was answered, and in a foraging settlement food
+            // production is never answered - so a forager could never store
+            // anything, which is precisely backwards. Probed directly:
+            // Preparedness sat below its threshold in eight agents out of
+            // eight, at values of 0.00 to 0.14 against thresholds of 0.26 to
+            // 0.40, for the whole of a settlement's life.
+            //
+            // What it waits on is being neither hungry nor parched today.
+            DriveType::Preparedness => &[DriveType::Hunger, DriveType::Thirst],
             DriveType::Luxury => &[DriveType::Preparedness],
 
             // A roof is what you want once you are rested and safe

@@ -93,7 +93,17 @@ impl Grid {
                 let combined = (base_noise + detail_noise).clamp(0.0, 1.0);
 
                 // Generate base terrain based on elevation (combined noise)
-                let terrain_type = if combined < 0.15 {
+                let terrain_type = if combined < Self::AS_LOW_AS_THE_SEA_GETS {
+                    // The deepest basins are sea. Everything above them that
+                    // is still under water is a river or a lake, and fresh.
+                    //
+                    // Doing it by elevation rather than by carving an edge
+                    // means the sea turns up where the ground actually falls
+                    // away to it, and a world that has no deep basin has no
+                    // coast - which is a world where salt has to be found
+                    // inland or not at all.
+                    TerrainType::Sea
+                } else if combined < 0.15 {
                     TerrainType::Water
                 } else if combined < 0.25 {
                     // Low-lying areas near water
@@ -137,6 +147,19 @@ impl Grid {
         self.ensure_terrain_diversity(&mut rng);
     }
 
+    /// How low the ground has to fall before the water standing on it is
+    /// salt.
+    ///
+    /// Under half of what is already water, so most of a world's water stays
+    /// fresh and a coast is a feature of the map rather than the whole of it.
+    const AS_LOW_AS_THE_SEA_GETS: f32 = 0.06;
+
+    /// How often a wetland beside the sea is brackish rather than fresh.
+    const HOW_OFTEN_A_MARSH_BY_THE_SEA_IS_SALT: f32 = 0.75;
+
+    /// And how often dry ground beside the sea has dried out salt.
+    const HOW_OFTEN_DRY_GROUND_BY_THE_SEA_IS_A_FLAT: f32 = 0.35;
+
     /// Generate transition terrain between water and land
     fn generate_transition_terrain(&mut self) {
         let mut rng = rand::thread_rng();
@@ -172,6 +195,32 @@ impl Grid {
                     // Only change Plains, Meadow to transition terrain
                     if matches!(current, TerrainType::Plains | TerrainType::Meadow) {
                         self.tiles[y][x].terrain.terrain_type = new_terrain;
+                    }
+                }
+
+                // What the sea does to the ground it touches: marsh where
+                // it is wet, and flats where it is not.
+                //
+                // This is the whole supply of salt in the world. A settlement
+                // with no coast has to find a deposit in the mountains or go
+                // without, which is exactly the position most inland peoples
+                // were actually in.
+                if self.is_adjacent_to_terrain(&terrain_copy, x, y, TerrainType::Sea) {
+                    match current {
+                        TerrainType::Wetland | TerrainType::Riverbank
+                            if rng.gen::<f32>() < Self::HOW_OFTEN_A_MARSH_BY_THE_SEA_IS_SALT =>
+                        {
+                            self.tiles[y][x].terrain.terrain_type = TerrainType::SaltMarsh;
+                            continue;
+                        }
+                        TerrainType::Desert | TerrainType::Beach | TerrainType::Plains
+                            if rng.gen::<f32>()
+                                < Self::HOW_OFTEN_DRY_GROUND_BY_THE_SEA_IS_A_FLAT =>
+                        {
+                            self.tiles[y][x].terrain.terrain_type = TerrainType::SaltFlat;
+                            continue;
+                        }
+                        _ => {}
                     }
                 }
 

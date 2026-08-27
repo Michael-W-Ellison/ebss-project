@@ -228,13 +228,26 @@ impl InventoryItem {
     /// Get total weight of this item stack
     /// Includes container contents (water, etc.) if applicable
     pub fn total_weight(&self) -> f32 {
-        let base_weight = self.weight_per_unit * self.quantity as f32;
+        // What has been done to it tells on what it weighs. Drying takes the
+        // water out and water is most of what meat weighs, so a hunter who
+        // dries a kill before walking home carries more of the animal home -
+        // see `PreparationState::what_it_does_to_the_weight`.
+        let each = self.weight_per_unit * self.how_much_lighter_it_is();
+        let base_weight = each * self.quantity as f32;
 
         // Add liquid weight if this is a filled container
         // Water weighs ~1 kg per liter
         let liquid_weight = self.fill_level.unwrap_or(0.0);
 
         base_weight + liquid_weight
+    }
+
+    /// What being dried or cooked or smoked has taken off this thing's weight.
+    pub fn how_much_lighter_it_is(&self) -> f32 {
+        self.food_data
+            .as_ref()
+            .map(|food| food.preparation.what_it_does_to_the_weight())
+            .unwrap_or(1.0)
     }
 }
 
@@ -271,7 +284,7 @@ impl Inventory {
 
         // Check weight limit
         let item_weight = item.total_weight();
-        if self.current_weight + item_weight > self.max_weight {
+        if self.current_weight + item_weight > self.effective_max_weight() {
             return false; // Too heavy
         }
 
@@ -420,6 +433,12 @@ impl Inventory {
         &self.items
     }
 
+    /// The same, to be changed rather than read. Draining a vessel is the
+    /// caller this was wanting.
+    pub fn get_all_items_mut(&mut self) -> &mut HashMap<String, InventoryItem> {
+        &mut self.items
+    }
+
     /// Recalculate total weight from all items
     pub fn recalculate_weight(&mut self) {
         self.current_weight = self.items.values()
@@ -429,12 +448,44 @@ impl Inventory {
 
     /// Check if inventory is overweight
     pub fn is_overweight(&self) -> bool {
-        self.current_weight > self.max_weight
+        self.current_weight > self.effective_max_weight()
     }
+
+    /// How much this pack can hold, baskets and all.
+    ///
+    /// A person carries what their arms hold. A person with a basket carries
+    /// what their arms hold and what the basket holds, which is most of the
+    /// reason anybody ever wove one - see `making::WEAVE_A_BASKET`.
+    pub fn effective_max_weight(&self) -> f32 {
+        // And a leather bag holds a good deal more than a flax basket, which
+        // is what being a leatherworker is worth: carrying capacity is the
+        // thing this people is shortest of - see `making::SEW_A_BAG`.
+        let bags = self
+            .items
+            .get("leatherbag")
+            .map(|item| item.quantity)
+            .unwrap_or(0);
+
+        let baskets = self
+            .items
+            .get("basket")
+            .map(|item| item.quantity)
+            .unwrap_or(0);
+
+        self.max_weight
+            + baskets as f32 * Self::WHAT_A_BASKET_HOLDS
+            + bags as f32 * Self::WHAT_A_LEATHER_BAG_HOLDS
+    }
+
+    /// What one basket adds, in the units a pack is weighed in.
+    pub const WHAT_A_BASKET_HOLDS: f32 = 20.0;
+
+    /// And what a leather bag adds, which is rather more.
+    pub const WHAT_A_LEATHER_BAG_HOLDS: f32 = 35.0;
 
     /// Get weight capacity remaining
     pub fn weight_capacity_remaining(&self) -> f32 {
-        (self.max_weight - self.current_weight).max(0.0)
+        (self.effective_max_weight() - self.current_weight).max(0.0)
     }
 
     /// Get weight as percentage of max (0.0 to 1.0+)
@@ -493,6 +544,19 @@ impl LifeStage {
     /// Check if agent can reproduce at this stage
     pub fn can_reproduce(&self) -> bool {
         matches!(self, LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elderly)
+    }
+
+    /// Whether somebody at this stage of life could stand and fight a wolf.
+    ///
+    /// The very young cannot, and that is the commonest reason in the world
+    /// for fighting not to be an option. An old one can - not well, and
+    /// `Agent::own_strength` already knows what their body is worth - but
+    /// they can raise a hand.
+    pub fn can_fight(&self) -> bool {
+        matches!(
+            self,
+            LifeStage::Adolescent | LifeStage::Adult | LifeStage::Elderly
+        )
     }
 
     /// Get learning rate multiplier for this stage
@@ -556,6 +620,48 @@ impl LifeStage {
     }
 }
 
+/// What is wrong with somebody, and until when.
+///
+/// "Eating raw meat, spending time near dead bodies or fresh waste, and eating
+/// spoiling food should have a chance to cause sickness."
+///
+/// There was no illness at all in this model before this. The only health
+/// consequence anywhere in it was a flat ten damage for eating something past
+/// `is_harmful`, taken in one tick and over with, so a settlement could live
+/// on raw flesh and sleep in its own midden and never know the difference.
+///
+/// An ailment is deliberately a thing that *lasts*. What makes sickness matter
+/// in a settlement is not the damage, it is the days: somebody laid up is
+/// somebody not gathering, not building, and eating anyway.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Ailment {
+    /// What brought it on, in the agent's own terms - which is also the key it
+    /// learns against, so that somebody who has been ill twice off raw flesh
+    /// can decide to stop eating raw flesh.
+    pub from: String,
+    /// When it started.
+    pub since: u32,
+    /// And when it will have run its course.
+    pub until: u32,
+    /// How badly, from nought to one.
+    pub severity: f32,
+}
+
+impl Ailment {
+    /// Whether this has run its course by now.
+    pub fn is_over(&self, now: u32) -> bool {
+        now >= self.until
+    }
+
+    /// How long somebody is laid up for, at the mildest and the worst.
+    ///
+    /// Two days to a week and a half, on a calendar of twelve ticks to the
+    /// day. Long enough to cost a settlement work, short enough that it is
+    /// not simply a slower way of dying.
+    pub const THE_SHORTEST_IT_LASTS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
+    pub const THE_LONGEST_IT_LASTS: u32 = 10 * crate::environment::seasons::TICKS_PER_DAY;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentState {
     pub health: f32,
@@ -576,6 +682,16 @@ pub struct AgentState {
     /// of it comes out again somewhere.
     #[serde(default)]
     pub waste_carried: f32,
+    /// What is wrong with this one, if anything.
+    #[serde(default)]
+    pub ailing: Option<Ailment>,
+    /// How much salt this one has drunk and not yet got rid of.
+    ///
+    /// "If they do so it should increase their hydration drive more over time
+    /// even if it seems to temporarily satiate it." So it is not the drink
+    /// that costs, it is the days after it.
+    #[serde(default)]
+    pub salt_in_me: f32,
 }
 
 impl AgentState {
@@ -598,6 +714,8 @@ impl AgentState {
             last_drank_tick: 0,
             ticks_without_water: 0,
             waste_carried: 0.0,
+            ailing: None,
+            salt_in_me: 0.0,
         }
     }
 
@@ -851,6 +969,17 @@ pub struct Agent {
     pub transport: TransportSystem,
     pub technology_knowledge: TechnologyKnowledge,
     pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
+    /// How many times this one has been laid up by each thing.
+    ///
+    /// Deliberately not routed through `lessons`. An illness is not an
+    /// attempt that did not work - it is days of your life - and the ordinary
+    /// belief machinery cannot represent that: at any realistic rate of
+    /// getting ill off raw flesh the successes outnumber the failures and the
+    /// belief saturates *positive*, so an agent would eat raw flesh happily
+    /// for ever. Equilibrium there sits at a 37 per cent illness rate, which
+    /// is poison rather than a gamble.
+    #[serde(default)]
+    pub times_laid_up: std::collections::HashMap<String, u32>,
     /// The steps this agent has found out how to do that it was not born
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
@@ -872,6 +1001,38 @@ pub struct Agent {
     /// hunting.
     #[serde(default)]
     pub lessons: super::practices::Lessons,
+    /// Questions this one has put to the world and is waiting on the answer
+    /// to - see [`super::wondering::Wondering`].
+    ///
+    /// Curiosity was a thing that answered in the same turn it was spent, and
+    /// most of what a stone-age people has to find out does not answer for
+    /// three days and does not answer where you are standing.
+    #[serde(default)]
+    pub wonderings: Vec<super::wondering::Wondering>,
+    /// How much food this one has actually eaten, and how much went off on it
+    /// before it could.
+    ///
+    /// The whole point of preserving anything is that the time spent getting
+    /// it was not wasted. If half the meat rots before it is eaten, half the
+    /// hunt was wasted - the hours are gone either way and only one of them
+    /// fed anybody. Nothing in this project had ever counted that, so every
+    /// preservation change had to be judged on how much was *in* the store
+    /// rather than on how much of what was got was ever any use.
+    #[serde(default)]
+    pub food_i_ate: u32,
+    #[serde(default)]
+    pub food_that_rotted_on_me: u32,
+    /// What is actually in this agent's hands, as against what is in the pack.
+    ///
+    /// A pair of them, which is what `verbs::A_PAIR_OF_HANDS` has always said
+    /// and nothing had ever made true. Before this a tool in the pack was a
+    /// tool in the hand: an axe helped you the moment you owned one, whether
+    /// or not you had got it out, and "a free hand" could only be guessed at
+    /// from how loaded the pack was. Taking a thing in hand is a turn's work
+    /// now, it is worth doing because a tool already out does more, and it
+    /// costs you the hand until you put it away.
+    #[serde(default)]
+    pub hands: [Option<String>; 2],
     /// What the world around this agent is doing, as far as its drives care.
     /// Filled in by the simulation once a tick; empty for an agent ticked
     /// without a world, which is the right answer for a world that is not
@@ -937,12 +1098,17 @@ impl Agent {
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
+            times_laid_up: std::collections::HashMap::new(),
             found_out: std::collections::HashSet::new(),
+            wonderings: Vec::new(),
+            food_i_ate: 0,
+            food_that_rotted_on_me: 0,
             patterns: super::patterns::Patterns::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
+            hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
             preferences: Preferences::default(),
@@ -1150,6 +1316,16 @@ impl Agent {
     /// spare.
     pub const ENOUGH_TO_HAND: u32 = 6;
 
+    /// And how much food, which is a different question.
+    ///
+    /// Food is not flint: six armfuls of berries is not a sensible thing to
+    /// be carrying about once berries actually go off. Anything past a meal
+    /// is worth putting by rather than walking around with, and a settlement
+    /// living hand to mouth rarely holds even that - which is why this was
+    /// three and had to come down. At three, `Cover` was refused 1,513 times
+    /// out of 1,525 for want of anything to bury.
+    pub const WHAT_IS_NOT_WORTH_A_TRIP: u32 = 1;
+
     /// The thing this agent has most of beyond what it needs about it, if any.
     ///
     /// The Preparedness drive named `item_type: "resource"` - a placeholder
@@ -1174,6 +1350,365 @@ impl Agent {
             .max_by_key(|(_, item)| item.quantity)
             .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
     }
+
+    /// Food this agent has more of than it is going to eat.
+    ///
+    /// Deliberately separate from `what_i_can_spare`, which excludes anything
+    /// anybody eats: that one is about materials for the chain and it was
+    /// right to leave food out of it while there was nowhere to put food. A
+    /// hole in the ground is somewhere to put food.
+    pub fn what_food_i_can_spare(&self) -> Option<(String, u32)> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(name, item)| {
+                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP
+                    && (item.is_food() || name.contains("food") || name.contains("grain"))
+            })
+            // What keeps worst is what most wants burying
+            .max_by_key(|(_, item)| item.quantity)
+            .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
+    }
+
+    /// The best thing in the pack that is worth laying out to dry.
+    ///
+    /// `what_food_i_can_spare` picks the *largest* stack and every branch of
+    /// the provisioning decision then uses that one item, which is fine when
+    /// everything keeps the same way and wrong the moment it does not. What
+    /// it did in practice was hand a whole fish to the drying branch, because
+    /// whole fish is what a settlement carries most of - and a whole fish
+    /// laid in the sun turns, it does not dry.
+    ///
+    /// So this asks the question the drying branch actually wants: of
+    /// everything I could spare, what would keep if I laid it out?
+    pub fn what_i_could_dry(&self) -> Option<(String, u32)> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP)
+            .filter(|(name, _)| self.is_it_worth_drying(name))
+            // Most of it first: one turn dries a stack, so the biggest stack
+            // is the best use of the turn.
+            .max_by_key(|(_, item)| item.quantity)
+            .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
+    }
+
+    /// The best thing in the pack that salt would keep.
+    ///
+    /// The same question as `what_i_could_dry` and it has to be asked
+    /// separately, because the two do not accept the same things: drying
+    /// wants a thing cut thin and a fortnight of weather, and salt does not
+    /// care about either. What they share is that neither will do anything
+    /// for a whole carcass or for something already turned.
+    pub fn what_i_could_salt(&self) -> Option<(String, u32)> {
+        use crate::world::nutrition::{Piece, PreparationState};
+
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP)
+            .filter(|(name, _)| Piece::of(name) != Piece::Whole)
+            .filter(|(_, item)| {
+                item.food_data.as_ref().is_some_and(|food| {
+                    food.preparation == PreparationState::Raw
+                        && food.freshness >= Self::WORTH_PUTTING_BY
+                })
+            })
+            .max_by_key(|(_, item)| item.quantity)
+            .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
+    }
+
+    /// This one drank out of the sea.
+    ///
+    /// It slakes the thirst on the tick - that is the trap, and it is why
+    /// people do it - and then costs more than it gave, over the days it
+    /// takes the body to get rid of it again.
+    pub fn drank_salt_water(&mut self, now: u32) {
+        use super::EmotionSource;
+
+        self.state.salt_in_me =
+            (self.state.salt_in_me + Self::WHAT_ONE_DRINK_OF_THE_SEA_LEAVES).min(Self::AS_SALT_AS_ANYBODY_GETS);
+
+        // And it is a thing that happened, recorded against the doing of it,
+        // so that somebody who has done it twice knows better.
+        self.lessons.record_particular(Self::DRINKING_THE_SEA, false);
+
+        if self.state.salt_in_me >= Self::AS_SALT_AS_ANYBODY_GETS {
+            self.emotions.add_fear_with_traits(
+                EmotionSource::Event("salt".to_string()),
+                Self::WHAT_BEING_SALT_IS_WORTH_IN_WORRY,
+                &self.traits,
+            );
+            let _ = now;
+        }
+    }
+
+    /// Whether this one knows better than to drink the sea.
+    ///
+    /// Everybody does. This is not a discovery - a mouthful of sea water
+    /// tells you what it is the moment it is in your mouth, and every people
+    /// that ever lived beside one knew. What it is not is a rule that holds
+    /// when somebody is three days dry.
+    pub fn would_i_drink_the_sea(&self) -> bool {
+        self.state.is_dehydrated()
+    }
+
+    /// A tick of having drunk the sea: the thirst comes back worse, and the
+    /// salt slowly goes.
+    fn tick_salt(&mut self) {
+        if self.state.salt_in_me <= 0.0 {
+            return;
+        }
+
+        let salt = self.state.salt_in_me;
+
+        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+            thirst.increase(salt * Self::WHAT_SALT_ADDS_TO_A_THIRST);
+        }
+
+        self.state.salt_in_me = (salt - Self::HOW_FAST_SALT_GOES).max(0.0);
+    }
+
+    /// What one drink of sea water leaves behind.
+    const WHAT_ONE_DRINK_OF_THE_SEA_LEAVES: f32 = 0.35;
+
+    /// And the most anybody can be carrying at once.
+    const AS_SALT_AS_ANYBODY_GETS: f32 = 1.0;
+
+    /// How much a full load of salt adds to the thirst every tick.
+    ///
+    /// Set against `Thirst`'s own accumulation so that a drink of the sea
+    /// costs rather more than it gave: the drink takes half a unit off, and
+    /// getting rid of the salt puts most of a unit back on over the days it
+    /// takes.
+    const WHAT_SALT_ADDS_TO_A_THIRST: f32 = 0.012;
+
+    /// And how fast the body gets rid of it.
+    const HOW_FAST_SALT_GOES: f32 = 0.012;
+
+    /// What being full of salt is worth in worry.
+    const WHAT_BEING_SALT_IS_WORTH_IN_WORRY: f32 = 0.2;
+
+    /// What an agent calls drinking the sea, for the record it keeps.
+    pub const DRINKING_THE_SEA: &'static str = "the sea";
+
+    /// This one has come down with something.
+    ///
+    /// Nothing here stacks: somebody already ill does not get a second
+    /// ailment on top, they simply stay ill. What a second exposure does is
+    /// nothing at all, which is a simplification and a deliberate one - the
+    /// alternative is a settlement that catches four things in a bad week and
+    /// dies of arithmetic.
+    pub fn taken_ill_with(&mut self, from: &str, severity: f32, now: u32) {
+        use super::EmotionSource;
+        use rand::Rng;
+
+        if self.state.ailing.is_some() {
+            return;
+        }
+
+        let severity = severity.clamp(0.05, 1.0);
+
+        let spread = Ailment::THE_LONGEST_IT_LASTS - Ailment::THE_SHORTEST_IT_LASTS;
+        let how_long = Ailment::THE_SHORTEST_IT_LASTS
+            + (spread as f32 * severity) as u32
+            + rand::thread_rng().gen_range(0..=Ailment::THE_SHORTEST_IT_LASTS);
+
+        self.state.ailing = Some(Ailment {
+            from: from.to_string(),
+            since: now,
+            until: now + how_long,
+            severity,
+        });
+
+        // And it is a thing that happened for a reason. This is the whole of
+        // the learning: somebody who has been ill twice off raw flesh has a
+        // record saying so, and can decline the third helping.
+        *self.times_laid_up.entry(from.to_string()).or_insert(0) += 1;
+
+        self.emotions.add_fear_with_traits(
+            EmotionSource::Event(format!("ill from {from}")),
+            severity * Self::WHAT_BEING_ILL_IS_WORTH_IN_WORRY,
+            &self.traits,
+        );
+    }
+
+    /// Whether this one is ill.
+    pub fn is_ailing(&self) -> bool {
+        self.state.ailing.is_some()
+    }
+
+    /// What it is down with, if anything.
+    pub fn what_ails_me(&self) -> Option<&Ailment> {
+        self.state.ailing.as_ref()
+    }
+
+    /// A tick of being ill: it costs, and then it is over.
+    fn tick_ailment(&mut self, now: u32) {
+        let Some(ailing) = self.state.ailing.as_ref() else {
+            return;
+        };
+
+        if ailing.is_over(now) {
+            // Come through it. Getting better is not a point in favour of
+            // whatever made you ill, so nothing is recorded here.
+            self.state.ailing = None;
+            return;
+        }
+
+        let severity = ailing.severity;
+        self.state.health =
+            (self.state.health - severity * Self::WHAT_A_TICK_OF_ILLNESS_COSTS).max(0.0);
+        self.state.energy =
+            (self.state.energy - severity * Self::WHAT_ILLNESS_TAKES_OUT_OF_YOU).max(0.0);
+    }
+
+    /// Whether this one has learned, the hard way, to leave a thing alone.
+    ///
+    /// Reads the same record `taken_ill_with` writes. It is the ordinary
+    /// lessons machinery - nothing here knows what "raw" means, only that
+    /// this agent has a bad history with something by that name.
+    pub fn has_this_made_me_ill(&self, from: &str) -> bool {
+        self.how_often_this_has_laid_me_up(from) >= Self::TWICE_IS_A_PATTERN
+    }
+
+    /// How many times this one has been laid up by a given thing.
+    pub fn how_often_this_has_laid_me_up(&self, from: &str) -> u32 {
+        self.times_laid_up.get(from).copied().unwrap_or(0)
+    }
+
+    /// How many times a thing has to have laid somebody up before it is
+    /// worth treating as a rule rather than as bad luck.
+    ///
+    /// Twice. A week in bed is a great deal of evidence, and a person who has
+    /// spent two of them off the same thing does not need a third.
+    pub const TWICE_IS_A_PATTERN: u32 = 2;
+
+    /// What a tick of being ill takes off the body.
+    ///
+    /// Small on purpose. A week of it at full severity comes to about a
+    /// quarter of a healthy body, which is a bad illness and not a sentence.
+    const WHAT_A_TICK_OF_ILLNESS_COSTS: f32 = 0.25;
+
+    /// And what it takes out of somebody's day.
+    ///
+    /// This is the part that costs a settlement rather than the agent: an
+    /// agent with no energy sleeps, and somebody asleep for four days in the
+    /// autumn is four days of nobody gathering.
+    const WHAT_ILLNESS_TAKES_OUT_OF_YOU: f32 = 0.8;
+
+    /// What coming down with something is worth in worry.
+    const WHAT_BEING_ILL_IS_WORTH_IN_WORRY: f32 = 0.3;
+
+    /// How often eating raw flesh makes somebody ill.
+    ///
+    /// About one meal in twelve. Raw flesh is not poison - people have lived
+    /// on it - it is a gamble, and the point of a fire is that it stops being
+    /// one. Cooking was worth 2.7 times the nutrition and nothing else before
+    /// this, so there was no reason on earth to light a fire you had to fetch
+    /// wood for.
+    pub const HOW_OFTEN_RAW_FLESH_TELLS: f64 = 0.08;
+
+    /// And how often food that is on the turn does.
+    ///
+    /// Scaled by how far gone it is, so this is the rate at the point where
+    /// it is barely edible. Food past `is_harmful` is a separate and worse
+    /// matter that was already handled.
+    pub const HOW_OFTEN_FOOD_ON_THE_TURN_TELLS: f64 = 0.35;
+
+    /// Below this, food is on the turn: still edible, no longer safe.
+    pub const ON_THE_TURN: f32 = 0.5;
+
+    /// What this agent calls being ill off raw flesh, which is the key it
+    /// learns against.
+    pub const OFF_RAW_FLESH: &'static str = "raw flesh";
+
+    /// And off food that had started to go.
+    pub const OFF_FOOD_ON_THE_TURN: &'static str = "food on the turn";
+
+    /// And off living on fouled ground.
+    pub const OFF_FOUL_GROUND: &'static str = "foul ground";
+
+    /// Food went off in this agent's own hands.
+    ///
+    /// Worry rather than grief. What has been lost is not the meal so much as
+    /// the certainty of the next one, and the specification is explicit that
+    /// it should land as a threat to the hunger drive rather than as a bad
+    /// mood: an agent that has watched its supper turn twice this week is an
+    /// agent that has a reason to dig a hole and lay things out in the sun.
+    pub fn watched_food_go_off(&mut self, what: &str, how_much: u32) {
+        use super::EmotionSource;
+
+        // The wasted half of whatever was spent getting it
+        self.food_that_rotted_on_me = self.food_that_rotted_on_me.saturating_add(how_much);
+
+        let worth_minding = (how_much as f32 * Self::WHAT_A_LOST_MEAL_IS_WORTH)
+            .min(Self::AS_MUCH_AS_ONE_LOT_CAN_COST);
+
+        self.emotions.add_fear_with_traits(
+            EmotionSource::Event(format!("{what} went off")),
+            worth_minding,
+            &self.traits,
+        );
+
+        // And it is a thing that happened, so it is a thing that can be
+        // learned from: whatever this agent was doing with that food, it did
+        // not work
+        self.lessons.record_particular("keeping food", false);
+    }
+
+    /// What one unit of food turning is worth in worry.
+    const WHAT_A_LOST_MEAL_IS_WORTH: f32 = 0.03;
+
+    /// And the most any single lot of it can come to, so that losing a
+    /// basketful is bad rather than paralysing.
+    const AS_MUCH_AS_ONE_LOT_CAN_COST: f32 = 0.25;
+
+    /// Whether a thing in the pack is raw food still good enough to be worth
+    /// preserving.
+    ///
+    /// Raw, because anything already dried or salted or fermented is done.
+    /// Still sound, because preserving does not undo what has already
+    /// happened to a thing: all you get from drying carrion is dry carrion.
+    pub fn is_it_worth_drying(&self, what: &str) -> bool {
+        use crate::world::nutrition::PreparationState;
+
+        // And only if this one knows what laying a thing out would do. The
+        // first cut left this out, so agents chose to dry things they had no
+        // idea how to dry, the action came back refused, and the turn was
+        // gone - which cost a settlement more than half of what it had in the
+        // ground by winter.
+        if !self.found_out.contains(Self::THAT_LAYING_IT_OUT_KEEPS_IT) {
+            return false;
+        }
+
+        // And not a whole beast. Laying a carcass out does not dry it, it
+        // turns it - which is the one thing about preserving that this world
+        // teaches rather than hands down.
+        if crate::world::nutrition::Piece::of(what) == crate::world::nutrition::Piece::Whole {
+            return false;
+        }
+
+        self.inventory
+            .get_item(what)
+            .and_then(|item| item.food_data.as_ref())
+            .is_some_and(|food| {
+                food.preparation == PreparationState::Raw
+                    && food.freshness >= Self::WORTH_PUTTING_BY
+            })
+    }
+
+    /// How sound a thing has to still be before anybody bothers preserving
+    /// it.
+    const WORTH_PUTTING_BY: f32 = 0.5;
+
+    /// What somebody has to have watched happen before they will lay food out
+    /// on purpose.
+    ///
+    /// The same string the simulation records when a thing dries in the sun
+    /// with somebody standing over it - see
+    /// `Simulation::THAT_LAYING_IT_OUT_KEEPS_IT`.
+    pub const THAT_LAYING_IT_OUT_KEEPS_IT: &'static str = "drying";
 
     /// Everything a person could use and has next to none of.
     ///
@@ -1279,6 +1814,159 @@ impl Agent {
     /// Write down that this agent has found out how to do something.
     ///
     /// Returns false if it already knew.
+    /// Put a question to the world and start waiting on the answer.
+    pub fn now_i_wonder(&mut self, wondering: super::wondering::Wondering) {
+        if self.am_i_wondering_about(&wondering.did, &wondering.what) {
+            return;
+        }
+
+        // Nobody holds more than a few questions open at once. The oldest
+        // goes, which is also the one most likely to have been answered by
+        // somebody walking off with the thing.
+        while self.wonderings.len() >= Self::AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS {
+            self.wonderings.remove(0);
+        }
+
+        self.wonderings.push(wondering);
+    }
+
+    /// Whether this one already has this question open.
+    pub fn am_i_wondering_about(&self, did: &str, what: &str) -> bool {
+        self.wonderings
+            .iter()
+            .any(|wondering| wondering.did == did && wondering.what == what)
+    }
+
+    /// Whether this one has put this question often enough to have a view.
+    ///
+    /// Not "has ever got an answer", which was the first cut of this and made
+    /// the whole mechanism useless: one answer is one afternoon, and one
+    /// afternoon can no more tell you what becomes of meat left out than one
+    /// throw can tell you what a dice does. What is being found out here is
+    /// that it depends on the weather, and *that* cannot be found out at all
+    /// without leaving meat out in several sorts of weather.
+    ///
+    /// Measured, the first cut asked and answered sixty-five questions a world
+    /// and drew exactly nought conclusions from them, because no agent ever
+    /// held more than a single instance of any of them.
+    pub fn do_i_know_what_becomes_of(&self, did: &str, what: &str) -> bool {
+        self.lessons.tried_this(&format!("{did}:{what}")) >= Self::ENOUGH_TIMES_TO_HAVE_A_VIEW
+    }
+
+    /// How many times somebody has to have left a thing out before they stop
+    /// wondering what becomes of it.
+    ///
+    /// Enough that both the wet afternoons and the dry ones have a run behind
+    /// them, because the answer this is reaching for is not "it goes off" but
+    /// "it goes off *in the rain*".
+    const ENOUGH_TIMES_TO_HAVE_A_VIEW: u32 = 20;
+
+    /// Something in the pack this one would leave somewhere to see what
+    /// becomes of it.
+    ///
+    /// The whole of "what happens if I leave meat in the rain". Three things
+    /// have to be true and all three matter: it has to be something whose
+    /// fate this one has never watched, there has to be more than one of it
+    /// so the experiment does not cost the experimenter its dinner, and it
+    /// has to be food, because a lump of flint left in a field is a lump of
+    /// flint in a field a week later and nobody learns anything.
+    ///
+    /// What it emphatically does *not* check is the weather. The branch this
+    /// replaces would only put something down under a clear sky, which is to
+    /// say the code already knew the answer and only let anybody run the
+    /// experiment on the days it comes out well. Finding out that meat left
+    /// in the rain is ruined is the *same discovery* as finding out that meat
+    /// left in the sun keeps, and a people that can only make the second one
+    /// has not found anything out at all.
+    pub fn what_i_would_leave_out(&self) -> Option<String> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .map(|(_, item)| item)
+            .filter(|item| Self::is_it_worth_watching(item))
+            .filter(|item| item.quantity > Self::MORE_THAN_ANYBODY_WOULD_RISK)
+            .filter(|item| !self.am_i_wondering_about(Self::LEAVING_IT_OUT, &item.item_id))
+            .filter(|item| !self.do_i_know_what_becomes_of(Self::LEAVING_IT_OUT, &item.item_id))
+            .map(|item| item.item_id.clone())
+            .next()
+    }
+
+    /// Whether this one would put a question to the world about this thing,
+    /// having done this to it.
+    ///
+    /// The same three conditions for every verb: not already asking it, not
+    /// already sure of the answer, and something whose fate is worth watching.
+    pub fn would_i_wonder_what_becomes_of(&self, did: &str, what: &str) -> bool {
+        !self.am_i_wondering_about(did, what) && !self.do_i_know_what_becomes_of(did, what)
+    }
+
+    /// What asking after this thing would actually teach somebody.
+    ///
+    /// Not the thing itself - you cannot be handed a pot by being told about
+    /// one. What passes between two people is the *name of the discovery* the
+    /// thing depends on, which is exactly the gate the making machinery
+    /// already checks: an agent who has that name can attempt the working, and
+    /// an agent who has not cannot.
+    ///
+    /// Which means being told does not make anybody believe anything. It lets
+    /// them go and try it, and what happens when they try it is what decides
+    /// whether they believe it - which is how it should be, and is the whole
+    /// difference between being told a thing works and finding out.
+    pub fn what_asking_about_this_would_teach(item_id: &str) -> Option<String> {
+        use crate::environment::making;
+
+        // Something somebody worked out how to make
+        if making::EVERY_WORKING
+            .iter()
+            .any(|working| working.makes == item_id && !working.obvious)
+        {
+            return Some(item_id.to_string());
+        }
+
+        if making::how_to_make(item_id).is_some_and(|step| !step.obvious) {
+            return Some(item_id.to_string());
+        }
+
+        None
+    }
+
+    /// And what asking about a *meal* would teach, which is a different
+    /// question: dried meat is not a thing anybody makes, it is meat that has
+    /// been somewhere.
+    pub fn what_asking_about_this_meal_would_teach(item: &InventoryItem) -> Option<&'static str> {
+        use crate::world::nutrition::PreparationState;
+
+        let how = item.food_data.as_ref()?.preparation;
+
+        matches!(how, PreparationState::Dried | PreparationState::Smoked)
+            .then_some(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
+    }
+
+    /// Whether leaving this somewhere could come to anything.
+    ///
+    /// Food, because the weather and the ground get at it. And clay, because
+    /// a fire does - a lump left in the embers is not a lump of clay in the
+    /// morning, which is the one thing in this world that a *material* left
+    /// lying about turns into something else. A flint left in a field is a
+    /// flint in a field a week later and nobody learns anything.
+    fn is_it_worth_watching(item: &InventoryItem) -> bool {
+        item.food_data.is_some() || item.item_id == Self::THE_ONE_MATERIAL_A_FIRE_CHANGES
+    }
+
+    /// What an experiment is called when it is somebody leaving a thing
+    /// somewhere and coming back to look.
+    pub const LEAVING_IT_OUT: &'static str = "leave";
+
+    /// Clay, and nothing else so far.
+    pub const THE_ONE_MATERIAL_A_FIRE_CHANGES: &'static str = "clay";
+
+    /// How many of a thing somebody has to have before they will spare one to
+    /// find something out. Curiosity is not hunger and must not act like it.
+    const MORE_THAN_ANYBODY_WOULD_RISK: u32 = 2;
+
+    /// And how many questions anybody keeps open at once.
+    const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
+
     pub fn found_out_how_to(&mut self, what: &str) -> bool {
         self.found_out.insert(what.to_string())
     }
@@ -1329,16 +2017,29 @@ impl Agent {
     /// wants them.
     ///
     /// Hunting first: a spear is the difference between eating meat and not.
-    /// Then cutting wood, then cutting meat.
+    /// Then cutting wood, then cutting meat, then something to carve and
+    /// something to dig with.
     ///
     /// This is stated as the work rather than as the tool because what the
     /// best tool for a job *is* changes as a people finds things out. A man
     /// who has never seen metal wants a stone knife; a man who has wants a
     /// metal one, and the same line of code asks for both.
-    pub const WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO: [super::SkillType; 3] = [
+    pub const WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO: [super::SkillType; 5] = [
         super::SkillType::Hunting,
         super::SkillType::Woodcutting,
         super::SkillType::Leatherworking,
+        // Crafting and mining were not on this list, and nothing else in the
+        // model ever wanted a tool for either. Measured directly: of thirty-one
+        // people, **twenty-six wanted a vessel and could make one, twenty-eight
+        // held the wood for it, and four owned anything to carve with.** The
+        // block on the whole fluid family was never the order of the working
+        // table or where the branch sat in the decision - it was that a pair of
+        // hands never once thought to want a knife for carving.
+        //
+        // The same for mining: "nothing in hand that is any use for Mining" was
+        // six hundred refused turns a world at the digging alone.
+        super::SkillType::Crafting,
+        super::SkillType::Mining,
     ];
 
     /// The best tool this agent knows how to make for a kind of work, if it
@@ -1436,16 +2137,142 @@ impl Agent {
     pub fn what_i_would_work_on(&self) -> Option<(String, String)> {
         use crate::environment::making;
 
-        making::EVERY_WORKING
+        let could: Vec<&'static making::Working> = making::EVERY_WORKING
             .iter()
             .filter(|working| working.obvious || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
+            .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
             .filter(|working| self.how_many_i_have(working.makes) < making::A_FEW_SPARE)
-            .find(|working| {
+            .filter(|working| {
                 self.lessons
                     .will_try_this_again(&format!("{}:{}", working.verb, working.to))
             })
+            .collect();
+
+        if could.is_empty() {
+            return None;
+        }
+
+        // Where a man starts in the list is his own business.
+        //
+        // This took the *first* thing in the table it could do and stopped, so
+        // the order of a hand-written list decided what a whole people ever
+        // made. Carving a bowl sits late in that table: anything earlier with
+        // materials to hand won every turn, and measured, a settlement made
+        // essentially no vessels at all however badly it wanted one - no
+        // carried water, no boiling, no salt.
+        //
+        // `what_working_i_would_try_out` hit exactly this and fixed it exactly
+        // this way, for exactly this reason: retting flax sits above fermenting
+        // fruit, so over eight worlds nobody ever fermented anything, because
+        // somebody always had flax. The fix did not get carried across to its
+        // neighbour.
+        let mine = (self.id.as_u128() % could.len() as u128) as usize;
+
+        could
+            .get(mine)
             .map(|working| (working.verb.to_string(), working.to.to_string()))
+    }
+
+    /// A carcass in the pack that has to come apart before it is supper.
+    ///
+    /// "How are agents eating meat? Can they just absorb an entire side of
+    /// beef? Should they not have to cut it into smaller pieces so they can
+    /// cook and eat it?" - and until this existed they could and they did: a
+    /// kill dropped two-kilo lumps of raw beast and one `Eat` swallowed one.
+    ///
+    /// This is deliberately not `what_i_would_work_on`. That one is about
+    /// Utility, waits on the lessons, and stops once there are a few spare;
+    /// this is a step on the way to a meal and answers to Hunger, so it does
+    /// not wait on anything. Everybody is born knowing a carcass comes apart.
+    pub fn what_flesh_i_should_cut_up(&self) -> Option<(String, String)> {
+        use crate::environment::making;
+        use crate::world::nutrition::Piece;
+
+        // Only bother if there is nothing already cut that would do. A man
+        // with a joint in his hand does not stop to quarter the rest of the
+        // deer before he eats.
+        if self.find_best_food_to_eat().is_some() {
+            return None;
+        }
+
+        // And only with something to do it with. `cut` wants an edge, and the
+        // matrix enforces that before the action runs - so choosing this
+        // without one spends the turn and comes straight back refused, which
+        // is exactly what cost a settlement half its winter store last time.
+        if self
+            .what_i_have_to_work_with(super::SkillType::Leatherworking)
+            .is_none()
+        {
+            return None;
+        }
+
+        self.inventory
+            .items
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(id, _)| Piece::of(id) == Piece::Whole)
+            .filter(|(_, item)| {
+                // Not one that has already turned. Cutting up carrion is a
+                // waste of an edge and a turn.
+                item.food_data
+                    .as_ref()
+                    .is_none_or(|food| !food.is_spoiled() && !food.is_harmful())
+            })
+            .find_map(|(id, item)| {
+                making::how_to_work("cut", id)
+                    .filter(|working| working.obvious || self.found_out.contains(working.makes))
+                    .filter(|working| item.quantity >= working.how_much)
+                    .map(|working| (working.verb.to_string(), working.to.to_string()))
+            })
+    }
+
+    /// A joint in the pack worth cutting down into strips, because it is not
+    /// going to be eaten today.
+    ///
+    /// The counterpart to `what_flesh_i_should_cut_up`, and the difference
+    /// between them is what the food is *for*. A hungry man quarters a deer
+    /// so he can eat it. A man laying in for the winter cuts the joint down
+    /// thin, because a strip is dry in two days and a joint takes most of a
+    /// week - and a thing that is dry keeps twenty times as long as a thing
+    /// that is not.
+    ///
+    /// Only for somebody who knows what laying a thing out would do. Cutting
+    /// flesh into strips is a great deal of work for no reason at all if you
+    /// have never seen what the sun does to it afterwards.
+    pub fn what_i_would_cut_down_for_keeping(&self) -> Option<(String, String)> {
+        use crate::environment::making;
+        use crate::world::nutrition::Piece;
+
+        if !self.found_out.contains(Self::THAT_LAYING_IT_OUT_KEEPS_IT) {
+            return None;
+        }
+
+        if self
+            .what_i_have_to_work_with(super::SkillType::Leatherworking)
+            .is_none()
+        {
+            return None;
+        }
+
+        self.inventory
+            .items
+            .iter()
+            .filter(|(id, _)| Piece::of(id) == Piece::Portion)
+            .filter(|(id, _)| Piece::is_it_flesh(id))
+            .filter(|(_, item)| {
+                // Still worth keeping. There is no sense drying carrion.
+                item.food_data.as_ref().is_some_and(|food| {
+                    food.preparation == crate::world::nutrition::PreparationState::Raw
+                        && food.freshness >= Self::WORTH_PUTTING_BY
+                })
+            })
+            .find_map(|(id, item)| {
+                making::how_to_work("cut", id)
+                    .filter(|working| working.obvious || self.found_out.contains(working.makes))
+                    .filter(|working| item.quantity >= working.how_much)
+                    .map(|working| (working.verb.to_string(), working.to.to_string()))
+            })
     }
 
     /// And something in the pack nobody here has ever thought to break down.
@@ -1453,16 +2280,37 @@ impl Agent {
     /// The cheapest experiment a person can run: the materials are in the pack
     /// and the tool is in the hand whatever happens, so what it costs is one
     /// stick and an afternoon.
-    pub fn what_working_i_would_try_out(&self) -> Option<(String, String)> {
+    pub fn what_working_i_would_try_out(&self, a_fire_is_to_hand: bool) -> Option<(String, String)> {
         use crate::environment::making;
 
-        making::every_working_to_find_out()
+        let could: Vec<&'static making::Working> = making::every_working_to_find_out()
             .filter(|working| !self.found_out.contains(working.makes))
+            // Not something that wants a fire, when there is no fire. The
+            // executor refuses those, and an experiment that comes straight
+            // back refused is a turn gone - which is exactly what cost a
+            // settlement half its winter store two batches ago.
+            .filter(|working| !working.over_a_fire || a_fire_is_to_hand)
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
-            .find(|working| {
+            .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
+            .filter(|working| {
                 self.lessons
                     .will_try_this_again(&format!("{}:{}", working.verb, working.to))
             })
+            .collect();
+
+        if could.is_empty() {
+            return None;
+        }
+
+        // Which of them this particular person is the one to try. Taking the
+        // first of the list meant the order of the table decided what a whole
+        // people ever found out: retting flax sits above fermenting fruit, so
+        // over eight worlds nobody ever fermented anything, because somebody
+        // always had flax. Where a man starts in the list is his own business.
+        let mine = (self.id.as_u128() % could.len() as u128) as usize;
+
+        could
+            .get(mine)
             .map(|working| (working.verb.to_string(), working.to.to_string()))
     }
 
@@ -1541,19 +2389,72 @@ impl Agent {
     /// cordage, and holds a spear three turns later. Nothing here asks for a
     /// thing already carried: two spears are no better than one until the
     /// first one breaks.
-    pub fn what_i_would_make(&self) -> Option<String> {
+    /// A vessel this agent would rather have than not, if it has none.
+    ///
+    /// **Nothing in this world had ever wanted one.** `what_i_would_make` asks
+    /// only after tools - something to hunt with, something to cut wood with,
+    /// something to work a hide with - so a bowl and a fired pot both declared
+    /// what they hold and neither was ever made by anybody. Which meant no
+    /// agent could carry water, so every drink was a walk to the river and
+    /// back; and it meant `Boil` was refused for want of something to hold the
+    /// sea in **two hundred and forty-seven times a world**, so salt was
+    /// effectively unreachable too.
+    ///
+    /// A vessel is the plainest preparation there is. The trip to the water is
+    /// the cost and the water is free, so a person who owns something to carry
+    /// it in pays that cost once and drinks for days.
+    pub fn what_vessel_i_would_rather_have(&self) -> Option<(&'static str, &'static str)> {
+        if self.what_i_can_hold_water_in() > 0 {
+            return None;
+        }
+
+        crate::environment::making::EVERY_WORKING
+            .iter()
+            .filter(|working| working.holds.is_some_and(|held| held > 0.0))
+            .filter(|working| working.obvious || self.found_out.contains(working.makes))
+            .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
+            .max_by(|a, b| {
+                a.holds
+                    .unwrap_or(0.0)
+                    .partial_cmp(&b.holds.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|working| (working.verb, working.to))
+    }
+
+    /// How many things this agent has that will hold a liquid.
+    pub fn what_i_can_hold_water_in(&self) -> u32 {
+        self.inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.is_container())
+            .map(|item| item.quantity)
+            .sum()
+    }
+
+    pub fn what_i_would_make(&self, a_fire_is_to_hand: bool) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
 
         let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+
+        // Owning it, not holding it: the executor asks for ownership and the
+        // tool gets taken in hand on the way - see `get_the_tool_out_for`.
+        let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
         Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
             .iter()
             .filter_map(|trade| self.what_i_would_rather_have(*trade))
             .find_map(|want| {
-                crate::environment::making::what_to_do_first_knowing(
+                // Only a step that could actually be carried out. Asking for
+                // one that could not is worse than a wasted turn: the refusal
+                // goes into the record, and a man learns from it that making
+                // knives does not work.
+                crate::environment::making::what_to_do_first_that_can_be_done(
                     want.called,
                     &holding,
                     &knows,
+                    &in_hand,
+                    a_fire_is_to_hand,
                 )
             })
             .map(|step| step.makes.to_string())
@@ -1626,25 +2527,126 @@ impl Agent {
         coming / turned.max(1.0)
     }
 
+    /// How much liquid this agent is carrying in vessels.
+    ///
+    /// What the fluid family runs on. Nobody could carry any of it until
+    /// somebody worked out how to hollow out a bowl.
+    pub fn how_much_water_i_carry(&self) -> f32 {
+        self.inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.is_container())
+            .filter_map(|item| item.fill_level)
+            .sum()
+    }
+
+    /// Take that much liquid out of what is being carried, and say how much
+    /// actually came out.
+    pub fn draw_from_what_i_carry(&mut self, wanted: f32) -> f32 {
+        let mut still_wanting = wanted;
+        let mut got = 0.0;
+
+        for item in self.inventory.get_all_items_mut().values_mut() {
+            if still_wanting <= 0.0 {
+                break;
+            }
+            if !item.is_container() {
+                continue;
+            }
+
+            let came = item.drain(still_wanting);
+            still_wanting -= came;
+            got += came;
+        }
+
+        got
+    }
+
     /// Whether there is a hand free to take hold of something with.
     ///
     /// The first cut of this counted a hand as full for every kind of tool in
     /// the pack, so a man who owned an axe and a spear had no hands at all and
-    /// could never stitch a coat again. A pack is not a pair of hands: a tool
-    /// is carried and taken out when it is wanted, and at rest a person's
-    /// hands are empty.
+    /// could never stitch a coat again. The second guessed at it from how
+    /// loaded the pack was, which was a fudge and was written down as one.
     ///
-    /// What genuinely leaves somebody with nothing to work with is being
-    /// loaded to the limit of what they can carry - arms full, and the next
-    /// thing they pick up is the thing they drop. That is what this measures,
-    /// and it is the "free-hand" half of what an action requires.
+    /// There are two hands now and they hold particular things, so this is
+    /// simply a question about them.
+    ///
+    /// The pack does not come into it, and the third cut of this was the one
+    /// that found out why. A settlement lives at or over the limit of what it
+    /// can carry - measured mean load 70 against a capacity of 50 - so a rule
+    /// that wanted spare capacity meant nobody in the model ever had a hand
+    /// free for anything. What a heavy pack costs is paid in the walking, by
+    /// `Simulation::what_this_load_costs`, which is where it belongs.
     pub fn a_hand_to_spare(&self) -> bool {
-        self.inventory.weight_capacity_remaining() > Self::WHAT_A_FREE_HAND_MEANS
+        self.hands.iter().any(|hand| hand.is_none())
     }
 
-    /// How much a person has to have spare before they count as having a hand
-    /// free, in the units the pack is weighed in.
-    const WHAT_A_FREE_HAND_MEANS: f32 = 2.0;
+    /// Whether this particular thing is out and in a hand.
+    pub fn is_in_my_hand(&self, what: &str) -> bool {
+        self.hands
+            .iter()
+            .any(|hand| hand.as_deref() == Some(what))
+    }
+
+    /// What is out, in whichever order the hands happen to be in.
+    pub fn what_is_in_my_hands(&self) -> impl Iterator<Item = &str> {
+        self.hands.iter().filter_map(|hand| hand.as_deref())
+    }
+
+    /// Take something out of the pack and into a hand.
+    ///
+    /// Refuses what is not in the pack, what is already out, and anything at
+    /// all when both hands are full. Nothing leaves the pack: a hand is a
+    /// claim on a thing rather than a second place to keep it, which is what
+    /// keeps a thing from existing twice.
+    pub fn take_in_hand(&mut self, what: &str) -> bool {
+        if self.is_in_my_hand(what) {
+            return false;
+        }
+
+        if self.how_many_i_have(what) == 0 {
+            return false;
+        }
+
+        let Some(free) = self.hands.iter().position(|hand| hand.is_none()) else {
+            return false;
+        };
+
+        self.hands[free] = Some(what.to_string());
+        true
+    }
+
+    /// Put a thing back in the pack, freeing the hand.
+    pub fn put_away(&mut self, what: &str) -> bool {
+        let Some(held) = self
+            .hands
+            .iter()
+            .position(|hand| hand.as_deref() == Some(what))
+        else {
+            return false;
+        };
+
+        self.hands[held] = None;
+        true
+    }
+
+    /// A hand does not go on holding what the owner no longer has.
+    ///
+    /// Anything given away, traded, stolen, worn out or eaten leaves the pack
+    /// through the inventory, which knows nothing about hands - so the hands
+    /// are checked against the pack rather than being told.
+    pub fn let_go_of_what_i_no_longer_have(&mut self) {
+        for hand in 0..self.hands.len() {
+            let gone = self.hands[hand]
+                .as_deref()
+                .is_some_and(|what| self.inventory.get_item(what).is_none_or(|item| item.quantity == 0));
+
+            if gone {
+                self.hands[hand] = None;
+            }
+        }
+    }
 
     pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
         let Some(tool) = self.what_i_have_to_work_with(trade) else {
@@ -1662,9 +2664,56 @@ impl Agent {
             .map(|quality| quality.modifier().clamp(worst, best))
             .unwrap_or(1.0);
 
+        // An axe in the pack is an axe you have to stop and dig out. It still
+        // works - a person is not helpless because the thing is in the bag -
+        // but a tool already in the hand is worth appreciably more, and that
+        // difference is the whole reason anybody bothers to take one out.
+        let out = if self.is_in_my_hand(tool.called) {
+            1.0
+        } else {
+            Self::WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH
+        };
+
         // A blunt axe is still an axe, so half the gain survives to the end
         // of its life and the other half wears away with it.
-        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left) * how_well_made
+        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left) * how_well_made * out
+    }
+
+    /// What a tool you have not got out is worth against one you have.
+    ///
+    /// Not nothing: you can reach into a bag mid-job. The first cut put it at
+    /// two thirds and that was much too harsh - a person can only hold two
+    /// things and a working settlement owns four or five, so most work is
+    /// done with something fetched out of the bag, and taxing all of it a
+    /// sixth cost the settlement a quarter of its standing crop and 40 per
+    /// cent of its tools. It is a small edge, not a penalty for being
+    /// organised.
+    pub const WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH: f32 = 0.9;
+
+    /// What to let go of when both hands are full and the job wants one free.
+    ///
+    /// The least useful of what is being held, by the same reckoning that
+    /// decided to pick it up.
+    pub fn what_i_would_put_away(&self) -> Option<String> {
+        use crate::environment::making;
+
+        let worth = |what: &str| {
+            making::EVERY_TOOL
+                .iter()
+                .find(|tool| tool.called == what)
+                .map(|tool| self.skills.hand_for(tool.helps) * tool.how_much_better)
+                // Something in the hand that is not a tool at all is the
+                // first thing to go
+                .unwrap_or(0.0)
+        };
+
+        self.what_is_in_my_hands()
+            .min_by(|a, b| {
+                worth(a)
+                    .partial_cmp(&worth(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|what| what.to_string())
     }
 
     /// Wear the tool used for a piece of work, and say if it broke.
@@ -2347,6 +3396,13 @@ impl Agent {
         // Process food spoilage in inventory
         self.tick_food_spoilage(current_tick);
 
+        // And whatever this one has come down with, which costs a little
+        // every tick and then is over
+        self.tick_ailment(current_tick);
+
+        // And the salt, if this one has been drinking out of the sea
+        self.tick_salt();
+
         // And let go of trades that have not been practised in a long time.
         // Once a season is often enough for something measured in years, and a
         // settlement of two hundred is not worth walking every skill of every
@@ -2471,6 +3527,13 @@ impl Agent {
             if let Some(item) = self.inventory.items.remove(&item_id) {
                 self.state.waste_carried += item.quantity as f32
                     * crate::world::Soil::waste_from_spoilage(&item_id);
+
+                // And it is worth minding. Food going off in your own pack is
+                // a threat to the one drive that kills you soonest, and until
+                // now it was the one kind of loss that cost an agent nothing
+                // at all to watch: the meal simply stopped existing and
+                // nobody felt anything about it.
+                self.watched_food_go_off(&item_id, item.quantity);
             }
         }
     }
@@ -2572,6 +3635,116 @@ impl Agent {
     /// It is what the agent *believes*, not what is true. Two agents of
     /// identical build appraise the same wolf differently if one of them has
     /// beaten a wolf before, and that is the point.
+    /// Whether this agent could raise a hand to anything at all.
+    ///
+    /// Not whether it would win - that is `ThreatAssessment` - but whether
+    /// fighting is available to it as a thing to do. Two ways it is not: no
+    /// arm that works, and a body with so little left in it that the first
+    /// blow returned would finish the job.
+    pub fn could_i_fight_at_all(&self, coming: f32) -> bool {
+        use super::body::BodyPartType;
+
+        // A child does not fight a wolf. This is not a judgement about how
+        // brave it is - it is the commonest way in the world for fighting to
+        // not be an option, and leaving it out made freezing unreachable:
+        // measured over eight worlds, not one agent ever froze, because
+        // anybody with an arm and more health than one bite would take had
+        // fighting available to them.
+        if !self.state.life_stage.can_fight() {
+            return false;
+        }
+
+        let an_arm = [BodyPartType::LeftArm, BodyPartType::RightArm]
+            .iter()
+            .any(|part| {
+                self.body
+                    .get_part(*part)
+                    .is_some_and(|arm| arm.is_functional())
+            });
+
+        if !an_arm {
+            return false;
+        }
+
+        // A man with four points of health left does not trade blows with a
+        // wolf. What one would cost him is what he already knows from having
+        // stood his ground before - see `what_a_blow_costs_me`.
+        self.state.health > self.what_a_blow_costs_me(coming)
+    }
+
+    /// Whether this agent could run anywhere.
+    ///
+    /// Running is not walking: it costs `WHAT_RUNNING_COSTS` and a body with
+    /// nothing left in it cannot pay. Legs that do not work stop it too.
+    /// Whether there is anywhere to run *to* is a question about the ground
+    /// and belongs to the simulation - see `Simulation::is_there_anywhere_to_run`.
+    pub fn could_i_run_at_all(&self, what_it_takes: f32) -> bool {
+        use super::body::BodyPartType;
+
+        let a_leg = [BodyPartType::LeftLeg, BodyPartType::RightLeg]
+            .iter()
+            .any(|part| {
+                self.body
+                    .get_part(*part)
+                    .is_some_and(|leg| leg.is_functional())
+            });
+
+        a_leg && self.state.energy > what_it_takes
+    }
+
+    /// What this agent has to lose - the drive demand still standing between
+    /// it and being satisfied, which is what a thing that would kill it
+    /// actually takes away.
+    ///
+    /// The specification says a threat is a threat *to the agent's ability to
+    /// satisfy future drive demand*, and that is a different quantity from
+    /// how large the animal's teeth are. A wolf does not take an agent's
+    /// health; it takes every meal, every drink and every night's sleep that
+    /// agent had left. So what it costs is measured on the drives.
+    ///
+    /// Every drive that is asking contributes what it is asking for, ranked:
+    /// the ones that kill you count for most, the ones that decide whether
+    /// there is anybody here in ten years next, and the ones that decide what
+    /// sort of place it is least. A person with nothing pressing still has
+    /// something to lose - `WHAT_BEING_ALIVE_IS_WORTH` - because being alive
+    /// is itself the thing that makes tomorrow's dinner possible.
+    pub fn what_i_stand_to_lose(&self) -> f32 {
+        use crate::core::drives::DriveRank;
+
+        let asked: f32 = self
+            .drives
+            .drives
+            .iter()
+            .map(|drive| {
+                let weight = match drive.drive_type.rank() {
+                    DriveRank::Primary => 1.0,
+                    DriveRank::Secondary => 0.5,
+                    DriveRank::Tertiary => 0.2,
+                };
+                drive.urgency().clamp(0.0, 1.0) * weight
+            })
+            .sum();
+
+        // Four primaries at full cry is the most anybody carries, so that is
+        // what the scale is divided by
+        let carried = (asked / Self::WHAT_A_LIFE_FULL_OF_WANT_COMES_TO).clamp(0.0, 1.0);
+
+        Self::WHAT_BEING_ALIVE_IS_WORTH
+            + carried * (1.0 - Self::WHAT_BEING_ALIVE_IS_WORTH)
+    }
+
+    /// What a person with nothing pressing still stands to lose, against
+    /// somebody who is starving, parched and worn out at once.
+    ///
+    /// Not far off the whole of it: a comfortable man does not shrug at a
+    /// wolf. What the rest of the scale buys is that a desperate one minds
+    /// rather more.
+    const WHAT_BEING_ALIVE_IS_WORTH: f32 = 0.75;
+
+    /// The most drive demand anybody carries at once, in the units
+    /// `what_i_stand_to_lose` sums.
+    const WHAT_A_LIFE_FULL_OF_WANT_COMES_TO: f32 = 4.0;
+
     pub fn own_strength(&self) -> f32 {
         let health_factor = self.state.health / 100.0;
         let body_factor = self.body.movement_speed_multiplier();
@@ -2647,8 +3820,14 @@ impl Agent {
     ) -> super::EmotionType {
         use super::ThreatAssessment;
 
-        let assessment =
-            ThreatAssessment::assess(self.own_strength(), threat_strength, source.clone());
+        // What the thing would end, which is what makes it a threat rather
+        // than merely a large animal - see `what_i_stand_to_lose`
+        let assessment = ThreatAssessment::assess_against_what_is_at_stake(
+            self.own_strength(),
+            threat_strength,
+            self.what_i_stand_to_lose(),
+            source.clone(),
+        );
 
         let emotion_type = assessment.emotion_type();
         let emotion_amount = assessment.emotion_amount();
@@ -3601,6 +4780,13 @@ impl Agent {
         match action {
             Action::Gather { resource_type } => format!("gather:{resource_type}"),
             Action::Craft { item_type } => format!("craft:{item_type}"),
+            // Digging yourself in is not framing. `build` wants poles in the
+            // hand - right for a tent, wrong for a hole - so the matrix has
+            // to be asked a different question about a burrow, and there has
+            // always been a `burrow` verb in it to ask.
+            Action::Build { structure_type, .. } if structure_type == "burrow" => {
+                format!("burrow:{structure_type}")
+            }
             Action::Build { structure_type, .. } => format!("build:{structure_type}"),
             Action::Store { item_type, .. } => format!("store:{item_type}"),
             Action::Eat { food_type } => format!("eat:{food_type}"),
@@ -3612,11 +4798,22 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
+            Action::TakeFrom { .. } => "takefrom".to_string(),
+            Action::FleeFrom { .. } => "fleefrom".to_string(),
+            Action::Freeze => "freeze".to_string(),
             Action::Examine { what } => format!("examine:{what}"),
+            Action::Equip { .. } => "equip".to_string(),
+            Action::Unequip { .. } => "unequip".to_string(),
+            Action::Dry { .. } => "dry".to_string(),
+            Action::Boil => "boil".to_string(),
+            Action::Salt { .. } => "salt".to_string(),
+            Action::Excavate => "excavate".to_string(),
+            Action::Cover { .. } => "cover".to_string(),
             Action::PickUp { .. } => "pickup".to_string(),
             Action::PutDown { .. } => "putdown".to_string(),
             Action::Trade { .. } => "trade".to_string(),
             Action::GiveTo { .. } => "giveto".to_string(),
+            Action::GoWithout { .. } => "gowithout".to_string(),
             Action::Work { verb, to } => format!("{verb}:{to}"),
             Action::Taste => "taste".to_string(),
             Action::TrySwapping {
@@ -3632,6 +4829,7 @@ impl Agent {
             Action::PlantCutting => "plantcutting".to_string(),
             Action::SpreadMuck => "spreadmuck".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
+            Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
             other => format!("{:?}", other)
                 .split(|c: char| c == ' ' || c == '{' || c == '(')
@@ -3642,17 +4840,43 @@ impl Agent {
     }
 
     pub fn learn_from(&mut self, action: &Action, worked: bool) {
+        self.learn_from_this_here(action, worked, &[]);
+    }
+
+    /// The same, with what the world was doing at the time written down
+    /// alongside it.
+    ///
+    /// Nobody names the situation. The circumstances are whatever the sky, the
+    /// season and the ground happened to be, gathered by the simulation and
+    /// attached to the attempt without either the agent or the code that chose
+    /// the action having an opinion about which of them matter. Which of them
+    /// matter is the thing the agent works out - see
+    /// [`super::practices::Lessons::what_this_changes`].
+    pub fn learn_from_this_here(
+        &mut self,
+        action: &Action,
+        worked: bool,
+        here: &[super::practices::Circumstance],
+    ) {
         use super::practices::Undertaking;
 
         // The fine record, which is what decides whether this exact thing is
         // worth trying again. The coarse one below answers a different
         // question - what sort of person this is - and both are wanted.
         self.lessons
-            .record_particular(&Self::what_was_tried(action), worked);
+            .record_particular_here(&Self::what_was_tried(action), worked, here);
 
         let undertaking = match action {
             Action::Hunt { .. } => Undertaking::Hunting,
             Action::Fight { .. } => Undertaking::Fighting,
+            // Running is the other answer to the same question, but it is not
+            // the same lesson. Getting away teaches you that getting away
+            // works; it must not teach you that you can win, or a man who has
+            // outrun four wolves goes and picks a fight with the fifth
+            Action::FleeFrom { .. } => Undertaking::Fleeing,
+            // Freezing is not an attempt at anything and teaches nothing: an
+            // agent that lived through it did not do so by freezing well
+            Action::Freeze => return,
             Action::Fish => Undertaking::Fishing,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
@@ -3660,6 +4884,12 @@ impl Agent {
             | Action::TendField
             | Action::TakeCutting
             | Action::PlantCutting => Undertaking::Farming,
+            // Digging a hole and filling it is putting something by, which is
+            // the same undertaking as any other kind of husbandry
+            Action::Excavate | Action::Cover { .. } => Undertaking::Farming,
+            // Making food outlast the week it was got in is cookery, which is
+            // where the rest of what a fire is for already lives
+            Action::Dry { .. } => Undertaking::Cooking,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,
@@ -3669,7 +4899,8 @@ impl Agent {
             Action::Socialize { .. }
             | Action::ShareInformation { .. }
             | Action::Trade { .. }
-            | Action::GiveTo { .. } => Undertaking::Dealing,
+            | Action::GiveTo { .. }
+            | Action::GoWithout { .. } => Undertaking::Dealing,
             _ => return,
         };
 
@@ -4620,11 +5851,20 @@ impl Agent {
             return EatResult::NoFood;
         }
 
+        // You cannot eat a deer. The decision layer knows this and cuts one up
+        // first, but the executor is the place it has to be true: an agent
+        // handed a carcass by any other route would otherwise swallow two
+        // kilos of raw beast in a tick.
+        if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
+            return EatResult::NoFood;
+        }
+
         let food_data = match food_data {
             Some(data) => data,
             None => {
                 // Not a tracked food item - consume 1 with flat nutrition
                 self.inventory.remove_item(item_id, 1);
+                self.food_i_ate = self.food_i_ate.saturating_add(1);
                 let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
                 self.nutrition.consume(&flat_nutrition);
                 self.state.took_a_meal(
@@ -4641,6 +5881,7 @@ impl Agent {
         // Check if food is harmful (severely spoiled)
         if food_data.is_harmful() {
             self.inventory.remove_item(item_id, 1);
+            self.food_i_ate = self.food_i_ate.saturating_add(1);
             let damage = 10.0;
             self.state.health = (self.state.health - damage).max(0.0);
             return EatResult::MadeSick(damage);
@@ -4653,6 +5894,42 @@ impl Agent {
 
         // Consume the food
         self.inventory.remove_item(item_id, 1);
+        self.food_i_ate = self.food_i_ate.saturating_add(1);
+
+        // And what it might cost. Two gambles, both of which a fire settles:
+        // raw flesh, and food that has started to go but has not gone far
+        // enough to be obviously carrion.
+        //
+        // This is the first illness in the model. Before it, cooking was
+        // worth 2.7 times the nutrition and nothing else, so there was no
+        // reason to fetch wood for a fire you did not strictly need.
+        {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let raw_flesh = food_data.preparation
+                == crate::world::nutrition::PreparationState::Raw
+                && crate::world::nutrition::Piece::is_it_flesh(item_id);
+
+            if raw_flesh && rng.gen_bool(Self::HOW_OFTEN_RAW_FLESH_TELLS) {
+                self.taken_ill_with(Self::OFF_RAW_FLESH, 0.5, current_tick);
+            } else if food_data.freshness < Self::ON_THE_TURN {
+                // The further gone it is, the likelier it is to tell. At the
+                // point where it counts as harmful it is a different and
+                // worse question, handled above.
+                let how_far_gone =
+                    1.0 - (food_data.freshness / Self::ON_THE_TURN).clamp(0.0, 1.0);
+                let odds = Self::HOW_OFTEN_FOOD_ON_THE_TURN_TELLS * how_far_gone as f64;
+
+                if rng.gen_bool(odds.clamp(0.0, 1.0)) {
+                    self.taken_ill_with(
+                        Self::OFF_FOOD_ON_THE_TURN,
+                        0.3 + 0.4 * how_far_gone,
+                        current_tick,
+                    );
+                }
+            }
+        }
 
         // Get effective nutrition (preparation + freshness factors applied)
         let nutrition = food_data.effective_nutrition();
@@ -4696,6 +5973,51 @@ impl Agent {
     }
 
     /// Find the best food item to eat based on nutritional needs and freshness
+    /// How many meals are actually in the pack.
+    ///
+    /// Not the same question as how much food is in the pack. A haunch nobody
+    /// has taken a knife to, a stack that has gone over, a strip of raw flesh
+    /// that made this one ill last time - all of them answer `is_food` and
+    /// none of them is supper. Anything deciding whether a person needs to go
+    /// and get something wants this count and not the other one, or a man
+    /// carrying a rotten carcass reads as provisioned.
+    pub fn how_many_meals_i_have(&self) -> u32 {
+        self.inventory
+            .items
+            .iter()
+            .filter(|(item_id, _)| self.is_this_a_meal(item_id))
+            .map(|(_, item)| item.quantity)
+            .sum()
+    }
+
+    /// Whether one thing in the pack is something this person would eat, on
+    /// the same terms `find_best_food_to_eat` picks by.
+    fn is_this_a_meal(&self, item_id: &str) -> bool {
+        let Some(item) = self.inventory.items.get(item_id) else {
+            return false;
+        };
+        if item.quantity == 0 {
+            return false;
+        }
+        if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
+            return false;
+        }
+        let Some(ref food_data) = item.food_data else {
+            return false;
+        };
+        if food_data.is_spoiled() || food_data.is_harmful() {
+            return false;
+        }
+        if food_data.preparation == crate::world::nutrition::PreparationState::Raw
+            && crate::world::nutrition::Piece::is_it_flesh(item_id)
+            && self.has_this_made_me_ill(Self::OFF_RAW_FLESH)
+            && !self.state.is_starving()
+        {
+            return false;
+        }
+        true
+    }
+
     pub fn find_best_food_to_eat(&self) -> Option<String> {
         let needed = self.nutrition.most_needed_nutrient();
 
@@ -4708,12 +6030,35 @@ impl Agent {
                 continue;
             }
 
+            // A carcass is not a meal. Somebody has to take a knife to it
+            // first, and until they do it is no more edible than the animal
+            // was - see `Piece` and `what_i_could_cut_up`.
+            if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
+                continue;
+            }
+
             if let Some(ref food_data) = item.food_data {
                 // Skip anything that would make the agent sick. Raw food turns
                 // harmful before it counts as spoiled, so checking spoilage
                 // alone leaves agents eating rot: ten health a bite, one bite
                 // a tick, until the stack or the agent runs out.
                 if food_data.is_spoiled() || food_data.is_harmful() {
+                    continue;
+                }
+
+                // And skip raw flesh, if this one has been ill off raw flesh
+                // before and is not desperate enough for that to stop
+                // mattering. This is the whole point of the illness: a fire
+                // used to be worth 2.7 times the nutrition and nothing else.
+                //
+                // Starving overrides it, as a strong enough survival drive
+                // overrides everything: a man three days without food eats
+                // what is in front of him and takes his chances.
+                if food_data.preparation == crate::world::nutrition::PreparationState::Raw
+                    && crate::world::nutrition::Piece::is_it_flesh(item_id)
+                    && self.has_this_made_me_ill(Self::OFF_RAW_FLESH)
+                    && !self.state.is_starving()
+                {
                     continue;
                 }
 
@@ -4726,8 +6071,27 @@ impl Agent {
                     crate::world::NutrientType::Micronutrients => nutrition.micronutrients,
                 };
 
-                // Prefer fresher food (multiply by freshness)
-                let adjusted_score = score * food_data.freshness;
+                // Prefer fresher food, and prefer food that will not keep.
+                //
+                // Freshness alone was exactly backwards for a people with a
+                // store. A person eats the thing that is about to be lost and
+                // saves the thing that will last, which is the whole reason
+                // for preserving anything - and until now nothing did that.
+                // Agents spent three turns drying a lot of fish and then ate
+                // it the same afternoon, so a settlement held 0.56 units of
+                // preserved food through a whole winter.
+                //
+                // `spoilage_multiplier` is how fast a thing goes off, so it
+                // is already the number wanted: raw is 1.0 and dried is 0.05,
+                // which makes a dried strip a twentieth as attractive as
+                // today's supper and exactly as attractive in February, when
+                // there is nothing else.
+                //
+                // Freshness stays in, so that "eat what will be lost first"
+                // does not become "eat the rot first": a raw thing at 0.35
+                // still scores below a raw thing at 1.0.
+                let adjusted_score =
+                    score * food_data.freshness * food_data.preparation.spoilage_multiplier();
 
                 if best_item.is_none() || adjusted_score > best_item.as_ref().unwrap().1 {
                     best_item = Some((item_id.clone(), adjusted_score));
@@ -6883,6 +8247,219 @@ impl Agent {
             .or_insert_with(|| super::gossip::TrustRating::new(self.id, liar))
             .update_on_verification(false);
     }
+
+    /// Somebody took something of this agent's.
+    ///
+    /// The same shape as finding out you were lied to, and worse: a lie costs
+    /// you a belief and a theft costs you the thing. It lands on the bond, it
+    /// lands on the anger, and it goes on the record that decides whose word
+    /// this agent will take next time.
+    pub fn they_took_something_of_mine(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_tick: u32,
+    ) {
+        use super::EmotionSource;
+
+        // What it costs depends on how much was taken and how much this agent
+        // had. Two sticks off a man with forty is a nuisance; two off a man
+        // with three is the difference between a spear and no spear.
+        let had = self.how_many_i_have(what).max(how_many);
+        let share = (how_many as f32 / had as f32).clamp(0.0, 1.0);
+        let cost = Self::WHAT_BEING_ROBBED_COSTS_THEM * (0.4 + 0.6 * share);
+
+        self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+
+        let bond = self
+            .relationships
+            .get_or_create_relationship(thief, current_tick);
+        bond.weaken(cost);
+        bond.settle_what_we_are();
+
+        // On the record - but in the thief's column, not the liar's. Being
+        // honest is about what a man says, and this is about what he takes.
+        self.knowledge
+            .trust_ratings
+            .entry(thief)
+            .or_insert_with(|| super::gossip::TrustRating::new(self.id, thief))
+            .update_on_theft();
+    }
+
+    /// What being robbed costs the man who was robbed, at its worst.
+    ///
+    /// More than a lie. A lie takes a belief off you and a theft takes the
+    /// thing.
+    const WHAT_BEING_ROBBED_COSTS_THEM: f32 = 0.55;
+
+    /// How readily this agent would help itself to somebody else's things.
+    ///
+    /// Nobody steals for the sake of it. What decides it is what sort of
+    /// person this is and how badly the want is pressing: an honest man with a
+    /// full belly does not, and a starving one might.
+    pub fn how_readily_i_would_take_it(&self) -> f32 {
+        use crate::core::traits::Trait;
+
+        let mut how_readily: f32 = 0.12;
+
+        if self.traits.has(Trait::Honest) {
+            how_readily -= 0.10;
+        }
+        if self.traits.has(Trait::Greedy) {
+            how_readily += 0.12;
+        }
+
+        // And need, which is what actually does it
+        if self.state.is_starving() || self.nutrition.is_starving() {
+            how_readily += 0.35;
+        }
+
+        how_readily.clamp(0.0, 1.0)
+    }
+
+    /// Which drive a thing answers, as far as this agent is concerned.
+    ///
+    /// Rough, and it has to be: the model has no table saying what each of a
+    /// hundred item names is *for*. What it does have is food that declares
+    /// itself food, vessels that hold water, and a chain that says which raw
+    /// things it is forever short of. Everything else is something to have
+    /// put by.
+    pub fn what_this_would_answer(&self, what: &str) -> crate::core::DriveType {
+        use crate::core::DriveType;
+
+        if self
+            .inventory
+            .get_item(what)
+            .is_some_and(|item| item.is_food())
+            || matches!(what, "food" | "grain" | "flour" | "bread" | "fish" | "meat")
+        {
+            return DriveType::Hunger;
+        }
+
+        if what == "water"
+            || self
+                .inventory
+                .get_item(what)
+                .is_some_and(|item| item.is_container())
+        {
+            return DriveType::Thirst;
+        }
+
+        if crate::environment::making::is_a_familiar_thing(what) {
+            return DriveType::Utility;
+        }
+
+        DriveType::Preparedness
+    }
+
+    /// What taking a thing would actually be worth to this agent.
+    ///
+    /// The specification asks for theft to be decided on drive demand rather
+    /// than on temperament, and this is the first half of it: how much of
+    /// what this agent is asking for would a handful of that answer. A sack
+    /// of grain is worth a great deal to a hungry man and nothing at all to a
+    /// full one, and until now the decision could not tell the two apart
+    /// because it never looked at what was being taken.
+    pub fn what_taking_this_would_answer(&self, what: &str, how_many: u32) -> f32 {
+        let answers = self.what_this_would_answer(what);
+
+        let urgency = self
+            .drives
+            .get(answers)
+            .map(|drive| drive.urgency().clamp(0.0, 1.0))
+            .unwrap_or(0.0);
+
+        // More of a thing is worth more, and sharply less so: the second
+        // armful of grain does not answer hunger twice
+        let how_much = (how_many as f32 / Self::WHAT_A_USEFUL_HAUL_IS).clamp(0.0, 1.0);
+
+        urgency * how_much
+    }
+
+    /// How many of a thing counts as having got something worth having.
+    const WHAT_A_USEFUL_HAUL_IS: f32 = 4.0;
+
+    /// What taking it would cost this agent later.
+    ///
+    /// The second half: taking threatens *future* drive demand satisfaction,
+    /// and in this model it does so through the bonds. Everything a person
+    /// gets from other people - gifts, trades, news, somebody to have a child
+    /// with, somebody who does not leave them to the wolves - runs on the
+    /// bond, and a theft costs it with the victim and with everybody who saw.
+    ///
+    /// `watching` is how many people are near enough to see, the victim
+    /// included. `bonds` is what this agent currently gets from the people it
+    /// would be stealing in front of, on the same 0..1 scale a bond is on.
+    pub fn what_taking_it_would_cost_me(&self, watching: usize, bonds: f32) -> f32 {
+        use crate::core::traits::Trait;
+
+        // What the eyes are worth. Doing it in front of nobody still costs
+        // something, because the victim always knows.
+        let seen = 1.0 + watching as f32 * Self::WHAT_ANOTHER_PAIR_OF_EYES_ADDS;
+
+        let mut cost = bonds.clamp(0.0, 1.0) * seen * Self::WHAT_A_BOND_IS_WORTH_KEEPING;
+
+        // Temperament does not decide this any more, but it does weigh it: an
+        // honest man sees more at stake in being a thief and a greedy one
+        // sees less
+        if self.traits.has(Trait::Honest) {
+            cost *= 1.6;
+        }
+        if self.traits.has(Trait::Greedy) {
+            cost *= 0.6;
+        }
+
+        cost
+    }
+
+    /// What each further witness adds to what a theft costs.
+    const WHAT_ANOTHER_PAIR_OF_EYES_ADDS: f32 = 0.5;
+
+    /// What standing among the people you live with is worth, against the
+    /// most a single haul could answer.
+    ///
+    /// Above 1.0, so that on an ordinary day the sums come out against
+    /// stealing: a settlement where theft pays is a settlement that stops
+    /// being one.
+    const WHAT_A_BOND_IS_WORTH_KEEPING: f32 = 1.4;
+
+    /// Whether this agent would take it, weighing the one against the other.
+    ///
+    /// > the decision to commit theft should be made if the theft will satisfy
+    /// > drive demand and not threaten future drive demand satisfaction. if a
+    /// > survival drive is strong enough, it will override the risk to future
+    /// > drive satisfaction to ensure immediate survival.
+    ///
+    /// So: gain against cost, and a primary drive past
+    /// `WHEN_TOMORROW_STOPS_MATTERING` sets the cost aside altogether. A man
+    /// who will be dead by morning is not weighing his reputation.
+    pub fn would_i_take_it(&self, gain: f32, cost: f32) -> bool {
+        if self.is_a_survival_drive_past_bearing() {
+            return gain > 0.0;
+        }
+
+        gain > cost
+    }
+
+    /// Whether something that kills you is far enough along to stop an agent
+    /// caring what anybody thinks.
+    pub fn is_a_survival_drive_past_bearing(&self) -> bool {
+        use crate::core::drives::DriveRank;
+
+        self.drives
+            .drives
+            .iter()
+            .filter(|drive| drive.drive_type.rank() == DriveRank::Primary)
+            .any(|drive| drive.urgency() >= Self::WHEN_TOMORROW_STOPS_MATTERING)
+    }
+
+    /// How hard something that kills you has to be pressing before a person
+    /// stops weighing what it will cost them afterwards.
+    ///
+    /// High on purpose. This is the override, not the ordinary case: it is
+    /// the difference between a hungry man and a starving one.
+    const WHEN_TOMORROW_STOPS_MATTERING: f32 = 0.85;
 
     /// And when what it was told turns out to have been true once.
     ///

@@ -140,6 +140,56 @@ pub struct World {
     #[serde(default)]
     pub dropped: Vec<Dropped>,
 
+    /// Pits dug in the ground, and what is keeping in them.
+    ///
+    /// A settlement had nowhere to put anything. The storehouse is a single
+    /// global bag of counts with no position, nothing in it ever spoils, and
+    /// what an agent could put by explicitly excluded food - so nothing that
+    /// anybody eats was ever stored anywhere by anybody. Measured at ten
+    /// thousand ticks, not one of sixty-five living agents was carrying so
+    /// much as a meal. A hole in the cold ground with the earth back over it
+    /// is what a people this far along actually has, and it is the difference
+    /// between a settlement that eats what it finds today and one that eats
+    /// in February.
+    #[serde(default)]
+    pub pits: Vec<Pit>,
+
+    /// Where a seam was worked out.
+    ///
+    /// A mined-out mineral node is genuinely gone and is taken off the map,
+    /// which left no way to tell worked ground from ground that never held
+    /// anything. That mattered in one place and mattered a lot: a man who
+    /// honestly reported a clay seam he passed yesterday was recorded as a
+    /// **liar** the moment somebody else mined it out and walked over the
+    /// spot, because the spot was then indistinguishable from the invented
+    /// one a liar names. A settlement of twenty-five people who would not
+    /// dream of lying produced dozens of proven liars. See ISSUES_FOUND #48.
+    ///
+    /// Ground that has been worked looks worked. This is the world
+    /// remembering that.
+    #[serde(default)]
+    pub where_it_was_worked_out: std::collections::HashSet<Position>,
+
+    /// What has dried out in the sun since anybody last looked, and where.
+    ///
+    /// The world does the drying; whoever is standing near enough to see it
+    /// happen is what turns it into something a person knows. Drained every
+    /// tick by the simulation - see `Simulation::who_saw_that_dry`.
+    #[serde(default, skip)]
+    pub what_dried_in_the_sun: Vec<(Position, String)>,
+    /// Food that went off before anybody ate it, where it lay and in the
+    /// ground.
+    ///
+    /// The wasted half of whatever was spent getting it. If half the meat rots
+    /// before it is eaten then half the hunt was wasted, and until this was
+    /// counted every preservation change in this project had to be judged on
+    /// how much was *in* the store rather than on how much of what was got was
+    /// ever any use to anybody.
+    #[serde(default)]
+    pub food_that_rotted_where_it_lay: u64,
+    #[serde(default)]
+    pub food_that_rotted_in_the_ground: u64,
+
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
     /// Drawn once when the country is made and never shown to anybody living
@@ -161,6 +211,142 @@ pub struct Dropped {
     pub where_it_is: Position,
     /// The tick it was left, which is what the weather counts from
     pub since: u32,
+    /// How much extra ageing the weather has done to it, over and above the
+    /// passing of time.
+    ///
+    /// Kept as its own count rather than by winding the food's `created_tick`
+    /// backwards, which was the first attempt and silently did nothing: a
+    /// thing dropped at tick zero has a `created_tick` of zero, and
+    /// `saturating_sub` on a `u32` at zero is a very quiet no-op.
+    #[serde(default)]
+    pub weathered: u32,
+    /// And how much sun it has had, which is the other thing the sky does to
+    /// a thing lying in it.
+    #[serde(default)]
+    pub dried_in_the_sun: u32,
+}
+
+/// A hole in the ground with food in it.
+///
+/// Covered or open. Covered is what does the work: earth over the top keeps
+/// the sun and the air off, and what is in there ages at a quarter the rate
+/// it would in somebody's pack. Open, it is a hole with food in it, which is
+/// to say it is much the same as leaving it on the grass.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Pit {
+    pub where_it_is: Position,
+    pub holds: Vec<crate::agents::InventoryItem>,
+    pub covered: bool,
+    /// The tick it was dug, which is what the ground counts from
+    pub dug: u32,
+}
+
+impl Pit {
+    /// How much a pit holds, in the units a pack is weighed in.
+    ///
+    /// Generous against a pack, which is the point of digging one - a person
+    /// carries fifty and a hole in the ground takes six times that.
+    pub const WHAT_A_PIT_TAKES: u32 = 300;
+
+    /// What is in there to eat, counted. The lining is not stores.
+    pub fn how_much_is_in_it(&self) -> u32 {
+        self.holds
+            .iter()
+            .filter(|item| Self::is_it_food(item))
+            .map(|item| item.quantity)
+            .sum()
+    }
+
+    /// Whether there is room for more.
+    pub fn has_room(&self) -> bool {
+        self.how_much_is_in_it() < Self::WHAT_A_PIT_TAKES
+    }
+
+    /// Whether there is anything in it worth walking to.
+    ///
+    /// The vessel it is lined with does not count, and neither does an uncut
+    /// haunch or a stack that has gone over. A hungry man who walks to a
+    /// store and comes back with the bowl has not eaten, and no more has one
+    /// who comes back with something he cannot put in his mouth.
+    pub fn has_food(&self) -> bool {
+        self.holds.iter().any(|item| Self::is_it_a_meal(item))
+    }
+
+    /// Whether a thing in the pit is something to eat rather than the vessel
+    /// it is kept in.
+    fn is_it_food(item: &crate::agents::InventoryItem) -> bool {
+        item.quantity > 0 && !matches!(item.item_id.as_str(), "bowl" | "basket")
+    }
+
+    /// What is in there to eat, by name.
+    ///
+    /// A meal, not merely a thing that is not a basket. This used to answer
+    /// with whatever was nearest the top, and a pit holding an uncut haunch
+    /// or a stack that had gone over would offer it over and over to somebody
+    /// who could not eat it: they picked it up, were no better fed for it,
+    /// and picked it up again. One settlement in sixteen starved to death
+    /// standing on its own larder doing exactly that. See ISSUES_FOUND #43.
+    pub fn something_to_eat(&self) -> Option<&str> {
+        self.holds
+            .iter()
+            .find(|item| Self::is_it_a_meal(item))
+            .map(|item| item.item_id.as_str())
+    }
+
+    /// Whether a thing in the pit is something somebody could actually make a
+    /// meal of, on the same terms `Agent::how_many_meals_i_have` counts by.
+    fn is_it_a_meal(item: &crate::agents::InventoryItem) -> bool {
+        if !Self::is_it_food(item) {
+            return false;
+        }
+        if !crate::world::nutrition::Piece::of(&item.item_id).can_it_be_eaten() {
+            return false;
+        }
+        match item.food_data {
+            Some(ref food) => !food.is_spoiled() && !food.is_harmful(),
+            None => false,
+        }
+    }
+
+    /// Whether somebody put a vessel in it before they filled it.
+    ///
+    /// A bowl or a basket between the food and the damp is worth as much as
+    /// the hole is: see `World::what_is_buried_keeps`.
+    pub fn is_lined(&self) -> bool {
+        self.holds
+            .iter()
+            .any(|item| matches!(item.item_id.as_str(), "bowl" | "basket"))
+    }
+
+    /// Take some of a thing out.
+    pub fn take_out(&mut self, what: &str, how_many: u32) -> u32 {
+        let Some(held) = self
+            .holds
+            .iter_mut()
+            .find(|item| item.item_id == what && item.quantity > 0)
+        else {
+            return 0;
+        };
+
+        let taken = how_many.min(held.quantity);
+        held.quantity -= taken;
+        self.holds.retain(|item| item.quantity > 0);
+        taken
+    }
+
+    /// Put something in.
+    pub fn put_in(&mut self, item: crate::agents::InventoryItem) {
+        if let Some(already) = self
+            .holds
+            .iter_mut()
+            .find(|held| held.item_id == item.item_id)
+        {
+            already.quantity += item.quantity;
+            return;
+        }
+
+        self.holds.push(item);
+    }
 }
 
 /// World configuration
@@ -309,6 +495,8 @@ impl World {
             item,
             where_it_is,
             since: tick,
+            weathered: 0,
+            dried_in_the_sun: 0,
         });
     }
 
@@ -349,11 +537,306 @@ impl World {
     ///
     /// Food goes first and goes into the ground, which is where food goes.
     /// Everything else weathers away in its own time.
+    /// Cold ground with the earth back over it keeps food.
+    ///
+    /// `FoodData::update_freshness` works off elapsed time since the thing was
+    /// made, so the way to make a pit keep something is to hold that clock
+    /// back: on three ticks in every four the buried food's `created_tick` is
+    /// pushed forward with the world, so a season underground costs it what a
+    /// fortnight in a pack would. An open pit is a hole with food in it and
+    /// keeps nothing at all.
+    ///
+    /// What has gone off in there rots away like anything else.
+    fn what_is_buried_keeps(&mut self) {
+        let now = self.tick;
+        let mut buried_and_lost = 0u64;
+
+        for pit in self.pits.iter_mut() {
+            // Bare earth is cool and dark and keeps a thing rather better
+            // than a pack does. Earth with a vessel in it keeps it better
+            // again: what actually gets at buried food is the ground itself -
+            // damp, and everything that lives in it - and a bowl or a basket
+            // between the two is the difference between a store and a hole
+            // full of rot.
+            let every = if pit.is_lined() {
+                Self::HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE
+            } else {
+                Self::HOW_OFTEN_BARE_EARTH_LETS_IT_AGE
+            };
+
+            let ageing = now % every == 0;
+
+            for item in pit.holds.iter_mut() {
+                if let Some(food) = item.food_data.as_mut() {
+                    if pit.covered && !ageing {
+                        food.created_tick = food.created_tick.saturating_add(1);
+                    }
+                    food.update_freshness(now);
+                }
+            }
+
+            pit.holds.retain(|item| {
+                let keeps = item.quantity > 0
+                    && item
+                        .food_data
+                        .as_ref()
+                        .is_none_or(|food| food.freshness > 0.0);
+
+                if !keeps && item.food_data.is_some() {
+                    buried_and_lost += item.quantity as u64;
+                }
+
+                keeps
+            });
+        }
+
+        self.food_that_rotted_in_the_ground =
+            self.food_that_rotted_in_the_ground.saturating_add(buried_and_lost);
+    }
+
+    /// One tick in this many is the only one that tells on food buried in
+    /// bare earth.
+    ///
+    /// Twice as long as a pack, which is what cool and dark are worth on
+    /// their own.
+    const HOW_OFTEN_BARE_EARTH_LETS_IT_AGE: u32 = 2;
+
+    /// And in earth with a vessel between the food and the ground.
+    ///
+    /// Four times a pack. What gets at buried food is the ground itself, and
+    /// a bowl or a basket in the way of it is the difference between a store
+    /// and a hole full of rot.
+    const HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE: u32 = 4;
+
+    /// Whether a thing laid out will dry through before it turns.
+    ///
+    /// Strips cut off a carcass will. A berry will - it is mostly skin. A
+    /// whole fish will not: the outside dries and the inside goes on being a
+    /// fish, and by evening the whole of it is carrion. That is the
+    /// difference a people here can actually see, and it is the only route
+    /// they have to anything that keeps.
+    pub fn will_this_dry(what: &str) -> bool {
+        // Flesh dries once somebody has cut it, and not before. A whole beast
+        // laid in the sun goes off; a joint of it takes most of a week and a
+        // strip of it two days - see `nutrition::Piece`.
+        if crate::world::nutrition::Piece::is_it_flesh(what) {
+            return crate::world::nutrition::Piece::of(what) != crate::world::nutrition::Piece::Whole;
+        }
+
+        what.ends_with("strips")
+            || what.ends_with("portions")
+            || matches!(what, "food" | "berries" | "greens" | "grain" | "roots")
+    }
+
+    /// How much faster a thing goes off lying in the open than it does in a
+    /// pack.
+    const WHAT_THE_WEATHER_ADDS: u32 = 3;
+
+    /// And in the shade, out of both sun and rain.
+    ///
+    /// Still worse than a pack, because a pack is carried indoors and out of
+    /// the way of everything that eats carrion.
+    const WHAT_SHADE_ADDS: u32 = 2;
+
+    /// How much sun a thing has to sit in before it is dried through.
+    ///
+    /// Two days of clear weather, which on this calendar is a real wait: rain
+    /// in the middle of it does not undo the drying but it does stop it, so a
+    /// wet fortnight is a fortnight nothing gets preserved.
+    /// Superseded by `nutrition::Piece::how_long_it_takes_to_dry`, which asks
+    /// the question this constant could not: how big is the piece.
+    #[allow(dead_code)]
+    const HOW_LONG_DRYING_TAKES: u32 = 24;
+
+    /// How often the weathering pass runs, which is what the extra ageing is
+    /// reckoned against.
+    const HOW_OFTEN_THE_WEATHER_GETS_AT_IT: u32 = 10;
+
+    /// What share of what a plant is carrying comes off it each pass, once
+    /// the season it bears in has passed.
+    ///
+    /// The plant pass runs every ten ticks, so at a quarter a hedgerow is
+    /// four fifths bare within five days of the season turning and all but
+    /// empty inside a fortnight. That is what fruit does.
+    ///
+    /// A first cut used a twentieth and left 472 units of berries hanging on
+    /// bushes in midwinter - most of a season's crop still on the branch in
+    /// the snow, which is not a lean season, it is autumn with worse weather.
+    const WHAT_FALLS_OFF_A_TICK: f32 = 0.25;
+
+    /// The pit dug on this tile, if there is one.
+    pub fn pit_at(&self, where_it_is: Position) -> Option<&Pit> {
+        self.pits.iter().find(|pit| pit.where_it_is == where_it_is)
+    }
+
+    /// The same, to put something in or take something out of.
+    pub fn pit_at_mut(&mut self, where_it_is: Position) -> Option<&mut Pit> {
+        self.pits
+            .iter_mut()
+            .find(|pit| pit.where_it_is == where_it_is)
+    }
+
+    /// The nearest pit with anything in it, and how far off it is.
+    pub fn nearest_full_pit(&self, from: Position, within: u32) -> Option<(&Pit, u32)> {
+        self.pits
+            .iter()
+            .filter(|pit| pit.has_food())
+            .map(|pit| {
+                let paces = from.distance_to(&pit.where_it_is);
+                (pit, paces)
+            })
+            .filter(|(_, paces)| *paces <= within)
+            .min_by_key(|(_, paces)| *paces)
+    }
+
+    /// How much food is in the ground about here.
+    ///
+    /// The whole larder within walking distance, not one hole. A person can
+    /// see the pits round their own camp, and how full a store is, is a
+    /// question about the store and not about whichever hole they happen to
+    /// be standing over.
+    pub fn how_much_is_in_the_ground_near(&self, from: Position, within: u32) -> u32 {
+        self.pits
+            .iter()
+            .filter(|pit| from.distance_to(&pit.where_it_is) <= within)
+            .map(|pit| pit.how_much_is_in_it())
+            .sum()
+    }
+
+    /// The nearest pit with room in it.
+    pub fn nearest_pit_with_room(&self, from: Position, within: u32) -> Option<(&Pit, u32)> {
+        self.pits
+            .iter()
+            .filter(|pit| pit.has_room())
+            .map(|pit| {
+                let paces = from.distance_to(&pit.where_it_is);
+                (pit, paces)
+            })
+            .filter(|(_, paces)| *paces <= within)
+            .min_by_key(|(_, paces)| *paces)
+    }
+
     fn what_is_lying_about_weathers(&mut self) {
         let now = self.tick;
         let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
+        let mut dried: Vec<(Position, String)> = Vec::new();
+
+        // What is lying out in the weather goes off faster than what is in
+        // somebody's pack. Sun, rain and flies get at it, and until now they
+        // did not: a thing picked up off the grass a fortnight after it was
+        // dropped was exactly as fresh as the day it fell.
+        // What the sky is doing to whatever is lying in it.
+        //
+        // Rain rots anything. Sun dries what is thin enough to dry - strips
+        // cut off a carcass, berries - and rots what is not: a whole fish
+        // left out in the sun is carrion by evening, and the same fish cut
+        // down and laid out keeps for a season. That difference is the whole
+        // of what a people here can learn about preserving anything, and it
+        // is the world that teaches it rather than anything written down.
+        // How hard it is coming down, rather than whether it is. A drizzle
+        // and a thunderstorm were the same event: `WHAT_THE_WEATHER_ADDS` was
+        // a constant and the intensity - which the weather has always
+        // reported - was thrown away at the first comparison.
+        let how_hard_it_rains = self.climate.weather.weather_type.precipitation_intensity();
+        let sunny = matches!(
+            self.climate.weather.weather_type,
+            crate::environment::WeatherType::Clear
+                | crate::environment::WeatherType::PartlyCloudy
+        );
+
+        // What is lying under a roof, which the sky cannot get at either way.
+        //
+        // "Nothing yet distinguishes food under a roof from food in the
+        // open": shade was a constant rather than a question about where the
+        // thing was lying. It is a question now, and it cuts both ways - a
+        // thing under a roof does not rot in the rain and does not dry in the
+        // sun either.
+        let under_a_roof: std::collections::HashSet<Position> = self
+            .buildings
+            .iter()
+            .map(|building| building.position)
+            .collect();
+
+        for left in self.dropped.iter_mut() {
+            if left.item.food_data.is_none() {
+                continue;
+            }
+
+            let sheltered = under_a_roof.contains(&left.where_it_is);
+            let thin_enough_to_dry = Self::will_this_dry(&left.item.item_id);
+            let drying = sunny && thin_enough_to_dry && !sheltered;
+
+            if drying {
+                left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+            } else {
+                // Rain gets at everything, and how much depends on how hard
+                // it is coming down. Sun gets at anything too thick to dry
+                // through before it turns, and at full strength - there is
+                // nothing gentle about a hot afternoon and a whole carcass.
+                let in_the_open = if sheltered {
+                    // The sky gets at nothing under a roof. What is left is
+                    // the shade case, which still costs something, because
+                    // nothing keeps out of doors.
+                    0.0
+                } else if sunny && !thin_enough_to_dry {
+                    1.0
+                } else {
+                    how_hard_it_rains
+                };
+
+                // Shade is the floor and the open sky is the ceiling; a
+                // drizzle sits between them rather than at the top of the
+                // range with a thunderstorm.
+                let shade = Self::WHAT_SHADE_ADDS as f32;
+                let worst = Self::WHAT_THE_WEATHER_ADDS as f32;
+                let adds = shade + (worst - shade) * in_the_open.clamp(0.0, 1.0);
+
+                left.weathered +=
+                    ((adds - 1.0) * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT as f32) as u32;
+            }
+
+            let weathered = left.weathered;
+
+            // How long it has to lie there is a question about how small it
+            // was cut. This was one flat number for everything, so a joint
+            // dried as fast as a strip and there was no reason on earth to
+            // cut a thing into strips.
+            let long_enough = left.dried_in_the_sun
+                >= crate::world::nutrition::Piece::of(&left.item.item_id)
+                    .how_long_it_takes_to_dry();
+
+            if let Some(food) = left.item.food_data.as_mut() {
+                if long_enough && food.preparation == crate::world::nutrition::PreparationState::Raw
+                {
+                    food.set_preparation(
+                        crate::world::nutrition::PreparationState::Dried,
+                        now,
+                    );
+                    dried.push((left.where_it_is, left.item.item_id.clone()));
+                }
+
+                food.update_freshness(now + weathered);
+            }
+        }
+
+        self.what_dried_in_the_sun.extend(dried);
+
+        let mut wasted = 0u64;
 
         self.dropped.retain(|left| {
+            // Food that has gone off entirely is not food any more, whatever
+            // the clock says about how long it has lain there
+            if left
+                .item
+                .food_data
+                .as_ref()
+                .is_some_and(|food| food.freshness <= 0.0)
+            {
+                back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
+                wasted += left.item.quantity as u64;
+                return false;
+            }
+
             let lain = now.saturating_sub(left.since);
 
             let gone = if left.item.food_data.is_some() {
@@ -364,10 +847,14 @@ impl World {
 
             if gone && left.item.food_data.is_some() {
                 back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
+                wasted += left.item.quantity as u64;
             }
 
             !gone
         });
+
+        self.food_that_rotted_where_it_lay =
+            self.food_that_rotted_where_it_lay.saturating_add(wasted);
 
         for (where_it_is, worth) in back_to_the_ground {
             if let Some(tile) = self.grid.get_tile_mut(&where_it_is) {
@@ -430,6 +917,11 @@ impl World {
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             dropped: Vec::new(),
+            pits: Vec::new(),
+            where_it_was_worked_out: std::collections::HashSet::new(),
+            what_dried_in_the_sun: Vec::new(),
+            food_that_rotted_where_it_lay: 0,
+            food_that_rotted_in_the_ground: 0,
         };
 
         // The ground under the terrain that was just generated
@@ -446,6 +938,8 @@ impl World {
         ));
 
         // Stock the country with what grows on it
+        world.prime_the_springs();
+
         world.plants.spawn_naturalistic(&world.grid);
 
         // Spawn initial wildlife based on terrain
@@ -570,7 +1064,14 @@ impl World {
             ));
         }
 
-        // Generate food nodes (in plains and meadows)
+        // Generate food nodes (in plains and meadows).
+        //
+        // How much a bush carries comes from the same table the clustered
+        // resources use, and how much *this* bush carries comes from the
+        // ground it is rooted in. Both of those used to be a hard-coded
+        // `gen_range(20..60)` sitting here, out of reach of anything that
+        // thought it was setting the world's food supply - see
+        // ISSUES_FOUND #57.
         for _ in 0..config.food_nodes {
             let terrain = if rng.gen::<f32>() < 0.6 {
                 TerrainType::Plains
@@ -578,11 +1079,70 @@ impl World {
                 TerrainType::Meadow
             };
             let pos = self.find_random_terrain_position(terrain);
-            self.resources.push(ResourceNode::new(
-                ResourceType::Food,
-                pos,
-                rng.gen_range(20..60),
-            ));
+            let (thin, heavy) =
+                resource_spawning::TerrainResourceMapper::amount_range(ResourceType::Food);
+            self.resources
+                .push(resource_spawning::what_this_ground_carries(
+                    &self.grid,
+                    ResourceType::Food,
+                    pos,
+                    rng.gen_range(thin..=heavy),
+                ));
+        }
+
+        // Wild leaf and shoot, and the first roots. What a hedgerow gives
+        // before anything has ripened - thin, plentiful and only there for
+        // its own few weeks of the year. Rather more patches than there are
+        // berry bushes, because a person living on greens has to pick a great
+        // many of them.
+        for (what, how_many) in [
+            (ResourceType::Greens, config.food_nodes * 3 / 2),
+            (ResourceType::Roots, config.food_nodes),
+        ] {
+            let (thin, heavy) = resource_spawning::TerrainResourceMapper::amount_range(what);
+
+            for _ in 0..how_many {
+                let terrain = if rng.gen::<f32>() < 0.5 {
+                    TerrainType::Meadow
+                } else {
+                    TerrainType::Plains
+                };
+                let pos = self.find_random_terrain_position(terrain);
+                self.resources
+                    .push(resource_spawning::what_this_ground_carries(
+                        &self.grid,
+                        what,
+                        pos,
+                        rng.gen_range(thin..=heavy),
+                    ));
+            }
+        }
+
+        // Salt: rare, and in two quite different places.
+        //
+        // On a flat, where a shallow sea dried up and left what was in it, it
+        // can be picked up off the ground. In a seam in the hills it has to
+        // be broken out. Both are scarce on purpose - a settlement that has
+        // neither has to boil the sea for it or go without, and going without
+        // is what most inland peoples actually did.
+        for (terrain, how_many, carrying) in [
+            (TerrainType::SaltFlat, Self::HOW_MANY_SALT_FLATS_CARRY, (40, 110)),
+            (TerrainType::Mountain, Self::HOW_MANY_SEAMS_IN_THE_HILLS, (15, 45)),
+        ] {
+            for _ in 0..how_many {
+                // Only where the ground for it actually exists. A world with
+                // no coast has no flats, and asking for a position on terrain
+                // that is not there would put salt in the middle of a wood.
+                if !self.is_there_any_of_this_terrain(terrain) {
+                    continue;
+                }
+                let pos = self.find_random_terrain_position(terrain);
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Salt,
+                    pos,
+                    rng.gen_range(carrying.0..carrying.1),
+                ));
+            }
         }
 
         // Generate water sources (rivers, wells, springs)
@@ -602,6 +1162,62 @@ impl World {
                 pos,
                 rng.gen_range(200..500), // High capacity, water is abundant at source
             ));
+        }
+
+        // And the sea, which is water and is not a drink.
+        //
+        // It has to be here as a water source or nobody could ever make the
+        // mistake: a thing an agent cannot reach is a thing an agent cannot
+        // learn about. What stops them drinking it is not that it is
+        // unreachable, it is that they know better - see
+        // `Agent::would_i_drink_the_sea`, which is false for everybody who is
+        // not already dying of thirst.
+        for terrain in [TerrainType::Sea, TerrainType::SaltMarsh] {
+            if !self.is_there_any_of_this_terrain(terrain) {
+                continue;
+            }
+            for _ in 0..Self::HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED {
+                let pos = self.find_random_terrain_position(terrain);
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Water,
+                    pos,
+                    // As much as any one source in this world carries. There
+                    // is no running the sea dry, but a node is a node and
+                    // nothing else in the world is allowed to be bigger.
+                    rng.gen_range(400..500),
+                ));
+            }
+        }
+    }
+
+    /// How many places along a coast a person can get down to the water.
+    const HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED: u32 = 3;
+
+    /// Work out what every spring in this world puts out, before anybody
+    /// drinks from one.
+    ///
+    /// `regenerate_resources` sets this, and it does not run until the tenth
+    /// tick. A source with no flow on it yet has no floor under it, so the
+    /// founders could drink one dry in the first morning of the world - which
+    /// is the whole failure this is meant to prevent, arriving ten ticks early.
+    fn prime_the_springs(&mut self) {
+        let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+
+        for resource in &mut self.resources {
+            if resource.resource_type != ResourceType::Water {
+                continue;
+            }
+
+            let terrain_type = self
+                .grid
+                .get_tile(&resource.position)
+                .map(|tile| tile.terrain.terrain_type)
+                .unwrap_or(TerrainType::Plains);
+
+            let temperature = self.climate.get_temperature(resource.position, terrain_type);
+            let inflow = resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+
+            resource.flow = inflow;
         }
     }
 
@@ -652,6 +1268,29 @@ impl World {
                 .push(pos_tuple);
         }
     }
+
+    /// Whether this world has any of a given ground in it at all.
+    ///
+    /// `find_random_terrain_position` falls back to *any* free tile when it
+    /// cannot find the ground it was asked for, which is right for wood in a
+    /// world short of forest and quite wrong for salt: it would put a salt
+    /// flat in the middle of a wood. A world with no coast should simply have
+    /// no flats.
+    fn is_there_any_of_this_terrain(&self, terrain_type: TerrainType) -> bool {
+        (0..self.grid.height).any(|y| {
+            (0..self.grid.width).any(|x| {
+                self.grid
+                    .get_tile(&Position::new(x as i32, y as i32))
+                    .is_some_and(|tile| tile.terrain.terrain_type == terrain_type)
+            })
+        })
+    }
+
+    /// How many patches of salt a world's flats carry.
+    const HOW_MANY_SALT_FLATS_CARRY: u32 = 4;
+
+    /// And how many seams there are in the hills, for a people with no coast.
+    const HOW_MANY_SEAMS_IN_THE_HILLS: u32 = 2;
 
     fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
         use rand::seq::SliceRandom;
@@ -749,9 +1388,17 @@ impl World {
         // A renewable node stays on the map when emptied so it can regrow;
         // deleting it would make berry patches and fish runs single-use and
         // drain the world of food permanently. Mined-out mineral deposits are
-        // genuinely gone and are removed.
-        self.resources
-            .retain(|r| r.amount > 0 || r.is_renewable());
+        // genuinely gone and are removed - but the ground remembers being
+        // worked, which is what tells a stripped seam from a spot somebody
+        // made up.
+        let worked_out = &mut self.where_it_was_worked_out;
+        self.resources.retain(|r| {
+            let keeping = r.amount > 0 || r.is_renewable();
+            if !keeping {
+                worked_out.insert(r.position);
+            }
+            keeping
+        });
     }
 
     // ===== Heat Source Management =====
@@ -1419,6 +2066,9 @@ impl World {
             self.what_is_lying_about_weathers();
         }
 
+        // What is under the earth keeps
+        self.what_is_buried_keeps();
+
         // Update animals (AI, movement, aging)
         self.animals.tick();
 
@@ -1493,6 +2143,12 @@ impl World {
             if resource.resource_type == ResourceType::Water {
                 let inflow =
                     resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+
+                // The rate is also the floor. What is standing in a spring is
+                // this pass's flow arriving, not a barrel somebody filled, so
+                // it is the one resource in this world that cannot be taken
+                // away - see `ResourceNode::what_can_be_taken`.
+                resource.flow = inflow;
                 resource.take_inflow(inflow);
                 continue;
             }
@@ -1530,6 +2186,18 @@ impl World {
             if cultivated {
                 let growing = (season_modifier * ground_water).clamp(0.0, 1.0);
                 soil.nobody_weeded_this(growing, 1.0);
+            }
+
+            // A hedgerow out of season carries nothing. Growth was seasonal
+            // from the beginning and what was *standing* was not, so a berry
+            // bush that had grown all summer still had its berries on it in
+            // February - and a settlement that could pick fruit in the snow
+            // had no reason to put anything by, no lean season to be lean in,
+            // and no use for a store. What is on the plant now falls off it
+            // outside the weeks it bears, which is what fruit does.
+            if !resource.resource_type.is_it_bearing(current_season) {
+                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK);
+                continue;
             }
 
             let _regen_amount = resource.regenerate_in_ground(

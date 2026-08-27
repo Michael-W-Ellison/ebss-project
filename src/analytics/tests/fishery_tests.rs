@@ -161,12 +161,12 @@ fn what_a_fish_leaves_reaches_the_ground() {
 
     on_fish
         .inventory
-        .add_item(InventoryItem::new("fish".to_string(), 4));
+        .add_item(InventoryItem::new("fishportions".to_string(), 4));
     on_grain
         .inventory
         .add_item(InventoryItem::new("grain".to_string(), 4));
 
-    let _ = on_fish.eat_food_item("fish", 100);
+    let _ = on_fish.eat_food_item("fishportions", 100);
     let _ = on_grain.eat_food_item("grain", 100);
 
     assert!(

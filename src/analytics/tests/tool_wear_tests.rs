@@ -258,7 +258,7 @@ fn a_broken_tool_is_a_reason_to_make_a_new_one() {
 
     let mut made_an_axe = false;
     for _ in 0..12 {
-        let Some(what) = simulation.population.agents[0].what_i_would_make() else {
+        let Some(what) = simulation.population.agents[0].what_i_would_make(true) else {
             break;
         };
         let result = simulation.execute_action(

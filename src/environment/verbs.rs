@@ -76,6 +76,14 @@ pub enum Wants {
     AToolFor(SkillType),
     /// One particular thing, by name, held and not used up
     ThisInHand(&'static str),
+    /// Something that holds a liquid, with something in it.
+    ///
+    /// The whole fluid family wants one, and none of the fluid family could
+    /// exist until somebody could hollow out a bowl - which is what the
+    /// container machinery in this codebase had been waiting for since it was
+    /// written. A verb that wants a vessel wants a full one: an empty bowl is
+    /// a bowl and not a means.
+    AVessel,
 }
 
 impl Wants {
@@ -89,11 +97,23 @@ impl Wants {
         helped_by: &impl Fn(SkillType) -> bool,
         a_hand_to_spare: bool,
     ) -> bool {
+        self.satisfied_by_hands(holding, helped_by, a_hand_to_spare, 0.0)
+    }
+
+    /// The same, for hands that may be carrying a vessel with something in it.
+    pub fn satisfied_by_hands(
+        &self,
+        holding: &impl Fn(&str) -> u32,
+        helped_by: &impl Fn(SkillType) -> bool,
+        a_hand_to_spare: bool,
+        carrying_liquid: f32,
+    ) -> bool {
         match self {
             Wants::BareHands => true,
             Wants::AFreeHand => a_hand_to_spare,
             Wants::AToolFor(trade) => helped_by(*trade),
             Wants::ThisInHand(what) => holding(what) > 0,
+            Wants::AVessel => carrying_liquid > 0.0,
         }
     }
 }
@@ -280,7 +300,7 @@ pub const FLEE_FROM: Verb = verb(
     Targets::AnAnimal,
     Wants::BareHands,
     &[Changes::Where],
-    None,
+    Some("fleefrom"),
 );
 
 pub const ENTER: Verb = verb(
@@ -324,13 +344,13 @@ pub const PLACE_DOWN: Verb = verb(
 );
 
 /// Not an act so much as a state: what carrying costs is paid every tick.
-pub const CARRY: Verb = verb(
+pub const CARRY: Verb = happens_when(
     "carry",
     Family::Manipulation,
     Targets::AThingHeld,
     Wants::AFreeHand,
     &[Changes::ABody],
-    None,
+    "a loaded pack is paid for with every step taken under it",
 );
 
 pub const DROP: Verb = verb(
@@ -342,13 +362,16 @@ pub const DROP: Verb = verb(
     Some("spreadmuck"),
 );
 
-pub const HOLD: Verb = verb(
+/// The state a thing is in between being taken up and being put away. Not
+/// something anybody decides once `equip` exists - it is what `equip` leaves
+/// behind, and what makes the tool worth more than the same tool in the bag.
+pub const HOLD: Verb = happens_when(
     "hold",
     Family::Manipulation,
     Targets::AThingHeld,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld],
-    None,
+    "a thing taken up stays in the hand until it is put away",
 );
 
 pub const RELEASE: Verb = verb(
@@ -382,7 +405,7 @@ pub const CRUSH: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
-    None,
+    Some("crush"),
 );
 
 pub const CUT: Verb = verb(
@@ -441,6 +464,50 @@ pub const HEAT: Verb = sometimes(
     Wants::BareHands,
     &[Changes::WhatAThingIs],
     Some("craft"),
+);
+
+/// Laying food out in the air, or hanging it over a fire.
+///
+/// Not one of the specification's sixty-eight - it was added when food was
+/// first put on a clock it could actually rot against. `PreparationState`
+/// has carried Dried, Smoked, Salted, Pickled and Fermented since it was
+/// written, with a spoilage multiplier for each, and nothing had ever set any
+/// of them: there was no reason to preserve anything in a world where meat
+/// took a year and a quarter to turn.
+pub const DRY: Verb = verb(
+    "dry",
+    Family::Thermal,
+    Targets::AThingHeld,
+    Wants::BareHands,
+    &[Changes::WhatAThingIs],
+    Some("dry"),
+);
+
+/// Rubbing salt into food, which is the third way of keeping a thing and the
+/// only one that needs neither a week of sun nor a fire kept going.
+pub const SALT: Verb = verb(
+    "salt",
+    Family::Thermal,
+    Targets::AThingHeld,
+    Wants::BareHands,
+    &[Changes::WhatAThingIs],
+    Some("salt"),
+);
+
+/// Holding a thing in a fire until it stops being what it was.
+///
+/// Distinct from `heat`, which is what a `Making` does over a fire and is
+/// carried out by `Craft`. This is the other thing a fire does: not warming a
+/// thing up on the way to making something else out of it, but changing what
+/// the thing *is*. Clay goes in and pottery comes out, and there is no going
+/// back.
+pub const FIRE: Verb = verb(
+    "fire",
+    Family::Thermal,
+    Targets::AThingHeld,
+    Wants::BareHands,
+    &[Changes::WhatAThingIs],
+    Some("fire"),
 );
 
 pub const COOL: Verb = verb(
@@ -514,9 +581,9 @@ pub const SOAK: Verb = verb(
     "soak",
     Family::Fluid,
     Targets::Water,
-    Wants::BareHands,
+    Wants::AVessel,
     &[Changes::WhatAThingIs],
-    None,
+    Some("soak"),
 );
 
 pub const COAT: Verb = verb(
@@ -532,9 +599,9 @@ pub const BOIL: Verb = verb(
     "boil",
     Family::Fluid,
     Targets::AFire,
-    Wants::ThisInHand("waterskin"),
+    Wants::AVessel,
     &[Changes::WhatAThingIs],
-    None,
+    Some("boil"),
 );
 
 pub const LEACH: Verb = verb(
@@ -550,9 +617,9 @@ pub const FERMENT: Verb = verb(
     "ferment",
     Family::Fluid,
     Targets::AThingHeld,
-    Wants::BareHands,
+    Wants::AVessel,
     &[Changes::WhatAThingIs],
-    None,
+    Some("ferment"),
 );
 
 // ---------------------------------------------------------------------------
@@ -574,7 +641,7 @@ pub const WEAVE: Verb = verb(
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatAThingIs],
-    None,
+    Some("weave"),
 );
 
 pub const CARVE: Verb = verb(
@@ -583,16 +650,20 @@ pub const CARVE: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Crafting),
     &[Changes::WhatAThingIs],
-    None,
+    Some("carve"),
 );
 
+/// Pressing a soft thing into a shape it keeps.
+///
+/// Live at last. Clay is the only material in this world that will do it, and
+/// it is where every fired thing starts.
 pub const MOLD: Verb = verb(
     "mold",
     Family::Assembly,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatAThingIs],
-    None,
+    Some("mold"),
 );
 
 pub const FOLD: Verb = verb(
@@ -667,31 +738,40 @@ pub const DIG: Verb = verb(
     Some("tillsoil"),
 );
 
+/// Digging yourself into the ground, because there is nothing to build with.
+///
+/// Live at last. `build` is framing - it wants poles in the hand, which is
+/// right for a tent and quite wrong for a hole - so a burrow is its own verb
+/// rather than a kind of building. What it wants is something to dig with.
 pub const BURROW: Verb = verb(
     "burrow",
     Family::Subterranean,
     Targets::TheGroundUnderfoot,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::TheGround, Changes::Where],
-    None,
+    Some("burrow"),
 );
 
+/// Digging a hole in the ground to keep things in, and what comes out of it.
 pub const EXCAVATE: Verb = verb(
     "excavate",
     Family::Subterranean,
     Targets::TheGroundUnderfoot,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::TheGround, Changes::WhatIsHeld],
-    None,
+    Some("excavate"),
 );
 
+/// Putting the earth back over what you have just put in the hole. Cold
+/// ground with a lid of soil on it is what a people this far along has instead
+/// of a cellar, and it keeps food four times as long as a pack does.
 pub const COVER: Verb = verb(
     "cover",
     Family::Subterranean,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::TheGround, Changes::WhatIsHeld],
-    None,
+    Some("cover"),
 );
 
 // ---------------------------------------------------------------------------
@@ -795,13 +875,32 @@ pub const AIM: Verb = verb(
     None,
 );
 
-pub const DODGE: Verb = verb(
+/// Nobody decides to dodge either. It is what a body does when something
+/// comes at it, and how much of it a body manages is what standing your ground
+/// has taught it - see `Agent::what_a_blow_costs_me`.
+pub const DODGE: Verb = happens_when(
     "dodge",
     Family::Combat,
     Targets::Nobody,
     Wants::BareHands,
     &[Changes::ABody],
-    None,
+    "something comes at you",
+);
+
+/// The third answer to a thing that would kill you, and the one nobody
+/// arrives at on purpose. It is what is left when a body can neither run nor
+/// raise a hand: see `Simulation::how_this_one_answers_a_threat`.
+///
+/// Not in the specification's twelve families - it was added when the
+/// fight-or-flight decision was given the rest of its tree, because a
+/// decision with two branches and no answer for "neither" is not a decision.
+pub const FREEZE: Verb = verb(
+    "freeze",
+    Family::Combat,
+    Targets::Nobody,
+    Wants::BareHands,
+    &[Changes::Nothing],
+    Some("freeze"),
 );
 
 pub const PARRY: Verb = verb(
@@ -832,7 +931,7 @@ pub const TAKE_FROM: Verb = verb(
     Targets::APerson,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld, Changes::ABond],
-    None,
+    Some("takefrom"),
 );
 
 pub const TRADE: Verb = verb(
@@ -862,6 +961,22 @@ pub const COMMUNICATE: Verb = verb(
     Some("shareinformation"),
 );
 
+/// Asking somebody how a thing of theirs came about.
+///
+/// The other half of `communicate`, and the half that was missing. Sharing is
+/// somebody deciding to say something; this is somebody deciding to ask, which
+/// is how a discovery gets out of the head that made it and into the head that
+/// needed it. A settlement of forty could work the same thing out forty times
+/// over and be no further on than the first man who worked it out.
+pub const ASK_ABOUT: Verb = verb(
+    "ask about",
+    Family::Exchange,
+    Targets::APerson,
+    Wants::BareHands,
+    &[Changes::WhatIsKnown],
+    Some("ask"),
+);
+
 // ---------------------------------------------------------------------------
 // 11. Equipment and utilities
 // ---------------------------------------------------------------------------
@@ -881,7 +996,7 @@ pub const EQUIP: Verb = verb(
     Targets::AThingHeld,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld],
-    None,
+    Some("equip"),
 );
 
 pub const UNEQUIP: Verb = verb(
@@ -890,16 +1005,18 @@ pub const UNEQUIP: Verb = verb(
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatIsHeld],
-    None,
+    Some("unequip"),
 );
 
-pub const USE: Verb = verb(
+/// A tool put to its purpose. Nobody chooses this: it is what happens to the
+/// axe when the tree comes down, and it is why an axe is a finite thing.
+pub const USE: Verb = happens_when(
     "use",
     Family::Equipment,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatAThingIs],
-    None,
+    "a tool does a piece of work and is the worse for it",
 );
 
 // ---------------------------------------------------------------------------
@@ -948,7 +1065,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 3
     SMASH, CRUSH, CUT, SCRAPE, PIERCE, DRILL, SPLIT,
     // 4
-    HEAT, COOL, QUENCH, IGNITE, MELT, ROAST,
+    HEAT, DRY, SALT, FIRE, COOL, QUENCH, IGNITE, MELT, ROAST,
     // 5
     MIX, POUR, SOAK, COAT, BOIL, LEACH, FERMENT,
     // 6
@@ -958,9 +1075,9 @@ pub const EVERY_VERB: &[Verb] = &[
     // 8
     HARVEST, HUNT, BUTCHER, EAT, DRINK, TASTE,
     // 9
-    ATTACK_WITH, DEFEND_WITH, THROW, AIM, DODGE, PARRY,
+    ATTACK_WITH, DEFEND_WITH, THROW, AIM, DODGE, PARRY, FREEZE,
     // 10
-    GIVE_TO, TAKE_FROM, TRADE, SHARE, COMMUNICATE,
+    GIVE_TO, TAKE_FROM, TRADE, SHARE, COMMUNICATE, ASK_ABOUT,
     // 11
     WEAR, EQUIP, UNEQUIP, USE,
     // 12
