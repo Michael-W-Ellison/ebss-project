@@ -11001,15 +11001,35 @@ impl Simulation {
                             });
                         }
 
-                        // Add to agent inventory
+                        // Add to agent inventory.
+                        //
+                        // Anything edible off a plant carries a clock, the
+                        // same as anything edible picked off the ground. This
+                        // path did not attach one, so a settlement that
+                        // harvested its own plants filled up with food that
+                        // could never go off - and, worse, one such stack
+                        // swallowed every honest one that was merged into it.
+                        // See ISSUES_FOUND #61.
+                        let now = self.current_tick;
+                        let clocks: Vec<Option<crate::world::nutrition::FoodData>> = items_gained
+                            .iter()
+                            .map(|stack| {
+                                crate::agents::storage_integration::id_to_item_type(
+                                    &stack.material_id,
+                                )
+                                .and_then(|kind| self.food_database.create_food_data(&kind, now))
+                            })
+                            .collect();
+
                         let agent = &mut self.population.agents[agent_index];
-                        for item_stack in &items_gained {
+                        for (item_stack, clock) in items_gained.iter().zip(clocks) {
                             use crate::agents::InventoryItem;
-                            let item = InventoryItem::new_with_weight(
+                            let mut item = InventoryItem::new_with_weight(
                                 item_stack.material_id.clone(),
                                 item_stack.quantity,
                                 1.5, // Plant materials weight
                             );
+                            item.food_data = clock;
                             agent.inventory.add_item(item);
                         }
 
@@ -11240,15 +11260,19 @@ impl Simulation {
 
                             // Remove from initiator inventory
                             let initiator = &mut self.population.agents[agent_index];
-                            if let Some(_removed) = initiator.inventory.remove_item(&item_str, *quantity) {
-                                // Add to recipient inventory
+                            if let Some(given) = initiator.inventory.remove_item(&item_str, *quantity) {
+                                // What is handed over is the thing itself.
+                                //
+                                // It used to be a *new* item built out of the
+                                // name: same id, same count, and nothing else
+                                // - no food data, no freshness, no
+                                // preparation, and a flat weight of 2.0
+                                // whatever it was. So giving somebody a week-old
+                                // fish handed them a fish that would never go
+                                // off, and giving away a dried strip threw the
+                                // drying away. See ISSUES_FOUND #61.
                                 let recipient = &mut self.population.agents[target_index];
-                                let gift_item = crate::agents::InventoryItem::new_with_weight(
-                                    item_str.clone(),
-                                    *quantity,
-                                    2.0, // Default weight
-                                );
-                                recipient.inventory.add_item(gift_item);
+                                recipient.inventory.add_item(given);
 
                                 let gift_value = calculate_gift_value(item_type, *quantity);
                                 message = format!("Gave {} {:?} to agent (value: {:.1})", quantity, item_type, gift_value);
@@ -12297,21 +12321,20 @@ impl Simulation {
                 let me = self.population.agents[agent_index].id;
                 let robbed = self.population.agents[them].id;
 
-                {
+                // What is taken is the thing itself, clock and all. Building
+                // a fresh item out of the name handed the thief a stack that
+                // would never go off - stealing a week-old fish got you a
+                // fish that keeps for ever. See ISSUES_FOUND #61.
+                let taken = {
                     let other = &mut self.population.agents[them];
-                    other.inventory.remove_item(&theirs.0, took);
+                    let taken = other.inventory.remove_item(&theirs.0, took);
                     other.they_took_something_of_mine(me, &theirs.0, took, tick_now);
-                }
+                    taken
+                };
 
-                {
+                if let Some(taken) = taken {
                     let agent = &mut self.population.agents[agent_index];
-                    agent.inventory.add_item(
-                        crate::agents::InventoryItem::new_with_weight(
-                            theirs.0.clone(),
-                            took,
-                            1.0,
-                        ),
-                    );
+                    agent.inventory.add_item(taken);
                 }
 
                 // And whoever else was standing there saw it. A thief in a

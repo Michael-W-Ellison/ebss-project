@@ -341,7 +341,11 @@ impl Pit {
             .iter_mut()
             .find(|held| held.item_id == item.item_id)
         {
-            already.quantity += item.quantity;
+            // A pit keeps one stack of a thing, and that stack is as old as
+            // its oldest part - see `InventoryItem::absorb`. Burying a fresh
+            // load into a pit that has been holding one since autumn does not
+            // make the pit fresh.
+            already.absorb(item);
             return;
         }
 

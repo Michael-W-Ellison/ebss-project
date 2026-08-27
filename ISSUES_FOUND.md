@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Eighteen tests fail intermittently
+### 1. Nineteen tests fail intermittently
 
 **Three of the twenty that used to be on this list were not flakes at all.**
 `water_is_not_used_up` failed 12 times out of 12 and
@@ -35,6 +35,7 @@ run more than a handful of times on their own.
     analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
     analytics::tests::working_tests::nobody_works_more_than_they_have_a_use_for
     analytics::tests::situation_tests::a_settlement_works_things_out_that_nobody_wrote_down
+    analytics::tests::keeping_it_tests::a_deer_at_your_feet_beats_a_berry_patch_a_walk_away
     analytics::tests::predator_prey_tests::predators_hold_a_herd_down
     analytics::tests::fluid_tests::nobody_proposes_a_fluid_working_with_a_dry_pack
     analytics::tests::relationship_tests::a_settlement_ends_up_with_enemies_in_it
@@ -46,6 +47,12 @@ run more than a handful of times on their own.
     analytics::tests::clay_tests::a_curious_agent_with_clay_tries_molding_it
     analytics::tests::barter_tests::two_people_with_opposite_problems_trade
     analytics::tests::asking_tests::being_told_lets_you_try_it_rather_than_making_you_believe_it
+
+`a_deer_at_your_feet_beats_a_berry_patch_a_walk_away` was found the same way
+and characterised the same way: **0 failures in 20 runs here and 1 in 20 on the
+commit before**. It is about hunting, and the batch it turned up in touched
+nothing to do with hunting, which is exactly why it was worth twenty runs a
+side rather than a shrug.
 
 `a_settlement_works_things_out_that_nobody_wrote_down` was found in a
 full-suite run while the scarcity work was going on, and characterised against
@@ -3256,18 +3263,115 @@ the clobbered files were discarded rather than filtered.
 And a `pkill -f` pattern **matched the command line of the shell running it**,
 so the guard against a runaway run killed the run.
 
+### 61. A thing rebuilt from its name is not the thing
+
+Entry #45 noted in passing that stacking kept the wrong clock and left it as a
+data-modelling wart. It is not a wart. It is one mistake made in five places,
+and in a simulation whose whole subject is what an agent *decides*, it matters
+for a reason that has nothing to do with realism: **an agent chooses whether to
+eat now, dry it, bury it or leave it on the strength of what its pack says it
+is holding.** A pack that lies about its own food produces perfectly sensible
+decisions about a world that is not there.
+
+#### The stacking rule
+
+`Inventory::add_item` and `Pit::put_in` both merged by name with a bare
+`quantity += other.quantity`, keeping whichever stack happened to be there
+first. So the same act went either way by accident: this morning's berries
+tipped onto a week-old basket inherited the week-old timer, and a week-old
+handful tipped onto a fresh stack was **silently made new again**.
+
+Freshness is derived from `created_tick`, so the timer is the thing that has to
+move. `FoodData::the_older_clock` now takes the older tick, the faster-spoiling
+preparation and the shorter spoilage span, and `InventoryItem::absorb` is the
+single merge both call sites use — mould spreads, and a stack is as old as its
+oldest part and as perishable as its worst. Half of this the user asked for and
+half of it is the same bug seen from the other side.
+
+#### And four places that rebuilt an item out of its name
+
+The stack merge is one instance of a wider mistake: taking an item's *name* and
+count and constructing a fresh item, discarding everything else about it.
+
+- **Giving.** `Action::Give` removed the item from one pack and built a new one
+  for the other: same id, same count, and nothing else — no food data, no
+  freshness, no preparation, and a flat weight of 2.0 whatever it was. Giving
+  somebody a week-old fish handed them a fish that would never go off; giving
+  away a dried strip threw the drying away.
+- **Theft.** The same, exactly. Stealing a week-old fish got you a fish that
+  keeps for ever.
+- **Harvesting a plant.** The flora harvest path attached no food data at all,
+  so anything picked off a cultivated plant was inert from the moment it
+  existed.
+- **The merge itself**, when one side had no food data: the dataless side could
+  win, and an item with no `food_data` **never rots**. One such stack in a pit
+  swallowed every honest stack merged into it afterwards, which is where the
+  several hundred units of immortal food in #45 came from.
+
+Measured directly, tracking food-named items with no clock: inert food first
+appeared in a pack around **tick 1,800** and in a pit by **6,800**. After the
+fixes, pits are clean and packs show one residual case in three ten-thousand
+tick runs, from a path not yet identified — recorded rather than claimed to be
+finished.
+
+#### The clock rule is written, tested, and **not shipped**
+
+This is the uncomfortable part. Everything above ships. The clock rule — the
+thing the entry is named after and the thing that was actually asked for — does
+not, and here is why.
+
+Measured at thirty-two worlds a side, with the rule on:
+
+| | before | with the clock rule |
+|---|---|---|
+| **food eaten** | 9,703 | **4,638** (t = −8.4) |
+| people alive | 55.5 | 48.0 (t = −2.2) |
+| winter store | 320 | 105 (t = −10.7) |
+| rotted in packs | 1,346 | 390 |
+| rotted on the ground | 1,340 | 697 |
+| rotted in pits | 485 | 967 |
+
+A settlement ate **less than half as much**. And the loss does not turn up
+anywhere: eaten plus waste falls from **12,874 to 6,692**, so something like
+six thousand units leave the ledger without being eaten, without rotting in a
+pack, on the ground or in a pit, and without still being held at the end.
+
+It was attributed properly rather than guessed at. Three arms, sixteen worlds
+each:
+
+- Without the harvest clock: eaten 4,184. Still halved, so that is not it.
+- Without the clock merge, everything else on: eaten **9,389** against a
+  baseline 9,703, t = −0.32, and every other column null.
+
+So the clock merge is responsible on its own, and the six-thousand-unit hole is
+unexplained. Two readings of the rule were tried — the strict one (always take
+the older tick) and a quantity-weighted blend with mould-that-has-manifested
+taking the whole basket — and they measured within 1% of each other, so the
+pathology is not the severity of the rule.
+
+**Shipping a rule that loses half a settlement's food to a sink nobody has
+found is worse than shipping a stack that lies about its age.** A stack still
+keeps the clock of whatever was there first, which is wrong, is known to be
+wrong, and is the lesser wrong. `stacking_tests::a_stack_still_keeps_the_clock_of_whatever_was_there_first`
+says so out loud so that nobody reads the current behaviour as intended.
+
+The reason to come back to it is the first paragraph of this entry: this is a
+behavioural model, and an agent's decisions are only as good as what its pack
+tells it. A settlement that has been told its winter store is fresh has no
+reason to dry anything.
+
 ## Housekeeping
 
-### 58. Committed backup file
+### 62. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 59. Build warnings
+### 63. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 60. Placeholder package metadata
+### 64. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

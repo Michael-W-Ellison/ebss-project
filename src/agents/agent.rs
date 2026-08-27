@@ -133,6 +133,51 @@ impl InventoryItem {
     }
 
     /// Check if this is a food item
+    /// Take another lot of the same thing onto this stack.
+    ///
+    /// A stack that has food data keeps it when something without any is
+    /// added, and picks one up if it had none. An item with no `food_data`
+    /// **never rots**, so letting a dataless lot swallow a real stack made
+    /// food that could sit in a pit for the life of the world without ever
+    /// going off - which is where the several hundred units of immortal food
+    /// in ISSUES_FOUND #45 came from.
+    ///
+    /// # What this deliberately does not do
+    ///
+    /// It does not merge the two clocks. It keeps the clock of whichever
+    /// stack was already there, which is what the bare
+    /// `quantity += other.quantity` it replaces did.
+    ///
+    /// That is **not** because the clock rule is wrong. Fresh food tipped
+    /// into a basket that has been going over ought to come down to meet it -
+    /// mould spreads - and `FoodData` had a `the_older_clock` written and unit
+    /// tested for exactly that. It was measured at thirty-two worlds a side
+    /// and held back:
+    ///
+    /// | | before | with the clock rule |
+    /// |---|---|---|
+    /// | food eaten | 9,703 | **4,638** (t = -8.4) |
+    /// | people alive | 55.5 | 48.0 (t = -2.2) |
+    /// | winter store | 320 | 105 |
+    ///
+    /// A settlement ate **less than half as much**, and the loss does not
+    /// turn up in any waste column - eaten plus waste falls from 12,874 to
+    /// 6,692, so something like six thousand units leave the ledger without
+    /// being eaten, rotting or being left anywhere. Every other change in that
+    /// batch was measured null with the clock rule off, so the rule is
+    /// responsible and the hole is not explained. Shipping a rule that loses
+    /// half a settlement's food to an unexplained sink is worse than shipping
+    /// a stack that lies about its age.
+    ///
+    /// See ISSUES_FOUND #61, and the task that goes with it.
+    pub fn absorb(&mut self, other: InventoryItem) {
+        self.quantity += other.quantity;
+
+        if self.food_data.is_none() {
+            self.food_data = other.food_data;
+        }
+    }
+
     pub fn is_food(&self) -> bool {
         self.food_data.is_some()
     }
@@ -293,7 +338,7 @@ impl Inventory {
 
         // Add or stack item
         if let Some(existing) = self.items.get_mut(&item.item_id) {
-            existing.quantity += item.quantity;
+            existing.absorb(item);
         } else {
             self.items.insert(item.item_id.clone(), item);
         }

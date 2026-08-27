@@ -438,6 +438,29 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- 🚧 A thing rebuilt from its name is not the thing. Four places took an item's
+  *name* and count and constructed a fresh item, discarding everything else
+  about it. **Giving** somebody a week-old fish handed them a fish that would
+  never go off, and gave away a dried strip as undried. **Theft** did the same.
+  **Harvesting a plant** attached no food clock at all. And the **stack merge**
+  let a lot with no clock swallow a real one — an item with no food data never
+  rots, which is where the immortal food in ISSUES_FOUND #45 came from. All four
+  fixed, and measured null together.
+
+  The **clock rule is written, unit tested, and deliberately not shipped**, and
+  that is the useful part of the entry. Fresh food tipped into a basket going
+  over ought to come down to meet it — mould spreads. With that rule on, a
+  settlement ate **less than half as much** (9,703 to 4,638, t = -8.4) and lost
+  seven people, and the loss turns up in no waste column: eaten plus waste falls
+  from 12,874 to 6,692, so ~6,000 units leave the ledger without being eaten,
+  rotting anywhere, or still being held. Attributed across three arms — with the
+  rule off and everything else on, eaten is 9,389 against 9,703 (t = -0.3) — so
+  the rule is responsible and the hole is unexplained. Two severities of the rule
+  measured within 1% of each other, so it is not a matter of tuning.
+
+  Shipping a rule that loses half a settlement's food to a sink nobody has found
+  is worse than shipping a stack that lies about its age. A test says so out loud
+  so the current behaviour is not read as intended. See ISSUES_FOUND.md #61
 - 🚧 Making food scarcer does not make a people careful. Thinning what there is
   to gather and capping what one person takes, done together and measured
   separately. **Mostly a negative result, and the negatives are the valuable
