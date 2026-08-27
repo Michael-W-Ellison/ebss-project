@@ -438,6 +438,32 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- 🚧 Making food scarcer does not make a people careful. Thinning what there is
+  to gather and capping what one person takes, done together and measured
+  separately. **Mostly a negative result, and the negatives are the valuable
+  part.**
+
+  The first attempt measured nothing at all, because **there are two resource
+  spawners** and berries come out of the one that was not being changed — the
+  fourth instance of this project's duplicated-vocabulary defect and the second
+  in two batches. Both read one table now, and a patch is the size the ground
+  under it will carry. With that fixed the thinning is real: a world's edible
+  standing crop goes from **7,413 to 3,944**.
+
+  And it still changed nothing — **not one column of thirty-two worlds a side
+  reaches significance**. The standing crop turns out to be a buffer: a patch
+  regrows at a fixed rate until it hits its cap, so halving the cap makes it top
+  out sooner and produce at exactly the same pace. That is the springs lesson
+  from the entry above, arrived at from the other side. Wild animals now get out
+  of a person's way — nothing in the fauna module knew agents existed except the
+  predator pass — and **hunting is 250 actions in 270,000**, so it cannot matter.
+
+  So the flow was halved instead, and **reverted**: the population did not move
+  and **efficiency went from 0.74 to 0.70 (t = -3.0)**, with more rotting in
+  packs and more left on the ground. People ranged further, carried more when
+  they found anything, and lost more in transit. The waste in this model is a
+  behaviour, not a supply artefact, and starving people does not fix a
+  behaviour. See ISSUES_FOUND.md #57
 - ✅ A spring is a flow, not a barrel. The entry above raised the rate; this is
   the half that matters. Water was a `ResourceNode` with an `amount` that
   drinking decremented — a stock — and **a spring does not have a set amount of

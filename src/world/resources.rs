@@ -211,6 +211,26 @@ impl ResourceType {
     }
 
 
+    /// Whether this is a thing that grows out of the ground, and so a thing
+    /// the ground's condition has a say in.
+    ///
+    /// A seam of clay does not care how rich the topsoil over it is; a
+    /// hedgerow does.
+    pub fn is_it_grown(&self) -> bool {
+        matches!(
+            self,
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Herbs
+                | ResourceType::Flax
+                | ResourceType::Cotton
+                | ResourceType::StrangePlant
+                | ResourceType::Wood
+        )
+    }
+
     /// Whether an agent can eat this straight from the land.
     ///
     /// The single answer to "is this food", used by foraging, by what an agent
@@ -984,6 +1004,19 @@ impl ResourceNode {
         // and no more, which is what a settlement of a dozen lives on and what
         // a settlement of forty starves against. Ground that has been broken
         // and sown is a different matter - see `cultivated_multiplier`.
+        // This is the flow, and the standing crop above is only a buffer on
+        // top of it - which is why thinning the hedgerows by half, a world's
+        // edible standing crop from 7,413 to 3,944, changed **nothing
+        // measurable** at thirty-two worlds a side. A patch tops out sooner
+        // and goes on producing at the same pace.
+        //
+        // Halving these numbers as well was measured and **reverted**. It did
+        // not make a winter bite: the population did not move, and efficiency
+        // went from 0.74 to 0.70 (t = -3.0) with more rotting in packs and
+        // more left on the ground. Scarcer food did not make a settlement
+        // careful, it made it range further and hoard worse. The waste in this
+        // model is a behaviour and not a supply artefact, and starving people
+        // does not fix a behaviour. See ISSUES_FOUND #57.
         let base_rate = match self.resource_type {
             // Renewable resources
             ResourceType::Wood => 0.01,       // Trees grow slowly

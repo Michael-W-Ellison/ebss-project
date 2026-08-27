@@ -44,6 +44,7 @@ pub mod danger_map_tests;
 pub mod keeping_it_tests;
 pub mod portion_tests;
 pub mod salt_tests;
+pub mod scarcity_tests;
 pub mod sickness_tests;
 mod weather_tests;
 pub mod working_tests;

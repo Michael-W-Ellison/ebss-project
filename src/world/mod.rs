@@ -1064,7 +1064,14 @@ impl World {
             ));
         }
 
-        // Generate food nodes (in plains and meadows)
+        // Generate food nodes (in plains and meadows).
+        //
+        // How much a bush carries comes from the same table the clustered
+        // resources use, and how much *this* bush carries comes from the
+        // ground it is rooted in. Both of those used to be a hard-coded
+        // `gen_range(20..60)` sitting here, out of reach of anything that
+        // thought it was setting the world's food supply - see
+        // ISSUES_FOUND #57.
         for _ in 0..config.food_nodes {
             let terrain = if rng.gen::<f32>() < 0.6 {
                 TerrainType::Plains
@@ -1072,11 +1079,15 @@ impl World {
                 TerrainType::Meadow
             };
             let pos = self.find_random_terrain_position(terrain);
-            self.resources.push(ResourceNode::new(
-                ResourceType::Food,
-                pos,
-                rng.gen_range(20..60),
-            ));
+            let (thin, heavy) =
+                resource_spawning::TerrainResourceMapper::amount_range(ResourceType::Food);
+            self.resources
+                .push(resource_spawning::what_this_ground_carries(
+                    &self.grid,
+                    ResourceType::Food,
+                    pos,
+                    rng.gen_range(thin..=heavy),
+                ));
         }
 
         // Wild leaf and shoot, and the first roots. What a hedgerow gives
@@ -1084,10 +1095,12 @@ impl World {
         // its own few weeks of the year. Rather more patches than there are
         // berry bushes, because a person living on greens has to pick a great
         // many of them.
-        for (what, how_many, carrying) in [
-            (ResourceType::Greens, config.food_nodes * 3 / 2, (25, 70)),
-            (ResourceType::Roots, config.food_nodes, (15, 45)),
+        for (what, how_many) in [
+            (ResourceType::Greens, config.food_nodes * 3 / 2),
+            (ResourceType::Roots, config.food_nodes),
         ] {
+            let (thin, heavy) = resource_spawning::TerrainResourceMapper::amount_range(what);
+
             for _ in 0..how_many {
                 let terrain = if rng.gen::<f32>() < 0.5 {
                     TerrainType::Meadow
@@ -1095,11 +1108,13 @@ impl World {
                     TerrainType::Plains
                 };
                 let pos = self.find_random_terrain_position(terrain);
-                self.resources.push(ResourceNode::new(
-                    what,
-                    pos,
-                    rng.gen_range(carrying.0..carrying.1),
-                ));
+                self.resources
+                    .push(resource_spawning::what_this_ground_carries(
+                        &self.grid,
+                        what,
+                        pos,
+                        rng.gen_range(thin..=heavy),
+                    ));
             }
         }
 

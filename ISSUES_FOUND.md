@@ -14,7 +14,7 @@ and running the project.
 
 ## Correctness
 
-### 1. Seventeen tests fail intermittently
+### 1. Eighteen tests fail intermittently
 
 **Three of the twenty that used to be on this list were not flakes at all.**
 `water_is_not_used_up` failed 12 times out of 12 and
@@ -34,6 +34,7 @@ run more than a handful of times on their own.
     analytics::tests::agent_building_integration_tests::test_different_building_types_use_appropriate_strategies
     analytics::tests::clothing_tests::a_cold_agent_ends_up_dressed
     analytics::tests::working_tests::nobody_works_more_than_they_have_a_use_for
+    analytics::tests::situation_tests::a_settlement_works_things_out_that_nobody_wrote_down
     analytics::tests::predator_prey_tests::predators_hold_a_herd_down
     analytics::tests::fluid_tests::nobody_proposes_a_fluid_working_with_a_dry_pack
     analytics::tests::relationship_tests::a_settlement_ends_up_with_enemies_in_it
@@ -45,6 +46,14 @@ run more than a handful of times on their own.
     analytics::tests::clay_tests::a_curious_agent_with_clay_tries_molding_it
     analytics::tests::barter_tests::two_people_with_opposite_problems_trade
     analytics::tests::asking_tests::being_told_lets_you_try_it_rather_than_making_you_believe_it
+
+`a_settlement_works_things_out_that_nobody_wrote_down` was found in a
+full-suite run while the scarcity work was going on, and characterised against
+it before being believed: **2 failures in 40 runs here and 1 in 40 on the
+commit before**. Indistinguishable, so it is a pre-existing flake that had
+never been caught rather than anything the food changes did — which was worth
+forty runs to establish, because thinner food is exactly the sort of thing that
+would leave a settlement with less to work out.
 
 `test_minimize_travel_time_from_agent_position` was re-characterised while
 checking whether the spring work had broken it, and its recorded rate is a
@@ -3150,18 +3159,115 @@ ground it falls on; it simply never left, because a source cannot be drawn
 below its flow. That is the computationally cheap version of the right answer
 and it is worth writing down as such.
 
+### 57. Making food scarcer does not make a people careful
+
+Two halves of one problem, done together at the user's direction and measured
+separately so they would stay readable: thin what there is to gather (#184),
+and stop a people taking more of it than it will eat (#178). The batch is
+**mostly a negative result**, and the negatives are worth more than the change.
+
+#### The vocabulary that was in two places again
+
+The first attempt thinned `TerrainResourceMapper::amount_range` — berries from
+(20, 60) to (8, 24) — and measured **nothing**. A world still held 994 units of
+berries against 1,000 before.
+
+There are **two resource spawners in this project**. The naturalistic one
+places clustered minerals and crops and reads that table. The basic one in
+`World::generate_resources` places wood, stone, food, greens and roots, and had
+its own hard-coded `gen_range(20..60)` sitting inside it. Berries come out of
+the second one. Thinning the first and measuring the result was measuring
+nothing at all.
+
+**Fourth instance of this project's duplicated-vocabulary defect**, and the
+second in two batches. Both spawners now read one table and both route through
+one `what_this_ground_carries`, so a patch is the size the *kind* of thing
+carries, on the fertility of the tile it is rooted in — which `regenerate_in_ground`
+has always capped regrowth by and which the crop a world *started* with ignored
+entirely.
+
+With that fixed the thinning is real: a world's edible standing crop goes from
+**7,413 to 3,944**, berries from 987 to 218.
+
+#### And it still changed nothing
+
+Thirty-two worlds a side, against thinner hedgerows, shy animals and a cap on
+what one person takes: **not one column reaches significance.** Not population,
+not food eaten, not waste, not efficiency, not the store.
+
+Three reasons, and each is worth keeping:
+
+**The standing crop is a buffer; the flow is what matters.** A patch regrows at
+`base_rate` per tick until it hits its cap. Halving the cap does not halve the
+flow — the patch simply tops out sooner and goes on producing at exactly the
+same pace. This is the springs lesson from #53 in reverse, arrived at from the
+other side.
+
+**Hunting is 250 actions in 270,000.** Wild animals now get out of a person's
+way — nothing in the fauna module knew agents existed except the predator pass,
+so a deer stood where it stood while a settlement walked up to it — and it
+cannot possibly matter at that volume. The change is right and its effect is
+unmeasurable, which is the honest thing to say about it.
+
+**The demand cap has almost nothing to bite on.** A hungry man with food in his
+pack eats it rather than gathering; the branch that fills a pack past what
+anybody will eat is a *kill* or an autumn store trip, and the store trip was
+already capped in #43.
+
+#### The thing that was tried next, and reverted
+
+If the flow is what matters, halve the flow: berries from 0.025 a tick to 0.012,
+wild grain from 0.015 to 0.008. Thirty-two worlds a side:
+
+| | before | scarcer | |
+|---|---|---|---|
+| people alive | 54.9 | 52.2 | — |
+| food eaten | 9,271 | 8,310 | — |
+| **efficiency** | **0.74** | **0.70** | **t = −3.0** |
+| rotted in packs | 1,355 | **1,655** | t = 2.4 |
+| left where it fell | 43 | **105** | t = 2.1 |
+
+Scarcer food did not make a winter bite. The population did not move and
+**efficiency got significantly worse**: people ranged further, carried more when
+they found anything, and lost more of it in transit. Reverted.
+
+That is the finding. **The waste in this model is a behaviour, not a supply
+artefact, and starving people does not fix a behaviour.** Every previous entry
+that reached for a resource number to change how a settlement behaves should be
+read against this one.
+
+#### What was kept
+
+All of it except the rate, on the grounds that each piece is *correct*
+independent of whether it is measurable: one vocabulary across both spawners, a
+crop that follows the ground it stands in, a wild hedge that is not an orchard,
+animals that get out of the way, and a person who does not go back to the river
+for more fish than he will eat. Measured together: **null on every column**, at
+no cost anywhere.
+
+#### Two measurement mistakes, recorded
+
+**Two copies of the same pipeline ran at once** and clobbered each other's
+output files, producing a 45-row CSV for a 32-world run with 13 malformed rows.
+This is the second time in this project's history that racing output paths have
+produced a false reading, and the first was already written down. Results from
+the clobbered files were discarded rather than filtered.
+
+And a `pkill -f` pattern **matched the command line of the shell running it**,
+so the guard against a runaway run killed the run.
+
 ## Housekeeping
 
-### 54. Committed backup file
+### 58. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 55. Build warnings
+### 59. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 56. Placeholder package metadata
+### 60. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

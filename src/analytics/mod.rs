@@ -1037,6 +1037,23 @@ impl Simulation {
         // Tick world (building construction progress, etc.)
         self.world.tick();
 
+        // And what the wild things do about the people in it. Nothing in the
+        // fauna module knew agents existed except the predator pass, so a deer
+        // stood where it stood while a settlement walked up to it - which is
+        // most of why a hunt was a matter of finding an animal rather than of
+        // stalking one. See ISSUES_FOUND #57.
+        {
+            let people: Vec<(i32, i32)> = self
+                .population
+                .agents
+                .iter()
+                .filter(|agent| agent.state.is_alive)
+                .map(|agent| (agent.state.position.0, agent.state.position.1))
+                .collect();
+
+            self.world.animals.shy_away_from(&people);
+        }
+
         // Apply religious building effects to agent happiness
         self.apply_religious_effects();
 
@@ -1656,7 +1673,12 @@ impl Simulation {
         //
         // The learning gate is the existing one: somebody who has thrown at
         // six animals and hit none stops throwing.
-        if !putting_by && agent.lessons.will_try_this_again("hunt") {
+        // And nobody throws at a deer with a pack already fuller of food than
+        // he will get through, which is what a hunt that pays actually means.
+        if !putting_by
+            && !Self::more_food_than_he_will_get_through(agent)
+            && agent.lessons.will_try_this_again("hunt")
+        {
             if let Some((animal_id, animal_position)) = self.nearest_prey(agent, agent_position) {
                 let reach = (animal_position.0 - agent_position.0)
                     .abs()
@@ -1690,7 +1712,14 @@ impl Simulation {
             let distance =
                 (target.0 - agent_position.0).abs() + (target.1 - agent_position.1).abs();
 
-            // Walk to food we know about before trying to pick anything up
+            // Walk to food we know about before trying to pick anything up -
+            // and not at all with more about him than he will get through.
+            // A man with a pack of berries going over does not want another
+            // hedge, he wants to eat what he has or put it somewhere it keeps.
+            if Self::more_food_than_he_will_get_through(agent) {
+                return None;
+            }
+
             if distance > 1 {
                 return Some(Action::Move { target });
             }
@@ -3583,6 +3612,38 @@ impl Simulation {
             .count() as u32
     }
 
+    /// How much food a person will get through before it goes off on them.
+    ///
+    /// Not how much they can carry — that is a question about weight and it is
+    /// the wrong one. A load of berries a fortnight's eating deep is not a
+    /// fortnight's eating, it is a few days' eating and a fortnight's rot.
+    ///
+    /// Sized well above what anybody needs for a day and well below what a
+    /// pack holds, so it bites on somebody standing at a full river and not on
+    /// somebody with supper about them.
+    const WHAT_A_PERSON_GETS_THROUGH: u32 = 8;
+
+    /// Whether there is already more food about this person than they will eat
+    /// before it spoils.
+    ///
+    /// The demand half of ISSUES_FOUND #43. That entry stopped a settlement
+    /// burying four years of food into a hole by asking what the camp would
+    /// eat before winter; nothing asked the same question of a pack. Putting
+    /// the world's resources back to what the config actually specified then
+    /// cost **eight points of efficiency** — doubling what there is to gather
+    /// does not double what anybody eats, it doubles what rots in a pack and
+    /// on the grass. See ISSUES_FOUND #49 and #57.
+    ///
+    /// It counts food rather than meals on purpose. A pack of whole fish
+    /// nobody has taken a knife to is the single largest thing that rots on
+    /// anybody in this model — 1,398 units in a world against 2,250 of
+    /// everything foraged put together — and it is food by weight, by bulk and
+    /// by the smell it gives off. What it is not is supper, and going back to
+    /// the river for more of it is the mistake this stops.
+    fn more_food_than_he_will_get_through(agent: &crate::agents::Agent) -> bool {
+        Self::how_much_food_is_in_the_pack(agent) >= Self::WHAT_A_PERSON_GETS_THROUGH
+    }
+
     /// Whether this agent is carrying a load worth taking to the store.
     fn is_the_load_worth_carrying_home(
         &self,
@@ -5310,6 +5371,13 @@ impl Simulation {
             .unwrap_or(0.0);
 
         if hunger.max(sustenance) < Self::WORTH_GETTING_WET {
+            return None;
+        }
+
+        // And nobody stands in a river for more fish than he will eat. This is
+        // where it bites hardest: whole fish is the largest single thing that
+        // goes off in anybody's pack in this model.
+        if Self::more_food_than_he_will_get_through(agent) {
             return None;
         }
 
