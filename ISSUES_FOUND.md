@@ -3833,18 +3833,148 @@ is not explained.
 `find_nearest_resource` picks purely by distance and is the other place the
 remembered amount would belong, if anything reached it. Recorded, not fixed.
 
+### 69. Every man knew how to make an axe and one in thirty-five owned one
+
+"They struggle to complete simple tasks." So the first thing built was an
+instrument for where a settlement's day actually goes, and the first thing it
+did was kill my own first guess.
+
+#### Not the walking
+
+`Move` is **42.7% of every turn** taken in a settlement, which looks like the
+whole answer. It is not. Counting the length of every unbroken run of walking
+between two things actually done: **79% of things done need no walk at all**,
+11% need one pace, and the mean is **0.71 paces per thing done**. Fewer than
+2% of actions follow a walk of eight paces or more. The walking is a thousand
+one-step adjustments interleaved with work, not fruitless trekking. Good thing
+it was measured.
+
+#### It is the tools
+
+Eight worlds, ten thousand ticks, 2.3 million turns:
+
+| | attempted | refused |
+|---|---|---|
+| `Work` | 18,756 | **88.2%** |
+| `Excavate` | 6,348 | **99.4%** |
+| `TrySwapping` | 6,489 | **100.0%** |
+| `Examine` | 9,542 | **92.0%** |
+| `Boil` | 3,521 | **86.8%** |
+
+And the reasons, which are nearly all one reason:
+
+```
+Work: Nothing in hand that is any use for Leatherworking     6707
+Excavate: Nothing in hand that is any use for Mining         6309
+Work: Nothing in hand that is any use for Crafting           5710
+Work: Nothing in hand that is any use for Mining             3628
+Boil: Nothing to hold water in                               3056
+Hunt: No spear in hand for that                              2227
+```
+
+Half of every refusal in the model was **an agent choosing work it had nothing
+to do it with**. Then the second instrument, on who owns what:
+
+> 181 people alive across four worlds. **All 181 knew how to make a handaxe, a
+> stone knife and a spear. Five owned an axe. Nineteen owned a knife.**
+
+And crafting was not broken: `Craft` succeeded **every time it was attempted**
+and was attempted 270 times a world across forty-five people over ten thousand
+ticks.
+
+#### Why
+
+`Craft` lives in the `Utility` branch, behind `what_i_would_work_on` and the
+vessel branch, and Utility is a drive that rarely wins a contest against
+Hunger. So the tool got made only when nothing more pressing was happening -
+while Hunger and the store kept proposing `Work` and `Excavate` that were
+refused for want of exactly that tool, over and over, for the whole run.
+
+This file already contains the answer, written for the *other* half of the same
+problem:
+
+> Reaching for a tool is not what somebody does with a spare moment, it is what
+> they do just before using it.
+
+That is the comment on `get_the_tool_out_for`, which hoists **equipping** a
+tool to the moment of use. Nobody had done the same for **making** one.
+
+#### The fix
+
+`make_what_this_wants`, beside `get_the_tool_out_for` in the same
+post-processing chain. When the verb matrix is about to refuse an action for
+want of a tool, and this one knows a step towards that tool it could take right
+now, it takes the step. The turn was lost either way.
+
+Three things keep it honest:
+
+- It asks the **same function** the executor asks. `what_this_wants_that_is_
+  missing` returns the structured `Wants`; the refusal message is built from
+  it. Two ways of asking whether a man can do a job is how this project lost
+  the measurements in #66 and #67.
+- It only names a step that **can actually be carried out** - materials,
+  knowledge, a fire if the step wants one, a hammerstone in the hand if the
+  step wants one. A refusal is worse than a wasted turn, because it goes into
+  the record and teaches a man that making knives does not work.
+- The substitute is **checked for short-handedness itself** before it is taken,
+  or this trades one refusal for another and calls it progress.
+
+`Craft`, `Equip` and `Unequip` are never substituted, because making a thing is
+the answer to this and the two must not fight over the turn. `Work` is
+deliberately *not* on that list: a working refused for want of a knife is
+exactly the case.
+
+#### Measured, 32 worlds a side
+
+| | baseline | with the fix | t |
+|---|---|---|---|
+| people carrying a knife | 3.9 ± 0.4 | **8.3 ± 0.5** | **7.51** |
+| vessels held | 14.2 ± 1.2 | **22.1 ± 1.6** | **3.89** |
+| pits dug | 5.5 ± 0.3 | **7.8 ± 0.3** | **5.91** |
+| crafts | 281 ± 9 | **349 ± 10** | **5.12** |
+| short-handed refusals | 2,695 ± 97 | **1,690 ± 49** | **-9.21** |
+| refused workings | 1,919 ± 70 | **1,288 ± 48** | **-7.39** |
+| digs attempted | 658 ± 47 | **323 ± 21** | **-6.48** |
+| failure rate | 0.0230 | **0.0212** | **-3.77** |
+| deaths | 22.7 ± 0.9 | 20.7 ± 0.7 | -1.70 |
+| alive | 49.0 ± 1.8 | 51.6 ± 2.0 | 1.01 |
+| eaten | 4,780 ± 181 | 5,063 ± 175 | 1.13 |
+| people carrying a spear | 7.2 ± 0.7 | 6.2 ± 0.5 | -1.24 |
+
+The digging row is the shape of the whole thing: **half as many attempts and
+43% more pits.** They stopped trying to dig holes they had nothing to dig with,
+and dug more holes.
+
+Survival moves the right way and is not significant on its own - alive +2.7
+(t = 1.01), eaten +283 (t = 1.13), deaths -1.9 (t = -1.70). Spears are slightly
+down and null. What *is* significant is that the settlement is equipped, and
+being equipped is upstream of everything the model is for.
+
+#### What is still refused, and left open
+
+- **1,690 short-handed refusals a world remain.** These are men who know how to
+  make the tool and have not got the makings. The substitution stops at "no
+  step can be taken"; going and fetching the material is the next link and
+  wants its own arm. Filed as #190.
+- **`TrySwapping` is refused 100% of the time** - 6,489 attempts, not one
+  success, in eight worlds. A whole verb that has never once worked in a live
+  settlement. Filed as #191.
+- **`Examine` is refused 92%**, almost all of it "Turned the food over, none
+  the wiser" and the same for clay, iron and grain. An agent re-examines what
+  it has already learned nothing from. Filed as #192.
+
 ## Housekeeping
 
-### 69. Committed backup file
+### 70. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 70. Build warnings
+### 71. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 71. Placeholder package metadata
+### 72. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

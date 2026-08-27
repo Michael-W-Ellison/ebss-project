@@ -438,6 +438,47 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ Every man knew how to make an axe and one in thirty-five owned one. "They
+  struggle to complete simple tasks" — so the first thing built was an
+  instrument for where a settlement's day goes, and the first thing it did was
+  kill my own first guess. `Move` is **42.7% of every turn**, which looks like
+  the whole answer; counting every unbroken run of walking says **79% of things
+  done need no walk at all** and the mean is **0.71 paces per thing done**. The
+  walking is fine.
+
+  It is the tools. `Work` was refused **88.2%** of the time, `Excavate`
+  **99.4%**, `Hunt` for want of a spear 2,227 times — and nearly every refusal
+  was one refusal: *nothing in hand that is any use for this*. Then: of 181
+  people alive, **all 181 knew how to make a handaxe, a stone knife and a
+  spear; five owned an axe and nineteen owned a knife.** Crafting was not
+  broken — it succeeded every time it was attempted, and was attempted 270
+  times a world across forty-five people over ten thousand ticks. `Craft` sits
+  in the Utility branch behind two others, and Utility rarely wins against
+  Hunger.
+
+  This project had already written the answer for the *other* half of the
+  problem: *reaching for a tool is not what somebody does with a spare moment,
+  it is what they do just before using it.* Nobody had done the same for
+  **making** one. `make_what_this_wants` sits beside `get_the_tool_out_for`:
+  when the verb matrix is about to refuse an action for want of a tool, and the
+  agent knows a step towards that tool it could take now, it takes the step.
+  The turn was lost either way. It asks the same function the executor asks, it
+  only names a step that can actually be carried out, and it checks the
+  substitute for short-handedness before taking it.
+
+  Measured 32 worlds a side: **people carrying a knife 3.9 to 8.3** (t = 7.5),
+  **vessels 14.2 to 22.1** (t = 3.9), **pits dug 5.5 to 7.8** (t = 5.9), crafts
+  +24% (t = 5.1), short-handed refusals **-37%** (t = -9.2), failure rate
+  0.0230 to 0.0212 (t = -3.8). The digging row is the shape of it: **half as
+  many attempts and 43% more pits.** Survival moves the right way and is not
+  significant on its own — alive +2.7, eaten +283, deaths -1.9.
+
+  Three things the instrument found and this does not fix, each filed with its
+  numbers: 1,690 short-handed refusals a world remain where the *material* is
+  missing (#190); **`TrySwapping` is refused 100% of the time, 6,489 attempts
+  and not one success** (#191); and `Examine` is refused 92% because an agent
+  re-examines what it has already learned nothing from (#192). See
+  ISSUES_FOUND.md #69
 - ✅ A place, a date, and how much was on it — and being right, which nothing
   recorded. Everything one agent could tell another was a position, a resource
   type and a date. A listener already weighed the *age* of a claim and had no

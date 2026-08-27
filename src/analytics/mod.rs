@@ -868,6 +868,11 @@ impl Simulation {
                 // moment, it is what they do just before using it.
                 let action = self.get_the_tool_out_for(action, agent_index);
 
+                // And a job whose tool this one has not got at all, but knows
+                // how to make. The turn was going to be a refusal; it goes on
+                // the tool instead.
+                let action = self.make_what_this_wants(action, agent_index);
+
                 // What the settlement spends its days doing
                 *self
                     .actions_taken
@@ -8907,11 +8912,18 @@ impl Simulation {
         }
     }
 
-    fn what_these_hands_are_short_of(
+    /// What the matrix says this action wants and these hands have not got.
+    ///
+    /// The structured answer. Two things ask it: the executor, to refuse, and
+    /// the decision, to do something about it before the turn is spent - see
+    /// `what_these_hands_are_short_of` and `make_what_this_wants`. Keeping one
+    /// function between them is deliberate: two ways of asking whether a man
+    /// can do a job is how this project has lost measurements before.
+    fn what_this_wants_that_is_missing(
         &self,
         action: &Action,
         agent_index: usize,
-    ) -> Option<String> {
+    ) -> Option<crate::environment::verbs::Wants> {
         use crate::environment::verbs;
 
         let agent = &self.population.agents[agent_index];
@@ -8931,16 +8943,19 @@ impl Simulation {
         let a_hand_to_spare = agent.a_hand_to_spare();
         let carrying_liquid = agent.how_much_water_i_carry();
 
-        wanted
-            .into_iter()
-            .find(|wants| {
-                !wants.satisfied_by_hands(
-                    &holding,
-                    &helped_by,
-                    a_hand_to_spare,
-                    carrying_liquid,
-                )
-            })
+        wanted.into_iter().find(|wants| {
+            !wants.satisfied_by_hands(&holding, &helped_by, a_hand_to_spare, carrying_liquid)
+        })
+    }
+
+    fn what_these_hands_are_short_of(
+        &self,
+        action: &Action,
+        agent_index: usize,
+    ) -> Option<String> {
+        use crate::environment::verbs;
+
+        self.what_this_wants_that_is_missing(action, agent_index)
             .map(|wants| match wants {
                 verbs::Wants::ThisInHand(what) => format!("No {what} in hand for that"),
                 verbs::Wants::AToolFor(trade) => {
@@ -8950,6 +8965,91 @@ impl Simulation {
                 verbs::Wants::AVessel => "Nothing to hold water in".to_string(),
                 verbs::Wants::BareHands => "Nothing wanting".to_string(),
             })
+    }
+
+    /// A turn about to be spent on a refusal, spent on the tool instead.
+    ///
+    /// The same argument as `get_the_tool_out_for`, one step further back.
+    /// That one says: reaching for a tool is not what somebody does with a
+    /// spare moment, it is what they do just before using it. Neither is
+    /// *making* one. Making sits in the Utility branch, behind two others,
+    /// and Utility is a drive that rarely wins - so measured over eight
+    /// worlds a settlement attempted `Work` 18,756 times and was refused
+    /// **88.2%** of them for want of a tool, `Excavate` 6,348 times and was
+    /// refused **99.4%**, while every man alive knew how to make a handaxe
+    /// and 2.8% of them owned one. Twenty-two thousand turns went on wanting
+    /// a thing nobody would spend a turn making.
+    ///
+    /// So when the matrix is about to refuse an action for want of a tool,
+    /// and this one knows a step towards that tool it could take right now,
+    /// it takes the step. The turn was lost either way.
+    fn make_what_this_wants(&self, action: Action, agent_index: usize) -> Action {
+        use crate::environment::verbs::Wants;
+
+        // Making a thing is itself an answer to this, and the two must not
+        // fight over the turn. `Work` is deliberately *not* on this list: a
+        // working refused for want of a knife is exactly the case, and the
+        // guard against a making that wants a tool of its own is below, where
+        // the substitute is checked before it is taken.
+        if matches!(
+            action,
+            Action::Craft { .. } | Action::Equip { .. } | Action::Unequip { .. }
+        ) {
+            return action;
+        }
+
+        let Some(missing) = self.what_this_wants_that_is_missing(&action, agent_index) else {
+            return action;
+        };
+
+        let agent = &self.population.agents[agent_index];
+
+        // What would answer it. A free hand is somebody else's problem - see
+        // `free_a_hand_for` - and bare hands are never missing.
+        let wanted: &str = match missing {
+            Wants::ThisInHand(what) => what,
+            Wants::AToolFor(trade) => match agent.what_i_would_rather_have(trade) {
+                Some(tool) => tool.called,
+                None => return action,
+            },
+            Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
+        };
+
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+        let in_hand = |what: &str| agent.how_many_i_have(what) > 0;
+        let a_fire_is_to_hand = self
+            .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
+            .is_some();
+
+        // Only a step that can actually be carried out. Naming one that
+        // cannot is worse than the refusal it replaces: the refusal goes into
+        // the record and the man learns from it that making knives does not
+        // work.
+        let Some(step) = crate::environment::making::what_to_do_first_that_can_be_done(
+            wanted,
+            &holding,
+            &knows,
+            &in_hand,
+            a_fire_is_to_hand,
+        ) else {
+            return action;
+        };
+
+        let instead = Action::Craft {
+            item_type: step.makes.to_string(),
+        };
+
+        // And the substitute must not be short-handed itself, or this trades
+        // one refusal for another and calls it progress
+        if self
+            .what_this_wants_that_is_missing(&instead, agent_index)
+            .is_some()
+        {
+            return action;
+        }
+
+        instead
     }
 
     fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
@@ -15593,5 +15693,7 @@ impl Simulation {
 
 #[cfg(test)]
 mod tests;
+
+
 
 
