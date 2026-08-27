@@ -117,6 +117,15 @@ pub struct Simulation {
     /// stayed where it fell. The other half of the waste - see
     /// `into_the_pack_or_on_the_ground`.
     pub what_would_not_fit_in_the_pack: u64,
+    /// Where the threat tree came out, by the name of the branch.
+    ///
+    /// The same argument as `actions_failed_because`, one level earlier. An
+    /// action tally can only count the answers a decision reached; it cannot
+    /// tell a tree that is working from a tree that is never asked. #66
+    /// measured `Freeze` at zero in sixty-four worlds and could say nothing
+    /// about which of those it was, because every way of declining looks like
+    /// `None` from outside. This counts the declining as well as the deciding.
+    pub what_a_threat_came_to: std::collections::HashMap<String, u64>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -281,6 +290,7 @@ impl Simulation {
             actions_taken: std::collections::HashMap::new(),
             actions_failed: std::collections::HashMap::new(),
             actions_failed_because: std::collections::HashMap::new(),
+            what_a_threat_came_to: std::collections::HashMap::new(),
             what_anybody_found_out: std::collections::HashMap::new(),
             what_anybody_was_told: std::collections::HashMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -611,8 +621,51 @@ impl Simulation {
                 // Running away comes out as an ordinary Move, so without a
                 // note of why it was chosen it is invisible in the tally
                 let mut running_away = false;
+
+                // What this one felt, and what the threat tree made of it.
+                // Both are read out of the block below and tallied after it,
+                // because everything in there holds `self` immutably.
+                let felt: Option<&'static str>;
+                let on_the_mind: Option<&'static str>;
+                let under_the_gate: Option<&'static str>;
+                let mut came_to: Option<&'static str> = None;
+
                 let (action, is_plan_action) = {
                     let agent = &self.population.agents[agent_index];
+
+                    felt = if agent.emotions.should_flee() {
+                        Some("felt: afraid enough to act")
+                    } else if agent.emotions.should_attack() {
+                        Some("felt: angry enough to act")
+                    } else {
+                        None
+                    };
+
+                    // And whether there was a creature on this one's mind at
+                    // all, at any strength. The gap between this and `felt` is
+                    // the gate: a man who is afraid of the wolf he can see but
+                    // not afraid *enough* never reaches the tree.
+                    on_the_mind = if agent.emotions.what_frightens_me_most().is_some() {
+                        Some("a creature is on the mind: feared")
+                    } else if agent.emotions.what_angers_me_most().is_some() {
+                        Some("a creature is on the mind: resented")
+                    } else {
+                        None
+                    };
+
+                    // And which half of the gate turned it away, for the
+                    // turns where something was on the mind and nothing came
+                    // of it. `should_attack` wants anger over a half *and*
+                    // fear under three tenths, so there are two ways to fail
+                    // it and they want different fixes.
+                    let (how_afraid, how_angry) = (agent.emotions.fear, agent.emotions.anger);
+                    under_the_gate = if how_angry > 0.5 {
+                        Some("under the gate: angry, but too frightened to stand")
+                    } else if how_afraid > 0.3 {
+                        Some("under the gate: uneasy, but not angry enough")
+                    } else {
+                        Some("under the gate: neither strongly enough")
+                    };
 
                     // PRIORITY -1: An agent already starving eats before it does
                     // anything else, including running from a threat.
@@ -665,12 +718,12 @@ impl Simulation {
                         // - run, or turn and fight if there is nowhere to run,
                         // or freeze if there is neither. The attacker branches
                         // below it are for agents, who are not creatures.
-                        if let Some(away) = self
-                            .how_this_one_answers_a_threat(agent, agent_position)
-                            .or_else(|| {
-                                self.run_from_whoever_frightens_me(agent, agent_position)
-                            })
-                        {
+                        let tree = self.what_this_threat_comes_to(agent, agent_position);
+                        came_to = Some(tree.0);
+
+                        if let Some(away) = tree.1.or_else(|| {
+                            self.run_from_whoever_frightens_me(agent, agent_position)
+                        }) {
                             debug!(
                                 "Agent {} RUNNING from {:?} (fear={:.2})",
                                 agent_id,
@@ -720,10 +773,16 @@ impl Simulation {
                         // An angry agent stands its ground - it does not walk
                         // across the map after a wolf it can see, which is
                         // what keeps this from eating a settlement's whole day.
-                        if let Some(strike) = self
-                            .round_on_whoever_angers_me(agent, agent_position)
-                            .or_else(|| self.how_this_one_answers_a_threat(agent, agent_position))
-                        {
+                        let grudge = self.round_on_whoever_angers_me(agent, agent_position);
+                        came_to = Some(if grudge.is_some() {
+                            "a grudge answered before the tree was asked"
+                        } else {
+                            self.what_this_threat_comes_to(agent, agent_position).0
+                        });
+
+                        if let Some(strike) = grudge.or_else(|| {
+                            self.what_this_threat_comes_to(agent, agent_position).1
+                        }) {
                             debug!(
                                 "Agent {} STANDING GROUND against {:?} (anger={:.2})",
                                 agent_id,
@@ -751,6 +810,36 @@ impl Simulation {
                         self.generate_non_emotional_action(agent, agent_position)
                     }
                 };
+
+                // And now the block is done with `self`, book what the
+                // feelings came to. See `what_a_threat_came_to`.
+                let mut book = |what: &str| {
+                    *self
+                        .what_a_threat_came_to
+                        .entry(what.to_string())
+                        .or_insert(0) += 1;
+                };
+
+                book("turns decided");
+                if let Some(on_the_mind) = on_the_mind {
+                    book(on_the_mind);
+                }
+                if let Some(felt) = felt {
+                    book(felt);
+                    if came_to.is_none() {
+                        // Frightened enough to act on, and something further
+                        // up the priority list went first
+                        book("something else came first");
+                    }
+                } else if on_the_mind.is_some() {
+                    book("on the mind, but under the gate");
+                    if let Some(under_the_gate) = under_the_gate {
+                        book(under_the_gate);
+                    }
+                }
+                if let Some(came_to) = came_to {
+                    book(came_to);
+                }
 
                 // Resolve nil UUIDs in social actions to actual nearby agents
                 let action = Self::resolve_action_target(
@@ -780,12 +869,10 @@ impl Simulation {
                 let action = self.get_the_tool_out_for(action, agent_index);
 
                 // What the settlement spends its days doing
-                let did = if running_away {
-                    "Flee".to_string()
-                } else {
-                    Self::name_of(&action)
-                };
-                *self.actions_taken.entry(did).or_insert(0) += 1;
+                *self
+                    .actions_taken
+                    .entry(Self::what_to_book(&action, running_away))
+                    .or_insert(0) += 1;
 
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
@@ -4983,6 +5070,29 @@ impl Simulation {
     ///
     /// `Gather { resource_type: "berries" }` and `Gather { resource_type:
     /// "wood" }` are the same kind of day's work for counting purposes.
+    /// What to book an action under in `actions_taken`.
+    ///
+    /// Almost always its own name. The one exception is the fear branch's
+    /// fallback, which runs from another *person* and comes out as an
+    /// ordinary `Move` that nothing downstream could tell from a stroll.
+    ///
+    /// It used to be the other way round - everything chosen in the fear
+    /// branch was booked as "Flee", `FleeFrom` and `Freeze` included. Both of
+    /// those name themselves, and the failure path below books by
+    /// `name_of`, so a *refused* run went under `FleeFrom` while a run that
+    /// happened went under "Flee": the verb showed 19,626 failures against no
+    /// attempts at all, and `Freeze` showed as never once taken in
+    /// sixty-four worlds. Two names for one thing, which is this project's
+    /// oldest defect and its sixth appearance. The invariant it broke is that
+    /// nothing can fail at a thing it was never recorded doing.
+    fn what_to_book(action: &Action, running_away: bool) -> String {
+        if running_away && matches!(action, Action::Move { .. }) {
+            return "Flee".to_string();
+        }
+
+        Self::name_of(action)
+    }
+
     fn name_of(action: &Action) -> String {
         let full = format!("{:?}", action);
         match full.find(|c: char| c == ' ' || c == '{' || c == '(') {
@@ -5769,8 +5879,22 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
+        self.what_this_threat_comes_to(agent, agent_position).1
+    }
+
+    /// The same tree, and the name of the branch it came out of.
+    ///
+    /// Every way of declining used to look like `None` from outside, which is
+    /// why #66 could measure `Freeze` at zero in sixty-four worlds and say
+    /// nothing about whether the tree was working or idle. The name is what
+    /// `Simulation::what_a_threat_came_to` counts.
+    fn what_this_threat_comes_to(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> (&'static str, Option<Action>) {
         // What it is, where it is, and how hard it hits
-        let (kind, standing) = agent
+        let named = agent
             .emotions
             .what_frightens_me_most()
             .map(|(kind, _)| (kind, false))
@@ -5779,9 +5903,20 @@ impl Simulation {
                     .emotions
                     .what_angers_me_most()
                     .map(|(kind, _)| (kind, true))
-            })?;
+            });
 
-        let (which, where_it_is, paces) = self.nearest_of_kind(kind, agent_position)?;
+        // Frightened or angry enough to act, and not at any creature. A
+        // grudge against a neighbour comes out here: the branches below this
+        // one deal with people.
+        let Some((kind, standing)) = named else {
+            return ("nothing named", None);
+        };
+
+        // It named something that is not about. The feeling outlasts the
+        // thing by however long the decay takes.
+        let Some((which, where_it_is, paces)) = self.nearest_of_kind(kind, agent_position) else {
+            return ("named, but not about", None);
+        };
 
         let coming = self
             .world
@@ -5798,7 +5933,7 @@ impl Simulation {
         // agent that is not afraid of a thing four paces off has no business
         // with it at all - it gets on with its day.
         if standing && paces > Self::WITHIN_A_STEP_OR_TWO {
-            return None;
+            return ("not worth crossing to", None);
         }
 
         let could_fight = agent.could_i_fight_at_all(coming);
@@ -5809,16 +5944,19 @@ impl Simulation {
         // exactly what this sets aside. It is the one place in the model
         // where an agent knowingly takes the worse of two options.
         if could_fight && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
-            return Some(if paces <= Self::HUNT_REACH {
-                Action::Fight {
-                    animal_id: which,
-                    weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
-                }
-            } else {
-                Action::Move {
-                    target: (where_it_is.0, where_it_is.1, agent_position.2),
-                }
-            });
+            return (
+                "stands over one of its own",
+                Some(if paces <= Self::HUNT_REACH {
+                    Action::Fight {
+                        animal_id: which,
+                        weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+                    }
+                } else {
+                    Action::Move {
+                        target: (where_it_is.0, where_it_is.1, agent_position.2),
+                    }
+                }),
+            );
         }
 
         let could_run = agent.could_i_run_at_all(Self::WHAT_RUNNING_COSTS)
@@ -5848,17 +5986,17 @@ impl Simulation {
 
         match (standing, could_fight, could_run) {
             // What it wanted to do, and it can
-            (true, true, _) => Some(fight()),
-            (false, _, true) => Some(run()),
+            (true, true, _) => ("stands its ground", Some(fight())),
+            (false, _, true) => ("runs", Some(run())),
 
             // Cornered: it wanted to run and there is nowhere to go, so it
             // turns and fights. Or it wanted to fight and cannot lift an arm,
             // so it goes.
-            (false, true, false) => Some(fight()),
-            (true, false, true) => Some(run()),
+            (false, true, false) => ("cornered, so fights", Some(fight())),
+            (true, false, true) => ("cannot fight, so runs", Some(run())),
 
             // Neither. This is the case the decision never had an answer for.
-            (_, false, false) => Some(Action::Freeze),
+            (_, false, false) => ("freezes", Some(Action::Freeze)),
         }
     }
 
@@ -15079,6 +15217,7 @@ impl Simulation {
             actions_taken: std::collections::HashMap::new(),
             actions_failed: std::collections::HashMap::new(),
             actions_failed_because: std::collections::HashMap::new(),
+            what_a_threat_came_to: std::collections::HashMap::new(),
             what_anybody_found_out: std::collections::HashMap::new(),
             what_anybody_was_told: std::collections::HashMap::new(),
             what_would_not_fit_in_the_pack: 0,

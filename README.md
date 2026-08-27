@@ -438,6 +438,45 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ Two names for one action, and the two claims it cost. The entry below
+  ended by wondering whether shy animals had retired the threat tree, and the
+  answer to that was in ten lines of the function it accused: `shy_away_from`
+  already exempts every Aggressive and Territorial species, which is every
+  predator in the world. What the instrument found instead was worse.
+
+  `actions_taken` booked everything chosen in the fear branch as "Flee";
+  `actions_failed` booked by the action's own name. So a run that happened and
+  a run that was *refused* went into different buckets, and `Freeze` — chosen
+  in the same branch — read as never once taken. **Sixth appearance of this
+  project's duplicated-vocabulary defect, and the first to corrupt a published
+  measurement rather than a behaviour.** The decision reached `FleeFrom` 1,558
+  times in four worlds while the tally recorded none.
+
+  **Two claims withdrawn.** `Freeze` at "zero in sixty-four worlds" is wrong —
+  twelve baseline worlds take it **10,971 times**, in the same rare-catastrophic
+  shape as the refusal itself. And "running happens nine times as often" is
+  withdrawn as unresolved: re-measured with the label fix on *both* arms it goes
+  the other way (1,256 to 363 a world, t = -2.79), a second draw goes the
+  original way, and per-world flee counts run from 1 to 7,365 — the quantity is
+  too skewed for a mean of thirty-two to mean anything.
+
+  What #176 did do, measured on something that is not skewed: **ground put
+  between a man and the thing rises from 7.2 to 16.3 paces a run** against an
+  intended bolt of nineteen. The old clamp turned a landing off the map edge
+  into a one-pace shuffle. And freezing falls from 10,971 to 1,092 over twelve
+  worlds — the cornered case fixed, not the branch dead.
+
+  The tree is asked on **1.45% of turns** and 80% of what reaches it falls out
+  at "nothing named", which is it correctly declining a quarrel between people
+  and handing over. Its two halves are quiet for two different reasons, and
+  only one is a defect. A wolf put one pace from a healthy adult **leaves at
+  six paces a tick and does not come back** — the fauna model reading the odds
+  — so nothing gets near enough to frighten anybody, and creature fear runs at
+  0.15% of turns. What does stay near is what a person can beat, so it is
+  appraised as anger, at 9.8% of turns. And that anger cannot pass its own
+  gate: it caps at 0.5 and `should_attack` wants more than 0.5, so an agent
+  turns on a wolf only because it also resents a boar. Left open as #188. See
+  ISSUES_FOUND.md #67
 - ✅ Two words for one question, and a man who could not get off the beach. The
   largest single refusal this model has produced — **76,644 in one world**, three
   quarters of every turn taken in the settlement — and the cause was neither of
@@ -461,9 +500,9 @@ original specifications.
   **running actually happens nine times as often** (0.25 to 2.22 a world,
   t = 2.48) because the decision's yes is now one the running can act on.
   Everything else null, which is what a fix to a rare tail should look like.
-  Also recorded: `Freeze` was taken **zero times in sixty-four worlds**, so the
-  whole threat tree may have been quietly retired by shy animals two commits
-  ago. See ISSUES_FOUND.md #66
+  **The "running happens nine times as often" figure and the `Freeze` figure
+  that were here are withdrawn — both were read off a miscounted tally, and the
+  entry below corrects them.** See ISSUES_FOUND.md #66
 - ✅ There was no sink. The settlement was living on food that never aged. The
   entry below held the food-clock rule back because eaten plus waste fell from
   12,874 to 6,692 with it on, and concluded six thousand units were leaking.

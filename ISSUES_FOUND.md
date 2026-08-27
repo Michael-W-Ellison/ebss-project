@@ -3532,18 +3532,195 @@ here: an animal that keeps its distance is never appraised as a threat. That
 is realistic and it may also have quietly retired a subsystem. Not
 investigated; recorded so somebody does.
 
+> **Both numbers in that paragraph were wrong, and so is the "runs actually
+> taken" row of the table above. They were read off a counter that was
+> booking two different things under two different names.** `actions_taken`
+> booked everything chosen in the fear branch as "Flee"; `actions_failed`
+> booked by the action's own name. So a run that happened went under "Flee",
+> a run that was *refused* went under `FleeFrom`, and `Freeze` — also chosen
+> in that branch — went under "Flee" as well and therefore read as never once
+> taken. The 19,626 refusals are real, but "against no attempts at all" was an
+> artefact of the same defect this entry is about, one level up. #67 corrects
+> it, retracts the flee row, and reports what #176 actually did. The
+> shy-animal hypothesis was wrong too: `shy_away_from` already exempts every
+> Aggressive and Territorial species, which is every predator in the table.
+
+### 67. Two names for one action, and the two claims it cost
+
+#66 ended with a paragraph about the threat tree looking retired, and #187
+asked whether shy animals had done it. Neither the answer nor the question
+survived contact with an instrument.
+
+#### First, the instrument
+
+The lesson from #65 — build the measuring thing before the hypotheses — taken
+this time. `Simulation::what_a_threat_came_to` counts where the threat
+decision comes out, one hash lookup on a path that runs once per agent-turn.
+It has to exist because every way of declining used to look identical from
+outside: `None`. An action tally can count the answers a decision reached; it
+cannot tell a tree that is working from a tree that is never asked.
+
+The first run of it, four worlds and 1.1 million agent-turns, answered the
+question in one line and raised a worse one:
+
+| | count | share of turns |
+|---|---|---|
+| turns decided | 1,197,947 | 100% |
+| a creature on the mind: resented | 146,394 | 12.2% |
+| a creature on the mind: feared | 8,057 | 0.67% |
+| on the mind, but under the gate | 149,303 | 12.5% |
+| felt: afraid enough to act | 9,497 | 0.79% |
+| felt: angry enough to act | 3,630 | 0.30% |
+| — tree declined: nothing named | 7,316 | 0.61% |
+| — tree declined: named, but not about | 3,343 | 0.28% |
+| — tree declined: not worth crossing to | 204 | 0.02% |
+| — **tree answered: runs** | **1,558** | 0.13% |
+| — tree answered: stands its ground | 42 | 0.004% |
+| **`actions_taken["FleeFrom"]`** | **0** | **0%** |
+
+The decision reached `Action::FleeFrom` 1,558 times and the action tally
+recorded it none.
+
+#### The defect
+
+```rust
+let did = if running_away { "Flee".to_string() } else { Self::name_of(&action) };
+*self.actions_taken.entry(did).or_insert(0) += 1;
+```
+
+Everything chosen in the fear branch was booked as "Flee". The failure path
+four lines below books by `Self::name_of(&action)`, which is `"FleeFrom"`. So
+a run that happened and a run that was refused went into two different
+buckets, and `Freeze` — also chosen in that branch — went into the "Flee"
+bucket and read as never once taken.
+
+The note was correct when it was written: running away used to come out as an
+ordinary `Move` that nothing could tell from a stroll. `FleeFrom` and `Freeze`
+became verbs of their own afterwards and name themselves. The relabel was
+never narrowed. **Sixth appearance of the duplicated-vocabulary defect**, and
+the first one that corrupted a published measurement rather than a behaviour.
+
+It is now `Simulation::what_to_book`, which relabels only a `Move`, and the
+invariant it broke is a test: *nothing can fail at a thing it was never
+recorded doing.*
+
+#### What it cost, stated plainly
+
+Two claims in #66 are withdrawn.
+
+1. **"`Freeze` was taken zero times in sixty-four worlds."** Wrong. With the
+   labels fixed, twelve baseline worlds take it **10,971 times**, and at
+   n = 32 the distribution is 28 zeros and then 16, 31, 161, **934** — the
+   same rare-catastrophic shape as the refusal itself.
+2. **"Running happens nine times as often, 0.25 to 2.22 a world, t = 2.48."**
+   Withdrawn as unresolved. Re-measured with the label fix applied to *both*
+   arms, 32 worlds a side: **1,256 to 363 a world, t = -2.79** — the opposite
+   direction. A second draw of twelve worlds a side gives 3,151 against 5,118,
+   the original direction again. Per-world flee counts run from 1 to 7,365;
+   the quantity is too skewed for a mean of thirty-two to mean anything, and
+   no claim is made about it either way.
+
+#### What #176 actually did, measured on something that is not skewed
+
+Ground put between the agent and the thing, per run, twelve worlds a side and
+3,151 and 5,118 runs:
+
+| | baseline | with the fix |
+|---|---|---|
+| mean paces moved per run | **7.4** | **17.1** |
+| mean paces *gained* on the thing | **7.2** | **16.3** |
+
+The intended bolt is nineteen paces. The old three-way-plus-clamp delivered
+under 40% of it: a landing off the map edge was clamped back onto the edge, so
+a nineteen-pace bolt could become a one-pace shuffle and the man was still
+inside the wolf's radius next turn. The eight-way search takes the furthest
+*passable* tile along each ray and scores on ground gained, and delivers 86%.
+
+And freezing — the branch for a body that can neither run nor raise a hand —
+falls from 10,971 to 1,092 over the same twelve worlds, and from a worst world
+of 934 to a worst world of 5 at n = 32. That is the cornered case being fixed
+rather than the branch being dead: after #176 there is nearly always somewhere
+to go.
+
+#### The threat tree is not retired, and shy animals were never the cause
+
+`Animals::shy_away_from` filters to `Passive | Neutral | Defensive`. Every
+Aggressive and Territorial species — every predator in the table — was already
+exempt. The hypothesis in #187 was checkable in ten lines of the function it
+accused, and I raised it without reading them.
+
+What does keep the predators away is a different pass, and it is not a defect
+either. Put a wolf one pace from a healthy adult and it leaves at **six paces
+a tick, straight away, and does not come back**:
+
+```
+t0: wolf at (37, 30)   agent at (30, 30)
+t1: wolf at (43, 30)   agent at (30, 30)
+t2: wolf at (49, 30)   agent at (30, 30)
+```
+
+That is `what_the_beasts_make_of_us` from #142 — run from what you cannot
+beat — reading the odds against an armed adult and deciding against it. It is
+the fauna model working, and it explains the whole shape of the numbers above:
+
+- **Predators leave before they are close enough to frighten anybody**, so the
+  fear side of the tree is quiet: creature fear on 0.15% of turns.
+- **What stays near a person is what a person can beat**, so it is appraised
+  as anger rather than fear: creature resentment on 9.8% of turns.
+- And that anger cannot pass its own gate, which is the next section.
+
+Two consequences worth someone's attention rather than mine: a wolf that will
+not approach a lone adult cannot hunt one, and the model has predator attacks
+on people as a deliberate feature (#29). And this made the wiring test for the
+instrument hard to write — the wolf has to be pinned at the agent's elbow each
+tick — which is itself a fact about the world worth knowing.
+
+What the tree actually does, with the labels fixed (four worlds, 1.1M turns):
+it is asked about **1.45% of turns** and reaches an action about 1,262 times.
+Its dominant fallout is **"nothing named" at 80% of everything that reaches
+it** — an agent frightened or angry enough to act, at a *person*. That is the
+tree correctly declining: the branches below it in the chain handle people,
+and it hands over to them. Not a defect.
+
+#### The one thing that is a defect, and is left open
+
+`should_attack()` is `anger > 0.5 && fear < 0.3`. `ThreatAssessment::
+emotion_amount()` returns `threat_level * 0.5` for anger, and `threat_level`
+is bounded at 1.0.
+
+**Anger at a single creature can therefore never exceed 0.5, and the gate
+wants strictly more than 0.5.** A man at maximum rage at one animal sits
+exactly on the gate and does not pass it. The branch fires only when two or
+more separate grudges *sum* past a half — `update_totals` adds the sources
+while the tree reads the strongest one, which is the same two-vocabularies
+shape again — so an agent turns on a wolf because it also resents a boar.
+
+Measured: 12.5% of every turn, an agent has a creature on its mind and nothing
+comes of it, and 12.1 of those 12.5 points are "neither strongly enough".
+Creature *resentment* runs at 9.8% of turns and creature *fear* at 0.15%: this
+model's animals are overwhelmingly resented rather than feared, which is #82's
+finding recurring one layer down — and, per the section above, is what you
+would expect when everything that could frighten a person walks away from one.
+So the two halves of the threat tree are quiet for two different reasons, and
+only the anger half is quiet because of arithmetic.
+
+Not fixed here. Retuning an emotional threshold is a behaviour change wanting
+its own arm and its own measurement, and folding it into a counting fix would
+confound both — the same reason #44 was held back from the larder batch.
+Filed as #188.
+
 ## Housekeeping
 
-### 67. Committed backup file
+### 68. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 68. Build warnings
+### 69. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 69. Placeholder package metadata
+### 70. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
