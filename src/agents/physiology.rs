@@ -106,6 +106,13 @@ const ENERGY_OF_ORDINARY_FOOD: f32 = 25.0;
 /// which happens to everybody and is not a reason to do anything differently.
 pub const DAYS_OF_RESERVE_BEFORE_IT_IS_STARVATION: f32 = 3.0;
 
+/// What a unit of milk is worth against a unit of ordinary forage.
+///
+/// Rich - fat and sugar - which is the whole reason an infant can live on it
+/// while its stomach holds a quarter of what its mother's does and it burns
+/// more for its size than she does.
+pub const WHAT_MILK_IS_WORTH: f32 = 2.0;
+
 /// Below this share of its water a body starts to go short.
 const FIRST_BAND: f32 = 0.75;
 

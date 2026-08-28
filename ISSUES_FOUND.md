@@ -4624,9 +4624,79 @@ Across five runs it was two to six. And the other half of `AgentState::is_starvi
 `energy < 20.0`, was measured firing **zero** times in twenty thousand
 adult-turns - energy is still never scarce, as #70 found.
 
+### 78. Milk went into a field that nothing reads, so every child ever born died as an infant
+
+Asked what is preventing a live settlement from forming, and traced the whole
+cohort - who was born, how old they got, what stage they died at.
+
+```
+t=    0 alive=12  Adult 12
+t= 1000 alive=12  Adult 12
+t= 1500 alive=10  Adult 8, Infant 2      (3 born)
+t= 2000 alive= 2  Adult 2                (4 born)
+t= 2260 alive= 0                         (4 born)
+
+  4  born here died as Infant at age 0
+  5  founder died as Adult at age 4500
+  3  founder died as Adult at age 5500
+  ...
+```
+
+**Four born, four dead as infants.** Not most of them: all of them, in every
+world measured. Nothing that has ever been born in this model has reached its
+first birthday.
+
+#### The infants were eating, and it was not enough
+
+They forage from the hour they are born - thirty and thirty-nine meals in a
+fortnight - and their reserve falls anyway, seven and a half thousand units down
+to three thousand. The arithmetic is against them: an infant's stomach holds a
+quarter of an adult's, a hundred and fifty units, while it burns thirty-five per
+cent of what an adult burns. So it needs **three and a half meals a day against a
+grown woman's two and a half**, and has to fetch every one of them itself.
+
+That is right, as physiology. Babies do feed more often than adults. What is
+missing is that somebody feeds them.
+
+#### And there is a nursing system, and it feeds them nothing
+
+`process_nursing` is live and complete: it finds infants, checks whether a
+caregiver is within reach, calls `nurse()`, tracks `ticks_since_nursed`, and
+takes health off one that goes unnursed. For the fed case, the whole of what it
+delivers is:
+
+```rust
+agent.state.energy = (agent.state.energy + NURSING_ENERGY_GAIN).min(100.0);
+```
+
+Five points of `energy` - the field #70 measured as never scarce, and which
+fires in `is_starving` exactly nought times in twenty thousand adult-turns.
+The stomach, the gut and the reserve, which are what starvation is now reckoned
+on, never saw a drop. A nursed infant was fed nothing at all.
+
+Nursing puts milk in the stomach now, a mouthful at a time so a full child stops
+and a hungry one takes another, at twice the richness of ordinary forage -
+which is the whole reason a child can live on it with a stomach a quarter the
+size. And it is charged to the woman: a nursing mother eats for two, and where
+there is not enough for two she is the one who goes short, so a hungry season
+tells in the next generation rather than only in this one.
+
+Children born in a world now reach Child, Adolescent and **Adult**. Peak
+population passed twelve.
+
+#### What is still preventing it
+
+The second half of the cohort trace, which is not fixed. Founders die as Adults
+at ages four and a half to six and a half thousand against a `max_age` of nine
+to eleven thousand - **about half their span** - and the causes are hunger and
+starvation. A settlement whose grown people die at half their age needs a birth
+rate it has not got. Deaths still run twelve to thirteen a world against one
+birth. That is #75's surplus problem, and it is now the only thing left in the
+way.
+
 ## Housekeeping
 
-### 78. The other thirteen drive rates were never derived either
+### 79. The other thirteen drive rates were never derived either
 
 `base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
 thirteen are the same sort of number. Hunger and Thirst can be derived, because
@@ -4635,23 +4705,23 @@ its threshold before the body takes damage. None of the other thirteen kills, so
 none can be derived that way, and all of them are still hand-picked against a
 calendar that no longer exists.
 
-### 79. The clock is spelled out in the interface too
+### 80. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 80. Committed backup file
+### 81. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 81. Build warnings
+### 82. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 82. Placeholder package metadata
+### 83. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

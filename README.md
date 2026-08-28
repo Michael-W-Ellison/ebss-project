@@ -559,6 +559,25 @@ original specifications.
   never on a body above nine tenths. A test walks a body through a fortnight of
   three meals a day, with a missed meal once a week, and asserts it is never
   once starving. See ISSUES_FOUND.md #77
+- ✅ Milk went into a field that nothing reads, so every child ever born died as
+  an infant. Tracing the whole cohort — who was born, how old they got, what
+  stage they died at — gave **four born, four dead as infants**. Not most of
+  them: all of them, in every world measured. Nothing born in this model had
+  ever reached its first birthday.
+
+  The infants *were* eating — thirty meals in a fortnight — and starved anyway.
+  An infant's stomach holds a quarter of an adult's while it burns 35% of what
+  an adult burns, so it needs **3.5 meals a day against a grown woman's 2.5**,
+  and fetched every one itself. There is a complete nursing system — caregiver
+  distance, `ticks_since_nursed`, a health penalty for going unnursed — and the
+  whole of what it delivered was `energy += 5.0`: the field #70 measured as
+  never scarce, which fires in `is_starving` zero times in 20,000 adult-turns.
+  The stomach, gut and reserve never saw a drop.
+
+  Nursing puts milk in the stomach now, a mouthful at a time, at twice the
+  richness of forage — and it is charged to the mother, so a hungry season tells
+  in the next generation. Children now reach Child, Adolescent and **Adult**.
+  See ISSUES_FOUND.md #78
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
