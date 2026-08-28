@@ -313,11 +313,16 @@ impl Physiology {
 
     /// What this body burns against what a grown one burns.
     ///
-    /// A small body burns more for its size, so this is the three-quarter
-    /// power of its share rather than the share itself. A quarter-sized body
-    /// burns thirty-five per cent of an adult's, not twenty-five.
+    /// The share itself, because the share *is* the food a body this age
+    /// needs - `what_a_body_this_age_eats` is a table of exactly that, year by
+    /// year, and there is nothing left for a scaling law to add.
+    ///
+    /// It was the three-quarter power of the share, which is the right shape
+    /// for real animals and was a guess standing in for a figure nobody had
+    /// given. It made a child need more meals a day than its father while
+    /// carrying a quarter of the stomach to take them in.
     pub fn how_fast_this_body_burns(&self) -> f32 {
-        (self.reserve_capacity / RESERVE_OF_A_GROWN_BODY).powf(0.75)
+        self.reserve_capacity / RESERVE_OF_A_GROWN_BODY
     }
 
     /// What is in the stomach now.
@@ -604,17 +609,97 @@ impl Physiology {
     /// floor under the other two rather than being averaged with them - a man
     /// three weeks hungry is not made comfortable by a mouthful.
     pub fn hunger(&self) -> f32 {
-        let belly = 1.0 - (self.in_the_stomach() / self.stomach_capacity).clamp(0.0, 1.0);
-        let gut = 1.0 - (self.in_the_gut() / UNITS_IN_A_PORTION).clamp(0.0, 1.0);
-        let spent = 1.0 - (self.reserve / self.reserve_capacity).clamp(0.0, 1.0);
+        self.how_fast_hunger_rises()
+    }
 
-        // An empty stomach on its own has to be enough to cross the hunger
-        // drive's threshold. Weighted evenly with the gut it was not: a body
-        // eating once a day keeps five hundred units in the gut at all times,
-        // which pinned that term at nothing and capped hunger at six tenths
-        // against a threshold of seven. Agents ate once a day, burned three
-        // times what they took in, and starved with food five paces off.
-        (0.75 * belly + 0.15 * gut + 0.10 * spent).max(spent)
+    /// How fast the hunger drive rises, as the three tables have it.
+    ///
+    /// "Hunger drive should be based on the agent's total caloric energy,
+    /// stomach fullness level, and amount of food in the intestines" - and
+    /// each of the three is given as a step table rather than a curve, so
+    /// each is a step table here.
+    ///
+    /// They multiply rather than average. The reserve table is the one that
+    /// runs away - one at nine tenths full, four below a tenth - and the two
+    /// gut tables gate it: a body with a full stomach and a day's food behind
+    /// it scores nought whatever its reserve says, because it has just eaten
+    /// and there is nothing to be done about the reserve for a day yet.
+    ///
+    /// "If an agent has nearly full internal/stored energy and enough food to
+    /// replenish what it normally requires in a day, then there is little need
+    /// to eat." So nought on either gut table stops the drive rising at all:
+    /// a body that has just eaten is not getting hungrier, whatever its
+    /// reserve says, because there is nothing to be done about the reserve for
+    /// a day yet.
+    ///
+    /// This is a **rate**, not a level - the tables are headed "Hunger Drive
+    /// Increase". Read as a level it says a body with a day's food in its gut
+    /// is never hungry at all, which stops it eating until the gut runs dry
+    /// and then it is too late; measured that way every settlement died twice
+    /// as fast.
+    pub fn how_fast_hunger_rises(&self) -> f32 {
+        let out_of = self.how_fast_this_body_burns().max(0.05);
+
+        // What the body has to go on
+        let share_of_reserve = (self.reserve / self.reserve_capacity.max(1.0)).clamp(0.0, 1.0);
+        let by_reserve = if share_of_reserve > 0.90 {
+            1.0
+        } else if share_of_reserve > 0.80 {
+            1.2
+        } else if share_of_reserve > 0.70 {
+            1.4
+        } else if share_of_reserve > 0.60 {
+            1.6
+        } else if share_of_reserve > 0.50 {
+            1.8
+        } else if share_of_reserve > 0.40 {
+            2.0
+        } else if share_of_reserve > 0.30 {
+            2.3
+        } else if share_of_reserve > 0.20 {
+            2.6
+        } else if share_of_reserve > 0.10 {
+            3.0
+        } else {
+            4.0
+        };
+
+        // What is in the stomach, against what a body this size holds
+        let belly = self.in_the_stomach() / out_of;
+        let by_belly = if belly >= 480.0 {
+            0.0
+        } else if belly >= 400.0 {
+            1.0
+        } else if belly >= 300.0 {
+            1.2
+        } else if belly >= 200.0 {
+            1.4
+        } else if belly >= 100.0 {
+            1.6
+        } else if belly >= 50.0 {
+            1.8
+        } else {
+            2.0
+        };
+
+        // And what is behind it in the gut
+        let gut = self.in_the_gut() / out_of;
+        let by_gut = if gut >= UNITS_BURNED_IN_AN_ORDINARY_DAY {
+            0.0
+        } else if gut >= 960.0 {
+            1.0
+        } else if gut >= 480.0 {
+            1.5
+        } else {
+            2.0
+        };
+
+        // Nought on either gut table means fed, whatever the reserve says
+        if by_belly == 0.0 || by_gut == 0.0 {
+            return 0.0;
+        }
+
+        by_reserve * by_belly * by_gut
     }
 }
 

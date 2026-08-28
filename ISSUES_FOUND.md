@@ -4694,9 +4694,65 @@ rate it has not got. Deaths still run twelve to thirteen a world against one
 birth. That is #75's surplus problem, and it is now the only thing left in the
 way.
 
+### 79. The real calendar, and what it does to a year that was tuned for a short one
+
+The calendar is now the one that was specified: a tick is a minute, 1440 to the
+day, thirty days to a month, twelve months to a year, three months to a season.
+Weeks alternate seven days and eight, which is the only way four of them make
+thirty, and it is why a season is exactly twelve weeks with a fortnight at each
+end - **early**, **deep** and **late** - and eight weeks between. 518,400
+minutes to a year and 36,288,000 to a seventy-year life. Six tests assert every
+one of those figures.
+
+The decision turn stays separable. A turn is when somebody stops to think, not a
+minute of living: `MINUTES_PER_TURN` is derived from the calendar, so the body
+runs on the specified clock whatever the decision loop does. At one turn a
+minute a life is thirty-six million decisions, which is the calendar as written
+and is not a thing anybody can run.
+
+Three tables replaced three guesses:
+
+- **What a body eats**, year by year: a fifth of an adult's food to four, then
+  rising to a full share at sixteen. The reserve used to be sized in five crude
+  bands with the burn as its three-quarter power - the right shape for real
+  animals, and a stand-in for a figure nobody had given. It made a child need
+  more meals a day than its father while carrying a quarter of the stomach to
+  take them in.
+- **What a body can do**, from one at two years to ten at sixteen, holding to
+  thirty-nine and falling away after. Not yet wired to anything - see #212.
+- **How fast hunger rises**, as the product of three step tables on the reserve,
+  the stomach and the gut.
+
+Life stages are in years now rather than turns, on the specified bands, and
+death comes at seventy exactly rather than from a range.
+
+#### The hunger tables are a rate, and reading them as a level kills everybody
+
+They are headed "Hunger Drive Increase". Read as a level - as the drive's value
+rather than its climb - the gut table says a body with a day's food behind it is
+never hungry at all, so it stops eating until the gut runs dry and then it is
+too late. Measured that way, every settlement died twice as fast as before.
+
+#### And the food year is now wrong
+
+Seasons went from twenty-four days to ninety. `when_it_bears` gives greens to
+spring, roots to summer, everything else to autumn and nothing to winter, which
+is a lean stretch at twenty-four days and three months of a single thin food at
+ninety.
+
+Measured: founders now die in **spring**, from day forty-two of ninety, of
+hunger - not in winter. Spring gives only greens, whose caloric density is six
+against ordinary forage's twenty-five, so a body eating nothing else wants four
+times the volume. Twelve of twelve, in every world.
+
+That is not a reason to shorten the calendar back. It is the world's food supply
+being wrong against a year that is now right, and it is filed as #209. The test
+suite went from fifteen failures to thirty-three, and most of them are the same
+thing: tests written against a year of ninety-six days.
+
 ## Housekeeping
 
-### 79. The other thirteen drive rates were never derived either
+### 80. The other thirteen drive rates were never derived either
 
 `base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
 thirteen are the same sort of number. Hunger and Thirst can be derived, because
@@ -4705,23 +4761,23 @@ its threshold before the body takes damage. None of the other thirteen kills, so
 none can be derived that way, and all of them are still hand-picked against a
 calendar that no longer exists.
 
-### 80. The clock is spelled out in the interface too
+### 81. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 81. Committed backup file
+### 82. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 82. Build warnings
+### 83. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 83. Placeholder package metadata
+### 84. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

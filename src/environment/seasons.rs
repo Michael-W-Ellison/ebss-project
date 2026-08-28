@@ -11,27 +11,124 @@
 use serde::{Deserialize, Serialize};
 use crate::agents::temperature::Temperature;
 
-/// How many ticks a day lasts.
-///
-/// A tick is two hours of world time. That is coarse enough that a life of
-/// ten thousand ticks covers years rather than the four days it used to, and
-/// fine enough that dawn, noon and midnight are still separate moments an
-/// agent can be cold or blind in.
-pub const TICKS_PER_DAY: u32 = 12;
+/// Minutes in a day. The body's clock, and the one the calendar is stated in.
+pub const MINUTES_PER_DAY: u32 = 1440;
 
-/// How many days a season lasts.
+/// Days in a week - and there are two lengths of week.
 ///
-/// A season is deliberately short. The point of a calendar in a simulation
-/// nobody watches for a million ticks is that the people in it have to live
-/// through a winter, and a ninety-day season at any tick rate that keeps
-/// day and night apart would never arrive.
-pub const DAYS_PER_SEASON: u32 = 24;
+/// "Week durations alternate between a 7-day week and an 8-day week. This
+/// results in 30-day months, and a 360-day year." Two of each makes thirty:
+/// 7 + 8 + 7 + 8. There is no other way to get four weeks into a month of
+/// thirty days, and it is why a season is exactly twelve weeks.
+pub const DAYS_IN_A_SHORT_WEEK: u32 = 7;
+pub const DAYS_IN_A_LONG_WEEK: u32 = 8;
+pub const WEEKS_PER_MONTH: u32 = 4;
+
+/// Days in a month.
+pub const DAYS_PER_MONTH: u32 =
+    (DAYS_IN_A_SHORT_WEEK + DAYS_IN_A_LONG_WEEK) * (WEEKS_PER_MONTH / 2);
+
+/// Months in a year, and months in a season.
+pub const MONTHS_PER_YEAR: u32 = 12;
+pub const MONTHS_PER_SEASON: u32 = MONTHS_PER_YEAR / 4;
+
+/// How many days a season lasts. Three months of thirty days.
+pub const DAYS_PER_SEASON: u32 = DAYS_PER_MONTH * MONTHS_PER_SEASON;
 
 /// How many days a year lasts.
-pub const DAYS_PER_YEAR: u32 = DAYS_PER_SEASON * 4;
+pub const DAYS_PER_YEAR: u32 = DAYS_PER_MONTH * MONTHS_PER_YEAR;
 
-/// How many ticks a year lasts.
+/// Weeks in a season, which is what the early/late phases are counted in.
+pub const WEEKS_PER_SEASON: u32 = WEEKS_PER_MONTH * MONTHS_PER_SEASON;
+
+/// How many minutes a year lasts: 518,400.
+pub const MINUTES_PER_YEAR: u32 = MINUTES_PER_DAY * DAYS_PER_YEAR;
+
+/// How long a life runs before old age takes it.
+pub const YEARS_BEFORE_OLD_AGE_TAKES_YOU: u32 = 70;
+
+/// The most minutes anybody lives: 36,288,000.
+pub const MINUTES_IN_A_WHOLE_LIFE: u32 = MINUTES_PER_YEAR * YEARS_BEFORE_OLD_AGE_TAKES_YOU;
+
+/// How many decision turns a day holds.
+///
+/// A turn is a decision - the unit at which somebody looks around and picks
+/// what to do - and it is not the same thing as a minute. The calendar above
+/// is stated in minutes because that is what a body runs on; this is how
+/// often anybody in it stops to think.
+///
+/// Twelve, so a turn is two hours. Every clock that matters is derived from
+/// the minute figures rather than from this, so making it finer makes the
+/// decision loop denser without making any of the physiology wrong - see
+/// `agents::physiology::MINUTES_PER_TURN`. At one, a turn is a minute and a
+/// seventy-year life is thirty-six million of them, which is the calendar as
+/// specified and is not a thing anybody can run.
+pub const TICKS_PER_DAY: u32 = 12;
+
+/// How many turns a year lasts.
 pub const TICKS_PER_YEAR: u32 = TICKS_PER_DAY * DAYS_PER_YEAR;
+
+/// Where in a season a day falls: the first fortnight, the long middle, or
+/// the last fortnight.
+///
+/// "Weeks 1-2 (Early Spring), weeks 3-10 (Spring), weeks 11-12 (Late Spring)",
+/// and the same shape for every season. Two weeks at each end and eight in
+/// the middle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PartOfSeason {
+    Early,
+    Deep,
+    Late,
+}
+
+impl PartOfSeason {
+    /// Which part of its season this day of the year falls in.
+    pub fn from_day_of_year(day: u32) -> Self {
+        let into_the_season = (day % DAYS_PER_YEAR) % DAYS_PER_SEASON;
+        let week = week_of_the_season(into_the_season);
+        if week < 2 {
+            PartOfSeason::Early
+        } else if week < WEEKS_PER_SEASON - 2 {
+            PartOfSeason::Deep
+        } else {
+            PartOfSeason::Late
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            PartOfSeason::Early => "early",
+            PartOfSeason::Deep => "deep",
+            PartOfSeason::Late => "late",
+        }
+    }
+}
+
+/// Which week of a season a day falls in, counted from nought.
+///
+/// Weeks alternate seven days and eight, so this is not a division. A pair of
+/// weeks is fifteen days; within the pair the first seven are the short week
+/// and the next eight the long one.
+pub fn week_of_the_season(day_of_season: u32) -> u32 {
+    const A_PAIR_OF_WEEKS: u32 = DAYS_IN_A_SHORT_WEEK + DAYS_IN_A_LONG_WEEK;
+    let pairs = day_of_season / A_PAIR_OF_WEEKS;
+    let into_the_pair = day_of_season % A_PAIR_OF_WEEKS;
+    pairs * 2 + u32::from(into_the_pair >= DAYS_IN_A_SHORT_WEEK)
+}
+
+/// How long the week containing this day of the season runs.
+pub fn how_long_this_week_is(day_of_season: u32) -> u32 {
+    if week_of_the_season(day_of_season) % 2 == 0 {
+        DAYS_IN_A_SHORT_WEEK
+    } else {
+        DAYS_IN_A_LONG_WEEK
+    }
+}
+
+/// Which month of the year a day falls in, counted from nought.
+pub fn month_of_the_year(day_of_year: u32) -> u32 {
+    (day_of_year % DAYS_PER_YEAR) / DAYS_PER_MONTH
+}
 
 /// Season of the year
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -497,5 +594,120 @@ mod tests {
     fn test_precipitation_modifiers() {
         assert!(Season::Spring.precipitation_modifier() > Season::Summer.precipitation_modifier());
         assert_eq!(Season::Spring.precipitation_modifier(), 1.3);
+    }
+}
+
+#[cfg(test)]
+mod calendar_tests {
+    use super::*;
+
+    /// Every figure in the specification, asserted.
+    #[test]
+    fn the_calendar_is_the_one_that_was_asked_for() {
+        assert_eq!(MINUTES_PER_DAY, 1440, "one tick a minute, 1440 to the day");
+        assert_eq!(DAYS_PER_MONTH, 30);
+        assert_eq!(MONTHS_PER_YEAR, 12);
+        assert_eq!(DAYS_PER_YEAR, 360);
+        assert_eq!(MONTHS_PER_SEASON, 3, "about three months to a season");
+        assert_eq!(DAYS_PER_SEASON, 90);
+        assert_eq!(WEEKS_PER_SEASON, 12);
+        assert_eq!(MINUTES_PER_YEAR, 518_400);
+        assert_eq!(MINUTES_IN_A_WHOLE_LIFE, 36_288_000);
+        assert_eq!(YEARS_BEFORE_OLD_AGE_TAKES_YOU, 70);
+    }
+
+    /// "Week durations alternate between a 7-day week and an 8-day week. This
+    /// results in 30-day months, and a 360-day year."
+    #[test]
+    fn weeks_alternate_seven_and_eight_and_make_a_thirty_day_month() {
+        let mut days = 0;
+        for week in 0..WEEKS_PER_MONTH {
+            days += how_long_this_week_is(days);
+            assert_eq!(
+                how_long_this_week_is(days - 1),
+                if week % 2 == 0 { 7 } else { 8 },
+                "week {week} should be {} days",
+                if week % 2 == 0 { 7 } else { 8 }
+            );
+        }
+        assert_eq!(days, DAYS_PER_MONTH, "four weeks should make a month");
+    }
+
+    #[test]
+    fn every_day_of_a_season_falls_in_one_of_its_twelve_weeks() {
+        for day in 0..DAYS_PER_SEASON {
+            let week = week_of_the_season(day);
+            assert!(week < WEEKS_PER_SEASON, "day {day} landed in week {week}");
+        }
+        // And the weeks run in order, one boundary at a time
+        let mut last = 0;
+        for day in 0..DAYS_PER_SEASON {
+            let week = week_of_the_season(day);
+            assert!(week == last || week == last + 1, "day {day}: {last} -> {week}");
+            last = week;
+        }
+        assert_eq!(last, WEEKS_PER_SEASON - 1, "the last day is in the last week");
+    }
+
+    /// "Weeks 1-2 (Early), weeks 3-10 (main), weeks 11-12 (Late)."
+    #[test]
+    fn a_season_has_a_fortnight_at_each_end_and_eight_weeks_between() {
+        let mut early = 0;
+        let mut deep = 0;
+        let mut late = 0;
+        for day in 0..DAYS_PER_SEASON {
+            match PartOfSeason::from_day_of_year(day) {
+                PartOfSeason::Early => early += 1,
+                PartOfSeason::Deep => deep += 1,
+                PartOfSeason::Late => late += 1,
+            }
+        }
+        // Two weeks at each end: a short and a long, so fifteen days
+        assert_eq!(early, 15, "weeks one and two");
+        assert_eq!(late, 15, "weeks eleven and twelve");
+        assert_eq!(deep, DAYS_PER_SEASON - 30, "the eight weeks between");
+    }
+
+    #[test]
+    fn each_season_gets_a_quarter_of_the_year_and_starts_where_it_should() {
+        for (season, index) in [
+            (Season::Spring, 0),
+            (Season::Summer, 1),
+            (Season::Fall, 2),
+            (Season::Winter, 3),
+        ] {
+            assert_eq!(season.first_day(), index * DAYS_PER_SEASON);
+            assert_eq!(Season::from_day_of_year(season.first_day()), season);
+            assert_eq!(
+                Season::from_day_of_year(season.first_day() + DAYS_PER_SEASON - 1),
+                season
+            );
+        }
+    }
+
+    #[test]
+    fn twelve_months_run_in_order_and_the_year_wraps() {
+        for month in 0..MONTHS_PER_YEAR {
+            assert_eq!(month_of_the_year(month * DAYS_PER_MONTH), month);
+            assert_eq!(month_of_the_year(month * DAYS_PER_MONTH + 29), month);
+        }
+        assert_eq!(month_of_the_year(DAYS_PER_YEAR), 0, "the year comes round");
+    }
+
+    /// The decision turn is separable from the calendar, and every clock the
+    /// body runs on is stated in minutes rather than in turns.
+    #[test]
+    fn the_decision_turn_does_not_change_the_calendar() {
+        assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
+        assert_eq!(
+            crate::agents::physiology::MINUTES_PER_TURN,
+            MINUTES_PER_DAY / TICKS_PER_DAY,
+            "a turn is however many minutes a day holds divided by the turns in it"
+        );
+        assert_eq!(
+            crate::agents::physiology::MINUTES_PER_TURN * TICKS_PER_DAY,
+            MINUTES_PER_DAY,
+            "and the turns in a day cover the whole of it"
+        );
     }
 }

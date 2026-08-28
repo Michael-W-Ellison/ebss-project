@@ -251,12 +251,14 @@ impl Population {
         {
             use rand::Rng;
             let mut rng = rand::thread_rng();
-            agent.state.age = rng.gen_range(2_600..5_000);
+            // Grown people, between twenty and forty
+            let years = rng.gen_range(20..40);
+            agent.state.age = years * crate::environment::seasons::TICKS_PER_YEAR;
             agent.state.life_stage = LifeStage::from_age(agent.state.age);
             agent
                 .state
                 .physiology
-                .now_a_body_of(agent.state.life_stage.hunger_reserve());
+                .now_a_body_of(agent.state.what_i_eat_for_my_age());
         }
 
         // Give the person a personality.

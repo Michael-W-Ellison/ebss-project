@@ -587,35 +587,118 @@ impl Default for Inventory {
     }
 }
 
-/// Life stages of an agent
+/// What share of a grown appetite a body of this many years wants.
 ///
-/// A year is [`crate::environment::TICKS_PER_YEAR`] ticks, so the boundaries
-/// below are roughly: infancy to five months, childhood to a year and a
-/// quarter, adolescence to two years, adulthood to seven, old age after that.
-/// An agent lives eight or nine years and sees thirty-odd seasons turn.
+/// The specification's own table, year by year: a fifth of an adult's food and
+/// water until four, then rising a twentieth a year to ten, then faster, and a
+/// full share from sixteen.
+///
+/// This replaces a guess. The reserve used to be sized by life stage in five
+/// crude bands, and what a body burned was the three-quarter power of that -
+/// which is the right shape for real animals and is not what was asked for.
+/// Here the figure is the food and water a body of that age needs, so it sizes
+/// the burn directly, and the reserve and the stomach with it. Everybody still
+/// starves in three weeks, whatever size they are; a small body simply has
+/// less to go without.
+pub fn what_a_body_this_age_eats(years: u32) -> f32 {
+    match years {
+        0..=3 => 0.20,
+        4 => 0.25,
+        5 => 0.30,
+        6 => 0.35,
+        7 => 0.40,
+        8 => 0.45,
+        9 => 0.50,
+        10 => 0.55,
+        11 => 0.60,
+        12 => 0.70,
+        13 => 0.80,
+        14 => 0.90,
+        _ => 1.00,
+    }
+}
+
+/// What a body of this many years can bring to moving, carrying and working.
+///
+/// The specification's table, as a share of a grown adult's ten: one at two
+/// years, climbing to ten at sixteen, holding until forty and falling away
+/// after. At seventy it is over.
+pub fn what_a_body_this_age_can_do(years: u32) -> f32 {
+    let out_of_ten = match years {
+        0..=1 => 0,
+        2..=3 => 1,
+        4..=5 => 2,
+        6..=7 => 3,
+        8..=9 => 4,
+        10..=11 => 5,
+        12 => 6,
+        13 => 7,
+        14 => 8,
+        15 => 9,
+        16..=39 => 10,
+        40..=49 => 9,
+        50..=54 => 8,
+        55..=59 => 7,
+        60..=64 => 6,
+        _ => 5,
+    };
+    out_of_ten as f32 / 10.0
+}
+
+/// Life stages of an agent, in years.
+///
+/// The bands are the ones the lifecycle is specified in, and what separates
+/// them is how far from a grown person somebody of that age may be:
+///
+/// - **0-5** must be with a parent at all times. Under two the parent has a
+///   hand occupied carrying them.
+/// - **6-10** must stay within sight of the camp or of some adult.
+/// - **11-15** must stay within an hour's walk of the camp or of some adult.
+/// - **16+** is a functional adult with no restrictions.
+/// - **70** is death from old age.
+///
+/// These used to be counted in turns - infancy to five hundred of them,
+/// adulthood at two and a half thousand - on a calendar where a year was
+/// eleven hundred turns and a whole life eight of them. A year is
+/// `TICKS_PER_YEAR` turns now and a life is seventy years.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifeStage {
-    /// 0-500 ticks, cannot reproduce, learns from parents
+    /// Under six: with a parent at all times
     Infant,
-    /// 500-1500 ticks, cannot reproduce, high learning rate
+    /// Six to ten: within sight of the camp or an adult
     Child,
-    /// 1500-2500 ticks, can reproduce, still learning
+    /// Eleven to fifteen: within an hour's walk
     Adolescent,
-    /// 2500-8000 ticks, prime reproduction age
+    /// Sixteen to forty-nine: a functional adult
     Adult,
-    /// 8000+ ticks, reduced fertility, wisdom phase
+    /// Fifty and over, when what a body can do starts falling away
     Elderly,
 }
 
 impl LifeStage {
-    /// Get life stage based on age
+    /// The year of life each stage begins in.
+    pub const KEPT_IN_ARMS_UNTIL: u32 = 6;
+    pub const KEPT_IN_SIGHT_UNTIL: u32 = 11;
+    pub const KEPT_WITHIN_AN_HOUR_UNTIL: u32 = 16;
+    pub const STRENGTH_STARTS_GOING_AT: u32 = 50;
+
+    /// Get life stage based on age in turns.
     pub fn from_age(age: u32) -> Self {
-        match age {
-            0..=500 => LifeStage::Infant,
-            501..=1500 => LifeStage::Child,
-            1501..=2500 => LifeStage::Adolescent,
-            2501..=8000 => LifeStage::Adult,
-            _ => LifeStage::Elderly,
+        Self::from_years(age / crate::environment::seasons::TICKS_PER_YEAR)
+    }
+
+    /// The same, from years already counted.
+    pub fn from_years(years: u32) -> Self {
+        if years < Self::KEPT_IN_ARMS_UNTIL {
+            LifeStage::Infant
+        } else if years < Self::KEPT_IN_SIGHT_UNTIL {
+            LifeStage::Child
+        } else if years < Self::KEPT_WITHIN_AN_HOUR_UNTIL {
+            LifeStage::Adolescent
+        } else if years < Self::STRENGTH_STARTS_GOING_AT {
+            LifeStage::Adult
+        } else {
+            LifeStage::Elderly
         }
     }
 
@@ -688,12 +771,15 @@ impl LifeStage {
     /// a hungry year shows up as a missing generation rather than as a smaller
     /// one.
     pub fn hunger_reserve(&self) -> f32 {
+        // The middle of each band, for the places that still only know a
+        // stage. `what_a_body_this_age_eats` is the real answer and takes the
+        // years - a five-year-old and a one-year-old are not the same size.
         match self {
-            LifeStage::Infant => 0.25,
-            LifeStage::Child => 0.45,
-            LifeStage::Adolescent => 0.75,
+            LifeStage::Infant => what_a_body_this_age_eats(3),
+            LifeStage::Child => what_a_body_this_age_eats(8),
+            LifeStage::Adolescent => what_a_body_this_age_eats(13),
             LifeStage::Adult => 1.0,
-            LifeStage::Elderly => 0.6,
+            LifeStage::Elderly => 1.0,
         }
     }
 }
@@ -815,7 +901,12 @@ impl AgentState {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         // Max age varies between 9000-11000 ticks
-        let max_age = rng.gen_range(9000..11000);
+        // Seventy years, and that is the end of it. There is no spread: the
+        // specification says "Age 70: Death from old age", and everything
+        // before it - the strength curve, the appetite curve - is written
+        // against that one figure.
+        let max_age = crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
+            * crate::environment::seasons::TICKS_PER_YEAR;
 
         Self {
             health: 100.0,
@@ -865,7 +956,7 @@ impl AgentState {
         // of it; a small child carries days. A famine therefore takes the young
         // and the old first and the people in their prime last, without anybody
         // having written that down.
-        let reserve = self.life_stage.hunger_reserve().max(0.05);
+        let reserve = self.what_i_eat_for_my_age();
         self.physiology.now_a_body_of(reserve);
 
         // Two hours of living, at whatever the last turn's work cost. Water,
@@ -1046,22 +1137,30 @@ impl AgentState {
         self.physiology.is_starving() || self.energy < 20.0
     }
 
+    /// How old this body is, in years.
+    pub fn years_old(&self) -> u32 {
+        self.age / crate::environment::seasons::TICKS_PER_YEAR
+    }
+
+    /// What share of a grown appetite this body wants, for its age.
+    pub fn what_i_eat_for_my_age(&self) -> f32 {
+        what_a_body_this_age_eats(self.years_old()).max(0.05)
+    }
+
     /// Put this body where it would be after this long without food.
     ///
     /// Minutes, which is the scale the old `ticks_without_food` figures were
     /// always written on. Sizes the body to its life stage first, so a child
     /// set to two days empty is two days into a *child's* reserve.
     pub fn gone_without_food_for(&mut self, minutes: u32) {
-        self.physiology
-            .now_a_body_of(self.life_stage.hunger_reserve().max(0.05));
+        self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
         self.physiology.gone_without_food_for(minutes);
         self.ticks_without_food = minutes;
     }
 
     /// Likewise, without water.
     pub fn gone_without_water_for(&mut self, minutes: u32) {
-        self.physiology
-            .now_a_body_of(self.life_stage.hunger_reserve().max(0.05));
+        self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
         self.physiology.gone_without_water_for(minutes);
         self.ticks_without_water = minutes;
     }
@@ -3359,10 +3458,16 @@ impl Agent {
         // when an agent is in trouble. Four separate spellings of that clock
         // disagreed before this - see ISSUES #73 - and the agent starved
         // holding a drive that had not yet noticed.
-        let body_wants_food = self.state.physiology.hunger();
+        // Hunger rises at the rate the three tables give, rather than being
+        // read straight off the body: the tables are headed "Hunger Drive
+        // Increase" and that is what they are. Thirst has no such table and is
+        // still read directly.
+        let how_fast_hunger_rises = self.state.physiology.how_fast_hunger_rises();
         let body_wants_water = self.state.physiology.thirst();
         if let Some(drive) = self.drives.get_mut(DriveType::Hunger) {
-            drive.value = body_wants_food;
+            let a_turn_of_it =
+                DriveType::Hunger.base_accumulation_rate() * how_fast_hunger_rises;
+            drive.value = (drive.value + a_turn_of_it).clamp(0.0, 1.0);
         }
         if let Some(drive) = self.drives.get_mut(DriveType::Thirst) {
             drive.value = body_wants_water;
