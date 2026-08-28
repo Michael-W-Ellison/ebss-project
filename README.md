@@ -468,6 +468,33 @@ original specifications.
   This exonerates the equipment work and reframes the efficiency programme:
   **the columns it would move are not connected to anything.** Food cannot save
   a life in a model where nobody dies for want of it. See ISSUES_FOUND.md #72
+- ⚠️ Four spellings of one clock, and rebasing it kills every settlement. #203
+  was the arithmetic fix for the above, and the arithmetic was the easy half.
+  The stale numbers — `1440`, `4320`, `10080`, `720`, `2160` — are written out
+  **four separate times**: in the body (`age_tick_with_modifier`), in the mind
+  (`ticks_before_this_kills_me`, which the whole drive hierarchy ranks needs
+  by), in the schedule (`base_accumulation_rate`, where thirst takes 62 ticks
+  to become a drive anybody acts on), and again in `world::nutrition`. Rebase
+  the body alone and everyone is dead in five days, because the planner still
+  believes death is 2,160 ticks off and nobody walks the ten paces to the
+  water.
+
+  Rebase all three and **thirst comes right completely** — median gap between
+  drinks 34 ticks → 3, driest agent 6, thirst deaths zero. And the hunger half
+  kills everybody: at 32 worlds a side, alive **50.9 → 1.4** (t=−19.5), births
+  **59 → 0**, peak **53 → 12**. No settlement ever grows past its founders.
+
+  Four hypotheses were raised and knocked down — distance (water is 10 paces,
+  food 5), the drive ranking (`how_hard_it_presses` is live and precedence-aware;
+  a first probe said otherwise and the probe was wrong), a phantom meal (`Eat`
+  is chosen 42% of turns, never fails, and both paths reset the clock), and the
+  size of a meal (raising it moved almost nothing). Agents choose to eat, more
+  often than subsistence needs, succeed every time, and starve anyway.
+
+  **Reverted, not shipped.** A settlement that dies in its first month is
+  strictly worse than one that cannot starve, and making the world survivable at
+  the true clock is a recalibration of the action economy, not a rebase of a
+  constant. See ISSUES_FOUND.md #73
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

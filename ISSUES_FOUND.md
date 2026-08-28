@@ -4227,18 +4227,129 @@ That reframes the whole efficiency specification. It is worth building for what
 a people can *do* - which is what it is really about - but nobody should expect
 it to show up in how many of them there are until #203 is answered.
 
+### 73. Four spellings of one clock, and rebasing it kills every settlement
+
+`AgentState::is_starving` read `ticks_without_food > 1440`. The comment beside
+it said "after a day". `TICKS_PER_DAY` is twelve. The clock was a hundred and
+twenty days, not one, which is why #72 found that in thirty-two worlds nobody
+had ever starved, and why the energy clause `|| self.energy < 20.0` was the
+only half of that test that could ever fire - and energy, per #70, never falls.
+
+The numbers were `1440`, `4320`, `10080`, `720`, `2160`: true when a tick was a
+minute, left behind when #42 put the calendar on a twelve-tick day.
+
+#### They were written out four times, and no two of them agreed
+
+That is the part worth recording, because the arithmetic was the easy half.
+
+1. `age_tick_with_modifier` - the body. Six bare thresholds deciding when
+   hunger and thirst take health.
+2. `ticks_before_this_kills_me` - the mind. The same five numbers spelled a
+   second time, as `2_160.0`, `4_320.0`, `10_080.0`. This is the function the
+   whole drive hierarchy ranks needs by: "the drive which will result in death
+   the fastest has the highest priority" is reckoned here.
+3. `DriveType::base_accumulation_rate` - the schedule. `Thirst => 0.012` against
+   a threshold of `0.75`, which is sixty-two ticks from nothing to a drive the
+   agent will act on. On no calendar is that a figure anybody derived.
+4. `world::nutrition` - `PROTEIN_DEFICIT_ONSET = 1440`,
+   `MICRONUTRIENT_DEFICIT_ONSET = 4320`, and a comment that admits the scale is
+   stale. Left alone here so as not to confound the measurement; still wrong.
+
+Rebase (1) alone and every agent is dead in five days: the body starts taking
+thirst damage at eighteen ticks while (2) still tells the planner death is two
+thousand one hundred and sixty ticks away, so thirst never becomes a live drive
+and nobody walks the ten paces to the water. Rebase (1) and (2) and (3) and the
+thirst half comes right completely - the driest agent in four hundred ticks
+gets to six, the median gap between drinks falls from thirty-four ticks to
+three, and thirst deaths stay at zero.
+
+#### And then the hunger half kills everybody
+
+Measured at thirty-two worlds a side, ten thousand ticks, twelve founders,
+against `1d859ca`:
+
+|                | baseline | rebased | t |
+|---|---|---|---|
+| alive at end   | 50.9 +- 2.5 | 1.4 +- 0.2 | -19.5 |
+| peak population| 53.1 +- 2.4 | 12.0 +- 0.0 | -16.8 |
+| births         | 59.1 +- 2.9 | 0.0 +- 0.0 | -20.0 |
+| deaths, hunger | 0.0 +- 0.0 | 8.8 +- 0.4 | +20.8 |
+| deaths, thirst | 0.0 +- 0.0 | 0.0 +- 0.0 | 0.0 |
+| food gathered  | 273487 +- 8796 | 33099 +- 4130 | -24.7 |
+
+No settlement ever grows past the twelve people it started with. Peak equals
+the founder count in all thirty-two.
+
+#### What it is not
+
+Four hypotheses were put up and knocked down, which is worth writing down so
+nobody spends the afternoon on them again:
+
+- **Not distance.** Water sits ten paces from the founders and there are
+  twenty-one sources; food sits five paces and there are a hundred and
+  forty-seven.
+- **Not the ranking.** `how_hard_it_presses` is live and multiplies by
+  `DriveRank::precedence` - a hundred for a primary drive against one for a
+  tertiary - so Hunger does outrank Industry. (A first probe said otherwise by
+  comparing how far each drive stood over its own threshold, which is not a
+  quantity that means anything across drives with different thresholds. The
+  probe was wrong, not the engine.)
+- **Not a phantom meal.** `Eat` is the most-chosen action, is chosen on about
+  forty-two per cent of turns, and never once fails. Both of its paths reset
+  the body clock: the carried path through `eat_food_item`, the foraging path
+  through `AgentState::eat` -> `took_a_meal`. (`food_i_ate` counts only carried
+  meals, which is why the harness column read zero; that was the instrument
+  mismeasuring, not a bug in the model.)
+- **Not the size of a meal.** `-0.3` against the hunger drive was a mouthful
+  from when a tick was a minute; a tick is two hours now. Raising it to a meal's
+  worth, and a drink from `0.5` to `0.8`, moved almost nothing: ten to twelve
+  of twelve still died across six worlds.
+
+So agents choose to eat, more often than subsistence needs, succeed every time,
+reset the clock every time, and still reach three days empty and die. The ones
+who eat and the ones who starve are different agents, and what the second group
+is doing instead - `Gather` takes as many turns as `Eat` and puts no food in
+anyone's inventory - is where this goes next.
+
+#### Not shipped
+
+The change is reverted. The clock is provably wrong and the fix for it is four
+lines of arithmetic, but a settlement that dies in its first month is strictly
+worse than one that cannot starve, and making the world survivable at the true
+clock is a recalibration of the action economy rather than a rebase of a
+constant. It should not ride along inside one.
+
+The instrument is real and the numbers above are the baseline for whoever takes
+#204 and #205.
+
 ## Housekeeping
 
-### 73. Committed backup file
+### 74. The other thirteen drive rates were never derived either
+
+`base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
+thirteen are the same sort of number. Hunger and Thirst can be derived, because
+they have death clocks behind them and a rate is only sane if the drive crosses
+its threshold before the body takes damage. None of the other thirteen kills, so
+none can be derived that way, and all of them are still hand-picked against a
+calendar that no longer exists.
+
+### 75. The clock is spelled out in the interface too
+
+`gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
+`bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
+hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
+wrong day.
+
+### 76. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 74. Build warnings
+### 77. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 75. Placeholder package metadata
+### 78. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
