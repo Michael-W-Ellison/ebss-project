@@ -277,6 +277,15 @@ fn test_inventory_preserved_across_save_load() {
 
     let mut sim = Simulation::new(world, population);
 
+    // A founder walks in with a couple of days of food already, so what this
+    // test is about is that whatever is in the pack comes back out of the save
+    // - not a particular number of berries.
+    let food_already = sim.population.agents[0]
+        .inventory
+        .get_item("food")
+        .map(|item| item.quantity)
+        .unwrap_or(0);
+
     // Add items to inventory
     sim.population.agents[0].inventory.add_item(
         crate::agents::InventoryItem::new("food".to_string(), 10)
@@ -292,7 +301,7 @@ fn test_inventory_preserved_across_save_load() {
 
     let food = loaded_sim.population.agents[0].inventory.get_item("food");
     assert!(food.is_some());
-    assert_eq!(food.unwrap().quantity, 10);
+    assert_eq!(food.unwrap().quantity, food_already + 10);
 
     let wood = loaded_sim.population.agents[0].inventory.get_item("wood");
     assert!(wood.is_some());

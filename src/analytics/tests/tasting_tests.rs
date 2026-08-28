@@ -284,6 +284,10 @@ fn nobody_tries_the_same_plant_twice() {
 fn a_plant_known_to_be_food_can_be_gathered_and_eaten() {
     let (mut simulation, _) = somebody_at_a_strange_plant(0, 0);
 
+    // A founder walks in with a couple of days of food in the pack already, so
+    // what is asked here is what this trip added, not what he is carrying.
+    let walked_in_with = simulation.population.agents[0].how_many_i_have("food");
+
     // Before anybody has tried it, nobody picks it
     let ignorant = simulation.execute_action(
         &Action::Gather {
@@ -293,7 +297,7 @@ fn a_plant_known_to_be_food_can_be_gathered_and_eaten() {
     );
     assert!(
         !ignorant.success
-            || simulation.population.agents[0].how_many_i_have("food") == 0,
+            || simulation.population.agents[0].how_many_i_have("food") == walked_in_with,
         "nobody fills a basket with a plant they have never seen eaten"
     );
 
@@ -311,7 +315,7 @@ fn a_plant_known_to_be_food_can_be_gathered_and_eaten() {
         knowing.message
     );
     assert!(
-        simulation.population.agents[0].how_many_i_have("food") > 0,
+        simulation.population.agents[0].how_many_i_have("food") > walked_in_with,
         "and it goes in the pack as food"
     );
 }
@@ -322,6 +326,8 @@ fn nobody_gathers_a_plant_they_know_is_poison() {
     let (mut simulation, _) = somebody_at_a_strange_plant(1, 0);
     simulation.population.agents[0].now_i_know_that_plant(1, false);
 
+    let walked_in_with = simulation.population.agents[0].how_many_i_have("food");
+
     simulation.execute_action(
         &Action::Gather {
             resource_type: "food".to_string(),
@@ -331,7 +337,7 @@ fn nobody_gathers_a_plant_they_know_is_poison() {
 
     assert_eq!(
         simulation.population.agents[0].how_many_i_have("food"),
-        0,
+        walked_in_with,
         "knowing what it is is exactly what stops him"
     );
 }

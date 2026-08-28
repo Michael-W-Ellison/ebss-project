@@ -292,22 +292,37 @@ fn three_meals_a_day_keeps_a_body_level() {
 
 /// Hunger is felt about five hours after eating, which is what puts three
 /// meals in a day rather than one or ten.
+///
+/// Asked as a *rate*, which is what the three tables give: they are headed
+/// "Hunger Drive Increase". This asked `hunger()` for a value and compared it
+/// against the drive's threshold, which cannot work - the product of three
+/// tables runs from one to sixteen and is a climb per turn, not a level. What
+/// the tables actually say is that a full stomach stops the climb dead and an
+/// emptying one lets it back on, and that is what is asserted here. The turn
+/// count is in `core::tests::drive_satisfaction_tests`.
 #[test]
 fn hunger_comes_on_about_five_hours_after_a_meal() {
     let mut body = Physiology::new();
     body.eat(UNITS_IN_A_PORTION, 1.0);
-    body.advance(MINUTES_PER_TURN, 5.0);
-    let just_fed = body.hunger();
-    assert!(just_fed < 0.7, "hunger right after eating is {just_fed}");
+    let full = body.how_fast_hunger_rises();
+    assert_eq!(
+        full, 0.0,
+        "a body with its supper still in front of it is not getting hungrier"
+    );
 
-    // Five hours on
-    for _ in 0..2 {
+    // An hour or two on, the stomach has started to empty and it is climbing
+    body.advance(MINUTES_PER_TURN, 5.0);
+    let emptying = body.how_fast_hunger_rises();
+    assert!(emptying > full, "hunger should start to build: {emptying}");
+
+    // And by the time the stomach is empty - six hours - it is climbing faster
+    while body.in_the_stomach() > 0.01 {
         body.advance(MINUTES_PER_TURN, 5.0);
     }
-    let later = body.hunger();
+    let empty = body.how_fast_hunger_rises();
     assert!(
-        later > just_fed,
-        "hunger should build: {just_fed} -> {later}"
+        empty > emptying,
+        "an empty stomach should press harder than an emptying one:          {emptying} -> {empty}"
     );
 }
 

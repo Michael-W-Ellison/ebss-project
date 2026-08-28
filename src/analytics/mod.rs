@@ -118,6 +118,13 @@ pub struct Simulation {
     /// stayed where it fell. The other half of the waste - see
     /// `into_the_pack_or_on_the_ground`.
     pub what_would_not_fit_in_the_pack: u64,
+    /// Edible items that actually landed in somebody's pack off a forage.
+    ///
+    /// The other end of the food ledger: `what_would_not_fit_in_the_pack`
+    /// counts what was picked and dropped, and this counts what was picked and
+    /// kept. Without it there is no way to tell a settlement that is not
+    /// gathering enough from one that is gathering plenty and losing it.
+    pub food_items_into_packs: u64,
     /// Where the threat tree came out, by the name of the branch.
     ///
     /// The same argument as `actions_failed_because`, one level earlier. An
@@ -295,6 +302,7 @@ impl Simulation {
             what_anybody_found_out: std::collections::HashMap::new(),
             what_anybody_was_told: std::collections::HashMap::new(),
             what_would_not_fit_in_the_pack: 0,
+            food_items_into_packs: 0,
         }
     }
 
@@ -9289,7 +9297,31 @@ impl Simulation {
                 let now = self.current_tick;
                 let remembers = &self.population.agents[agent_index].exploration_knowledge;
 
+                // What pays best, rather than what is nearest.
+                //
+                // This took the nearest edible thing and never asked what it
+                // was worth. Spring leaf is energy six against ordinary
+                // forage's twenty-five, so a unit of it is worth a quarter -
+                // and a stomach that holds six hundred units and empties in
+                // six hours can take in about two thousand four hundred units
+                // a day, which is five hundred and seventy-six energy against
+                // the fourteen hundred and forty a body burns.
+                //
+                // **A body living on greens starves however many greens there
+                // are.** With leaf the commonest thing growing, the nearest
+                // edible thing was almost always leaf, and settlements died of
+                // hunger in a spring holding three thousand units of greens,
+                // fifteen hundred of roots and two and a half thousand of fish,
+                // having eaten a sixth of it. Roots are energy thirty and fish
+                // twenty-five: either will keep somebody alive, and leaf will
+                // not.
+                //
+                // So the walk is weighed against what is at the end of it, and
+                // a root patch twenty paces off beats a leaf underfoot. Same
+                // reckoning as `provision::what_foraging_costs`, which already
+                // prices a trip.
                 let mut nearest_food: Option<(usize, u32)> = None;
+                let mut best_worth: f32 = 0.0;
                 for (i, resource) in self.world.resources.iter().enumerate() {
                     if Self::edible_item_for(resource.resource_type).is_some() && resource.amount > 0 {
                         let distance = agent_pos.distance_to(&resource.position);
@@ -9298,11 +9330,15 @@ impl Simulation {
                             let felt = distance
                                 + (bad * Self::WHAT_A_BAD_PLACE_ADDS_TO_A_WALK) as u32;
 
-                            if let Some((_, nearest_dist)) = nearest_food {
-                                if felt < nearest_dist {
-                                    nearest_food = Some((i, felt));
-                                }
-                            } else {
+                            let richness = Self::edible_item_for(resource.resource_type)
+                                .and_then(|kind| self.food_database.get(&kind))
+                                .map(|t| physiology::how_rich_this_food_is(t.base_nutrition.energy))
+                                .unwrap_or(1.0);
+                            let costs = crate::agents::provision::what_foraging_costs(felt, richness);
+                            let worth = richness / costs.max(0.01);
+
+                            if worth > best_worth {
+                                best_worth = worth;
                                 nearest_food = Some((i, felt));
                             }
                         }
@@ -9310,8 +9346,33 @@ impl Simulation {
                 }
 
                 if let Some((food_index, _)) = nearest_food {
-                    // Harvest food
-                    let harvested = self.world.resources[food_index].harvest(1);
+                    // Strip the patch, do not pick one berry off it.
+                    //
+                    // This took exactly one portion however far it had walked,
+                    // ate it standing there and went home empty-handed, so a
+                    // settlement lived hand to mouth for ever: measured over
+                    // four hundred turns, two thousand one hundred and
+                    // ninety-nine gather trips put wood, cotton, clay and iron
+                    // in packs and **not one item of food**, because the only
+                    // path food ever took out of the ground was this one and
+                    // this one ate what it took. Nothing was carried, so
+                    // nothing could be stored, so no pit ever held a winter;
+                    // and every meal cost a walk, which is why an agent with
+                    // the whole of spring standing round it took in nine
+                    // hundred units a day against the fourteen hundred and
+                    // forty it burned.
+                    //
+                    // The Gather branch was taught this and this one was not -
+                    // the same lesson written down twice and applied once. See
+                    // the armful reasoning there.
+                    let picking_season = self.world.climate.current_season();
+                    let here = self.world.resources[food_index].resource_type;
+                    let armful = if here.is_it_bearing(picking_season) {
+                        rng.gen_range(8..=14)
+                    } else {
+                        rng.gen_range(1..=3)
+                    };
+                    let harvested = self.world.resources[food_index].harvest(armful);
 
                     if harvested > 0 {
                         let agent = &mut self.population.agents[agent_index];
@@ -9348,6 +9409,39 @@ impl Simulation {
                             "Agent {} foraged and ate food, restored {:.1} energy, reset starvation timer",
                             agent.id, nutrition.energy
                         );
+
+                        // One portion goes down here; the rest of the armful
+                        // goes home in the pack. That is what turns a meal
+                        // into a larder: the next two days of food are
+                        // already carried, `find_best_food_to_eat` finds them
+                        // at a cost of one instead of a walk, and
+                        // `what_food_i_can_spare` finally has something to
+                        // bury. What will not fit stays on the bush - see
+                        // ISSUES #165.
+                        let left_in_the_hand = harvested.saturating_sub(1);
+                        if left_in_the_hand > 0 {
+                            use crate::agents::InventoryItem;
+                            let mut carried = InventoryItem::new_with_weight(
+                                Self::gathered_as(here).unwrap_or("food").to_string(),
+                                left_in_the_hand,
+                                0.5,
+                            );
+                            carried.food_data = self
+                                .food_database
+                                .create_food_data(&foraged_item, self.current_tick);
+                            if self.population.agents[agent_index]
+                                .inventory
+                                .add_item(carried)
+                            {
+                                self.food_items_into_packs += left_in_the_hand as u64;
+                            } else {
+                                self.world.resources[food_index]
+                                    .put_it_back(left_in_the_hand);
+                                self.what_would_not_fit_in_the_pack = self
+                                    .what_would_not_fit_in_the_pack
+                                    .saturating_add(left_in_the_hand as u64);
+                            }
+                        }
 
                         // What the trip actually cost: the walk both ways, and
                         // the work of getting this particular food out of the
@@ -9440,6 +9534,7 @@ impl Simulation {
                 let gathering_food = resource_type_enum == ResourceType::Food;
 
                 let mut nearest_resource: Option<(usize, u32)> = None;
+                let mut best_worth_gathering: f32 = 0.0;
                 // What this particular person will accept as food. Everybody
                 // takes berries; only somebody who has seen a strange plant
                 // eaten and survived will pick one.
@@ -9476,11 +9571,33 @@ impl Simulation {
                     if matches_request && resource.amount > 0 {
                         let distance = agent_pos.distance_to(&resource.position);
                         if distance <= Self::FORAGE_RADIUS {
-                            if let Some((_, nearest_dist)) = nearest_resource {
-                                if distance < nearest_dist {
-                                    nearest_resource = Some((i, distance));
-                                }
+                            // A trip for food is worth what it brings back.
+                            //
+                            // The same reckoning the Eat branch makes: leaf is
+                            // worth a quarter of ordinary forage and a root
+                            // more than one, so a root patch across the meadow
+                            // fills a pack that a nearer patch of greens does
+                            // not. Anything that is not food is picked by
+                            // nearness as before - a request for wood wants
+                            // the nearest wood.
+                            let worth = if gathering_food {
+                                let richness = Self::edible_item_for(resource.resource_type)
+                                    .and_then(|kind| self.food_database.get(&kind))
+                                    .map(|t| {
+                                        physiology::how_rich_this_food_is(t.base_nutrition.energy)
+                                    })
+                                    .unwrap_or(1.0);
+                                richness
+                                    / crate::agents::provision::what_foraging_costs(
+                                        distance, richness,
+                                    )
+                                    .max(0.01)
                             } else {
+                                1.0 / (distance as f32 + 1.0)
+                            };
+
+                            if worth > best_worth_gathering {
+                                best_worth_gathering = worth;
                                 nearest_resource = Some((i, distance));
                             }
                         }
@@ -9760,8 +9877,14 @@ impl Simulation {
                                 .create_food_data(&item_type, self.current_tick);
                         }
 
+                        let it_is_food = item.food_data.is_some();
+                        let went_in_the_pack =
+                            self.population.agents[agent_index].inventory.add_item(item);
+                        if it_is_food && went_in_the_pack {
+                            self.food_items_into_packs += harvested as u64;
+                        }
                         let agent = &mut self.population.agents[agent_index];
-                        if agent.inventory.add_item(item) {
+                        if went_in_the_pack {
                             // Grant skill XP based on resource type
                             let skill_type = Self::trade_for_gathering(resource_type_enum);
                             // A trip out is the commonest thing anybody does
@@ -15672,6 +15795,7 @@ impl Simulation {
             what_anybody_found_out: std::collections::HashMap::new(),
             what_anybody_was_told: std::collections::HashMap::new(),
             what_would_not_fit_in_the_pack: 0,
+            food_items_into_packs: 0,
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);

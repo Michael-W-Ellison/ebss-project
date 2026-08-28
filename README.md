@@ -578,6 +578,49 @@ original specifications.
   richness of forage — and it is charged to the mother, so a hungry season tells
   in the next generation. Children now reach Child, Adolescent and **Adult**.
   See ISSUES_FOUND.md #78
+- ✅ The real calendar, and then the discovery that nothing was ever short of
+  food. A tick is a minute, 1440 to the day, thirty days to a month, twelve
+  months to a year — weeks alternating seven days and eight, which is the only
+  way four of them make thirty. 518,400 minutes to a year and 36,288,000 to a
+  seventy-year life. The decision turn stays separable: `MINUTES_PER_TURN` is
+  derived, so the body runs on the specified clock whatever the decision loop
+  does. See ISSUES_FOUND.md #79
+- ✅ *"Why are the greens running out?"* They are not. Over a thousand turns
+  greens held steady while the settlement went from twelve alive to one; fish
+  was **74% of the world's standing edible stock and was taken seventy times
+  out of seven thousand seven hundred**; fifty-two animals were never hunted.
+  Three things were wrong under that, found by instrumenting both ends of the
+  food ledger.
+
+  **Leaf is a quarter of a food.** Greens are energy six against ordinary
+  forage's twenty-five. A stomach holds six hundred units and empties in six
+  hours, so the most a body can take in is about 2,400 units a day — 576 energy
+  against the 1,440 it burns. A body living on greens starves however many
+  greens there are, and both food-choosers took the nearest edible thing without
+  asking what it was worth. They weigh richness against the trip now.
+
+  **The Eat action picked one berry and ate it standing there.** Instrumented
+  directly: over four hundred turns, 2,199 gather trips put wood, cotton, clay
+  and iron into packs and **not one item of food** — the only path food had out
+  of the ground was the Eat branch, and it ate what it took. Nothing carried,
+  nothing stored, no pit ever a winter's, and every meal cost a walk. The Gather
+  branch had been taught the armful and this one had not: the same lesson
+  written down twice and applied once, for the ninth time. A meal strips the
+  patch now. On its own that made survival **worse** while raising the larder
+  sevenfold — a settlement that carries food and does not eat it dies with a
+  full pit.
+
+  **And the killer: a body that ate 2.26 times a day and needed three.** Turn
+  budget was not short, food was not short, Eat never failed once in a thousand
+  turns. `base_accumulation_rate` gave Hunger `0.01`, a number picked against a
+  calendar that no longer exists — about seventeen turns to want a meal. It is
+  derived now from the clock the stomach already keeps: a meal holds for as long
+  as the stomach takes to empty. Thirty-two worlds a side, mean last-alive
+  **1551 → 1878 turns**, alive at 1,500 **0.9 → 3.6**, peak larder **29 → 260**,
+  intake **970 → 1,281–1,503 units a day** against the 1,440 the specification
+  asks for. Spring gives roots as well as greens now — cattail and dandelion,
+  dug while the root still holds last year's store — and founders walk in with
+  two days of food. Nobody survives a year yet. See ISSUES_FOUND.md #80, #81
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

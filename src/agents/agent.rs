@@ -2036,6 +2036,20 @@ impl Agent {
     const WHAT_THEY_CARRY: [(&'static str, u32, f32); 2] =
         [("handaxe", 1, 2.0), ("stoneknife", 1, 0.5)];
 
+    /// And what they arrive with in the way of food.
+    ///
+    /// A people that walks into a valley has been eating on the way. Founders
+    /// arrived with an empty pack and had to find their first meal before they
+    /// had found the water, the wood or anywhere to sleep, which is not a
+    /// stone-age start - it is a shipwreck.
+    ///
+    /// Two days of it, and no more. A stone-age start rather than a stone-age
+    /// stockpile is the rule these founders are set up by, and giving them a
+    /// winter's worth would answer the question this model exists to ask. Two
+    /// days is enough to be looking for the good ground rather than for
+    /// tonight's supper.
+    const DAYS_OF_FOOD_THEY_WALK_IN_WITH: f32 = 2.0;
+
     /// Whether this agent can do a step at all.
     ///
     /// Everything a stone-age people arrives knowing is `obvious`; everything
@@ -3100,6 +3114,19 @@ impl Agent {
             let carried = self.a_tool_fresh_from_these_hands(what, how_many, each);
             self.inventory.add_item(carried);
         }
+
+        // And the food they have been walking on. Counted in portions off the
+        // body's own arithmetic rather than a number picked here, so that if
+        // what a body burns in a day changes, what a founder walks in with
+        // changes with it.
+        let portions = (Self::DAYS_OF_FOOD_THEY_WALK_IN_WITH
+            * super::physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY
+            / super::physiology::UNITS_IN_A_PORTION)
+            .round() as u32;
+        let mut travelling_food = InventoryItem::new_with_weight("food".to_string(), portions, 0.5);
+        travelling_food.food_data = crate::world::FoodDatabase::new()
+            .create_food_data(&crate::world::ItemType::Food, 0);
+        self.inventory.add_item(travelling_food);
     }
 
     pub const MATERIALS: [&'static str; 7] = [

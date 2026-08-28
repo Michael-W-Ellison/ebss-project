@@ -1151,8 +1151,8 @@ impl World {
         // berry bushes, because a person living on greens has to pick a great
         // many of them.
         for (what, how_many) in [
-            (ResourceType::Greens, config.food_nodes * 3 / 2),
-            (ResourceType::Roots, config.food_nodes),
+            (ResourceType::Greens, config.food_nodes * 3),
+            (ResourceType::Roots, config.food_nodes * 2),
         ] {
             let (thin, heavy) = resource_spawning::TerrainResourceMapper::amount_range(what);
 

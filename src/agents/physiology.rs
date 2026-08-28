@@ -151,6 +151,25 @@ const HOW_THE_STOMACH_EMPTIES: [(u32, f32); 10] = [
     (360, 8.0 / 8.0),
 ];
 
+/// How long a meal keeps a body from wanting the next one, in minutes.
+///
+/// The last entry in the gastric schedule: six hours, after which the stomach
+/// is empty. "An empty stomach is what a body feels, and it feels it about
+/// five hours after eating, which is what puts three meals in a day."
+pub const MINUTES_A_MEAL_HOLDS: u32 = HOW_THE_STOMACH_EMPTIES[HOW_THE_STOMACH_EMPTIES.len() - 1].0;
+
+/// The same, in decision turns.
+pub const TURNS_A_MEAL_HOLDS: f32 = MINUTES_A_MEAL_HOLDS as f32 / MINUTES_PER_TURN as f32;
+
+/// What the three hunger tables come to for a body that is not in trouble.
+///
+/// A full reserve is one, an empty stomach is two, and a gut with less than
+/// half a day behind it is two. This is the ordinary case - somebody who ate
+/// six hours ago and has not eaten since - and it is what the Hunger drive's
+/// climb is sized against, so that a body wants its next meal when its stomach
+/// is empty rather than at a rate somebody picked.
+pub const AN_ORDINARY_APPETITE: f32 = 1.0 * 2.0 * 2.0;
+
 /// What share of a meal has left the stomach by the time it is this old.
 pub fn share_of_a_meal_gone_by(age_in_minutes: u32) -> f32 {
     let age = age_in_minutes as f32;

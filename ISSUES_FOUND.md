@@ -4750,34 +4750,157 @@ being wrong against a year that is now right, and it is filed as #209. The test
 suite went from fifteen failures to thirty-three, and most of them are the same
 thing: tests written against a year of ninety-six days.
 
+### 80. Spring was never short of food; the only path food had out of the ground ate what it took
+
+"Why are the greens running out?" They are not. Measured over a thousand turns
+with `examples/_debug_spring.rs`, greens held at two hundred and sixty-nine to
+three hundred and eighty-one nodes' worth while the settlement went from twelve
+alive to one. Fish was seventy-four per cent of the world's standing edible
+stock - three thousand and seventy-two units across forty-two nodes - and the
+`Fish` action was taken **seventy times out of seven thousand seven hundred**.
+Fifty-two animals were never hunted at all. Nothing ran out.
+
+Three separate things were wrong, and only the third was the settlement-killer.
+
+#### Leaf is a quarter of a food, and both food-choosers picked the nearest thing
+
+Greens are energy six against ordinary forage's twenty-five, so
+`how_rich_this_food_is` puts a unit of leaf at 0.24. A stomach holds six hundred
+units and empties in six hours, so the most a body can physically take in is
+about two thousand four hundred units a day - **five hundred and seventy-six
+energy against the fourteen hundred and forty it burns**. A body living on
+greens starves however many greens there are.
+
+Both loops that pick food - the one behind `Action::Eat` and the one behind
+`Action::Gather` - took the nearest edible node and never asked what was at the
+end of the walk. With leaf the commonest thing growing, the nearest edible thing
+was almost always leaf. Both now weigh richness against
+`provision::what_foraging_costs`, so a root patch across the meadow beats a leaf
+underfoot. Measured over thirty-two worlds at the checkpoint where the two
+differ, the Gather half is worth about one more person alive at a thousand turns
+and nothing either way elsewhere; the Eat half is most of the gain.
+
+Spring also now gives roots as well as greens - cattail and dandelion are dug
+when the top growth is young and the root still holds last year's store, which
+is exactly what makes them worth digging before anything has ripened - and there
+are three times the greens nodes and twice the roots nodes there were.
+
+#### The Eat action picked one berry and ate it standing there
+
+`Action::Eat` harvested `1` from the node it had walked to, ate it, and went home
+empty-handed. Instrumented directly with `food_items_into_packs`: over four
+hundred turns, **two thousand one hundred and ninety-nine gather trips put wood,
+cotton, clay and iron into packs and not one item of food**, because the only
+path food ever took out of the ground was the Eat branch and the Eat branch ate
+what it took.
+
+So nothing was ever carried, so nothing could ever be stored, so no pit ever
+held a winter, and every single meal cost a walk. The Gather branch had been
+taught the armful - "a forager strips a bush, they do not pick a single fruit
+and walk home" - and the Eat branch had not. The same lesson written down twice
+and applied once, which is defect #3 in this document's list for the ninth time.
+
+A meal now strips the patch: one portion goes down on the spot and the rest of
+the armful goes home in the pack, where `find_best_food_to_eat` finds it next
+time at a cost of one instead of a walk and `what_food_i_can_spare` finally has
+something to bury. What will not fit stays on the bush, per #165.
+
+On its own this **made things worse** - thirty-two worlds, mean last-alive fell
+from 1551 turns to 878 - while raising the peak larder sevenfold, from 29 to
+204. A settlement that carries food and does not eat it dies with a full pit,
+which is what the next section is about.
+
+#### And the real killer: a body that ate 2.26 times a day and needed three
+
+`UNITS_IN_A_PORTION` is a third of a day exactly, so three portions is a day's
+food. Measured with `examples/_debug_body.rs`: two hundred and seven meals per
+agent over ninety-one and three-quarter days - **2.26 meals a day** - and an
+intake of one thousand and seventy-three units a day against the fourteen
+hundred and forty burned. The reserve fell from 30,180 to 5,023 in a straight
+line and everybody was dead by about a hundred days.
+
+Nothing was stopping them. Turn budget was not short: gathering took fifty-two
+per cent of turns and eating twenty. Food was not short: they died in a spring
+holding six thousand two hundred and fifty-three nodes' worth of edible stock.
+Eat never failed once in a thousand turns. **The body simply never asked for the
+third meal.**
+
+`base_accumulation_rate` gave Hunger `0.01`, a number picked against a calendar
+that no longer exists. At an ordinary product of the three hunger tables that is
+about seventeen turns - a day and a half - to climb from nothing to the
+threshold. A body that wants a meal every day and a half eats two-thirds of what
+it burns and starves in slow motion with its larder full.
+
+The rate is derived now, from the clock the stomach already keeps: a meal holds
+for as long as the stomach takes to empty, which is the last entry in
+`HOW_THE_STOMACH_EMPTIES` (six hours, three turns), so that is how long the
+drive takes to climb its threshold at the ordinary product of the tables. A body
+behind on its reserve or empty in the gut climbs faster, which is what the
+tables are for.
+
+Measured, thirty-two worlds, two thousand turns, against the commit before:
+
+| | mean last alive | alive at 1000 | alive at 1500 | peak larder |
+|---|---|---|---|---|
+| before | 1551 | 4.5 | 0.9 | 29 |
+| armful only | 878 | 0.4 | 0.0 | 204 |
+| **armful and derived rate** | **1878** | **6.3** | **3.6** | **260** |
+
+Intake went from 970 units a day to 1,281-1,503 - the fourteen hundred and forty
+the specification asks for, landed on from the arithmetic rather than tuned to.
+
+Founders also now walk in with two days of food, counted off
+`UNITS_BURNED_IN_AN_ORDINARY_DAY` rather than picked, so that a people arriving
+in a valley is looking for good ground rather than for tonight's supper. Two
+runs of thirty-two worlds put it at a wash for survival (1799 and 1922 against
+1878 without), which is what two days should be worth.
+
+#### What is still in the way
+
+Nobody survives a year yet. Sixteen worlds run to six thousand turns leave a
+mean of one person alive at four thousand, and `dropped` - the armful that would
+not fit in a full pack and went back on the bush - reaches eight thousand eight
+hundred items by turn two thousand four hundred while the pit sits at a hundred
+and fifteen and never grows. The larder is filled and eaten at the same rate.
+That is the next thing to measure and it is #213.
+
+### 81. The store is laid down and eaten at the same rate, so it is never a winter store
+
+Over twenty-five hundred turns the pit holds between a hundred and six and two
+hundred and one items the whole way through and never accumulates, while nearly
+nine thousand items of harvested food are thrown back on the bush because packs
+are full. Somebody who cannot carry an armful home should be emptying their pack
+into the pit and going back out; instead `Store` takes two hundred and fifty-two
+turns out of seven thousand four hundred and eighty-four. Not investigated yet.
+
 ## Housekeeping
 
-### 80. The other thirteen drive rates were never derived either
+### 82. The other thirteen drive rates were never derived either
 
-`base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
-thirteen are the same sort of number. Hunger and Thirst can be derived, because
-they have death clocks behind them and a rate is only sane if the drive crosses
-its threshold before the body takes damage. None of the other thirteen kills, so
-none can be derived that way, and all of them are still hand-picked against a
-calendar that no longer exists.
+Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
+and Thirst is read straight off the body. The other thirteen are still numbers
+somebody chose. They can be derived the same way only if something measurable
+sits behind them, and nothing does: none of them kills, so none has a clock to
+be sized against, and all of them were picked against a calendar that no longer
+exists.
 
-### 81. The clock is spelled out in the interface too
+### 83. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 82. Committed backup file
+### 84. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 83. Build warnings
+### 85. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 84. Placeholder package metadata
+### 86. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
