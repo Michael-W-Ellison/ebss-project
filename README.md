@@ -656,6 +656,36 @@ original specifications.
   twenty separate decisions, any of which the loudest drive can override, so it
   is rarely finished. That is the commitment problem, and it is the next thing.
   See ISSUES_FOUND.md #82
+- ✅ Every tile of every walk was a fresh decision, so no walk ever finished. A
+  `Move` action is one tile, and the whole decision — which drive, which patch,
+  which route — was re-derived from scratch at each of them against a world that
+  had shifted a step. A trip to a fish run twenty tiles off was twenty chances
+  for whatever drive was loudest that minute to send the agent elsewhere:
+  **`Move` ran at a third of all turns** and most of those trips did not finish,
+  so agents ate whatever was underfoot when they gave up. That is why weighting
+  food by what it is worth measured worse than picking the nearest thing —
+  *toward* the river was never *at* the river.
+
+  An agent now holds an **errand**: where it is going and which drive it set out
+  to answer. Four things end one — arriving, a fright, a different drive taking
+  over, or a walk running so far past what the distance was worth that the place
+  is plainly unreachable. A nearer patch coming into view is not one of them. A
+  bare "is a different drive leading now" test abandoned **58% of errands
+  mid-walk**, because the top two drives trade places almost every turn; turning
+  somebody round now takes a drive pressing a quarter again as hard.
+
+  Thirty-two worlds, two runs a side: mean last-alive **1,278 → 1,633 and
+  1,584**, peak larder ~200. `Move` fell from a third of turns to an eighth and
+  `Eat` rose from a fifth to a quarter. Of 392 errands in a 1,200-turn world,
+  158 arrived, 227 ended because a drive took over, and 4 were given up as
+  unreachable.
+
+  And a correction to the entry above: a low reserve does **not** raise hunger
+  through a full stomach. A body cannot answer a hunger it has no room for. What
+  the reserve changes is *when full arrives* — an intact reserve waits until the
+  stomach is down to a tenth of a sitting, a spent one is hungry again at three
+  quarters. That measured 1,278 against about 1,000 for the version it replaces.
+  See ISSUES_FOUND.md #83, #84
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

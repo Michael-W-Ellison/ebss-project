@@ -60,6 +60,7 @@ pub mod combat_verb_tests;
 pub mod examine_tests;
 pub mod fluid_tests;
 pub mod hands_tests;
+pub mod errand_tests;
 pub mod bearing_tests;
 pub mod beast_tests;
 pub mod keeping_tests;

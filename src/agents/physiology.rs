@@ -138,6 +138,19 @@ const FIRST_BAND: f32 = 0.75;
 /// it that never once ran dry.
 const WANTS_A_DRINK_AT: f32 = 0.92;
 
+/// How full a stomach stops a body with its reserve intact from wanting more.
+///
+/// A tenth of a sitting: near enough empty. Somebody who is not short of
+/// anything eats three times a day and does not think about food in between.
+const A_FULL_BODY_STOPS_AT: f32 = 0.10;
+
+/// And how full stops a body that has eaten its reserve down to nothing.
+///
+/// Three quarters of a sitting still in the stomach and it is looking for the
+/// next one. "Instead of waiting for their stomach to become empty, an agent
+/// might get hungry while their stomach is still half full."
+const A_SPENT_BODY_STOPS_AT: f32 = 0.75;
+
 /// How the stomach empties into the gut, as (minutes since the meal, share of
 /// it gone by then).
 ///
@@ -712,10 +725,13 @@ impl Physiology {
     ///
     /// "If an agent has nearly full internal/stored energy and enough food to
     /// replenish what it normally requires in a day, then there is little need
-    /// to eat." So nought on either gut table stops the drive rising at all:
-    /// a body that has just eaten is not getting hungrier, whatever its
-    /// reserve says, because there is nothing to be done about the reserve for
-    /// a day yet.
+    /// to eat." Both halves of that: what stops the drive rising is a full
+    /// stomach **and** a reserve that does not need topping up. A full stomach
+    /// still stops it whatever the reserve says - nobody eats while full - but
+    /// what counts as full moves with the reserve. A body that has plenty in
+    /// hand waits until its stomach is nearly empty; a body that has eaten
+    /// into its reserve is hungry again with the stomach still half full, and
+    /// so eats sooner and oftener rather than harder.
     ///
     /// This is a **rate**, not a level - the tables are headed "Hunger Drive
     /// Increase". Read as a level it says a body with a day's food in its gut
@@ -758,59 +774,54 @@ impl Physiology {
         // are the same supper and only the energy can say so. Read as volume,
         // a body with a full supper of anything dense in it read as empty.
         let belly = self.energy_in_the_stomach() / (WHAT_A_SITTING_AIMS_AT * out_of);
-        let by_belly = if belly >= 1.0 {
+
+        // How full is full enough to stop wanting more, for this body now.
+        //
+        // A body with its reserve intact wants nothing until its stomach is
+        // nearly empty. One that has eaten into its reserve is hungry again
+        // with the stomach still half full: "a low reserve should force an
+        // agent to eat sooner instead of eating while full."
+        //
+        // This is the whole of what a low reserve does to the stomach table,
+        // and it is deliberately not the other thing it could do. Letting the
+        // reserve raise hunger *through* a full stomach was tried, and it is
+        // wrong on its face: a body cannot answer a hunger it has no room for,
+        // so all a drive rising against a full stomach does is spend turns on
+        // meals that will not go down. Eating sooner is an answer. Eating
+        // while full is not.
+        let stops_wanting_at = A_FULL_BODY_STOPS_AT
+            + (A_SPENT_BODY_STOPS_AT - A_FULL_BODY_STOPS_AT) * (1.0 - share_of_reserve);
+        let by_belly = if belly >= stops_wanting_at {
             0.0
-        } else if belly >= 0.83 {
-            1.0
-        } else if belly >= 0.63 {
-            1.2
-        } else if belly >= 0.42 {
-            1.4
-        } else if belly >= 0.21 {
-            1.6
-        } else if belly >= 0.10 {
-            1.8
         } else {
-            2.0
+            // And below that point it climbs the rest of the way to an empty
+            // stomach, on the table's own shape.
+            let how_far_down = 1.0 - (belly / stops_wanting_at.max(1e-3)).clamp(0.0, 1.0);
+            1.0 + how_far_down
         };
 
-        // And what is behind it in the gut, as a share of a day's food
+        // And what is behind it in the gut, as a share of a day's food.
+        //
+        // The same argument: a day's food behind the stomach settles an
+        // ordinary body, and a body that has been living off its reserve wants
+        // more than a day's worth in hand before it stops looking for the next
+        // meal.
         let gut = self.energy_in_the_gut() / (UNITS_BURNED_IN_AN_ORDINARY_DAY * out_of);
-        let by_gut = if gut >= 1.0 {
+        let enough_behind_it = 1.0 + (1.0 - share_of_reserve);
+        let by_gut = if gut >= enough_behind_it {
             0.0
-        } else if gut >= 2.0 / 3.0 {
+        } else if gut >= enough_behind_it * 2.0 / 3.0 {
             1.0
-        } else if gut >= 1.0 / 3.0 {
+        } else if gut >= enough_behind_it / 3.0 {
             1.5
         } else {
             2.0
         };
 
-        // A full stomach and a day behind it stop an *ordinary* body wanting
-        // more. They do not stop a body that is short of energy.
-        //
-        // "There is nothing saying that the agents cannot eat before their
-        // stomach is completely empty. They can eat if they have the room in
-        // their stomach and if they have a hunger drive. This is why having an
-        // internal energy level which is low should still increase hunger
-        // drive, to help the agents eat enough to regain their lost energy
-        // stores."
-        //
-        // This returned nought flat whenever either gut table read nought,
-        // which cancelled the reserve entirely: a body three weeks into its
-        // reserve, with a mouthful in its stomach, was not hungry at all. The
-        // reserve is the term that must not be cancellable - it is the one
-        // that kills - so what the two gut tables do now is *damp* it rather
-        // than switch it off, and a body at the bottom of its reserve goes on
-        // asking for food with something in front of it.
-        let full_up = by_belly == 0.0 || by_gut == 0.0;
-        if full_up {
-            // Nothing above the ordinary is wanted. Below it, what is wanting
-            // is the shortfall itself, at the pace a stomach with something
-            // already in it can take it.
-            const WHAT_A_FULL_BODY_STILL_ASKS: f32 = 0.25;
-            let over_ordinary = (by_reserve - 1.0f32).max(0.0);
-            return over_ordinary * WHAT_A_FULL_BODY_STILL_ASKS;
+        // Full is full. What the reserve changes is *when* full arrives, which
+        // both tables above have already taken from it.
+        if by_belly == 0.0 || by_gut == 0.0 {
+            return 0.0;
         }
 
         by_reserve * by_belly * by_gut

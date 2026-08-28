@@ -1283,6 +1283,16 @@ pub struct Agent {
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
     pub satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker, // Tracks who/what satisfies which drives
     /// Current active plan being executed
+    /// What this one set out to do, and has not finished doing.
+    ///
+    /// "Once an agent plans an action, it would not change its mind unless its
+    /// situation changed in some manner. For example, an agent wants to walk
+    /// to get a drink of water and the trip takes an estimated 10 minutes
+    /// one-way. The agent begins walking and for the next ten ticks no new
+    /// decisions need be made."
+    ///
+    /// See `Errand`.
+    pub errand: Option<Errand>,
     pub current_plan: Option<ActionPlan>,
     /// Planning engine for generating and learning from plans
     pub planner: Planner,
@@ -1353,6 +1363,7 @@ impl Agent {
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
             satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker::new(),
+            errand: None,
             current_plan: None,
             planner: Planner::new(),
             plan_step_ticks: 0,
@@ -9098,3 +9109,61 @@ impl Agent {
         // This method just marks that we're spreading the word
     }
 }
+/// An errand: somewhere to be, something to do there, and the drive it answers.
+///
+/// "Once an agent plans an action, it would not change its mind unless its
+/// situation changed in some manner. The agent begins walking and for the next
+/// ten ticks no new decisions need be made. If during the walk the agent ran
+/// into a pack of wolves, it would need to recalculate."
+///
+/// Before this, every tile of every walk was a fresh decision made from
+/// scratch, and the whole decision - which drive, which patch, which route -
+/// was re-derived from a world that had moved one step. Measured, `Move` ran
+/// at a third of all turns and the trips it was made of mostly did not finish:
+/// a walk to a river twenty tiles off is twenty chances for whatever drive is
+/// loudest that minute to send the agent somewhere else, so agents ate
+/// whatever was underfoot when they gave up. That is why weighting food by
+/// what it is worth measured *worse* than picking the nearest thing - the
+/// better food was further off, and further off meant never arrived at.
+///
+/// What ends an errand is a change in what the agent needs, not the passing of
+/// a turn: arriving, a threat, a different drive taking the lead, or the walk
+/// going on so much longer than it should that the place is plainly not
+/// reachable.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Errand {
+    /// Where it is going
+    pub going_to: (i32, i32, i32),
+    /// Which drive it set out to answer
+    pub for_drive: DriveType,
+    /// How hard that drive was pressing when it set out, so that a drive going
+    /// quiet - because somebody handed this one a meal, say - ends the errand
+    pub pressed_this_hard: f32,
+    /// How many turns it has been walking
+    pub turns_on_it: u32,
+}
+
+impl Errand {
+    /// How much longer than the crow flies a walk is allowed to take.
+    ///
+    /// A step is a tile, so a place twenty tiles off is twenty turns of
+    /// walking at best. Ground is not flat and routes are not straight, so
+    /// three times that is generous; past it the place is not reachable and
+    /// going on is a way of starving politely.
+    pub const HOW_LONG_A_WALK_IS_WORTH: u32 = 3;
+
+    /// The fewest turns any errand is given, so that a short walk is not
+    /// abandoned on its first step.
+    pub const AT_LEAST_THIS_MANY_TURNS: u32 = 4;
+
+    /// How far off it was set out from
+    pub fn how_far_it_was(&self, from: (i32, i32, i32)) -> u32 {
+        (self.going_to.0 - from.0).abs().max((self.going_to.1 - from.1).abs()) as u32
+    }
+
+    /// Whether this one has got there.
+    pub fn arrived(&self, at: (i32, i32, i32)) -> bool {
+        self.going_to.0 == at.0 && self.going_to.1 == at.1
+    }
+}
+

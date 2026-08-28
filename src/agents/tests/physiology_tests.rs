@@ -509,3 +509,74 @@ fn days_into_the_reserve_is_the_same_question_for_a_child() {
         "three days costs a small body a larger share of what it carries"
     );
 }
+
+/// A low reserve makes a body hungry sooner, not hungry while full.
+///
+/// "Hunger drive should not increase with a full stomach with a low reserve,
+/// but should increase as the stomach empties. Basically, a low reserve should
+/// force an agent to eat sooner instead of eating while full. Instead of
+/// waiting for their stomach to become empty, an agent might get hungry while
+/// their stomach is still half full."
+#[test]
+fn a_low_reserve_brings_the_next_meal_forward_rather_than_eating_through_a_full_belly() {
+    let a_sitting = WHAT_A_SITTING_AIMS_AT;
+    let worth = what_a_unit_of_this_is_worth(ENERGY_OF_ORDINARY_FOOD);
+    let a_sittings_worth_of_units = a_sitting / worth;
+
+    // Two bodies, one with its reserve intact and one that has eaten most of
+    // its way through it, both with a full sitting in front of them
+    let mut fed = Physiology::new();
+    let mut spent = Physiology::new();
+    spent.reserve = spent.reserve_capacity * 0.05;
+
+    fed.eat(a_sittings_worth_of_units, worth);
+    spent.eat(a_sittings_worth_of_units, worth);
+
+    assert_eq!(
+        fed.how_fast_hunger_rises(),
+        0.0,
+        "a full stomach stops a body that is not short of anything"
+    );
+    assert_eq!(
+        spent.how_fast_hunger_rises(),
+        0.0,
+        "and it stops a body that is - nobody eats while full, whatever their \
+         reserve says"
+    );
+
+    // Now let both stomachs empty halfway. The spent one is hungry; the fed
+    // one is not yet.
+    let mut turns = 0;
+    while spent.energy_in_the_stomach() > a_sitting * 0.5 {
+        fed.advance(MINUTES_PER_TURN, 0.0);
+        spent.advance(MINUTES_PER_TURN, 0.0);
+        turns += 1;
+        assert!(turns < 20, "the stomach never emptied");
+    }
+
+    assert!(
+        spent.how_fast_hunger_rises() > 0.0,
+        "a body that has eaten into its reserve is hungry again with the \
+         stomach still half full"
+    );
+    assert_eq!(
+        fed.how_fast_hunger_rises(),
+        0.0,
+        "and one that has not is still waiting"
+    );
+}
+
+/// And when the stomach does empty, the spent body wants more than the fed one.
+#[test]
+fn an_empty_stomach_presses_harder_on_a_spent_body() {
+    let mut fed = Physiology::new();
+    let mut spent = Physiology::new();
+    spent.reserve = spent.reserve_capacity * 0.05;
+
+    assert!(
+        spent.how_fast_hunger_rises() > fed.how_fast_hunger_rises(),
+        "spent {} against fed {}",
+        spent.how_fast_hunger_rises(),
+        fed.how_fast_hunger_rises()
+    );
+}

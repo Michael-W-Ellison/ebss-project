@@ -4980,9 +4980,79 @@ it would not change its mind unless its situation changed in some manner." A
 settlement that can walk to the river without re-deciding at every step can eat
 fish; one that cannot is stuck with leaf whatever the chooser says.
 
+### 83. Every tile of every walk was a fresh decision, so no walk ever finished
+
+"Once an agent plans an action, it would not change its mind unless its
+situation changed in some manner. For example, an agent wants to walk to get a
+drink of water and the trip takes an estimated 10 minutes one-way. The agent
+begins walking and for the next ten ticks no new decisions need be made... An
+agent spending all day digging a pit need only make decisions to eat and drink
+as those drives increase, before returning to dig."
+
+A `Move` action is one tile, and the whole decision - which drive, which patch,
+which route - was re-derived from scratch at every one of them against a world
+that had shifted a step. A walk to a fish run twenty tiles off was twenty
+chances for whatever drive was loudest that minute to send the agent somewhere
+else. Measured, `Move` ran at **a third of all turns** and most of the trips it
+was made of did not finish; agents ate whatever was underfoot when they gave up.
+
+That is why #82's patch-chooser could not be made to prefer good food. Weighting
+density harder sends agents toward the river and measured *worse*, because
+"toward the river" was never "at the river".
+
+An agent now holds an **errand** - where it is going, and which drive it set out
+to answer - and keeps to it. What ends one is a change in what the agent needs,
+and there are four: it arrives, something frightens it, a different drive takes
+over, or the walk runs so far past what the distance was worth that the place is
+plainly not reachable. Not on that list: a nearer patch coming into view, this
+turn's dice, or the same drive pressing slightly differently.
+
+A bare "is a different drive at the head of the queue" test abandoned **58% of
+errands mid-walk**, because the top two drives trade places almost every turn as
+one is nibbled at and the other builds. Turning somebody round now takes a drive
+pressing a quarter again as hard as the one they set out on.
+
+Measured over thirty-two worlds, two runs a side:
+
+| | mean last alive | peak larder |
+|---|---|---|
+| before the errand | 1278, 1279 | 159, 183 |
+| errand, bare comparison | 1490, 1529 | 224, 189 |
+| **errand, with the margin** | **1633, 1584** | **220, 201** |
+
+`Move` fell from a third of all turns to an eighth, and `Eat` rose from a fifth
+to a quarter. Of 392 errands set out on in a 1,200-turn world, 158 arrived, 227
+ended because a drive took over, and **4** were given up as unreachable - the
+backstop is a backstop rather than the usual ending, which is what
+`errand_tests` asserts.
+
+### 84. A low reserve should bring the next meal forward, not eat through a full stomach
+
+The previous entry had a low reserve go on raising hunger *through* a full
+stomach, on the reading that the reserve is the term that kills and must not be
+cancellable. That is wrong on its face and was corrected:
+
+"Hunger drive should not increase with a full stomach with a low reserve, but
+should increase as the stomach empties. Basically, a low reserve should force an
+agent to eat sooner instead of eating while full. Instead of waiting for their
+stomach to become empty, an agent might get hungry while their stomach is still
+half full."
+
+A body cannot answer a hunger it has no room for, so all a drive rising against
+a full stomach buys is turns spent on meals that will not go down. What the
+reserve changes is **when full arrives**: a body with its reserve intact waits
+until its stomach is down to a tenth of a sitting, and one that has eaten its
+reserve away is hungry again at three quarters. The gut table moved the same
+way - an ordinary body is settled by a day's food behind the stomach, a spent
+one wants two.
+
+Measured over thirty-two worlds: mean last-alive **1278 and 1279 against about
+1000** for the version it replaces, and it is the more consistent of the two as
+well as the better.
+
 ## Housekeeping
 
-### 83. The other thirteen drive rates were never derived either
+### 85. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -4991,23 +5061,23 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 84. The clock is spelled out in the interface too
+### 86. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 85. Committed backup file
+### 87. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 86. Build warnings
+### 88. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 87. Placeholder package metadata
+### 89. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

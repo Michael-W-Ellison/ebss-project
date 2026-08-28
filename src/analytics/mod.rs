@@ -858,6 +858,11 @@ impl Simulation {
                     &agent_positions,
                 );
 
+                // An errand held across turns rather than re-decided at every
+                // step. This is what makes a walk to the river something an
+                // agent can finish - see `Errand`.
+                let action = self.stick_to_the_errand(agent_index, action, running_away);
+
                 // Drop travel plans toward places the agent cannot reach
                 let action = self.retarget_unreachable_move(agent_index, action);
 
@@ -8779,6 +8784,126 @@ impl Simulation {
     /// Walking greedily at an unreachable target leaves the agent shuffling
     /// between two tiles forever, so the memory is dropped as unusable and the
     /// next-best survival option taken instead.
+    /// Keep walking where this one was already walking.
+    ///
+    /// "Once an agent plans an action, it would not change its mind unless its
+    /// situation changed in some manner... In most cases, the agents should
+    /// not need to change their decisions once they are made."
+    ///
+    /// Every tile of every walk used to be a fresh decision, made from scratch
+    /// against a world that had moved one step, so a twenty-tile trip to a
+    /// fish run was twenty chances to be sent somewhere else. Measured, `Move`
+    /// ran at a third of all turns and most of those trips did not finish;
+    /// agents ate whatever was underfoot when they gave up, which is why
+    /// choosing food by what it is *worth* measured worse than choosing the
+    /// nearest thing.
+    ///
+    /// What ends an errand is a change in what the agent needs, and there are
+    /// four of them. It has arrived. Something frightened it. A different
+    /// drive has taken the lead - the drive demands changed, which is the one
+    /// the specification names. Or the walk has run so far past what the
+    /// distance was worth that the place is plainly not reachable, and going
+    /// on is a way of starving politely.
+    ///
+    /// Note what is *not* on that list: a nearer patch coming into view, this
+    /// turn's dice, or the same drive pressing slightly differently. Those are
+    /// the things that used to turn an agent round.
+    /// How much harder a drive has to press than the one an agent set out on
+    /// before it turns them round.
+    ///
+    /// A quarter again. Measured, a bare comparison abandoned 58% of errands
+    /// mid-walk, because the two drives at the head of the queue trade places
+    /// almost every turn.
+    const HOW_MUCH_HARDER_TO_TURN_SOMEBODY_ROUND: f32 = 1.25;
+
+    fn stick_to_the_errand(
+        &mut self,
+        agent_index: usize,
+        action: Action,
+        running_away: bool,
+    ) -> Action {
+        let here = self.population.agents[agent_index].state.position;
+        let presses_hardest = self.population.agents[agent_index].what_presses_hardest();
+
+        // Something frightened it, or the threat tree took the turn. Whatever
+        // it was going to do can wait.
+        if running_away {
+            self.population.agents[agent_index].errand = None;
+            return action;
+        }
+
+        if let Some(errand) = self.population.agents[agent_index].errand.clone() {
+            // A different drive at the head of the queue is not on its own a
+            // change of situation: two drives within a whisker of each other
+            // swap places every turn as one is nibbled at and the other
+            // builds, and an agent that turns round each time they do gets
+            // nowhere. What ends the errand is a drive that has actually taken
+            // over - one pressing clearly harder than the one this one set out
+            // to answer, as it presses *now*.
+            let still_wants_it = presses_hardest == Some(errand.for_drive)
+                || match presses_hardest {
+                    Some(other) => {
+                        let mine = self.population.agents[agent_index]
+                            .how_hard_it_presses(errand.for_drive);
+                        let theirs =
+                            self.population.agents[agent_index].how_hard_it_presses(other);
+                        theirs < mine * Self::HOW_MUCH_HARDER_TO_TURN_SOMEBODY_ROUND
+                    }
+                    None => true,
+                };
+            let a_long_walk = errand
+                .how_far_it_was(here)
+                .max(crate::agents::Errand::AT_LEAST_THIS_MANY_TURNS)
+                * crate::agents::Errand::HOW_LONG_A_WALK_IS_WORTH;
+            let given_up = errand.turns_on_it > a_long_walk;
+
+            if errand.arrived(here) || !still_wants_it || given_up {
+                let why = if errand.arrived(here) {
+                    "errand: got there"
+                } else if given_up {
+                    "errand: gave up on it"
+                } else {
+                    "errand: something else came first"
+                };
+                *self.what_a_threat_came_to.entry(why.to_string()).or_insert(0) += 1;
+                self.population.agents[agent_index].errand = None;
+                return action;
+            }
+
+            // Nothing has changed. Keep walking.
+            if let Some(errand) = self.population.agents[agent_index].errand.as_mut() {
+                errand.turns_on_it += 1;
+            }
+            *self
+                .what_a_threat_came_to
+                .entry("errand: kept to it".to_string())
+                .or_insert(0) += 1;
+            return Action::Move {
+                target: errand.going_to,
+            };
+        }
+
+        // No errand. If this turn is the start of a walk, that is one.
+        if let Action::Move { target } = action {
+            if let Some(for_drive) = presses_hardest {
+                let pressed_this_hard =
+                    self.population.agents[agent_index].how_hard_it_presses(for_drive);
+                self.population.agents[agent_index].errand = Some(crate::agents::Errand {
+                    going_to: target,
+                    for_drive,
+                    pressed_this_hard,
+                    turns_on_it: 1,
+                });
+                *self
+                    .what_a_threat_came_to
+                    .entry("errand: set out".to_string())
+                    .or_insert(0) += 1;
+            }
+        }
+
+        action
+    }
+
     fn retarget_unreachable_move(&mut self, agent_index: usize, action: Action) -> Action {
         use crate::core::memory::SpatialMemoryType;
 
