@@ -121,8 +121,7 @@ fn nobody_drinks_the_sea_who_does_not_have_to() {
     let mut simulation = one_person();
     let agent = &mut simulation.population.agents[0];
 
-    agent.state.ticks_without_water = 0;
-    agent.state.physiology.gone_without_water_for(0);
+    agent.state.gone_without_water_for(0);
     assert!(
         !agent.would_i_drink_the_sea(),
         "a man with any choice at all leaves it alone"
@@ -136,8 +135,7 @@ fn a_man_dying_of_thirst_drinks_it_anyway() {
     let mut simulation = one_person();
     let agent = &mut simulation.population.agents[0];
 
-    agent.state.ticks_without_water = 100_000;
-    agent.state.physiology.gone_without_water_for(100_000);
+    agent.state.gone_without_water_for(100_000);
     assert!(agent.state.is_dehydrated());
     assert!(agent.would_i_drink_the_sea());
 }
@@ -167,8 +165,7 @@ fn the_sea_costs_more_than_it_gives() {
     let mut worst = straight_after;
     for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 6) {
         simulation.population.agents[0].state.last_drank_tick = simulation.current_tick;
-        simulation.population.agents[0].state.ticks_without_water = 0;
-        simulation.population.agents[0].state.physiology.gone_without_water_for(0);
+        simulation.population.agents[0].state.gone_without_water_for(0);
         simulation.tick();
         let thirst = simulation.population.agents[0]
             .drives

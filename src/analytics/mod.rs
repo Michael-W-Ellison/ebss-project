@@ -1101,6 +1101,9 @@ impl Simulation {
             }
         }
 
+        // What everybody makes of their provisions, and the winter coming
+        self.reckon_what_is_put_by();
+
         // Process environmental damage (exposure, falling, disease)
         self.process_environmental_damage();
 
@@ -9124,6 +9127,74 @@ impl Simulation {
         instead
     }
 
+    /// What each agent makes of its own provisions against the winter coming.
+    ///
+    /// "Do I have enough supplies to survive the day? The week? The month? The
+    /// winter?" Four horizons, each less frightening to fail than the last,
+    /// and the answer comes out as one number that becomes the Preparedness
+    /// drive - which already knows how to put food by. See
+    /// `agents::provision`.
+    ///
+    /// What an agent can reach is its own pack and the camp's pits. A pit is
+    /// the settlement's, not any one person's, so everybody counts the same
+    /// store and everybody is easier for it being full: that is the whole
+    /// reason a people digs one.
+    fn reckon_what_is_put_by(&mut self) {
+        use crate::agents::provision::{WhatIsPutBy, UNITS_IN_ONE_STORED_ITEM};
+
+        let season = self.world.climate.current_season();
+        let day_of_year = (self.current_tick
+            / crate::environment::seasons::TICKS_PER_DAY)
+            % crate::environment::seasons::DAYS_PER_YEAR;
+
+        let in_the_ground: f32 = self
+            .world
+            .pits
+            .iter()
+            .map(|pit| pit.how_much_is_in_it() as f32)
+            .sum::<f32>()
+            * UNITS_IN_ONE_STORED_ITEM;
+
+        let mouths = self
+            .population
+            .agents
+            .iter()
+            .filter(|a| a.state.is_alive)
+            .count()
+            .max(1) as f32;
+        let each_ones_share = in_the_ground / mouths;
+
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            agent.state.winters_seen.another_day(season, day_of_year);
+
+            let in_hand = crate::agents::storage_integration::count_food_in_inventory(
+                &agent.inventory,
+            ) as f32
+                * UNITS_IN_ONE_STORED_ITEM;
+
+            // And what is still coming out of the body's own stores counts:
+            // somebody who has just eaten is not short of supper.
+            let in_the_body = agent.state.physiology.in_the_stomach()
+                + agent.state.physiology.in_the_gut();
+
+            let reckoning = WhatIsPutBy::reckon(
+                in_hand + each_ones_share + in_the_body,
+                agent.state.physiology.what_i_burn_in_a_day,
+                agent.state.winters_seen.how_long_a_winter_lasts(),
+                day_of_year,
+            );
+
+            if let Some(drive) = agent.drives.get_mut(DriveType::Preparedness) {
+                drive.value = reckoning.stress();
+            }
+            agent.state.what_the_larder_says = Some(reckoning);
+        }
+    }
+
     fn execute_action(&mut self, action: &Action, agent_index: usize) -> ActionResult {
         use rand::Rng;
         use crate::world::nutrition::CookingOutcome;
@@ -9277,9 +9348,23 @@ impl Simulation {
                             agent.id, nutrition.energy
                         );
 
+                        // What the trip actually cost: the walk both ways, and
+                        // the work of getting this particular food out of the
+                        // ground or off the bone. It was a flat five whatever
+                        // the agent did, so a patch across the valley cost the
+                        // same as the bush at the door and nobody had a reason
+                        // to prefer the near one. See
+                        // `provision::what_foraging_costs`.
+                        let paces = agent_pos
+                            .distance_to(&self.world.resources[food_index].position);
+                        let cost = crate::agents::provision::what_foraging_costs(
+                            paces,
+                            physiology::how_rich_this_food_is(nutrition.energy),
+                        );
+
                         ActionResult::success()
                             .with_drive_change(DriveType::Hunger, -0.3)
-                            .with_energy_cost(5.0) // Small energy cost to gather/eat
+                            .with_energy_cost(cost)
                             .with_message(format!("Ate {} and restored {:.1} energy", food_type, nutrition.energy))
                     } else {
                         ActionResult::failure("Food source was empty".to_string())

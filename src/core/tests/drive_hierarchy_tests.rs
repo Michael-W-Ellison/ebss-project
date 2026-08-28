@@ -29,10 +29,8 @@ fn somebody_comfortable() -> Agent {
     agent.state.life_stage = LifeStage::Adult;
     agent.state.health = 100.0;
     agent.state.energy = 100.0;
-    agent.state.ticks_without_food = 0;
-    agent.state.physiology.gone_without_food_for(0);
-    agent.state.ticks_without_water = 0;
-    agent.state.physiology.gone_without_water_for(0);
+    agent.state.gone_without_food_for(0);
+    agent.state.gone_without_water_for(0);
     agent
 }
 
@@ -85,10 +83,8 @@ fn thirst_takes_the_turn_from_hunger_when_the_water_runs_out_first() {
 
     // Two days without either. Hunger is further along as a *drive*, but
     // dehydration is much further along as a way of dying.
-    agent.state.ticks_without_water = 3_000;
-    agent.state.physiology.gone_without_water_for(3_000);
-    agent.state.ticks_without_food = 3_000;
-    agent.state.physiology.gone_without_food_for(3_000);
+    agent.state.gone_without_water_for(3_000);
+    agent.state.gone_without_food_for(3_000);
     agent.drives.get_mut(DriveType::Hunger).unwrap().value = 0.95;
     agent.drives.get_mut(DriveType::Thirst).unwrap().value = 0.80;
 
@@ -106,8 +102,7 @@ fn thirst_takes_the_turn_from_hunger_when_the_water_runs_out_first() {
 #[test]
 fn no_amount_of_wanting_a_fine_thing_outranks_being_thirsty() {
     let mut agent = somebody_comfortable();
-    agent.state.ticks_without_water = 4_000;
-    agent.state.physiology.gone_without_water_for(4_000);
+    agent.state.gone_without_water_for(4_000);
     agent.drives.get_mut(DriveType::Thirst).unwrap().value = 0.9;
 
     for wish in [
@@ -131,7 +126,7 @@ fn a_child_and_an_adult_do_not_rank_the_same_needs_the_same_way() {
     fn how_long_hunger_leaves(stage: LifeStage, empty_for: u32) -> f32 {
         let mut agent = somebody_comfortable();
         agent.state.life_stage = stage;
-        agent.state.ticks_without_food = empty_for;
+        agent.state.gone_without_food_for(empty_for);
         agent
             .state
             .ticks_before_this_kills_me(DriveType::Hunger)
@@ -151,18 +146,14 @@ fn a_child_and_an_adult_do_not_rank_the_same_needs_the_same_way() {
     // food has already caught up.
     let mut small = somebody_comfortable();
     small.state.life_stage = LifeStage::Child;
-    small.state.ticks_without_food = 3_000;
-    small.state.physiology.gone_without_food_for(3_000);
-    small.state.ticks_without_water = 1_000;
-    small.state.physiology.gone_without_water_for(1_000);
+    small.state.gone_without_food_for(3_000);
+    small.state.gone_without_water_for(1_000);
     small.drives.get_mut(DriveType::Hunger).unwrap().value = 0.9;
 
     let mut grown = somebody_comfortable();
     grown.state.life_stage = LifeStage::Adult;
-    grown.state.ticks_without_food = 3_000;
-    grown.state.physiology.gone_without_food_for(3_000);
-    grown.state.ticks_without_water = 1_000;
-    grown.state.physiology.gone_without_water_for(1_000);
+    grown.state.gone_without_food_for(3_000);
+    grown.state.gone_without_water_for(1_000);
     grown.drives.get_mut(DriveType::Hunger).unwrap().value = 0.9;
 
     assert!(

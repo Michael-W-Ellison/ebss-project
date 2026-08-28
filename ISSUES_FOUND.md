@@ -4400,9 +4400,67 @@ need rewriting against the body; the ones that set `ticks_without_food` in
 minutes were rewritten mechanically, and what is left needs judgement. See
 #206 and #207.
 
+### 75. Enough for the day, the week, the month, the winter
+
+Four horizons, each further out than the last and each less frightening to
+fail: no food for tonight is extreme, no week is high, no month is medium-high,
+no winter is medium. `agents::provision` holds it. It comes out as one number
+and that number is the Preparedness drive, which already knew how to put food
+by; what it does to the drives above it, it does through the chain gate, the
+same as any other unanswered need.
+
+Three things an agent works out for itself rather than being told. What it eats
+in a day, kept as a running average of what its own body actually burned, so a
+big agent working hard lays in more than a small one resting. How long a winter
+is, counted by living through them, with the calendar's answer used only until
+it has seen one out. And what a forage costs: the walk both ways, plus the work
+of getting that particular food - a carcass wants butchering where greens are
+picked off the hedge - where it had been a flat five whatever the agent did, so
+a patch across the valley cost the same as the bush at the door.
+
+#### The calendar has no months in it
+
+A season is twenty-four days and a year is four of them, so four actual weeks is
+*longer* than the winter the month rung is supposed to sit inside. The ladder
+inverted: an agent with more than a month put by already had more than a
+winter, and the winter rung could not be reached at all. The rung is half a
+season now - one day, seven days, twelve days, a winter - and a test asserts the
+ordering so it cannot invert again.
+
+#### A secondary need was outranking a primary one
+
+Preparedness on a settlement that can never quite lay a week by goes unanswered
+for thousands of turns, and `pressure()` grows without bound on a denied drive.
+Its urgency passed ten, at which point the ten-against-a-hundred band gap that
+exists precisely so that "no amount of wanting a fine coat outweighs being
+thirsty" stopped working. Agents walked away from the water to go on gathering.
+Urgency is capped just under the band ratio now.
+
+#### And bodies drink before they go short, not after
+
+Thirst reached its drive threshold at four fifths of a full body - by which time
+an agent had spent half a day on something else and might be a long walk from
+the water. Seven founders in twelve died of thirst in spring, in a world with
+twenty-one springs in it that never once ran dry. A body wants a drink at
+ninety-two hundredths now, which is what people actually do. Thirst deaths
+across six worlds went from nine to thirteen a world down to nought to two.
+
+#### Measured, and what is still wrong
+
+Hunger is now the only thing killing settlements, and it still kills them: ten
+to twelve of twelve founders over a ten-thousand-turn run. The store reaches
+five to nineteen items where it reached one or two, so the stockpiling is doing
+something, but nothing like a winter's worth.
+
+One change was tried and reverted: letting Preparedness go and *gather* food
+when there is none in the pack to store. It reads as the obvious missing link -
+both existing branches can only move food already carried - but it measured
+clearly negative. Deaths came sooner and the store fell, because the drive then
+always has something to do and crowds out eating. Filed rather than shipped.
+
 ## Housekeeping
 
-### 75. The other thirteen drive rates were never derived either
+### 76. The other thirteen drive rates were never derived either
 
 `base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
 thirteen are the same sort of number. Hunger and Thirst can be derived, because
@@ -4411,23 +4469,23 @@ its threshold before the body takes damage. None of the other thirteen kills, so
 none can be derived that way, and all of them are still hand-picked against a
 calendar that no longer exists.
 
-### 76. The clock is spelled out in the interface too
+### 77. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 77. Committed backup file
+### 78. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 78. Build warnings
+### 79. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 79. Placeholder package metadata
+### 80. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

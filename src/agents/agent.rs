@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use super::senses::Senses;
 use super::body::Body;
 use super::physiology;
+use super::provision;
 use super::skills::Skills;
 use super::emotions::{EmotionState, EmotionSource, RelationshipMap};
 use crate::core::traits::TraitSet;
@@ -761,6 +762,14 @@ pub struct AgentState {
     #[serde(default)]
     pub physiology: physiology::Physiology,
 
+    /// Winters this agent has counted its way through.
+    #[serde(default)]
+    pub winters_seen: provision::WintersSeen,
+
+    /// What this agent last made of its own provisions, and the winter coming.
+    #[serde(default)]
+    pub what_the_larder_says: Option<provision::WhatIsPutBy>,
+
     /// What the last turn's work cost, which is what the body burned doing it.
     ///
     /// "Increased physical activity should increase the rate at which hunger
@@ -820,6 +829,8 @@ impl AgentState {
             ticks_without_food: 0,
             last_drank_tick: 0,
             physiology: physiology::Physiology::new(),
+            winters_seen: provision::WintersSeen::default(),
+            what_the_larder_says: None,
             effort_this_turn: 0.0,
             ticks_without_water: 0,
             waste_carried: 0.0,
@@ -1033,6 +1044,26 @@ impl AgentState {
     /// Check if agent is starving (critical survival state)
     pub fn is_starving(&self) -> bool {
         self.physiology.is_starving() || self.energy < 20.0
+    }
+
+    /// Put this body where it would be after this long without food.
+    ///
+    /// Minutes, which is the scale the old `ticks_without_food` figures were
+    /// always written on. Sizes the body to its life stage first, so a child
+    /// set to two days empty is two days into a *child's* reserve.
+    pub fn gone_without_food_for(&mut self, minutes: u32) {
+        self.physiology
+            .now_a_body_of(self.life_stage.hunger_reserve().max(0.05));
+        self.physiology.gone_without_food_for(minutes);
+        self.ticks_without_food = minutes;
+    }
+
+    /// Likewise, without water.
+    pub fn gone_without_water_for(&mut self, minutes: u32) {
+        self.physiology
+            .now_a_body_of(self.life_stage.hunger_reserve().max(0.05));
+        self.physiology.gone_without_water_for(minutes);
+        self.ticks_without_water = minutes;
     }
 
     /// What share of itself this body can bring to anything.
@@ -3427,6 +3458,12 @@ impl Agent {
     /// so it cannot fall behind it again. See ISSUES #74.
     const A_LONG_WAY_OFF: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 / 2.0;
 
+    /// How much any one drive may press, before its band is applied.
+    ///
+    /// Just under the ratio between one band and the next, so a need in a
+    /// lower band can approach a need in a higher one and never pass it.
+    const AS_MUCH_AS_A_BAND_ALLOWS: f32 = 9.0;
+
     /// How hard this need is pressing on this agent, right now.
     ///
     /// Two things decide it. The tier says how much a need of this kind is
@@ -3450,7 +3487,17 @@ impl Agent {
             return 0.0;
         }
 
-        let wanting = drive.urgency();
+        // A band is a band.
+        //
+        // "Wide enough that no amount of wanting a fine coat outweighs being
+        // thirsty" is what the hundred against ten is for, and an unbounded
+        // `pressure()` was quietly defeating it: Preparedness on a settlement
+        // that can never quite lay a week by goes unanswered for thousands of
+        // turns, and the pressure of that carried its urgency past ten, at
+        // which point a secondary need outranked a primary one that was
+        // actively asking. Agents walked away from the water to go on
+        // gathering and died of thirst with a full larder in front of them.
+        let wanting = drive.urgency().min(Self::AS_MUCH_AS_A_BAND_ALLOWS);
 
         let deadly = self
             .state
@@ -6445,18 +6492,29 @@ impl Agent {
     }
 
     /// Update starvation counter (called each tick)
+    /// Another turn goes by with nothing eaten.
     pub fn update_starvation(&mut self) {
-        self.state.ticks_without_food += 1;
+        self.state
+            .physiology
+            .advance(physiology::MINUTES_PER_TURN, 5.0);
+        self.state.ticks_without_food += physiology::MINUTES_PER_TURN;
     }
 
     /// Apply damage from starvation
+    ///
+    /// The clock is the body's, not a counter of turns: what does the harm is
+    /// how far into the reserve this body has eaten, and an empty reserve is
+    /// death whatever the calendar says. See `agents::physiology`.
     pub fn apply_starvation_damage(&mut self) {
-        // Damage is already applied in age_tick, but this is for explicit calls
-        if self.state.is_starving() {
-            let days_starving = self.state.ticks_without_food / 1440;
-            let damage = (days_starving as f32) * 0.5;
-            self.state.lose_health(damage, "starvation");
-
+        if self.state.physiology.starved() {
+            self.state.lose_health(self.state.health, "starvation");
+            return;
+        }
+        if self.state.physiology.is_wasting() {
+            let days_into_the_reserve = (self.state.physiology.reserve_capacity
+                - self.state.physiology.reserve)
+                / physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY;
+            self.state.lose_health(days_into_the_reserve * 0.5, "starvation");
         }
     }
 

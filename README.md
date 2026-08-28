@@ -495,6 +495,27 @@ original specifications.
   strictly worse than one that cannot starve, and making the world survivable at
   the true clock is a recalibration of the action economy, not a rebase of a
   constant. See ISSUES_FOUND.md #73
+- ⚠️ Enough for the day, the week, the month, the winter. Four horizons, each
+  less frightening to fail than the last, coming out as one number that becomes
+  the Preparedness drive. An agent works out for itself what it eats in a day
+  (a running average of what its own body burned), how long a winter is
+  (counted by living through them), and what a forage costs (the walk both
+  ways, plus the work of getting that food — a carcass wants butchering where
+  greens are picked).
+
+  Three defects fell out of building it. **The calendar has no months**: four
+  weeks is longer than a twenty-four-day winter, so the ladder inverted and the
+  winter rung was unreachable. **A secondary drive outranked a primary one**:
+  `pressure()` grows without bound on a need nobody can answer, so Preparedness
+  passed the ten-against-a-hundred band gap and agents walked away from the
+  water to go on gathering. **Bodies drank too late**: thirst asked only at four
+  fifths of a full body, and seven founders in twelve died of thirst in spring
+  in a world with twenty-one springs that never ran dry.
+
+  Thirst deaths fell from 9–13 a world to 0–2, and the store from 1–2 items to
+  5–19. Hunger is now the only thing killing settlements, and it still kills
+  them. One change measured negative and was reverted rather than shipped.
+  See ISSUES_FOUND.md #75
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

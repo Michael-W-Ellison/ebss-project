@@ -97,6 +97,19 @@ const ENERGY_OF_ORDINARY_FOOD: f32 = 25.0;
 /// Below this share of its water a body starts to go short.
 const FIRST_BAND: f32 = 0.75;
 
+/// The point at which a body wants a drink.
+///
+/// Well above the point at which going without starts to cost it anything.
+/// People drink several times a day and are never near going short; they do
+/// not wait until their capabilities drop.
+///
+/// It matters more than it sounds. Thirst used to reach the drive's threshold
+/// at four fifths of a full body, by which time an agent had spent half a day
+/// on something else and might be a long walk from the water. Seven founders
+/// in twelve died of thirst in spring, in a world with twenty-one springs in
+/// it that never once ran dry.
+const WANTS_A_DRINK_AT: f32 = 0.92;
+
 /// How the stomach empties into the gut, as (minutes since the meal, share of
 /// it gone by then).
 ///
@@ -213,6 +226,19 @@ pub struct Physiology {
     /// What is waiting to be passed
     pub waste: f32,
 
+    /// What this body has burned since the day turned over
+    #[serde(default)]
+    pub burned_today: f32,
+
+    /// What it burns in a day, by its own count rather than from a table
+    ///
+    /// "The agents should calculate their average food consumption." A big
+    /// body working hard eats more than a small one resting, and it is its own
+    /// consumption an agent has to lay in against. Seeded with an ordinary
+    /// day's burn so a body that has not yet lived a day still has an answer.
+    #[serde(default)]
+    pub what_i_burn_in_a_day: f32,
+
     /// How much has ever gone down, and how many sittings it took
     #[serde(default)]
     pub units_ever_eaten: f32,
@@ -243,6 +269,8 @@ impl Physiology {
             reserve_capacity: RESERVE_OF_A_GROWN_BODY * share,
             stomach_capacity: STOMACH_CAPACITY * share,
             waste: 0.0,
+            burned_today: 0.0,
+            what_i_burn_in_a_day: UNITS_BURNED_IN_AN_ORDINARY_DAY * share,
             units_ever_eaten: 0.0,
             meals_ever_eaten: 0,
         }
@@ -377,6 +405,21 @@ impl Physiology {
             self.reserve = (self.reserve + won).min(self.reserve_capacity);
         }
 
+        // Keep a count of what a day actually costs this body, rolled over
+        // when the day turns. A quarter weight on the newest day, so a hard
+        // week moves it without one idle afternoon undoing the reckoning.
+        let burned_now = minutes as f32 * effort * self.how_fast_this_body_burns();
+        self.burned_today += burned_now;
+        if now / MINUTES_PER_DAY > was / MINUTES_PER_DAY {
+            if self.what_i_burn_in_a_day <= 0.0 {
+                self.what_i_burn_in_a_day = self.burned_today;
+            } else {
+                self.what_i_burn_in_a_day =
+                    self.what_i_burn_in_a_day * 0.75 + self.burned_today * 0.25;
+            }
+            self.burned_today = 0.0;
+        }
+
         // And the body burns what it burns, which depends on how big it is.
         //
         // Not in proportion, though: a small body burns more for its size than
@@ -384,7 +427,7 @@ impl Physiology {
         // eats rather than a quarter, and why a famine takes the young first
         // even though they need less food in absolute terms. Three quarters is
         // the usual exponent for this.
-        self.reserve = (self.reserve - minutes as f32 * effort * self.how_fast_this_body_burns()).max(0.0);
+        self.reserve = (self.reserve - burned_now).max(0.0);
 
         self.minute = now;
     }
@@ -492,10 +535,23 @@ impl Physiology {
 
     /// How much this body wants water, as a drive.
     ///
-    /// Pressing by the time the first band is reached, so an agent goes to the
-    /// water before it starts going short rather than after.
+    /// At the Thirst drive's own threshold by the time a body wants a drink,
+    /// and at its maximum by the time going without is costing it something.
     pub fn thirst(&self) -> f32 {
-        ((1.0 - self.hydration) / (1.0 - FIRST_BAND)).clamp(0.0, 1.0)
+        const THE_DRIVE_ACTS_AT: f32 = 0.75;
+
+        let short_by = (1.0 - self.hydration).max(0.0);
+        let wants_one = 1.0 - WANTS_A_DRINK_AT;
+        let going_short = 1.0 - FIRST_BAND;
+
+        if short_by <= wants_one {
+            // Up to wanting one
+            short_by / wants_one * THE_DRIVE_ACTS_AT
+        } else {
+            // And from wanting one to going short, the rest of the way
+            let past = (short_by - wants_one) / (going_short - wants_one);
+            (THE_DRIVE_ACTS_AT + past * (1.0 - THE_DRIVE_ACTS_AT)).min(1.0)
+        }
     }
 
     /// How much this body wants food, as a drive.

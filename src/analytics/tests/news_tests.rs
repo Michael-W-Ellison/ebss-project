@@ -179,8 +179,7 @@ fn a_thirsty_man_keeps_the_waterholes_and_lets_the_flax_go() {
         thirst.value = 0.95;
         thirst.denied_ticks = 400;
     }
-    agent.state.ticks_without_water = 3_000;
-    agent.state.physiology.gone_without_water_for(3_000);
+    agent.state.gone_without_water_for(3_000);
 
     // More places than anybody can hold in mind, half of them water and half
     // of them flax
