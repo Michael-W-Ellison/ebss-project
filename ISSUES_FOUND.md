@@ -4488,6 +4488,56 @@ settlement with twenty-six items of food in hand counted fourteen. It asks
 `is_food` now, which is the same question `what_food_i_can_spare` asks, so the
 counting and the deciding agree.
 
+#### The gap was measured wrong, and the store works
+
+The twenty-five-fold gap reported against the previous commit was arithmetic on
+a bad number. Eighteen-to-thirty-four items was a *winter average over a dying
+population*, not the store at its height. Sampled across the year, the pit is
+plainly doing its job: nought through spring, a little in summer that gets
+eaten, then a hundred and eighty in autumn, held at two hundred and eighteen
+through winter and drawn down to a hundred and seventy. The right shape
+exactly. The real shortfall is three or four to one, not twenty-five.
+
+Two hypotheses about where the food went were tested and disproved rather than
+acted on. It is not going into `world.storehouse_inventory`, the global bag
+`Action::Store` deposits into: measured across a year that holds **zero** food,
+because `what_i_can_spare` excludes anything anybody eats, exactly as its
+comment says. And the settlement is not idling - `Gather` and `Eat` together
+are seventy-three per cent of every turn, so locking the discretionary drives
+behind Preparedness would free perhaps eight per cent of turns and could not
+close three to one.
+
+#### What you cannot carry stays where it fell, in the one place it did not
+
+`node.harvest()` takes the food out of the world before anything asks whether
+the person picking it has room. When `add_item` refused, the branch returned a
+failure and **what had been picked was destroyed** - not returned to the node,
+not left on the ground. Gathering by the armful with full packs was quietly
+deleting food. ISSUES #165 states this principle and never reached this branch.
+It goes back on the node now.
+
+#### A basket in the season it bears
+
+`when_it_bears` says "autumn is when everything else comes on at once", and a
+day spent on a hedge in full fruit is not the same day's work as one spent on a
+picked-over one. Gathering paid an armful either way. In the season a thing
+bears it is a basket now - eight to fourteen - and out of it a handful.
+
+That is the whole margin a settlement has. At an armful a trip, a band already
+spending three quarters of its turns on food could feed itself and never bank a
+winter, however much it wanted to. The store went to sixteen-to-forty-six items
+a world and settlements started producing births.
+
+#### Berries were already autumn-only
+
+Asked for, and already true: `is_it_bearing` puts Food, Grain and Honey in
+autumn alone, and out of season what is on the plant falls off rather than
+merely failing to regrow. Measured over a year: berries nought in spring after
+the first fortnight, nought all summer, a hundred and sixty to four hundred and
+fifty through autumn, nought again by midwinter. The one exception is that a
+world is seeded with fruit on the bushes whatever season it starts in - two
+hundred and thirty berries in spring, which then fall off. Filed as #208.
+
 #### What is still wrong, and one thing tried twice and reverted twice
 
 Settlements still die, of hunger, over a full run. The store is real now but a

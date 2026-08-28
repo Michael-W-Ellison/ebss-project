@@ -9500,6 +9500,7 @@ impl Simulation {
                     };
 
                     // What an ordinary pair of hands brings back in a trip
+                    let picking_season = self.world.climate.current_season();
                     let ordinary = match resource_type_enum {
                         ResourceType::Wood => rng.gen_range(1..=3),
                         // An armful at a time, like wood: a garment's worth of
@@ -9528,11 +9529,26 @@ impl Simulation {
                         // carry, and `Inventory::add_item` already refuses
                         // what will not fit - so this is a ceiling on the
                         // picking, not on the carrying.
+                        //
+                        // And a basket rather than an armful in the season the
+                        // thing actually bears. "Autumn is when everything else
+                        // comes on at once" is what `when_it_bears` says, and a
+                        // day spent on a hedge in full fruit is not the same
+                        // day's work as one spent on a picked-over one. This is
+                        // the whole margin a settlement has: at an armful a
+                        // trip, a band spending three quarters of its turns on
+                        // food could feed itself and never bank a winter.
                         ResourceType::Food
                         | ResourceType::Greens
                         | ResourceType::Roots
                         | ResourceType::Grain
-                        | ResourceType::Herbs => rng.gen_range(3..=6),
+                        | ResourceType::Herbs => {
+                            if resource_type_enum.is_it_bearing(picking_season) {
+                                rng.gen_range(8..=14)
+                            } else {
+                                rng.gen_range(1..=3)
+                            }
+                        }
 
                         _ => 1,
                     };
@@ -9764,6 +9780,19 @@ impl Simulation {
                                 .with_energy_cost(10.0)
                                 .with_message(format!("Gathered {} {}", harvested, resource_type))
                         } else {
+                            // What you cannot carry stays where it fell.
+                            //
+                            // The harvest came off the node before anything
+                            // asked whether it would fit, so a full pack did
+                            // not merely refuse the trip - it destroyed what
+                            // had been picked. Gathering by the armful with
+                            // full packs was quietly deleting most of the food
+                            // a settlement took: twenty-eight thousand items
+                            // gathered over a run left six hundred in a pit and
+                            // a hundred and fifty in packs, and the rest went
+                            // nowhere at all. ISSUES #165 states this principle
+                            // and never reached this branch.
+                            self.world.resources[resource_index].put_it_back(harvested);
                             ActionResult::failure("Inventory full - cannot carry more".to_string())
                         }
                     } else {

@@ -567,6 +567,16 @@ pub struct ResourceNode {
 }
 
 impl ResourceNode {
+
+    /// Put back what would not fit in somebody's pack.
+    ///
+    /// A harvest comes off the node before anything asks whether the person
+    /// picking it has room, so this is how it goes back on. What you cannot
+    /// carry stays where it fell - see ISSUES #165, which states the principle
+    /// and never reached the gathering branch.
+    pub fn put_it_back(&mut self, how_much: u32) {
+        self.amount = (self.amount + how_much).min(self.max_amount);
+    }
     pub fn new(resource_type: ResourceType, position: Position, amount: u32) -> Self {
         Self {
             resource_type,
