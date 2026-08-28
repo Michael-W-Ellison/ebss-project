@@ -4594,9 +4594,39 @@ worlds of six. It is not growth yet: births run nought to four over a full run
 against twelve to sixteen deaths, and `food_put_by < 4` still refuses ninety-
 three per cent of the time, which is the same surplus problem as #75.
 
+### 77. A body with nineteen days of food inside it read as starving
+
+`Physiology::is_starving` was "nothing in the stomach, nothing in the gut, and
+any of the reserve at all drawn on". The last clause was there only to stop a
+newly made body - which starts with both empty - reading as starving, and it
+excluded nothing else: every body that has lived a day has drawn on its reserve.
+
+So the test reduced to the gut being empty, which is about thirty hours since
+the last meal, and that is what a missed meal looks like. Measured over five
+runs it fired on two to six per cent of adult-turns; **thirteen to nineteen per
+cent of those were bodies carrying more than three quarters of a three-week
+reserve, and three to four per cent more than nine tenths of it.** Sixteen and
+nineteen days of food inside them, called starving because the gut happened to
+be empty - and `immediate_needs_met` reads `is_starving`, so it was one of the
+things telling a well-fed settlement not to have children.
+
+It now asks how far into its reserve a body has actually eaten, in days rather
+than in a share, so the same question means the same thing for a child as for
+its father. Three days: the gut is only thirty hours empty by the time a body
+is a day and a quarter in, so it cannot fire on a missed meal, and three days
+without food is starving on anybody's reading. It fires on 0.3 to 1.8 per cent
+of adult-turns now, and never on a body with more than nine tenths of its
+reserve.
+
+A correction to what was said against the previous commit: the twenty-one per
+cent figure reported there was a single collapsing world, not the general case.
+Across five runs it was two to six. And the other half of `AgentState::is_starving`,
+`energy < 20.0`, was measured firing **zero** times in twenty thousand
+adult-turns - energy is still never scarce, as #70 found.
+
 ## Housekeeping
 
-### 77. The other thirteen drive rates were never derived either
+### 78. The other thirteen drive rates were never derived either
 
 `base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
 thirteen are the same sort of number. Hunger and Thirst can be derived, because
@@ -4605,23 +4635,23 @@ its threshold before the body takes damage. None of the other thirteen kills, so
 none can be derived that way, and all of them are still hand-picked against a
 calendar that no longer exists.
 
-### 78. The clock is spelled out in the interface too
+### 79. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 79. Committed backup file
+### 80. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 80. Build warnings
+### 81. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 81. Placeholder package metadata
+### 82. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

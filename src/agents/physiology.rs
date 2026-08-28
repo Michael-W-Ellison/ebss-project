@@ -94,6 +94,18 @@ pub const A_DRINK_IS_WORTH: f32 = 1.0 / 3.0;
 /// of "caloric density should be based on the type of food".
 const ENERGY_OF_ORDINARY_FOOD: f32 = 25.0;
 
+/// How far into its reserve a body has to be before going without counts as
+/// starving rather than as having missed a meal.
+///
+/// Three days of a three-week reserve.
+///
+/// The gut empties about thirty hours after a meal, by which time a body is a
+/// day and a quarter into its reserve - so three days is clear of anything
+/// that happens between meals, and is what "starving" means in ordinary use.
+/// Under it, a body with an empty gut has simply not eaten since yesterday,
+/// which happens to everybody and is not a reason to do anything differently.
+pub const DAYS_OF_RESERVE_BEFORE_IT_IS_STARVATION: f32 = 3.0;
+
 /// Below this share of its water a body starts to go short.
 const FIRST_BAND: f32 = 0.75;
 
@@ -476,13 +488,34 @@ impl Physiology {
     /// anything. This is the felt state and what everything else asks about.
     /// It is not yet doing harm - see `is_wasting`.
     pub fn is_starving(&self) -> bool {
-        // And the reserve has actually been drawn on. Without that clause a
-        // body that has never eaten anything - every agent at the moment it is
-        // made - reads as starving, because an empty stomach and an empty gut
-        // is exactly how everyone starts.
+        // And a week of the reserve gone with it.
+        //
+        // The gut clause alone is only about thirty hours since the last meal,
+        // which is a long morning rather than starvation, and it is exactly
+        // what happens between meals when one is missed. The reserve clause
+        // was "any of it at all has been drawn on" - which every body that has
+        // lived a day satisfies, so it excluded nothing but the newly made.
+        // Bodies carrying sixteen and nineteen days of food read as starving
+        // because their gut happened to be empty, and `immediate_needs_met`
+        // took that as a reason not to have children. See ISSUES #77.
+        //
+        // Three days into a three-week reserve, with nothing coming in behind
+        // it, is starving on anybody's reading - and the gut is only thirty
+        // hours empty by the time a body is a day and a quarter in, so this
+        // cannot fire on a missed meal.
         self.in_the_stomach() <= 0.0
             && self.in_the_gut() <= 0.0
-            && self.reserve < self.reserve_capacity * 0.95
+            && self.days_into_the_reserve() >= DAYS_OF_RESERVE_BEFORE_IT_IS_STARVATION
+    }
+
+    /// How many days of its own reserve this body has already eaten through.
+    ///
+    /// Reckoned against what *this* body burns, so a child a week into its
+    /// reserve and its father a week into his are both a week in, though the
+    /// numbers of units differ.
+    pub fn days_into_the_reserve(&self) -> f32 {
+        let a_day = UNITS_BURNED_IN_AN_ORDINARY_DAY * self.how_fast_this_body_burns();
+        (self.reserve_capacity - self.reserve) / a_day.max(1.0)
     }
 
     /// Far enough into the reserve that the body is taking it out of itself.

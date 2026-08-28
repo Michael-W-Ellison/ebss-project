@@ -392,3 +392,77 @@ fn hunger_presses_before_the_reserve_runs_down() {
         body.reserve
     );
 }
+
+/// A body on three meals a day is never once starving, however the meals fall.
+///
+/// The gut empties about thirty hours after a meal, so a missed meal empties
+/// it - and "nothing in the stomach and nothing in the gut" on its own is a
+/// long morning rather than starvation. Bodies carrying sixteen and nineteen
+/// days of food were reading as starving because their gut happened to be
+/// empty, and the breeding gate took that as a reason not to have children.
+/// See ISSUES #77.
+#[test]
+fn a_fed_body_is_never_starving_between_meals() {
+    let mut body = Physiology::new();
+    for day in 0..14 {
+        for turn in 0..12 {
+            // Three meals a day, and one day in seven with a meal missed
+            let a_meal = if day % 7 == 3 {
+                turn == 0 || turn == 6
+            } else {
+                turn == 0 || turn == 4 || turn == 8
+            };
+            if a_meal {
+                body.eat(UNITS_IN_A_PORTION, 1.0);
+            }
+            body.advance(MINUTES_PER_TURN, 5.0);
+            assert!(
+                !body.is_starving(),
+                "starving on day {day} turn {turn} with {:.0} of {:.0} reserve \
+                 ({:.1} days in), stomach {:.0}, gut {:.0}",
+                body.reserve,
+                body.reserve_capacity,
+                body.days_into_the_reserve(),
+                body.in_the_stomach(),
+                body.in_the_gut(),
+            );
+        }
+    }
+}
+
+/// And a body that has actually gone without is.
+#[test]
+fn a_body_three_days_without_food_is_starving() {
+    let mut body = Physiology::new();
+    assert!(!body.is_starving(), "a body that has never eaten is not starving");
+
+    // Two days without: hungry, not starving
+    body.gone_without_food_for(2 * MINUTES_PER_DAY);
+    assert!(
+        !body.is_starving(),
+        "two days is going hungry, not starving ({:.1} days in)",
+        body.days_into_the_reserve()
+    );
+
+    // Four days without, and it is
+    let mut body = Physiology::new();
+    body.gone_without_food_for(4 * MINUTES_PER_DAY);
+    assert!(body.is_starving(), "four days without food is starving");
+}
+
+/// How far into the reserve a body is does not depend on how big the body is.
+#[test]
+fn days_into_the_reserve_is_the_same_question_for_a_child() {
+    let mut child = Physiology::for_a_body_of(0.45);
+    let mut adult = Physiology::for_a_body_of(1.0);
+    child.gone_without_food_for(3 * MINUTES_PER_DAY);
+    adult.gone_without_food_for(3 * MINUTES_PER_DAY);
+
+    assert!((child.days_into_the_reserve() - 3.0).abs() < 0.01);
+    assert!((adult.days_into_the_reserve() - 3.0).abs() < 0.01);
+    // Though the child has eaten through far more of what it had
+    assert!(
+        child.reserve / child.reserve_capacity < adult.reserve / adult.reserve_capacity,
+        "three days costs a small body a larger share of what it carries"
+    );
+}

@@ -546,6 +546,19 @@ original specifications.
   **42% of adult-turns against 6.8%**, and peak population passed twelve for
   the first time. Not growth yet — births still run 0–4 against 12–16 deaths.
   See ISSUES_FOUND.md #76
+- ✅ A body with nineteen days of food inside it read as starving. `is_starving`
+  was "nothing in the stomach, nothing in the gut, and any of the reserve at all
+  drawn on" — and the last clause excluded nothing, since every body that has
+  lived a day has drawn on its reserve. So it reduced to the gut being empty,
+  which is thirty hours since a meal: exactly what a missed meal looks like.
+
+  Measured over five runs it fired on 2–6% of adult-turns, **13–19% of those on
+  bodies carrying more than three quarters of a three-week reserve.** It now
+  asks how many days into its reserve a body has eaten — the same question for
+  a child as for its father — and wants three of them. Down to 0.3–1.8%, and
+  never on a body above nine tenths. A test walks a body through a fortnight of
+  three meals a day, with a missed meal once a week, and asserts it is never
+  once starving. See ISSUES_FOUND.md #77
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
