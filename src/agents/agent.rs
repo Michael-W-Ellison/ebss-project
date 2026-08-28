@@ -4668,12 +4668,23 @@ impl Agent {
     /// "I had a meal this morning".
     pub const FOOD_TO_RAISE_A_CHILD: u32 = 4;
 
-    /// How long hunger has to have been a non-issue before an agent treats
-    /// the future as settled.
+    /// How full a body's reserve has to be for feeding itself to count as
+    /// having been easy.
     ///
-    /// Twenty days of never once going short. Long enough that a good week
-    /// does not count, short enough that a settlement living well can grow.
-    pub const SETTLED_ENOUGH_TO_GROW: u32 = 240;
+    /// The reserve is three weeks of food, so this is a body that has lost
+    /// less than three days of it - one that has been eating enough to stay
+    /// topped up rather than scraping.
+    ///
+    /// This was `SETTLED_ENOUGH_TO_GROW`, twenty days of the Hunger drive
+    /// never once crossing its threshold. That was a fair reading when hunger
+    /// accumulated at a rate somebody chose. It is not one now: hunger is read
+    /// off the stomach, and a well-fed body crosses that threshold three times
+    /// a day because that is what three meals a day *is*. The counter reset
+    /// every few hours and could never reach twenty days for anybody, ever - so
+    /// this clause of the breeding gate failed 24,229 times out of 24,260
+    /// adult-turns, and a settlement could only breed on a full pack. See
+    /// ISSUES #76.
+    pub const WELL_FED: f32 = 0.85;
 
     /// How much of a stretch of going short counts against it.
     ///
@@ -4692,11 +4703,9 @@ impl Agent {
     }
 
     /// How long hunger has not had to ask at all
-    pub fn how_long_food_has_been_easy(&self) -> u32 {
-        self.drives
-            .get(DriveType::Hunger)
-            .map(|drive| drive.answered_ticks())
-            .unwrap_or(0)
+    pub fn food_has_been_easy(&self) -> bool {
+        self.state.physiology.reserve
+            >= self.state.physiology.reserve_capacity * Self::WELL_FED
     }
 
     /// What the agent is carrying that it or a child could eat.
@@ -4745,8 +4754,7 @@ impl Agent {
         // goes and carries nothing, and it is in a far better position to
         // raise a child than one with a full pack on ground that has stopped
         // giving.
-        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD
-            || self.how_long_food_has_been_easy() >= Self::SETTLED_ENOUGH_TO_GROW
+        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD || self.food_has_been_easy()
     }
 
     /// Check if agent should attempt reproduction given current survival state

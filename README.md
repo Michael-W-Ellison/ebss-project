@@ -529,6 +529,23 @@ original specifications.
   counted a hand-written list of seven item ids and a forager's pack holds none
   of them, so twenty-six items of food counted as fourteen. Eighth appearance
   of the duplicated-vocabulary defect. See ISSUES_FOUND.md #75
+- ✅ Nobody could breed, because a well-fed body gets hungry three times a day.
+  Peak population was the twelve founders in every world ever measured, and it
+  came down to one clause of one gate. Breeding passes if there is food in the
+  pack for two **or** if feeding yourself has not been a problem for a long
+  stretch — and the second was "the Hunger drive has stayed below its threshold
+  for twenty days running". Fair when hunger accumulated at a chosen rate;
+  impossible now that hunger is read off the stomach, because a well-fed body
+  crosses that threshold three times a day. **That clause failed 24,229 times
+  out of 24,260 adult-turns.**
+
+  It reduced the whole gate to "is there a full pack", which fails 91% of the
+  time in a settlement that eats what it picks. The body already keeps the
+  record the clause wanted: a reserve is three weeks of food, near-full on
+  someone eating well and drawn down on someone scraping. The gate now passes
+  **42% of adult-turns against 6.8%**, and peak population passed twelve for
+  the first time. Not growth yet — births still run 0–4 against 12–16 deaths.
+  See ISSUES_FOUND.md #76
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

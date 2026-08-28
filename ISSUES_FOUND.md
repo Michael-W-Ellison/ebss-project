@@ -4551,9 +4551,52 @@ the store fell, because a drive that always has something to do takes the turn
 that would have been a meal. It reads as the obvious missing link and it is
 not one. Filed rather than shipped.
 
+### 76. Nobody could breed, because a well-fed body gets hungry three times a day
+
+Peak population was the twelve founders in every world ever measured. The cause
+is one clause of one gate.
+
+`expects_to_be_able_to_feed_a_child` passes if there is food in the pack for
+two **or** if feeding itself has simply not been a problem for a long stretch.
+The second was `how_long_food_has_been_easy() >= SETTLED_ENOUGH_TO_GROW`, and
+`how_long_food_has_been_easy` was the Hunger drive's `answered_ticks` - how many
+turns in a row hunger had stayed below its threshold. Twenty days of it.
+
+That was a fair reading of "never once going short" when hunger accumulated at a
+rate somebody had chosen. It is not one now. Hunger is read off the stomach, and
+a well-fed body crosses that threshold three times a day, because **that is what
+three meals a day is**. The counter reset every few hours and could never reach
+twenty days for anybody, ever.
+
+Counted over three thousand turns:
+
+| | adult-turns |
+|---|---|
+| examined | 24,260 |
+| "food not easy for 240" failed | **24,229** |
+| `food_put_by < 4` failed | 22,054 |
+| both food clauses failed | 22,023 |
+| passed the gate | 1,655 |
+
+Ninety-nine point nine per cent. The clause was not selective, it was
+impossible, and it reduced the whole gate to "is there a full pack", which
+fails ninety-one per cent of the time in a settlement that eats what it picks.
+
+The body already keeps the record the clause was reaching for. A reserve is
+three weeks of food; one that has been eating enough to stay topped up carries
+it nearly full, and one that has been scraping has drawn it down. So
+`food_has_been_easy` asks the reserve instead, and nothing has to remember
+anything or survive a bad afternoon.
+
+The gate now passes forty-two per cent of adult-turns rather than six point
+eight, and peak population passed twelve for the first time - thirteen in three
+worlds of six. It is not growth yet: births run nought to four over a full run
+against twelve to sixteen deaths, and `food_put_by < 4` still refuses ninety-
+three per cent of the time, which is the same surplus problem as #75.
+
 ## Housekeeping
 
-### 76. The other thirteen drive rates were never derived either
+### 77. The other thirteen drive rates were never derived either
 
 `base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
 thirteen are the same sort of number. Hunger and Thirst can be derived, because
@@ -4562,23 +4605,23 @@ its threshold before the body takes damage. None of the other thirteen kills, so
 none can be derived that way, and all of them are still hand-picked against a
 calendar that no longer exists.
 
-### 77. The clock is spelled out in the interface too
+### 78. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 78. Committed backup file
+### 79. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 79. Build warnings
+### 80. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 80. Placeholder package metadata
+### 81. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
