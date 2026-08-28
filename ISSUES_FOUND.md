@@ -4137,18 +4137,108 @@ population. Something else is, and none of the equipment work touches it. The
 honest next question is what actually caps a settlement at fifty people, and
 it should be asked with an instrument before anything else is built.
 
+### 72. Nobody starves, nobody freezes, and nine deaths in ten are illness
+
+Two capability changes in a row moved no survival column, so #201 asked what
+actually caps a settlement at fifty people. **The premise was wrong and the
+answer is not what anybody would have guessed.**
+
+#### Nothing caps it
+
+Sampled once a season, one world:
+
+```
+t0        12  ######
+t2304     17  ########
+t4608     23  ###########
+t6912     33  ################
+t9216     44  ######################
+```
+
+The population is **still climbing when the run ends**. Births outnumber deaths
+455 to 170 across eight worlds. "Fifty" was the mean *peak*, which is to say
+where ten thousand ticks happens to stop. There is no cap; there is a growth
+rate, and every measurement in this file that reports "alive" has been
+reporting how far a slow climb got.
+
+#### The instrument had to come first, and it was broken
+
+Causes of death were worked out **after the fact**, by asking a corpse whether
+it was hungry. By then the hunger has been eaten away and the cold has worn
+off, so the honest answer to every question was no: **70% of every death came
+out as `unknown cause`**. A settlement could not say what killed its people.
+
+So each thing that takes health now says what it was as it takes it -
+`AgentState::lose_health` - and the reckoning reads the record instead of
+interrogating a body. Old age is checked first, because it is a fact about the
+man and not about the last scratch he took.
+
+Measured at 32 worlds a side: **null on every column** (deaths t = -0.14, alive
+t = 0.69, eaten t = 1.48), which is what an instrument should cost.
+
+#### And then the answer, which is one word
+
+| cause | share |
+|---|---|
+| **illness** | **91.2%** |
+| a blow | 5.9% |
+| a fall | 2.9% |
+| hunger, thirst, cold, exhaustion, old age | **0%** |
+
+**Nine deaths in ten are disease.** Nobody in this model starves, dies of
+thirst, freezes, or works themselves to death - not rarely, but *never*. And
+illness is not common: **one person in 174 is ailing at any moment.** It is
+rare and it is nearly always fatal.
+
+Deaths by season are the other surprise: **Spring 41.2%, Summer 26.5%, Autumn
+20.6%, Winter 11.8%.** Winter is the *safest* season in a model that has spent
+several commits making the winter bite.
+
+#### Why nobody can starve
+
+The starvation and dehydration thresholds were never rebased when the calendar
+was:
+
+```rust
+if self.ticks_without_food as f32 > 1440.0 * reserve { ... }   // energy
+if self.ticks_without_food as f32 > 4320.0 * reserve { ... }   // health
+if self.ticks_without_food as f32 > 10080.0 * reserve { ... }  // death
+```
+
+`TICKS_PER_DAY` is **12**. Those numbers were written for a tick of a minute,
+so the first of them is **120 days without food** and the last is over two
+years. Agents eat every few ticks. **Not one of these branches has ever fired
+in a running settlement**, and the dehydration ones beside them are the same.
+
+This is ISSUES #24 again - *"Food was on a clock a hundred and twenty times too
+slow"* - in the survival clock rather than the spoilage clock. Filed as #203
+rather than fixed here, because making starvation possible for the first time
+is a balance change of the first order and wants its own arm.
+
+#### What this means for the equipment work
+
+It exonerates it. #69 and #71 made a settlement three times better equipped and
+moved no survival column, and the reason is now plain: **the columns they would
+have moved are not connected to anything.** Food cannot save a life in this
+model because nobody dies for want of it. Tools, effort, stores and preparation
+all feed a survival system whose only live wire is disease.
+
+That reframes the whole efficiency specification. It is worth building for what
+a people can *do* - which is what it is really about - but nobody should expect
+it to show up in how many of them there are until #203 is answered.
+
 ## Housekeeping
 
-### 72. Committed backup file
+### 73. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 73. Build warnings
+### 74. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 74. Placeholder package metadata
+### 75. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

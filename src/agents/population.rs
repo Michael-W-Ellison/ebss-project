@@ -88,6 +88,16 @@ pub struct PopulationStats {
     pub births_this_tick: u32,
     pub deaths_this_tick: u32,
     pub abandonments_this_tick: u32,
+    /// What killed people, by name, and where the breeding pass turned away.
+    ///
+    /// The same argument as `Simulation::actions_failed_because`, one level
+    /// out. Two capability changes measured in a row - a settlement three
+    /// times better equipped with 70% fewer wasted turns - moved no survival
+    /// column at all, and nothing in this model could say why, because the
+    /// causes of death were classified for a GUI timeline and then thrown
+    /// away. A count of the dead by cause, and of the living who could not
+    /// breed and why, is one hash lookup on paths that run rarely.
+    pub how_it_went: std::collections::HashMap<String, u64>,
 }
 
 /// Configuration for population behavior
@@ -746,29 +756,53 @@ impl Population {
             .iter()
             .filter(|agent| !agent.state.is_alive)
             .map(|agent| {
-                // Determine cause of death from agent state
-                let (cause_str, cause_enum) = if agent.state.is_starving() {
-                    ("starvation".to_string(), DeathCause::Starvation)
-                } else if agent.state.is_dehydrated() {
-                    ("dehydration".to_string(), DeathCause::Dehydration)
-                } else if agent.state.age >= agent.state.max_age {
-                    ("old age".to_string(), DeathCause::OldAge)
-                } else if agent.state.health <= 0.0 {
-                    // Could be combat or other damage
-                    if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
-                        ("combat".to_string(), DeathCause::Combat { killer_id: Some(attacker_id) })
-                    } else {
-                        ("health depletion".to_string(), DeathCause::Unknown)
-                    }
-                } else if agent.state.energy <= 0.0 {
-                    ("exhaustion".to_string(), DeathCause::Exhaustion)
+                // What killed this one, read off what was written at the time
+                // rather than worked out from what is left.
+                //
+                // The cascade this replaced asked a corpse whether it was
+                // hungry, and by then the hunger has been eaten away and the
+                // cold has worn off, so the honest answer to every question
+                // was no: **70% of every death in this model came out as
+                // "unknown cause"**, and a settlement could not say what
+                // killed its people. See `AgentState::lose_health`.
+                // Old age first, because it is a fact about the man and not
+                // about the last scratch he took: an ill man who reaches his
+                // years dies of his years, and reading the record alone would
+                // book every one of them under whatever ailed him at the end.
+                let named = if agent.state.age >= agent.state.max_age {
+                    "old age".to_string()
                 } else {
-                    ("unknown cause".to_string(), DeathCause::Unknown)
+                    agent
+                        .state
+                        .what_last_took_health
+                        .clone()
+                        .unwrap_or_else(|| "unknown cause".to_string())
                 };
+
+                let cause_enum = match named.as_str() {
+                    "hunger" | "starvation" => DeathCause::Starvation,
+                    "thirst" | "dehydration" => DeathCause::Dehydration,
+                    "old age" => DeathCause::OldAge,
+                    "exhaustion" => DeathCause::Exhaustion,
+                    "a blow" => DeathCause::Combat {
+                        killer_id: agent.emotions.recent_attacker(self.current_tick),
+                    },
+                    _ => DeathCause::Unknown,
+                };
+
+                let (cause_str, cause_enum) = (named, cause_enum);
                 let pos = (agent.state.position.0, agent.state.position.1);
                 (agent.id, cause_str, pos, cause_enum)
             })
             .collect();
+
+        for (_, cause, _, _) in &dead_agents {
+            *self
+                .stats
+                .how_it_went
+                .entry(format!("died of {cause}"))
+                .or_insert(0) += 1;
+        }
 
         if dead_agents.is_empty() {
             return; // No deaths to process
@@ -964,6 +998,36 @@ impl Population {
     pub fn process_reproduction(&mut self) {
         let mut new_offspring = Vec::new();
 
+        // Where this pass turns people away, counted once a tick per living
+        // grown person. Two capability changes moved no survival column and
+        // nothing could say why - see `PopulationStats::how_it_went`.
+        {
+            let where_they_stood: Vec<&'static str> = self
+                .agents
+                .iter()
+                .filter(|a| a.state.is_alive)
+                .map(|agent| {
+                    if !agent.state.life_stage.can_reproduce() {
+                        "not of an age to breed"
+                    } else if agent.traits.has(crate::core::traits::Trait::Infertile) {
+                        "infertile"
+                    } else if agent.is_pregnant() {
+                        "already carrying"
+                    } else if !agent.expects_to_be_able_to_feed_a_child() {
+                        "could not feed a child"
+                    } else if self.is_on_cooldown(agent.id) {
+                        "too soon after the last"
+                    } else {
+                        "ready to breed"
+                    }
+                })
+                .collect();
+
+            for what in where_they_stood {
+                *self.stats.how_it_went.entry(what.to_string()).or_insert(0) += 1;
+            }
+        }
+
         // Find potential mating pairs
         // Use should_attempt_reproduction() which checks both capability AND survival state
         // Agents with active hunger/thirst drives are excluded - they must secure food first
@@ -1006,7 +1070,17 @@ impl Population {
                         let female = &self.agents[female_idx];
 
                         // Try to impregnate - this uses proper pregnancy system
-                        if let Some(pregnancy) = attempt_impregnation(male, female, self.current_tick) {
+                        let got = attempt_impregnation(male, female, self.current_tick);
+                        *self
+                            .stats
+                            .how_it_went
+                            .entry(
+                                if got.is_some() { "a pair conceived" } else { "a pair did not take" }
+                                    .to_string(),
+                            )
+                            .or_insert(0) += 1;
+
+                        if let Some(pregnancy) = got {
                             let mother_id = female.id;
                             let father_id = male.id;
                             let pos = (female.state.position.0, female.state.position.1);

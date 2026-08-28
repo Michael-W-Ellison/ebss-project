@@ -438,6 +438,36 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ Nobody starves, nobody freezes, and nine deaths in ten are illness. Two
+  capability changes in a row moved no survival column, so the question was what
+  caps a settlement at fifty. **The premise was wrong.** Sampled once a season,
+  a world goes 12 → 17 → 23 → 33 → 44 and is **still climbing when the run
+  ends**; births beat deaths 455 to 170. "Fifty" was the mean *peak* — where ten
+  thousand ticks happens to stop.
+
+  The instrument had to come first and it was broken: causes of death were
+  worked out **after the fact**, by asking a corpse whether it was hungry, and
+  by then the hunger has been eaten away — **70% of every death came out as
+  "unknown cause"**. Now each thing that takes health names itself as it takes
+  it, and the reckoning reads the record. Measured null on every column at 32
+  worlds a side, which is what an instrument should cost.
+
+  Then the answer, which is one word: **illness 91.2%**, a blow 5.9%, a fall
+  2.9%, and **hunger, thirst, cold, exhaustion and old age exactly zero**. And
+  illness is rare — one person in 174 is ailing at any moment. Deaths run Spring
+  41%, Winter **12%**: winter is the *safest* season.
+
+  Why nobody can starve: the thresholds were never rebased when the calendar
+  was. `ticks_without_food > 1440` is commented "a day" and would be, at a tick
+  of a minute — but `TICKS_PER_DAY` is **12**, so it is 120 days, and the death
+  threshold is over two years. **Not one of those branches has ever fired.**
+  ISSUES #24 again, in the survival clock this time. Filed as #203 rather than
+  fixed, because making starvation possible for the first time is a balance
+  change of the first order.
+
+  This exonerates the equipment work and reframes the efficiency programme:
+  **the columns it would move are not connected to anything.** Food cannot save
+  a life in a model where nobody dies for want of it. See ISSUES_FOUND.md #72
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

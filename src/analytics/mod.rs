@@ -9909,7 +9909,7 @@ impl Simulation {
 
                 // Also reduce target's overall health
                 let target = &mut self.population.agents[target_index];
-                target.state.health = (target.state.health - actual_damage * 0.2).max(0.0);
+                target.state.lose_health(actual_damage * 0.2, "a blow");
 
                 // Get IDs before borrowing
                 let attacker_id = self.population.agents[agent_index].id;
@@ -14617,7 +14617,7 @@ impl Simulation {
                         agent.id, terrain_type, fall_damage, injured_part, injury_severity);
                 }
 
-                agent.state.health = (agent.state.health - fall_damage * 0.15).max(0.0);
+                agent.state.lose_health(fall_damage * 0.15, "a fall");
             }
 
             // 3. DISEASE/INFECTION - Random chance
@@ -14998,7 +14998,7 @@ impl Simulation {
                     // Apply health penalty if suffering
                     let penalty = nursing.health_penalty();
                     if penalty > 0.0 {
-                        agent.state.health = (agent.state.health - penalty).max(0.0);
+                        agent.state.lose_health(penalty, "illness");
                         debug!(
                             "Infant {} suffering from lack of nursing: -{:.1} health",
                             agent.id, penalty
