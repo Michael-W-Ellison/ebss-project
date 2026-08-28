@@ -4452,11 +4452,54 @@ to twelve of twelve founders over a ten-thousand-turn run. The store reaches
 five to nineteen items where it reached one or two, so the stockpiling is doing
 something, but nothing like a winter's worth.
 
-One change was tried and reverted: letting Preparedness go and *gather* food
-when there is none in the pack to store. It reads as the obvious missing link -
-both existing branches can only move food already carried - but it measured
-clearly negative. Deaths came sooner and the store fell, because the drive then
-always has something to do and crowds out eating. Filed rather than shipped.
+#### And then: a trip to a berry patch brought back one berry
+
+The reason a settlement could not lay anything by was not the deciding. It was
+the yield. In the gather table every edible thing was `=> 1`:
+
+```
+ResourceType::Wood => rng.gen_range(1..=3),
+// An armful at a time, like wood: a garment's worth of
+// flax one stem per trip is a week's work
+ResourceType::Flax | ResourceType::Cotton => rng.gen_range(1..=3),
+ResourceType::Stone => rng.gen_range(1..=2),
+ResourceType::Iron => 1,
+ResourceType::Food => 1,
+```
+
+The comment against flax is the argument, written out, for exactly the thing
+food was not getting. One item is one portion, and a body eats three portions a
+day - so a trip brought back a third of a day's food for a day's walking. A
+settlement gathering like that has no surplus, ever. The Preparedness drive
+knew it wanted a winter store, `putting_food_by` knew how to bury one, and
+there was never anything in a pack to bury.
+
+Food, greens, roots, grain and herbs come back by the armful now, three to six,
+and what actually limits a trip is what a person can carry - `add_item` already
+refuses what will not fit, so this is a ceiling on the picking rather than on
+the carrying. The winter store went from two-to-ten items a world to
+eighteen-to-thirty-four, and settlements started producing births.
+
+Two things had to be right first, and one of them was another duplicated
+vocabulary - the eighth. `count_food_in_inventory` counted a hand-written list
+of seven item ids, and a forager's pack holds none of them: greens, roots,
+grain and herbs go in under their own names and were invisible to it, so a
+settlement with twenty-six items of food in hand counted fourteen. It asks
+`is_food` now, which is the same question `what_food_i_can_spare` asks, so the
+counting and the deciding agree.
+
+#### What is still wrong, and one thing tried twice and reverted twice
+
+Settlements still die, of hunger, over a full run. The store is real now but a
+winter for twelve people is four hundred thousand food units and eighteen items
+is sixteen thousand.
+
+Letting Preparedness go and *gather* food when there is none in the pack to
+store was tried twice and measured clearly negative both times - the second
+time guarded so it could only fire on a full stomach. Deaths came sooner and
+the store fell, because a drive that always has something to do takes the turn
+that would have been a meal. It reads as the obvious missing link and it is
+not one. Filed rather than shipped.
 
 ## Housekeeping
 

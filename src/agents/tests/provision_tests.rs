@@ -203,3 +203,29 @@ fn what_is_in_the_body_counts_towards_the_day() {
     assert_ne!(fed.rung, HowLongTheFoodLasts::NotTheDay);
     assert!(fed.stress() < empty.stress());
 }
+
+/// A settlement cannot lay anything by if a trip brings back one berry.
+///
+/// This is the arithmetic behind the yield, rather than a test of the gather
+/// itself. A body eats three portions a day, so a trip that brings back one
+/// portion is a third of a day's food for a day's walking - a settlement
+/// gathering like that has no surplus, ever, and the Preparedness drive has
+/// nothing to bury however much it wants a winter store.
+#[test]
+fn a_trip_has_to_bring_back_more_than_a_meal() {
+    let a_days_food = physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY;
+
+    // One portion a trip, which is what food used to yield
+    let one_portion = UNITS_IN_ONE_STORED_ITEM;
+    assert!(
+        one_portion < a_days_food,
+        "one portion is not a day's food, so a trip a turn cannot feed anybody"
+    );
+
+    // An armful - three to six - is a day or two, which leaves something over
+    let armful = UNITS_IN_ONE_STORED_ITEM * 3.0;
+    assert!(
+        armful >= a_days_food,
+        "an armful should be at least a day's food: {armful} against {a_days_food}"
+    );
+}

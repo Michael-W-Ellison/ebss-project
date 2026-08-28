@@ -2741,6 +2741,7 @@ impl Simulation {
                         amount: how_many,
                     })
                 }),
+
             // Nothing in the world is fine enough to want yet - see
             // ISSUES_FOUND.md #5. Until something is, this need has no answer
             // and stands aside rather than spending the turn walking after a
@@ -9506,7 +9507,33 @@ impl Simulation {
                         ResourceType::Flax | ResourceType::Cotton => rng.gen_range(1..=3),
                         ResourceType::Stone => rng.gen_range(1..=2),
                         ResourceType::Iron => 1,
-                        ResourceType::Food => 1,
+
+                        // Food by the armful too, which is the whole of
+                        // whether a settlement can lay anything by.
+                        //
+                        // Every edible thing came back one at a time: a trip
+                        // to a berry patch was one berry, where a trip for
+                        // flax was already an armful on exactly the reasoning
+                        // written above it. A forager strips a bush, they do
+                        // not pick a single fruit and walk home, and a day
+                        // that brings back a third of a meal cannot feed
+                        // anybody, let alone put anything by for a winter. A
+                        // settlement gathered its whole year one portion at a
+                        // time and never had a surplus to store: the
+                        // Preparedness drive knew perfectly well it wanted a
+                        // winter store, `putting_food_by` knew how to bury
+                        // one, and there was never anything in a pack to bury.
+                        //
+                        // What actually limits a trip is what a person can
+                        // carry, and `Inventory::add_item` already refuses
+                        // what will not fit - so this is a ceiling on the
+                        // picking, not on the carrying.
+                        ResourceType::Food
+                        | ResourceType::Greens
+                        | ResourceType::Roots
+                        | ResourceType::Grain
+                        | ResourceType::Herbs => rng.gen_range(3..=6),
+
                         _ => 1,
                     };
 

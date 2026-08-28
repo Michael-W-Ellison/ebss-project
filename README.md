@@ -512,10 +512,23 @@ original specifications.
   fifths of a full body, and seven founders in twelve died of thirst in spring
   in a world with twenty-one springs that never ran dry.
 
-  Thirst deaths fell from 9–13 a world to 0–2, and the store from 1–2 items to
-  5–19. Hunger is now the only thing killing settlements, and it still kills
-  them. One change measured negative and was reverted rather than shipped.
-  See ISSUES_FOUND.md #75
+  Thirst deaths fell from 9–13 a world to 0–2. Hunger is now the only thing
+  killing settlements, and it still kills them.
+- ✅ A trip to a berry patch brought back one berry. The reason a settlement
+  could not lay anything by was the yield, not the deciding. In the gather
+  table every edible was `=> 1`, three lines under a comment reading *"An
+  armful at a time, like wood: a garment's worth of flax one stem per trip is a
+  week's work"* — the argument for the thing food was not getting, written out
+  next to it. One item is one portion and a body eats three a day, so a trip
+  brought back a third of a day's food for a day's walking, and there was never
+  anything in a pack for `putting_food_by` to bury.
+
+  Edibles come back by the armful now, capped by what a person can carry.
+  **The winter store went from 2–10 items a world to 18–34**, and settlements
+  started producing births. `count_food_in_inventory` was fixed too — it
+  counted a hand-written list of seven item ids and a forager's pack holds none
+  of them, so twenty-six items of food counted as fourteen. Eighth appearance
+  of the duplicated-vocabulary defect. See ISSUES_FOUND.md #75
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
