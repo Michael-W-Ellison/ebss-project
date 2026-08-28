@@ -106,6 +106,7 @@ fn test_eating_resets_starvation_counter() {
 
     // Increase starvation counter
     agent.state.ticks_without_food = 1000;
+    agent.state.physiology.gone_without_food_for(1000);
 
     // Give food and eat
     agent.inventory.add_item(InventoryItem::new("food".to_string(), 5));
@@ -124,6 +125,7 @@ fn test_agent_is_starving_after_threshold() {
 
     // Simulate extended starvation (3+ days = 4320+ ticks at 1440 ticks/day)
     agent.state.ticks_without_food = 4500;
+    agent.state.physiology.gone_without_food_for(4500);
 
     // Should be starving
     assert!(agent.state.is_starving());
@@ -137,6 +139,7 @@ fn test_starvation_damages_health() {
 
     // Set to starving state
     agent.state.ticks_without_food = 5000;
+    agent.state.physiology.gone_without_food_for(5000);
 
     // Apply starvation damage
     agent.apply_starvation_damage();
@@ -150,7 +153,8 @@ fn test_agent_dies_from_starvation() {
     let mut agent = Agent::new(AgentConfig::default());
 
     // Extreme starvation
-    agent.state.ticks_without_food = 20000; // ~14 days
+    agent.state.ticks_without_food = 20000;
+    agent.state.physiology.gone_without_food_for(20000); // ~14 days
 
     // Apply damage until death
     for _ in 0..100 {

@@ -130,6 +130,7 @@ fn being_caught_out_costs_a_man_his_credit() {
 fn a_lie_about_what_a_man_needs_costs_more() {
     let mut starving = somebody();
     starving.state.ticks_without_food = 9_600;
+    starving.state.physiology.gone_without_food_for(9_600);
     if let Some(hunger) = starving.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
         hunger.denied_ticks = 400;
@@ -154,6 +155,7 @@ fn the_same_lie_costs_less_to_a_man_who_is_not_hungry() {
 
     let mut starving = somebody();
     starving.state.ticks_without_food = 9_600;
+    starving.state.physiology.gone_without_food_for(9_600);
     if let Some(hunger) = starving.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
         hunger.denied_ticks = 400;
@@ -161,6 +163,7 @@ fn the_same_lie_costs_less_to_a_man_who_is_not_hungry() {
 
     let mut fed = somebody();
     fed.state.ticks_without_food = 0;
+    fed.state.physiology.gone_without_food_for(0);
 
     assert!(
         starving.what_a_lie_about_this_costs(Some("food"), liar)

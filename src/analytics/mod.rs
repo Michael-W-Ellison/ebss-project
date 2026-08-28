@@ -1,6 +1,7 @@
 // src/analytics/mod.rs
 //! Analytics, data logging, and emergence detection.
 
+use crate::agents::physiology;
 use crate::world::World;
 use crate::agents::Population;
 use crate::world::spatial_planning::{SpatialPlanner, PlacementStrategy, PlacementCriteria};
@@ -881,6 +882,14 @@ impl Simulation {
 
                 // Execute action in environment and get feedback
                 let action_result = self.execute_action(&action, agent_index);
+
+                // What the turn's work cost is what the body burned doing it.
+                // A body walking and digging burns and sweats faster than one
+                // asleep, which is the whole of "increased physical activity
+                // should increase the rate at which hunger and thirst
+                // increase". The action matrix already prices this.
+                self.population.agents[agent_index].state.effort_this_turn +=
+                    action_result.energy_cost;
 
                 if !action_result.success {
                     *self
@@ -9136,6 +9145,18 @@ impl Simulation {
 
         match action {
             Action::Eat { food_type } => {
+                // A full stomach will not take more, however much the reserve
+                // wants it. Somebody who has gone without cannot put it right
+                // in one sitting; it takes as many days to come back as a
+                // stomach holds meals. See `agents::physiology`.
+                if !self.population.agents[agent_index]
+                    .state
+                    .physiology
+                    .room_for_another_mouthful()
+                {
+                    return ActionResult::failure("Too full to eat".to_string());
+                }
+
                 // PRIORITY 1: eat food the agent is already carrying.
                 //
                 // Agents gather food into their inventory long before they are
@@ -9152,6 +9173,10 @@ impl Simulation {
                 if let Some(item_id) = carried_food {
                     match agent.eat_food_item(&item_id, self.current_tick) {
                         EatResult::Success(nutrition) => {
+                            agent.state.physiology.eat(
+                                physiology::UNITS_IN_A_PORTION,
+                                physiology::how_rich_this_food_is(nutrition.energy),
+                            );
                             debug!(
                                 "Agent {} ate carried {} ({:.1} energy, {:.1} protein), reset starvation timer",
                                 agent.id, item_id, nutrition.energy, nutrition.protein
@@ -9235,6 +9260,10 @@ impl Simulation {
 
                         agent.nutrition.consume(&nutrition);
                         agent.state.eat(self.current_tick, nutrition.energy);
+                        agent.state.physiology.eat(
+                            physiology::UNITS_IN_A_PORTION,
+                            physiology::how_rich_this_food_is(nutrition.energy),
+                        );
 
                         // Foraged fruit and berries carry water too
                         if nutrition.water_content > 0.3 {
@@ -9535,6 +9564,18 @@ impl Simulation {
                             // Reset dehydration counter
                             agent.state.last_drank_tick = self.current_tick;
                             agent.state.ticks_without_water = 0;
+
+                            if salt {
+                                // Salt water takes more water out of a body
+                                // than it puts in, and the body finds that out
+                                // twenty minutes later like any other drink.
+                                agent.state.physiology.hydration =
+                                    (agent.state.physiology.hydration
+                                        - physiology::A_DRINK_IS_WORTH * 0.5)
+                                        .max(0.0);
+                            } else {
+                                agent.state.physiology.drink(physiology::A_DRINK_IS_WORTH);
+                            }
 
                             if salt {
                                 // "Even if it seems to temporarily satiate

@@ -39,6 +39,7 @@ fn test_high_hunger_causes_fear() {
         hunger_drive.denied_ticks = 400;
     }
     agent.state.ticks_without_food = 4_000;
+    agent.state.physiology.gone_without_food_for(4_000);
 
     agent.update_emotions_from_drives();
 
@@ -58,6 +59,7 @@ fn a_need_that_keeps_being_met_does_not_frighten_anybody() {
         hunger_drive.denied_ticks = 0;
     }
     agent.state.ticks_without_food = 0;
+    agent.state.physiology.gone_without_food_for(0);
 
     agent.update_emotions_from_drives();
 
@@ -259,7 +261,9 @@ fn test_survival_drives_cause_fear_not_sadness() {
         thirst.denied_ticks = 400;
     }
     agent.state.ticks_without_food = 4_000;
+    agent.state.physiology.gone_without_food_for(4_000);
     agent.state.ticks_without_water = 3_000;
+    agent.state.physiology.gone_without_water_for(3_000);
 
     agent.update_emotions_from_drives();
 
@@ -370,6 +374,7 @@ fn test_multiple_drive_frustration_compounds() {
         rest.denied_ticks = 400;
     }
     agent.state.ticks_without_food = 4_000;
+    agent.state.physiology.gone_without_food_for(4_000);
     agent.state.energy = 10.0;
 
     agent.update_emotions_from_drives();

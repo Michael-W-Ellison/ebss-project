@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use super::senses::Senses;
 use super::body::Body;
+use super::physiology;
 use super::skills::Skills;
 use super::emotions::{EmotionState, EmotionSource, RelationshipMap};
 use crate::core::traits::TraitSet;
@@ -750,6 +751,24 @@ pub struct AgentState {
     pub last_ate_tick: u32, // Track when agent last ate
     pub ticks_without_food: u32, // Count starvation duration
     pub last_drank_tick: u32, // Track when agent last drank water
+
+    /// The body: water, stomach, gut and reserve, on a clock of minutes.
+    ///
+    /// This is the truth about whether an agent is hungry, thirsty, weakened
+    /// or dead of either. The two turn counters above are kept only so the
+    /// interface and older tests have something to read; they decide nothing.
+    /// See `agents::physiology`.
+    #[serde(default)]
+    pub physiology: physiology::Physiology,
+
+    /// What the last turn's work cost, which is what the body burned doing it.
+    ///
+    /// "Increased physical activity should increase the rate at which hunger
+    /// and thirst increase." The action matrix already prices every action in
+    /// energy; this carries that figure through to the body, and is spent when
+    /// the body reads it.
+    #[serde(default)]
+    pub effort_this_turn: f32,
     pub ticks_without_water: u32, // Count dehydration duration
     /// What this body has to pass, waiting to be left on the ground.
     ///
@@ -800,6 +819,8 @@ impl AgentState {
             last_ate_tick: 0,
             ticks_without_food: 0,
             last_drank_tick: 0,
+            physiology: physiology::Physiology::new(),
+            effort_this_turn: 0.0,
             ticks_without_water: 0,
             waste_carried: 0.0,
             ailing: None,
@@ -829,49 +850,42 @@ impl AgentState {
         // Track dehydration (faster than starvation - 3 days vs 7 days)
         self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
-        // What this body has stored to go on. A grown adult carries fat and
-        // muscle worth weeks of it; a small child carries days. Every
-        // threshold below is measured against that, so a famine takes the
-        // young and the old first and the people in their prime last.
+        // What this body has stored to go on. A grown adult carries three weeks
+        // of it; a small child carries days. A famine therefore takes the young
+        // and the old first and the people in their prime last, without anybody
+        // having written that down.
         let reserve = self.life_stage.hunger_reserve().max(0.05);
+        self.physiology.now_a_body_of(reserve);
 
-        // Energy depletion (normal metabolism)
-        let base_energy_loss = 0.05 * energy_multiplier; // Apply pregnancy/other multiplier
-        let mut energy_loss = base_energy_loss;
+        // Two hours of living, at whatever the last turn's work cost. Water,
+        // the stomach, the gut and the reserve all move on the body's own
+        // clock; see `agents::physiology`. The turn counters above are kept
+        // only for the interface and for older tests to read, and are derived
+        // rather than counted so they cannot disagree with the body.
+        let effort = std::mem::take(&mut self.effort_this_turn);
+        self.physiology
+            .advance(physiology::MINUTES_PER_TURN, effort * energy_multiplier);
 
-        // After a day without food: energy depletes faster, and a small body
-        // with little put by depletes faster still
-        if self.ticks_without_food as f32 > 1440.0 * reserve {
-            energy_loss *= 1.0 + 1.0 / reserve;
+        // Going short of water is felt before it is fatal: the bands in
+        // `Physiology::capability` take a quarter off everything the agent can
+        // do at each of three-quarters, half and a quarter. Nought is death.
+        if self.physiology.died_of_thirst() {
+            self.lose_health(self.health, "dehydration");
+        } else if self.physiology.is_parched() {
+            // Not damage so much as the body starting to fail at the edges
+            self.lose_health(0.15 * (1.0 - self.physiology.capability()), "thirst");
         }
 
-        // Three days on an adult's reserves; sooner on a child's
-        if self.ticks_without_food as f32 > 4320.0 * reserve {
+        // And the reserve running out is starvation. Three weeks for an adult.
+        if self.physiology.starved() {
+            self.lose_health(self.health, "starvation");
+        } else if self.physiology.is_wasting() {
             self.lose_health(0.1 / reserve, "hunger");
         }
 
-        // A week on an adult's reserves, and death is close
-        if self.ticks_without_food as f32 > 10080.0 * reserve {
-            self.lose_health(1.0 / reserve, "starvation");
-        }
-
-        // === DEHYDRATION MECHANICS (faster than starvation) ===
-        // After 12 hours (720 ticks) without water: energy depletes faster
-        if self.ticks_without_water > 720 {
-            energy_loss *= 1.5; // Additional 50% energy depletion
-        }
-
-        // After 1.5 days (2160 ticks) without water: health starts decreasing
-        if self.ticks_without_water > 2160 {
-            self.lose_health(0.15, "thirst");
-        }
-
-        // After 3 days (4320 ticks) without water: rapid health loss (death imminent)
-        if self.ticks_without_water > 4320 {
-            self.lose_health(1.5, "dehydration");
-        }
-
-        // Apply energy loss
+        // Energy depletion (normal metabolism), made worse by working thirsty
+        let base_energy_loss = 0.05 * energy_multiplier;
+        let energy_loss = base_energy_loss / self.physiology.capability().max(0.25);
         self.energy = (self.energy - energy_loss).max(0.0);
 
         // When energy is depleted, health starts decreasing too
@@ -972,7 +986,6 @@ impl AgentState {
             }
         }
 
-        let reserve = self.life_stage.hunger_reserve().max(0.05);
         let health = self.health.max(0.0);
 
         match drive_type {
@@ -980,31 +993,16 @@ impl AgentState {
             // and goes fifteen times faster after three days, which is why a
             // thirsty agent should stop whatever it is doing even if that
             // thing is fetching food.
-            DriveType::Thirst => {
-                let dry = self.ticks_without_water as f32;
-                let until_it_bites = (2_160.0 - dry).max(0.0);
-                let until_it_races = (4_320.0 - dry).max(0.0);
-
-                // Slow loss while between the two, then rapid
-                let slow_span = (until_it_races - until_it_bites).max(0.0);
-                let lost_slowly = slow_span * 0.15;
-                let left_for_the_race = (health - lost_slowly).max(0.0);
-
-                Some(until_it_races + once_health_goes(left_for_the_race, 1.5))
-            }
+            DriveType::Thirst => Some(
+                self.physiology.minutes_before_thirst_kills_me()
+                    / physiology::MINUTES_PER_TURN as f32,
+            ),
 
             // Starvation is slower and scales with what the body has put by
-            DriveType::Hunger => {
-                let empty = self.ticks_without_food as f32;
-                let until_it_bites = (4_320.0 * reserve - empty).max(0.0);
-                let until_it_races = (10_080.0 * reserve - empty).max(0.0);
-
-                let slow_span = (until_it_races - until_it_bites).max(0.0);
-                let lost_slowly = slow_span * (0.1 / reserve);
-                let left_for_the_race = (health - lost_slowly).max(0.0);
-
-                Some(until_it_races + once_health_goes(left_for_the_race, 1.0 / reserve))
-            }
+            DriveType::Hunger => Some(
+                self.physiology.minutes_before_hunger_kills_me()
+                    / physiology::MINUTES_PER_TURN as f32,
+            ),
 
             // Exhaustion is only a death clock once the energy is nearly
             // gone. Reckoning it from a full tank the way thirst is reckoned
@@ -1034,13 +1032,21 @@ impl AgentState {
 
     /// Check if agent is starving (critical survival state)
     pub fn is_starving(&self) -> bool {
-        self.ticks_without_food > 1440 || self.energy < 20.0
+        self.physiology.is_starving() || self.energy < 20.0
+    }
+
+    /// What share of itself this body can bring to anything.
+    ///
+    /// A quarter comes off at each of three-quarters, half and a quarter of a
+    /// full body of water. See `Physiology::capability`.
+    pub fn capability(&self) -> f32 {
+        self.physiology.capability()
     }
 
     /// Check if agent is dehydrated (critical survival state)
     /// Dehydration is more urgent than starvation (720 ticks = 12 hours)
     pub fn is_dehydrated(&self) -> bool {
-        self.ticks_without_water > 720
+        self.physiology.is_parched()
     }
 
     /// Check if agent is in critical survival state
@@ -3314,6 +3320,23 @@ impl Agent {
         let situation = self.what_the_situation_asks();
         self.drives.tick_in(&situation, secure);
 
+        // Hunger and thirst are not accumulated; they are read off the body.
+        //
+        // Every other drive builds at a rate somebody chose. These two do not
+        // need to, because there is a stomach, a gut and a reserve to ask, and
+        // asking them is the only way the drive and the body can agree about
+        // when an agent is in trouble. Four separate spellings of that clock
+        // disagreed before this - see ISSUES #73 - and the agent starved
+        // holding a drive that had not yet noticed.
+        let body_wants_food = self.state.physiology.hunger();
+        let body_wants_water = self.state.physiology.thirst();
+        if let Some(drive) = self.drives.get_mut(DriveType::Hunger) {
+            drive.value = body_wants_food;
+        }
+        if let Some(drive) = self.drives.get_mut(DriveType::Thirst) {
+            drive.value = body_wants_water;
+        }
+
         // Process sensory input into percepts and store them
         let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);
 
@@ -3393,7 +3416,16 @@ impl Agent {
     /// settlement's whole want of a harvest. At half a day a satisfied need
     /// scores about a seventh, a need a day out scores a half, and one twelve
     /// hours off starts taking the agent over.
-    const A_LONG_WAY_OFF: f32 = 720.0;
+    ///
+    /// Every figure in that paragraph is still exactly right; only the unit
+    /// was stale. It was written when a tick was a minute, so half a day was
+    /// seven hundred and twenty of them. `ticks_before_this_kills_me` now
+    /// answers in turns off a real body - thirst at thirty-six turns from a
+    /// full skin rather than four thousand - and against 720 that read as
+    /// twenty, so a fully watered agent was permanently in mortal danger and
+    /// went to the water on nine turns in ten. Derived from the calendar now,
+    /// so it cannot fall behind it again. See ISSUES #74.
+    const A_LONG_WAY_OFF: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 / 2.0;
 
     /// How hard this need is pressing on this agent, right now.
     ///

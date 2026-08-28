@@ -1,5 +1,5 @@
 // src/agents/population.rs
-use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
+use crate::agents::{Agent, AgentConfig, LifeStage, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, attempt_impregnation, give_birth, MateSelectionCriteria, PregnancyState};
 use crate::environment::technology::TechnologyRegistry;
 #[cfg(feature = "gui")]
@@ -234,6 +234,30 @@ impl Population {
     /// Spawn a new agent
     pub fn spawn_agent(&mut self, config: AgentConfig) {
         let mut agent = Agent::new(config);
+
+        // A founding party is grown people.
+        //
+        // Founders were spawned at age nought, and `LifeStage::from_age` calls
+        // anything under five hundred an infant, so every world began with
+        // twelve newborns and nobody to feed them. None of them reached
+        // `LifeStage::Adult` until tick 2,501, a quarter of the way through a
+        // ten-thousand-tick run, and until then each carried an infant's
+        // reserve - a quarter of a grown body's - while foraging for itself.
+        //
+        // Nothing showed it while nothing could starve. The moment the body
+        // was put on a real clock it killed every settlement in six days.
+        // Newborns come through `give_birth` and are unaffected by this; only
+        // the founders are spawned here. See ISSUES #74.
+        {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            agent.state.age = rng.gen_range(2_600..5_000);
+            agent.state.life_stage = LifeStage::from_age(agent.state.age);
+            agent
+                .state
+                .physiology
+                .now_a_body_of(agent.state.life_stage.hunger_reserve());
+        }
 
         // Give the person a personality.
         //

@@ -4322,9 +4322,87 @@ constant. It should not ride along inside one.
 The instrument is real and the numbers above are the baseline for whoever takes
 #204 and #205.
 
+### 74. The body on a clock of minutes, and the three things that were hiding behind the broken one
+
+#73 established that the survival clocks were a hundred and twenty times too
+slow and that rebasing them killed every settlement. The specification that
+followed settles the units: a tick is a minute, so a day is 1440 of them, an
+adult dies of thirst in three days (4,320) and starves in three weeks (30,240).
+
+The decision loop does not have to run at that resolution and should not - a
+turn is a decision, and twelve decisions a day is the calendar this model has.
+So the body keeps its own clock in minutes and `MINUTES_PER_TURN` of it passes
+every turn, derived from `TICKS_PER_DAY` so it follows the calendar rather than
+being told about it. `agents::physiology` holds it: hydration with the four
+capability bands, a stomach of 600 units emptying into the gut on the stated
+eight-stage six-hour schedule, a day in the gut before anything is worth
+anything, a reserve of three weeks' burn, caloric density off the food, and
+exertion taken from what each action cost. Twenty tests assert the
+specification's own numbers rather than the implementation's.
+
+Wiring it in exposed three defects that the broken clock had been hiding.
+
+#### Every world began with twelve newborns
+
+`LifeStage::from_age` calls anything under five hundred an infant, and founders
+were spawned at age nought. So every settlement started as twelve babies with
+nobody to feed them, and none of them reached `Adult` until tick 2,501 - a
+quarter of a ten-thousand-tick run. Each carried an infant's reserve while
+foraging for itself. On a real clock that killed every world in six days.
+Founders are grown people now; newborns come through `give_birth` and are
+untouched.
+
+A small body also burned an adult's 1,440 a day, which is what made the infant
+case fatal rather than merely hard. It now burns the three-quarter power of its
+size, so a child eats a third of what its father eats rather than a quarter -
+and a famine still takes the young first, for the right reason.
+
+#### A satisfied need read as a mortal emergency
+
+`A_LONG_WAY_OFF` is divided by the time left to live to decide whether a need
+is shouting. Its doc comment reads: *"Half a day... a satisfied need scores
+about a seventh, a need a day out scores a half, and one twelve hours off
+starts taking the agent over."* Every figure in that sentence is exactly right.
+Only the unit was stale - it was written when a tick was a minute, so half a day
+was 720 of them.
+
+Once `ticks_before_this_kills_me` answered off a real body, thirst at a full
+skin came back as thirty-six turns rather than four thousand, and against 720
+that scored twenty. A perfectly watered agent was permanently dying of thirst,
+Thirst maps to `Gather{water}`, and settlements spent **ninety-two per cent of
+every turn at the water**: 2,149 Gathers against 181 Eats, while starving.
+Derived from the calendar now.
+
+#### An empty stomach could not make an agent hungry
+
+Hunger was weighted evenly between the stomach and the gut. A body eating once
+a day keeps five hundred units in the gut at all times, which pinned that term
+at nothing and capped hunger at six tenths against a threshold of seven. And
+ordinary forage was priced against the middle of the food database - forty -
+when berries and roots sit at twenty to thirty, so everything actually being
+eaten was worth half a unit.
+
+#### Where it stands
+
+Fixed, the model works: three meals a day, one every 3.9 turns, exactly as
+specified; hydration holding between 0.89 and 0.95; the reserve near full;
+eleven of twelve alive at 1,200 turns with a full spread of work - eating,
+gathering, sleeping, sheltering, storing, talking, fishing.
+
+Then winter arrives. At about turn 1,000 the gut goes from 2,300 units to
+forty-four and hunger jumps to 0.90, and over a ten-thousand-turn run every
+settlement still dies. That is a food-supply and storage failure rather than a
+physiological one - #148 and #198 - and it is the first time anything in this
+model has been able to show it, because until now nobody could starve.
+
+**Not finished.** Twenty-six tests in the suite still encode the old model and
+need rewriting against the body; the ones that set `ticks_without_food` in
+minutes were rewritten mechanically, and what is left needs judgement. See
+#206 and #207.
+
 ## Housekeeping
 
-### 74. The other thirteen drive rates were never derived either
+### 75. The other thirteen drive rates were never derived either
 
 `base_accumulation_rate` gives Hunger `0.01` and Thirst `0.012`; the other
 thirteen are the same sort of number. Hunger and Thirst can be derived, because
@@ -4333,23 +4411,23 @@ its threshold before the body takes damage. None of the other thirteen kills, so
 none can be derived that way, and all of them are still hand-picked against a
 calendar that no longer exists.
 
-### 75. The clock is spelled out in the interface too
+### 76. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 76. Committed backup file
+### 77. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 77. Build warnings
+### 78. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 78. Placeholder package metadata
+### 79. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

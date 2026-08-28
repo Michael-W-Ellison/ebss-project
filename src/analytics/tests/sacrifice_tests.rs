@@ -272,6 +272,7 @@ fn a_man_already_dying_keeps_his_supper() {
 
     simulation.population.agents[0].state.energy = 1.0;
     simulation.population.agents[0].state.ticks_without_food = 2000;
+    simulation.population.agents[0].state.physiology.gone_without_food_for(2000);
     simulation.population.agents[0].nutrition.energy_reserves = 1.0;
 
     let here = simulation.population.agents[0].state.position;

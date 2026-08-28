@@ -189,6 +189,7 @@ fn a_need_with_nothing_to_round_on_produces_fear() {
         hunger.denied_ticks = 400;
     }
     agent.state.ticks_without_food = 9_600;
+    agent.state.physiology.gone_without_food_for(9_600);
 
     agent.update_emotions_from_drives();
 
@@ -207,6 +208,7 @@ fn a_need_with_nothing_to_round_on_produces_fear() {
         hunger.denied_ticks = 400;
     }
     earlier.state.ticks_without_food = 6_000;
+    earlier.state.physiology.gone_without_food_for(6_000);
     earlier.update_emotions_from_drives();
 
     assert!(
@@ -229,6 +231,7 @@ fn a_need_that_is_being_met_frightens_nobody() {
         hunger.denied_ticks = 0;
     }
     agent.state.ticks_without_food = 0;
+    agent.state.physiology.gone_without_food_for(0);
 
     agent.update_emotions_from_drives();
 
