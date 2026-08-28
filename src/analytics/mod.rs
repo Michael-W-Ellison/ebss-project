@@ -8948,6 +8948,65 @@ impl Simulation {
         })
     }
 
+    /// The raw thing a tool's chain is waiting on, fetched now rather than
+    /// whenever the Utility drive next wins an argument.
+    ///
+    /// `make_what_this_wants` stops at "no step can be taken", and past that
+    /// point the chain is short of something that has to be found: a man who
+    /// knows how to knap a knife and is standing in a meadow with no stone
+    /// gets no further. Measured after that change, **1,690 short-handed
+    /// refusals a world remained**, down from 2,695, and they are all this
+    /// case.
+    ///
+    /// The machinery for it already existed and was in the wrong place.
+    /// `Agent::what_i_must_find` sits at the *bottom* of the Utility chain,
+    /// behind working, vessels, crafting, trading, stooping and taking from
+    /// somebody - seven branches, on a drive that rarely wins against Hunger.
+    /// It is the same defect `Craft` had, one link along, and it wants the
+    /// same answer: fetching the stone is not what somebody does with a spare
+    /// moment, it is what they do when they have found they need a knife.
+    fn fetch_what_the_making_of_it_wants(
+        &self,
+        action: Action,
+        agent_index: usize,
+        wanted: &str,
+    ) -> Action {
+        let agent = &self.population.agents[agent_index];
+
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+
+        let short_of =
+            crate::environment::making::everything_wanting_knowing(wanted, &holding, &knows);
+
+        // Something he has actually laid eyes on, and that is near enough for
+        // the fetching to come to anything. Naming a thing this ground has not
+        // got trades a refusal for want of a tool for a refusal for want of a
+        // source, and this project has been round that loop before: a refusal
+        // is worse than a wasted turn, because it goes into the record.
+        let here = agent.state.position;
+        let Some(raw) = short_of
+            .iter()
+            .filter(|what| agent.have_i_seen(what))
+            .find(|what| self.could_this_gather_come_to_anything(agent, here, what))
+        else {
+            return action;
+        };
+
+        let instead = Action::Gather {
+            resource_type: raw.to_string(),
+        };
+
+        if self
+            .what_this_wants_that_is_missing(&instead, agent_index)
+            .is_some()
+        {
+            return action;
+        }
+
+        instead
+    }
+
     fn what_these_hands_are_short_of(
         &self,
         action: &Action,
@@ -9026,6 +9085,10 @@ impl Simulation {
         // cannot is worse than the refusal it replaces: the refusal goes into
         // the record and the man learns from it that making knives does not
         // work.
+        //
+        // And where no step can be taken, the chain is short of something that
+        // has to be *found* rather than made, so going and getting it is the
+        // job in hand.
         let Some(step) = crate::environment::making::what_to_do_first_that_can_be_done(
             wanted,
             &holding,
@@ -9033,7 +9096,7 @@ impl Simulation {
             &in_hand,
             a_fire_is_to_hand,
         ) else {
-            return action;
+            return self.fetch_what_the_making_of_it_wants(action, agent_index, wanted);
         };
 
         let instead = Action::Craft {
@@ -15693,6 +15756,7 @@ impl Simulation {
 
 #[cfg(test)]
 mod tests;
+
 
 
 

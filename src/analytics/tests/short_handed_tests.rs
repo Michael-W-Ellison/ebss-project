@@ -118,13 +118,17 @@ fn a_man_with_the_tool_is_left_to_get_on_with_it() {
     );
 }
 
-/// And somebody with neither the tool nor the makings is left alone too. The
-/// refusal is honest and it belongs in the record: a man who cannot make a
-/// knife should find that out.
+/// And somebody with neither the tool nor the makings, standing on ground that
+/// has none of what the tool wants, is left alone. The refusal is honest and
+/// it belongs in the record: a man who cannot make a knife should find that
+/// out.
 #[test]
-fn a_man_with_nothing_to_make_it_from_still_gets_his_refusal() {
+fn a_man_with_nothing_to_make_it_from_and_nowhere_to_get_it_still_gets_his_refusal() {
     let mut simulation = one_person();
     give(&mut simulation, "hide", 4);
+
+    // Bare ground, so there is nothing to fetch either
+    simulation.world.resources.clear();
 
     let job = Action::Work {
         verb: "scrape".to_string(),
@@ -138,7 +142,86 @@ fn a_man_with_nothing_to_make_it_from_still_gets_his_refusal() {
     assert_eq!(
         simulation.make_what_this_wants(job.clone(), 0),
         job,
-        "there is no step he could take, so the turn stays where it was"
+        "no step to take and nothing to fetch, so the turn stays where it was"
+    );
+}
+
+// --------------------------------------------------------------------------
+// And the link past that: fetching what the making wants
+// --------------------------------------------------------------------------
+
+/// A man who knows how to knap a knife, standing in a meadow with no stone,
+/// goes and gets stone. Measured after the tool step went in, **1,690
+/// short-handed refusals a world remained** and they are all this case.
+#[test]
+fn a_man_short_of_the_makings_goes_and_fetches_them() {
+    use crate::world::{Position, ResourceNode, ResourceType};
+
+    let mut simulation = one_person();
+    give(&mut simulation, "hide", 4);
+
+    let job = Action::Work {
+        verb: "scrape".to_string(),
+        to: "hide".to_string(),
+    };
+
+    if simulation.what_these_hands_are_short_of(&job, 0).is_none() {
+        return;
+    }
+
+    // Nothing in the pack to make a knife from, and no step he could take
+    if matches!(simulation.make_what_this_wants(job.clone(), 0), Action::Craft { .. }) {
+        // He could already make one; that is the other test's case
+        return;
+    }
+
+    // Now put what the chain wants under his feet
+    let agent = &simulation.population.agents[0];
+    let holding = |what: &str| agent.how_many_i_have(what);
+    let knows = |step: &making::Making| agent.knows_how_to(step);
+    let wanting = making::everything_wanting_knowing("stoneknife", &holding, &knows);
+
+    let Some(raw) = wanting.first().copied() else {
+        return;
+    };
+    let Some(kind) = ResourceType::called(raw) else {
+        return;
+    };
+
+    let here = Position::new(25, 25);
+    simulation.world.resources.push(ResourceNode::new(kind, here, 40));
+    simulation.population.agents[0]
+        .exploration_knowledge
+        .discover_resource(here, kind, 0);
+
+    let instead = simulation.make_what_this_wants(job.clone(), 0);
+
+    assert!(
+        matches!(&instead, Action::Gather { resource_type } if resource_type == raw),
+        "with {raw} at his feet he should be fetching it, not {instead:?}"
+    );
+}
+
+/// But only something he has actually seen and that is near enough for the
+/// fetching to come to anything. Naming a thing this ground has not got trades
+/// a refusal for want of a tool for a refusal for want of a source, and a
+/// refusal is worse than a wasted turn.
+#[test]
+fn nobody_sets_off_after_a_material_this_ground_has_not_got() {
+    let mut simulation = one_person();
+    give(&mut simulation, "hide", 4);
+    simulation.world.resources.clear();
+
+    let job = Action::Work {
+        verb: "scrape".to_string(),
+        to: "hide".to_string(),
+    };
+
+    let instead = simulation.make_what_this_wants(job.clone(), 0);
+
+    assert!(
+        !matches!(instead, Action::Gather { .. }),
+        "there is nothing on this ground to fetch, so no Gather should be          proposed: {instead:?}"
     );
 }
 

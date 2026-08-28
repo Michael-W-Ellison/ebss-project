@@ -82,6 +82,13 @@ plausibly change what he reaches for - so it was worth the forty runs.
 **3 failures in 20 here and 3 in 20 on the commit before**: identical, and an
 undocumented flake rather than a regression.
 
+`a_settlement_works_things_out_that_nobody_wrote_down` was re-characterised
+during the material-fetching work, which changes what a settlement spends its
+turns on and could plausibly change what it works out: **6 failures in 20 here
+and 4 in 20 on the commit before**. Indistinguishable, and its recorded rate
+above - 2 in 40 - is a considerable underestimate. It belongs beside
+`test_minimize_travel_time_from_agent_position` among the bad ones.
+
 Measured failure rates of roughly 1-in-10 to 1-in-20 per run for the first two,
 4-in-120 for the third and 1-in-30 to 1-in-40 for the next two, all present long
 before recent work (measured on unmodified code at 2/20, 3/15, 4/120, 1/40 and
@@ -4049,18 +4056,99 @@ ownership and lending; #198 anticipating a loss of drive satisfaction rather
 than reacting to it; #199 specialisation into trades. #190 - fetching the
 material a tool wants - was already open and is the next link after #69.
 
+### 71. A man in a meadow with no stone, who knows how to knap a knife
+
+The second link of the preparation cascade the specification asks for, and the
+residue #69 left behind.
+
+#69 turns a turn about to be refused for want of a tool into a step towards
+making the tool - but only when a step **can be taken right now**. Past that
+the chain is short of something that has to be *found*, and a man who knows
+how to knap a knife and is standing in a meadow with no stone gets no further.
+Measured: **1,690 short-handed refusals a world remained**, down from 2,695,
+and they are all this case.
+
+#### The machinery existed and was in the wrong place
+
+`Agent::what_i_must_find` - the raw thing a tool's chain is waiting on - has
+been in this codebase since #175 and sits at the **bottom of the Utility
+chain**, behind working, vessels, crafting, trading, stooping, and taking from
+somebody. Seven branches, on a drive that rarely wins an argument with Hunger.
+
+That is the same defect `Craft` had, one link along, and it wants the same
+answer, which #69 already wrote down:
+
+> Reaching for a tool is not what somebody does with a spare moment, it is what
+> they do just before using it.
+
+Neither is fetching the stone. `fetch_what_the_making_of_it_wants` sits where
+`make_what_this_wants` gives up, and asks `everything_wanting_knowing` what
+this particular tool's chain is short of.
+
+Two guards, both learned from #69:
+
+- **Only something he has laid eyes on, and near enough that the fetching comes
+  to anything.** Naming a thing this ground has not got trades a refusal for
+  want of a tool for a refusal for want of a source, and a refusal is worse
+  than a wasted turn because it goes into the record.
+- **The substitute is checked for short-handedness itself**, as before.
+
+#### Measured, 32 worlds a side
+
+| | baseline | with the fix | t |
+|---|---|---|---|
+| short-handed refusals | 1,536 ± 62 | **822 ± 64** | **-8.03** |
+| vessels held | 23.9 ± 2.3 | **40.7 ± 3.7** | **3.86** |
+| pits dug | 7.6 ± 0.3 | **9.3 ± 0.3** | **4.20** |
+| people carrying a knife | 9.3 ± 0.6 | **11.8 ± 0.9** | **2.26** |
+| crafts | 320 ± 8 | **367 ± 13** | **3.08** |
+| refused workings | 1,175 ± 48 | **669 ± 52** | **-7.16** |
+| digs attempted | 306 ± 23 | **113 ± 18** | **-6.63** |
+| failure rate | 0.0190 | **0.0163** | **-4.72** |
+| deaths | 21.3 ± 0.8 | 20.1 ± 1.0 | -0.89 |
+| alive | 47.1 ± 1.8 | 47.0 ± 2.0 | -0.02 |
+| eaten | 4,999 ± 191 | 4,875 ± 213 | -0.43 |
+
+The digging row is the same shape as #69's and more so: **a third as many
+attempts and 22% more pits.**
+
+#### The two links together
+
+Over the two commits, against where the session started:
+
+| | before #69 | now |
+|---|---|---|
+| short-handed refusals | 2,695 | **822** (-70%) |
+| vessels | 14.2 | **40.7** (x2.9) |
+| pits | 5.5 | **9.3** (+69%) |
+| people carrying a knife | 3.9 | **11.8** (x3.0) |
+
+#### And survival is flat, twice
+
+This has to be said plainly because it is the second time: alive, eaten and
+deaths are **null in both arms**, and in this one alive is dead flat
+(t = -0.02) and eaten slightly down (t = -0.43). A settlement three times
+better equipped, with 70% fewer wasted turns, does not feed more people.
+
+That is worth taking seriously rather than explaining away. The likeliest
+reading is #70's finding from the other direction: the things a tool buys -
+more yield a turn, less effort a turn - are not what is limiting this
+population. Something else is, and none of the equipment work touches it. The
+honest next question is what actually caps a settlement at fifty people, and
+it should be asked with an instrument before anything else is built.
+
 ## Housekeeping
 
-### 71. Committed backup file
+### 72. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 72. Build warnings
+### 73. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 73. Placeholder package metadata
+### 74. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

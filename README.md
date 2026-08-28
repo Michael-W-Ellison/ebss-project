@@ -438,6 +438,35 @@ original specifications.
   Demoting it deleted what it was producing rather than redirecting the turns.
   A branch that looks like idling may be the sole producer of something.
   See ISSUES_FOUND.md #42
+- ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
+  link of the preparation cascade, and the residue the first one left. Turning a
+  refused turn into *making* the tool only works while a step can be taken; past
+  that the chain is short of something that has to be **found**, and **1,690
+  short-handed refusals a world** were all that case.
+
+  The machinery existed and was in the wrong place — `what_i_must_find` has been
+  here since the stone-knife work and sits at the **bottom of the Utility
+  chain**, behind seven other branches, on a drive that rarely beats Hunger.
+  Same defect as `Craft` had, one link along, same answer: fetching the stone is
+  not what somebody does with a spare moment either. Guarded so nobody sets off
+  after a material this ground has not got — that would trade a refusal for a
+  refusal.
+
+  Measured 32 worlds a side: **short-handed refusals 1,536 to 822** (t = -8.0),
+  **vessels 23.9 to 40.7** (t = 3.9), **pits 9.3 from 7.6** (t = 4.2), knives
+  11.8 from 9.3 (t = 2.3), failure rate 0.0190 to 0.0163 (t = -4.7). A third as
+  many digs attempted and 22% more pits.
+
+  Over the two links together, against where the session started: short-handed
+  refusals **-70%**, vessels **×2.9**, people carrying a knife **×3.0**, pits
+  **+69%**.
+
+  **And survival was null both times** — here alive was dead flat (t = -0.02)
+  and eaten slightly down. A settlement three times better equipped does not
+  feed more people, and with energy never scarce either (the entry below), the
+  honest conclusion is that something else caps this population at about fifty
+  and none of the equipment work touches it. Filed as #201, to be answered with
+  an instrument before anything else is built. See ISSUES_FOUND.md #71
 - 🚧 The effort economy is decorative: nobody in this model is ever tired. A
   specification arrived describing tools that make work faster, an agent
   weighing *"eight hours with this axe, or two hours making a better one and six
