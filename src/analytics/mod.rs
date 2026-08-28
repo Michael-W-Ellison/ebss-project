@@ -8439,6 +8439,62 @@ impl Simulation {
         ]
     }
 
+    /// The most one pair of hands takes off a patch in one trip.
+    ///
+    /// Above this a patch is not worth more for being bigger: a hedge with a
+    /// thousand berries on it and one with fifty are the same afternoon's work.
+    const AS_MUCH_AS_ONE_TRIP_TAKES: f32 = 14.0;
+
+    /// How much of a turn one pace of walking comes to.
+    ///
+    /// A `Move` action is one tile, so a patch twenty paces off is twenty
+    /// turns of walking each way - most of two days - however cheap the
+    /// picking is at the end of it. Counted both ways.
+    const TURNS_A_PACE_TAKES: f32 = 2.0;
+
+    /// What a trip to this patch is worth, per unit of effort spent on it.
+    ///
+    /// Three things, where there used to be one.
+    ///
+    /// **What is standing there.** "Why would they go to a berry bush with a
+    /// single berry if there is another berry bush with 100 berries?" They
+    /// would not, and they were: both food-choosers looked only at what kind of
+    /// food it was and how far off it stood, so a patch stripped to its last
+    /// berry read exactly as well as a full one at the same distance and the
+    /// nearer of the two won. Capped at what one trip can carry off, because
+    /// past that a bigger patch is not a better morning.
+    ///
+    /// **What it is worth to eat.** A unit of fish is twenty-five energy and a
+    /// unit of leaf is six, so a fish patch is worth four trips to a leaf one -
+    /// which is what makes a people walk past the hedge at the door to get to
+    /// the river.
+    ///
+    /// **What the trip costs.** The walk both ways plus the work of getting
+    /// that particular food out of the ground, which
+    /// `provision::what_foraging_costs` already prices.
+    fn what_this_patch_is_worth(energy: f32, standing: u32, paces: u32, costs: f32) -> f32 {
+        let carried_off = (standing as f32).min(Self::AS_MUCH_AS_ONE_TRIP_TAKES);
+        let brings_back = carried_off
+            * physiology::UNITS_IN_ONE_ITEM
+            * physiology::what_a_unit_of_this_is_worth(energy);
+
+        // What is left after paying for the trip, over the time the trip takes.
+        //
+        // "The agents should be optimizing their actions by heading to food
+        // sources which will provide the energy needed in the time they need
+        // it." Both halves of that. A ratio of worth to *effort* answers the
+        // wrong question - it picks the cheapest trip, so a handful of leaf
+        // underfoot beats a river full of fish twenty paces off and starves
+        // the man who takes it. Net energy alone answers the other wrong
+        // question - it ignores that a walk is paid for in turns as well as in
+        // sweat, and a step is a turn, so a patch twenty paces off is most of
+        // two days there and back.
+        //
+        // So: what the trip is worth, less what it costs, per turn it takes.
+        let turns = 1.0 + paces as f32 * Self::TURNS_A_PACE_TAKES;
+        (brings_back - costs) / turns
+    }
+
     /// The inventory item a resource yields when eaten, if it is edible at all
     ///
     /// `ResourceType::is_edible` is the authority on whether something counts
@@ -9250,35 +9306,75 @@ impl Simulation {
                         .map(|item| item.item_id.clone())
                 });
 
+                // A sitting down to eat, not a single berry.
+                //
+                // A meal used to be one item worth a flat third of a day
+                // whatever it was, which made caloric density meaningless: a
+                // berry and a haunch of venison were the same supper. An item
+                // is a handful now - `UNITS_IN_ONE_ITEM` - and what it is
+                // worth is its own energy, so somebody living on leaf eats a
+                // great many more of them than somebody living on fish. That
+                // is the whole of what "the caloric density of food should be
+                // based on the type of food" asks for, and it only means
+                // anything if a meal is allowed to be several mouthfuls.
+                //
+                // It stops at whichever comes first: a third of a day's energy
+                // in, no room left in the stomach, or nothing left to eat.
                 if let Some(item_id) = carried_food {
-                    match agent.eat_food_item(&item_id, self.current_tick) {
-                        EatResult::Success(nutrition) => {
-                            agent.state.physiology.eat(
-                                physiology::UNITS_IN_A_PORTION,
-                                physiology::how_rich_this_food_is(nutrition.energy),
-                            );
-                            debug!(
-                                "Agent {} ate carried {} ({:.1} energy, {:.1} protein), reset starvation timer",
-                                agent.id, item_id, nutrition.energy, nutrition.protein
-                            );
-
-                            return ActionResult::success()
-                                .with_drive_change(DriveType::Hunger, -0.3)
-                                .with_energy_cost(1.0) // Eating from inventory is cheap
-                                .with_message(format!(
-                                    "Ate carried {} ({:.1} energy restored)",
-                                    item_id, nutrition.energy
-                                ));
+                    let mut energy_in = 0.0f32;
+                    let mut mouthfuls = 0u32;
+                    let mut made_sick: Option<f32> = None;
+                    while energy_in < physiology::WHAT_A_SITTING_AIMS_AT
+                        && agent.state.physiology.room_in_the_stomach()
+                            >= physiology::UNITS_IN_ONE_ITEM
+                    {
+                        match agent.eat_food_item(&item_id, self.current_tick) {
+                            EatResult::Success(nutrition) => {
+                                let worth = physiology::what_a_unit_of_this_is_worth(
+                                    nutrition.energy,
+                                );
+                                let went_down = agent
+                                    .state
+                                    .physiology
+                                    .eat(physiology::UNITS_IN_ONE_ITEM, worth);
+                                if went_down <= 0.0 {
+                                    break;
+                                }
+                                energy_in += went_down * worth;
+                                mouthfuls += 1;
+                            }
+                            EatResult::MadeSick(damage) => {
+                                made_sick = Some(damage);
+                                break;
+                            }
+                            // Spoiled/NoFood: nothing more of this to eat
+                            EatResult::Spoiled | EatResult::NoFood => break,
                         }
-                        EatResult::MadeSick(damage) => {
+                    }
+
+                    if let Some(damage) = made_sick {
+                        if mouthfuls == 0 {
                             return ActionResult::failure(format!(
                                 "Ate spoiled {} and got sick ({:.1} damage)",
                                 item_id, damage
                             ));
                         }
-                        // Spoiled/NoFood fall through to foraging below
-                        EatResult::Spoiled | EatResult::NoFood => {}
                     }
+
+                    if mouthfuls > 0 {
+                        debug!(
+                            "Agent {} ate {} of carried {} ({:.0} energy), reset starvation timer",
+                            agent.id, mouthfuls, item_id, energy_in
+                        );
+
+                        return ActionResult::success()
+                            .with_drive_change(DriveType::Hunger, -0.3)
+                            .with_energy_cost(1.0) // Eating from inventory is cheap
+                            .with_message(format!(
+                                "Ate {mouthfuls} of carried {item_id} ({energy_in:.0} energy)"
+                            ));
+                    }
+                    // Nothing went down - fall through to foraging below
                 }
 
                 // PRIORITY 2: forage from a nearby food resource node
@@ -9330,12 +9426,20 @@ impl Simulation {
                             let felt = distance
                                 + (bad * Self::WHAT_A_BAD_PLACE_ADDS_TO_A_WALK) as u32;
 
-                            let richness = Self::edible_item_for(resource.resource_type)
+                            let energy = Self::edible_item_for(resource.resource_type)
                                 .and_then(|kind| self.food_database.get(&kind))
-                                .map(|t| physiology::how_rich_this_food_is(t.base_nutrition.energy))
-                                .unwrap_or(1.0);
-                            let costs = crate::agents::provision::what_foraging_costs(felt, richness);
-                            let worth = richness / costs.max(0.01);
+                                .map(|t| t.base_nutrition.energy)
+                                .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+                            let costs = crate::agents::provision::what_foraging_costs(
+                                felt,
+                                physiology::how_much_work_this_food_is(energy),
+                            );
+                            let worth = Self::what_this_patch_is_worth(
+                                energy,
+                                resource.amount,
+                                felt,
+                                costs,
+                            );
 
                             if worth > best_worth {
                                 best_worth = worth;
@@ -9393,10 +9497,29 @@ impl Simulation {
 
                         agent.nutrition.consume(&nutrition);
                         agent.state.eat(self.current_tick, nutrition.energy);
-                        agent.state.physiology.eat(
-                            physiology::UNITS_IN_A_PORTION,
-                            physiology::how_rich_this_food_is(nutrition.energy),
-                        );
+
+                        // A sitting down to eat off the armful, and how much
+                        // of it that is depends on what it is: four fish or
+                        // sixteen handfuls of leaf come to the same supper.
+                        let worth = physiology::what_a_unit_of_this_is_worth(nutrition.energy);
+                        let mut eaten_here = 0u32;
+                        let mut energy_in = 0.0f32;
+                        while eaten_here < harvested
+                            && energy_in < physiology::WHAT_A_SITTING_AIMS_AT
+                        {
+                            let went_down = agent
+                                .state
+                                .physiology
+                                .eat(physiology::UNITS_IN_ONE_ITEM, worth);
+                            if went_down <= 0.0 {
+                                break;
+                            }
+                            energy_in += went_down * worth;
+                            eaten_here += 1;
+                        }
+                        if eaten_here == 0 {
+                            eaten_here = 1;
+                        }
 
                         // Foraged fruit and berries carry water too
                         if nutrition.water_content > 0.3 {
@@ -9418,7 +9541,7 @@ impl Simulation {
                         // `what_food_i_can_spare` finally has something to
                         // bury. What will not fit stays on the bush - see
                         // ISSUES #165.
-                        let left_in_the_hand = harvested.saturating_sub(1);
+                        let left_in_the_hand = harvested.saturating_sub(eaten_here);
                         if left_in_the_hand > 0 {
                             use crate::agents::InventoryItem;
                             let mut carried = InventoryItem::new_with_weight(
@@ -9454,7 +9577,7 @@ impl Simulation {
                             .distance_to(&self.world.resources[food_index].position);
                         let cost = crate::agents::provision::what_foraging_costs(
                             paces,
-                            physiology::how_rich_this_food_is(nutrition.energy),
+                            physiology::how_much_work_this_food_is(nutrition.energy),
                         );
 
                         ActionResult::success()
@@ -9581,19 +9704,27 @@ impl Simulation {
                             // nearness as before - a request for wood wants
                             // the nearest wood.
                             let worth = if gathering_food {
-                                let richness = Self::edible_item_for(resource.resource_type)
+                                let energy = Self::edible_item_for(resource.resource_type)
                                     .and_then(|kind| self.food_database.get(&kind))
-                                    .map(|t| {
-                                        physiology::how_rich_this_food_is(t.base_nutrition.energy)
-                                    })
-                                    .unwrap_or(1.0);
-                                richness
-                                    / crate::agents::provision::what_foraging_costs(
-                                        distance, richness,
-                                    )
-                                    .max(0.01)
+                                    .map(|t| t.base_nutrition.energy)
+                                    .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+                                let costs = crate::agents::provision::what_foraging_costs(
+                                    distance,
+                                    physiology::how_much_work_this_food_is(energy),
+                                );
+                                Self::what_this_patch_is_worth(
+                                    energy,
+                                    resource.amount,
+                                    distance,
+                                    costs,
+                                )
                             } else {
-                                1.0 / (distance as f32 + 1.0)
+                                // A request for wood wants the nearest wood,
+                                // but not the last stick of it: a seam with
+                                // something in it beats one with a scraping.
+                                let standing =
+                                    (resource.amount as f32).min(Self::AS_MUCH_AS_ONE_TRIP_TAKES);
+                                standing / (distance as f32 + 1.0)
                             };
 
                             if worth > best_worth_gathering {

@@ -37,12 +37,19 @@ pub const DAYS_IN_A_WEEK: u32 = 7;
 /// what it is: half a season. One day, seven days, twelve days, a winter.
 pub const DAYS_IN_A_MONTH: u32 = DAYS_PER_SEASON / 2;
 
-/// What one item of ordinary food in a pack or a pit comes to.
+/// What one item of ordinary food in a pack or a pit is worth to a body.
 ///
-/// A portion is a sitting-down-to-eat, and three of them is a day. Stores are
-/// counted in items rather than units everywhere else in this model, so this
-/// is the exchange rate between the two.
-pub const UNITS_IN_ONE_STORED_ITEM: f32 = physiology::UNITS_IN_A_PORTION;
+/// Stores are counted in items everywhere else in this model and the body
+/// counts in energy, so this is the exchange rate between the two: a handful
+/// of something, at what a unit of ordinary forage is worth. Eleven and a half
+/// of them is a day.
+///
+/// It was a whole third of a day per item, which is what a meal used to be
+/// worth whatever it was made of. An item is a handful now, and what a
+/// particular handful is worth depends on what it is - this is the figure for
+/// reckoning a mixed larder, where nobody is counting which berry is which.
+pub const UNITS_IN_ONE_STORED_ITEM: f32 =
+    physiology::UNITS_IN_ONE_ITEM * physiology::ENERGY_OF_ORDINARY_FOOD;
 
 /// How far ahead an agent can see food, and what failing each horizon costs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

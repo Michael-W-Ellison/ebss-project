@@ -8,6 +8,21 @@
 use crate::agents::physiology::*;
 
 /// A turn is two hours, and the body's clock does not care that it is.
+/// A sitting down to ordinary forage: enough handfuls of it to make a third of
+/// a day. An item is a handful now rather than a whole meal, so a test that
+/// wants to feed a body a meal has to feed it several.
+fn eat_a_sitting_of_ordinary_food(body: &mut Physiology) {
+    let worth = what_a_unit_of_this_is_worth(ENERGY_OF_ORDINARY_FOOD);
+    let mut energy_in = 0.0;
+    while energy_in < WHAT_A_SITTING_AIMS_AT {
+        let went_down = body.eat(UNITS_IN_ONE_ITEM, worth);
+        if went_down <= 0.0 {
+            break;
+        }
+        energy_in += went_down * worth;
+    }
+}
+
 #[test]
 fn a_turn_is_two_hours_of_living() {
     assert_eq!(MINUTES_PER_DAY, 1440);
@@ -35,8 +50,13 @@ fn the_clocks_are_the_ones_that_were_asked_for() {
 fn three_full_stomachs_is_more_than_a_day_wants() {
     assert!(STOMACH_CAPACITY * 3.0 > UNITS_BURNED_IN_AN_ORDINARY_DAY);
     assert_eq!(STOMACH_CAPACITY * 3.0, 1800.0);
-    // And three ordinary portions is exactly a day
-    assert_eq!(UNITS_IN_A_PORTION * 3.0, UNITS_BURNED_IN_AN_ORDINARY_DAY);
+    // And three sittings is exactly a day, in energy. Not in volume: how much
+    // *food* a sitting comes to depends on what the food is, which is what
+    // caloric density means.
+    assert_eq!(
+        WHAT_A_SITTING_AIMS_AT * 3.0,
+        UNITS_BURNED_IN_AN_ORDINARY_DAY
+    );
 }
 
 /// The gastric schedule, at every boundary the specification names.
@@ -277,7 +297,7 @@ fn three_meals_a_day_keeps_a_body_level() {
     for _ in 0..10 {
         for turn in 0..12 {
             if turn == 0 || turn == 4 || turn == 8 {
-                body.eat(UNITS_IN_A_PORTION, 1.0);
+                eat_a_sitting_of_ordinary_food(&mut body);
             }
             body.advance(MINUTES_PER_TURN, 5.0);
         }
@@ -303,7 +323,7 @@ fn three_meals_a_day_keeps_a_body_level() {
 #[test]
 fn hunger_comes_on_about_five_hours_after_a_meal() {
     let mut body = Physiology::new();
-    body.eat(UNITS_IN_A_PORTION, 1.0);
+    eat_a_sitting_of_ordinary_food(&mut body);
     let full = body.how_fast_hunger_rises();
     assert_eq!(
         full, 0.0,
@@ -329,17 +349,25 @@ fn hunger_comes_on_about_five_hours_after_a_meal() {
 /// Fat is worth more than greens, unit for unit.
 #[test]
 fn caloric_density_follows_the_food() {
-    // The database runs six (greens) to eighty (fat)
-    let greens = how_rich_this_food_is(6.0);
-    let ordinary = how_rich_this_food_is(25.0);
-    let fat = how_rich_this_food_is(80.0);
+    // The database runs six (greens) to eighty (fat), and a unit is worth what
+    // its own figure says rather than a share of some reference food. Dividing
+    // by twenty-five put every thin food below what a body burns however much
+    // of it there was - see ISSUES #82.
+    let greens = what_a_unit_of_this_is_worth(6.0);
+    let ordinary = what_a_unit_of_this_is_worth(25.0);
+    let fat = what_a_unit_of_this_is_worth(80.0);
     assert!(greens < ordinary && ordinary < fat);
-    assert!((ordinary - 1.0).abs() < 1e-5, "twenty-five is ordinary forage");
+    assert_eq!(greens, 6.0, "a unit of leaf is six energy, not a quarter of one");
+    assert_eq!(ordinary, 25.0);
 
     // And it tells on the body: a stomach of greens is worth less than a
     // stomach of fat
     let mut thin = Physiology::new();
     let mut rich = Physiology::new();
+    // Down to half, or both stomachs' worth clamps at a full reserve and the
+    // two are indistinguishable
+    thin.reserve = thin.reserve_capacity / 2.0;
+    rich.reserve = rich.reserve_capacity / 2.0;
     thin.eat(600.0, greens);
     rich.eat(600.0, fat);
     for _ in 0..24 {
@@ -396,7 +424,7 @@ fn thirst_presses_before_the_body_goes_short() {
 #[test]
 fn hunger_presses_before_the_reserve_runs_down() {
     let mut body = Physiology::new();
-    body.eat(UNITS_IN_A_PORTION, 1.0);
+    eat_a_sitting_of_ordinary_food(&mut body);
     while body.hunger() < 0.7 {
         body.advance(MINUTES_PER_TURN, 5.0);
         assert!(body.minute < MINUTES_TO_STARVE, "hunger never pressed");
@@ -428,7 +456,7 @@ fn a_fed_body_is_never_starving_between_meals() {
                 turn == 0 || turn == 4 || turn == 8
             };
             if a_meal {
-                body.eat(UNITS_IN_A_PORTION, 1.0);
+                eat_a_sitting_of_ordinary_food(&mut body);
             }
             body.advance(MINUTES_PER_TURN, 5.0);
             assert!(

@@ -4873,9 +4873,116 @@ are full. Somebody who cannot carry an armful home should be emptying their pack
 into the pit and going back out; instead `Store` takes two hundred and fifty-two
 turns out of seven thousand four hundred and eighty-four. Not investigated yet.
 
+### 82. A unit of leaf was worth a quarter of a unit of food, not six units of energy
+
+"If a green supplies 6 energy per unit, and the agents can eat a maximum of
+2,400 units of food per day, how come they are not reaching the 14,400 energy
+units that they are capable of?"
+
+Because `how_rich_this_food_is` divided the food's energy by
+`ENERGY_OF_ORDINARY_FOOD` before anything else touched it. A unit of leaf came
+out at **0.24** rather than **6** - a twenty-five-fold understatement - and
+every food in the database was scaled the same way, so nothing thin could ever
+reach maintenance however much of it there was. The previous entry's conclusion
+that "a body living on greens starves however many greens there are" was a
+description of that error, not of the food.
+
+#### What pins the scale
+
+The fishery, which was specified with numbers that close on themselves. A fish
+every two hours is one a turn on a twelve-turn day; a fish is four to six units;
+a unit of fish is twenty-five energy. That is 1,200 to 1,800 energy a day
+against the 1,440 a body burns, so **a people can live by fishing and it is a
+full day's work** - which is what was asked for. Measured, the fishery already
+delivers that rate: two fish a successful cast at about even odds is one fish a
+turn.
+
+Everything else follows from it. An item in a pack is a handful -
+`UNITS_IN_ONE_ITEM`, five units - rather than a third of a day. What a handful
+is worth is its own food's energy: a handful of fish is a hundred and
+twenty-five, a handful of leaf is thirty. A sitting down to eat aims at a third
+of a day in *energy*, so it is four fish or sixteen handfuls of leaf, and a meal
+is several mouthfuls rather than one item.
+
+This supersedes one line of the earlier specification - "three full meals would
+result in an intake of 1800 food, which would exceed the 1440 needed" - which
+reads the stomach's six hundred as the same currency as the day's fourteen
+hundred and forty. It cannot be both: under that reading twelve fish a day is
+three per cent of a day's food and nobody could live by fishing. The fishery's
+numbers are later and more specific, so the stomach's six hundred is a volume
+and a ceiling on gorging rather than a daily target.
+
+The two hunger tables that read the stomach and the gut were rebased with it.
+They were written in units when a meal was four hundred and eighty units
+whatever it was made of; read as volume, a body with a full supper of anything
+dense in it now reads as empty. They are shares of a sitting and of a day, in
+energy.
+
+#### A low reserve keeps asking, whatever is in front of it
+
+"This is why having an internal energy level which is low should still increase
+hunger drive, to help the agents eat enough to regain their lost energy stores."
+
+`how_fast_hunger_rises` returned nought flat whenever either gut table read
+nought, which cancelled the reserve term entirely: a body three weeks into its
+reserve with a mouthful in its stomach was not hungry at all. The two gut tables
+damp the reserve now rather than switching it off, so a body at the bottom of
+its reserve goes on asking with something in front of it.
+
+#### The patch with a hundred berries
+
+"Why would they go to a berry bush with a single berry if there is another berry
+bush with 100 berries?" They would not, and they were: both food-choosers asked
+what kind of food it was and how far off it stood and nothing else, so a patch
+stripped to its last berry read exactly as well as a full one beside it. A
+patch is now worth what one trip can carry off it, at what that food is worth to
+eat, less what the trip costs, over the turns the trip takes.
+
+All three terms were measured against each other over thirty-two worlds. Worth
+per unit of *effort* is the wrong question - it picks the cheapest trip, so leaf
+underfoot beats a river full of fish. Net energy alone is also wrong - a `Move`
+action is one tile, so a patch twenty paces off is most of two days there and
+back. Worth-less-cost over turns is the one that measured best of the three.
+
+#### What it costs, measured
+
+Thirty-two worlds, four runs: **mean last-alive 986, 990, 1033, 1159 turns,
+against 1799-1922 before.** A settlement lives about half as long.
+
+This is committed anyway, and the reason is that the number it replaces is
+simply wrong. The old model survived longer because the wrong constraint was
+doing the work: at four hundred and eighty units an item, a six-hundred-unit
+stomach held one item and a day's throughput was five of them, so a body needed
+to *acquire* five things a day and digestion was the ceiling. At five units an
+item it needs to acquire eleven or twelve, and acquisition is the ceiling. The
+first is a shorter life on a right number; the second was a longer life on a
+number twenty-five times out, and everything built on top of it would have
+inherited the error.
+
+#### What is actually in the way now, and why it is the next thing
+
+Acquisition, and specifically the tension between density and distance.
+Measured, a settlement eats thirteen handfuls a day - close to the twelve or
+thirteen it needs - but they are the wrong handfuls: leaf at thirty rather than
+fish at a hundred and twenty-five, so the intake is around a thousand energy
+against fourteen hundred burned.
+
+The chooser cannot fix that on its own. Weighting density harder sends agents to
+the river and measured **worse**, because a walk is one tile a turn and the
+walking is re-decided every tile: `Move` runs at a third of all turns and
+`SeekShelter` at another fifth. A twenty-tile trip to good food is twenty
+separate decisions, any of which can be overridden by whatever drive is loudest
+that minute, so the trip is rarely completed and the agent eats whatever is
+underfoot when it gives up.
+
+That is the commitment problem, and it is #214: "once an agent plans an action,
+it would not change its mind unless its situation changed in some manner." A
+settlement that can walk to the river without re-deciding at every step can eat
+fish; one that cannot is stuck with leaf whatever the chooser says.
+
 ## Housekeeping
 
-### 82. The other thirteen drive rates were never derived either
+### 83. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -4884,23 +4991,23 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 83. The clock is spelled out in the interface too
+### 84. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 84. Committed backup file
+### 85. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 85. Build warnings
+### 86. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 86. Placeholder package metadata
+### 87. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

@@ -46,12 +46,20 @@ pub const UNITS_BURNED_IN_AN_ORDINARY_DAY: f32 = MINUTES_PER_DAY as f32;
 /// What an adult's stomach holds.
 pub const STOMACH_CAPACITY: f32 = 600.0;
 
-/// What one sitting down to eat comes to, when there is enough to hand.
+/// What one gathered thing comes to in a stomach - a berry, a fish, a root.
 ///
-/// Three of these is an ordinary day's food exactly. Three *full* stomachs
-/// would be eighteen hundred, which is a quarter more than a body needs, so an
-/// agent with plenty in front of it still has no reason to eat until full.
-pub const UNITS_IN_A_PORTION: f32 = UNITS_BURNED_IN_AN_ORDINARY_DAY / 3.0;
+/// "A fish provides 4-6 units of food at 25 food energy per unit." Five, then:
+/// an item in a pack is a handful of something rather than a day's worth, and
+/// what a stomach holds is a hundred and twenty of them.
+pub const UNITS_IN_ONE_ITEM: f32 = 5.0;
+
+/// What a body is trying to get out of one sitting down to eat.
+///
+/// A third of a day, in energy. Not a volume: how much *food* that comes to
+/// depends entirely on what the food is, which is the whole point of caloric
+/// density. Twenty units of ordinary forage, four of a fat carcass, eighty of
+/// spring leaf.
+pub const WHAT_A_SITTING_AIMS_AT: f32 = UNITS_BURNED_IN_AN_ORDINARY_DAY / 3.0;
 
 /// How long what has left the stomach sits in the gut before it is worth
 /// anything.
@@ -89,10 +97,11 @@ pub const A_DRINK_IS_WORTH: f32 = 1.0 / 3.0;
 /// half a unit, so a settlement on three meals a day still lost five hundred
 /// units of reserve a day and starved with a full belly.
 ///
-/// A unit of ordinary forage is worth one unit of energy; spring greens are
-/// worth a quarter of that and fat two and a half times it, which is the whole
-/// of "caloric density should be based on the type of food".
-const ENERGY_OF_ORDINARY_FOOD: f32 = 25.0;
+/// Used now only to price the *work* of getting a food - see
+/// `how_much_work_this_food_is`. What a unit is worth to eat is the food's own
+/// energy figure and nothing else; dividing by this was a twenty-five-fold
+/// error that put every thin food below maintenance.
+pub const ENERGY_OF_ORDINARY_FOOD: f32 = 25.0;
 
 /// How far into its reserve a body has to be before going without counts as
 /// starving rather than as having missed a meal.
@@ -191,8 +200,47 @@ pub fn share_of_a_meal_gone_by(age_in_minutes: u32) -> f32 {
     0.0
 }
 
-/// What a unit of this food is worth against a unit of ordinary food.
-pub fn how_rich_this_food_is(energy: f32) -> f32 {
+/// What one unit of this food is worth, in the energy a body burns.
+///
+/// The food's own figure, and nothing else done to it. "If a green supplies 6
+/// energy per unit, and the agents can eat a maximum of 2,400 units of food per
+/// day, how come they are not reaching the 14,400 energy units that they are
+/// capable of?" - which is the arithmetic, and the answer was that this
+/// function divided by `ENERGY_OF_ORDINARY_FOOD` first.
+///
+/// That division made a unit of leaf worth **a quarter of a unit of food**
+/// rather than six units of energy: a twenty-five-fold error, and it put every
+/// thin food below what a body burns however much of it there was. Greens are
+/// meant to be livable - "they can still provide enough energy for the agents
+/// to live off of plants alone, especially once they start farming" - and at a
+/// quarter they never could be.
+///
+/// The scale is pinned by the fishery, which was specified with numbers that
+/// close: a fish every two hours is one a turn, a fish is four to six units, a
+/// unit of fish is twenty-five energy, so a day of fishing is 1,200 to 1,800
+/// energy against the 1,440 a body burns. A people can live by fishing and it
+/// is a full day's work, which is what was asked for.
+///
+/// This supersedes one line of the earlier specification - "three full meals
+/// would result in an intake of 1800 food, which would exceed the 1440 needed"
+/// - which reads the stomach's six hundred as being in the same currency as
+/// the day's fourteen hundred and forty. It cannot be both: under that reading
+/// twelve fish a day is three per cent of a day's food and nobody could live by
+/// fishing. The fishery's numbers are the later and the more specific, so they
+/// are the ones taken. The stomach's six hundred is a volume, and it is a
+/// ceiling on gorging rather than a daily target.
+pub fn what_a_unit_of_this_is_worth(energy: f32) -> f32 {
+    energy.max(0.5)
+}
+
+/// How much work this food is to win and prepare, as a multiplier.
+///
+/// A separate question from what it is worth to eat, and it was being answered
+/// with the same number. A carcass wants butchering and a root wants digging
+/// where leaf is picked off the hedge and eaten where it stands, so density
+/// stands in for the work - but only as a *ratio*, bounded, because a forage is
+/// never eighty times the work of another forage.
+pub fn how_much_work_this_food_is(energy: f32) -> f32 {
     (energy / ENERGY_OF_ORDINARY_FOOD).clamp(0.15, 2.5)
 }
 
@@ -327,7 +375,11 @@ impl Physiology {
     /// Against this body's own stomach rather than a grown one's: a fifth of
     /// an infant's stomach is a smaller thing than a fifth of its father's.
     pub fn room_for_another_mouthful(&self) -> bool {
-        self.room_in_the_stomach() > self.stomach_capacity * 0.2
+        // One mouthful, not a fifth of a stomach. "They can eat if they have
+        // the room in their stomach and if they have a hunger drive" - a body
+        // that is a little short and has a little room sits down to what there
+        // is, rather than waiting for the stomach to clear.
+        self.room_in_the_stomach() >= UNITS_IN_ONE_ITEM * self.how_fast_this_body_burns()
     }
 
     /// What this body burns against what a grown one burns.
@@ -352,6 +404,20 @@ impl Physiology {
     /// What is in the gut now.
     pub fn in_the_gut(&self) -> f32 {
         self.gut.iter().map(|c| c.units).sum()
+    }
+
+    /// What is in the stomach, in the energy it will be worth.
+    ///
+    /// The tables want to know whether there is a meal in there, and a meal is
+    /// a quantity of energy rather than a volume: nineteen units of ordinary
+    /// forage and eighty of spring leaf are the same supper.
+    pub fn energy_in_the_stomach(&self) -> f32 {
+        self.stomach.iter().map(|m| m.remaining * m.richness).sum()
+    }
+
+    /// And what is behind it in the gut, likewise.
+    pub fn energy_in_the_gut(&self) -> f32 {
+        self.gut.iter().map(|c| c.units * c.richness).sum()
     }
 
     /// How much more this body could get down right now.
@@ -683,39 +749,68 @@ impl Physiology {
             4.0
         };
 
-        // What is in the stomach, against what a body this size holds
-        let belly = self.in_the_stomach() / out_of;
-        let by_belly = if belly >= 480.0 {
+        // What is in the stomach, as a share of a sitting down to eat.
+        //
+        // In energy, not in volume. The table was written when a meal was a
+        // fixed four hundred and eighty *units* whatever it was made of, so
+        // its rungs were unit counts; now that a unit is worth its own food's
+        // energy, nineteen units of ordinary forage and eighty of spring leaf
+        // are the same supper and only the energy can say so. Read as volume,
+        // a body with a full supper of anything dense in it read as empty.
+        let belly = self.energy_in_the_stomach() / (WHAT_A_SITTING_AIMS_AT * out_of);
+        let by_belly = if belly >= 1.0 {
             0.0
-        } else if belly >= 400.0 {
+        } else if belly >= 0.83 {
             1.0
-        } else if belly >= 300.0 {
+        } else if belly >= 0.63 {
             1.2
-        } else if belly >= 200.0 {
+        } else if belly >= 0.42 {
             1.4
-        } else if belly >= 100.0 {
+        } else if belly >= 0.21 {
             1.6
-        } else if belly >= 50.0 {
+        } else if belly >= 0.10 {
             1.8
         } else {
             2.0
         };
 
-        // And what is behind it in the gut
-        let gut = self.in_the_gut() / out_of;
-        let by_gut = if gut >= UNITS_BURNED_IN_AN_ORDINARY_DAY {
+        // And what is behind it in the gut, as a share of a day's food
+        let gut = self.energy_in_the_gut() / (UNITS_BURNED_IN_AN_ORDINARY_DAY * out_of);
+        let by_gut = if gut >= 1.0 {
             0.0
-        } else if gut >= 960.0 {
+        } else if gut >= 2.0 / 3.0 {
             1.0
-        } else if gut >= 480.0 {
+        } else if gut >= 1.0 / 3.0 {
             1.5
         } else {
             2.0
         };
 
-        // Nought on either gut table means fed, whatever the reserve says
-        if by_belly == 0.0 || by_gut == 0.0 {
-            return 0.0;
+        // A full stomach and a day behind it stop an *ordinary* body wanting
+        // more. They do not stop a body that is short of energy.
+        //
+        // "There is nothing saying that the agents cannot eat before their
+        // stomach is completely empty. They can eat if they have the room in
+        // their stomach and if they have a hunger drive. This is why having an
+        // internal energy level which is low should still increase hunger
+        // drive, to help the agents eat enough to regain their lost energy
+        // stores."
+        //
+        // This returned nought flat whenever either gut table read nought,
+        // which cancelled the reserve entirely: a body three weeks into its
+        // reserve, with a mouthful in its stomach, was not hungry at all. The
+        // reserve is the term that must not be cancellable - it is the one
+        // that kills - so what the two gut tables do now is *damp* it rather
+        // than switch it off, and a body at the bottom of its reserve goes on
+        // asking for food with something in front of it.
+        let full_up = by_belly == 0.0 || by_gut == 0.0;
+        if full_up {
+            // Nothing above the ordinary is wanted. Below it, what is wanting
+            // is the shortfall itself, at the pace a stomach with something
+            // already in it can take it.
+            const WHAT_A_FULL_BODY_STILL_ASKS: f32 = 0.25;
+            let over_ordinary = (by_reserve - 1.0f32).max(0.0);
+            return over_ordinary * WHAT_A_FULL_BODY_STILL_ASKS;
         }
 
         by_reserve * by_belly * by_gut

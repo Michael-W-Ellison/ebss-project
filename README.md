@@ -621,6 +621,41 @@ original specifications.
   asks for. Spring gives roots as well as greens now — cattail and dandelion,
   dug while the root still holds last year's store — and founders walk in with
   two days of food. Nobody survives a year yet. See ISSUES_FOUND.md #80, #81
+- ✅ A unit of leaf was worth a quarter of a unit of food, not six units of
+  energy. `how_rich_this_food_is` divided a food's energy by the reference food
+  before anything touched it, so spring greens came out at 0.24 rather than 6 —
+  **a twenty-five-fold understatement**, applied to every food in the database.
+  Nothing thin could reach maintenance however much of it there was, and the
+  previous entry's "a body living on greens starves however many greens there
+  are" was a description of that error rather than of the food.
+
+  The scale is pinned by the fishery, whose numbers close on themselves: a fish
+  every two hours is one a turn, a fish is four to six units, a unit of fish is
+  twenty-five energy — 1,200 to 1,800 energy a day against the 1,440 a body
+  burns, so a people can live by fishing and it is a full day's work. An item in
+  a pack is a handful now rather than a third of a day; what a handful is worth
+  is its own food's energy; a meal is several mouthfuls. A low reserve keeps
+  raising hunger through a full stomach instead of being cancelled by it. And a
+  patch is worth what one trip carries off it, at what that food is worth, less
+  the trip, over the turns the trip takes — so the bush with one berry stops
+  reading as well as the bush with a hundred.
+
+  **Measured, it costs half the settlement's life**: 986–1,159 mean last-alive
+  turns over four runs of thirty-two worlds, against 1,799–1,922 before.
+  Committed anyway, because the old model lived longer only by having the wrong
+  constraint do the work — at 480 units an item a stomach held one item and a
+  day was five of them, so digestion was the ceiling; at five units an item a
+  body must acquire eleven or twelve, and acquisition is. A shorter life on a
+  right number beats a longer one on a number twenty-five times out.
+
+  What is in the way now is measured and specific: a settlement eats about
+  thirteen handfuls a day, close to what it needs, but they are leaf at thirty
+  energy rather than fish at a hundred and twenty-five. Weighting density harder
+  measures *worse*, because a walk is one tile a turn and is re-decided at every
+  tile — `Move` runs at a third of all turns. A twenty-tile trip to the river is
+  twenty separate decisions, any of which the loudest drive can override, so it
+  is rarely finished. That is the commitment problem, and it is the next thing.
+  See ISSUES_FOUND.md #82
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

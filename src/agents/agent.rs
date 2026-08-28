@@ -3115,15 +3115,14 @@ impl Agent {
             self.inventory.add_item(carried);
         }
 
-        // And the food they have been walking on. Counted in portions off the
-        // body's own arithmetic rather than a number picked here, so that if
-        // what a body burns in a day changes, what a founder walks in with
-        // changes with it.
-        let portions = (Self::DAYS_OF_FOOD_THEY_WALK_IN_WITH
+        // And the food they have been walking on. Counted off the body's own
+        // arithmetic rather than a number picked here, so that if what a body
+        // burns in a day changes, what a founder walks in with changes with it.
+        let handfuls = (Self::DAYS_OF_FOOD_THEY_WALK_IN_WITH
             * super::physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY
-            / super::physiology::UNITS_IN_A_PORTION)
+            / super::provision::UNITS_IN_ONE_STORED_ITEM)
             .round() as u32;
-        let mut travelling_food = InventoryItem::new_with_weight("food".to_string(), portions, 0.5);
+        let mut travelling_food = InventoryItem::new_with_weight("food".to_string(), handfuls, 0.5);
         travelling_food.food_data = crate::world::FoodDatabase::new()
             .create_food_data(&crate::world::ItemType::Food, 0);
         self.inventory.add_item(travelling_food);

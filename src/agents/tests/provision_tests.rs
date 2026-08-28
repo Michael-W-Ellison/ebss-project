@@ -164,7 +164,7 @@ fn the_same_day_is_not_counted_twice() {
 /// The walk, the food, and the getting of it.
 #[test]
 fn a_forage_is_priced_by_the_walk_and_the_food() {
-    let ordinary = physiology::how_rich_this_food_is(25.0);
+    let ordinary = physiology::how_much_work_this_food_is(25.0);
 
     // Further costs more
     assert!(
@@ -173,8 +173,8 @@ fn a_forage_is_priced_by_the_walk_and_the_food() {
     );
 
     // Denser food takes more getting: a carcass wants butchering, greens do not
-    let greens = physiology::how_rich_this_food_is(6.0);
-    let fat = physiology::how_rich_this_food_is(80.0);
+    let greens = physiology::how_much_work_this_food_is(6.0);
+    let fat = physiology::how_much_work_this_food_is(80.0);
     assert!(what_foraging_costs(5, fat) > what_foraging_costs(5, greens));
 
     // And nothing is free, even underfoot
@@ -215,15 +215,16 @@ fn what_is_in_the_body_counts_towards_the_day() {
 fn a_trip_has_to_bring_back_more_than_a_meal() {
     let a_days_food = physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY;
 
-    // One portion a trip, which is what food used to yield
-    let one_portion = UNITS_IN_ONE_STORED_ITEM;
+    // One handful a trip, which is what food used to yield
+    let one_handful = UNITS_IN_ONE_STORED_ITEM;
     assert!(
-        one_portion < a_days_food,
-        "one portion is not a day's food, so a trip a turn cannot feed anybody"
+        one_handful < a_days_food,
+        "one handful is not a day's food, so a trip a turn cannot feed anybody"
     );
 
-    // An armful - three to six - is a day or two, which leaves something over
-    let armful = UNITS_IN_ONE_STORED_ITEM * 3.0;
+    // An armful - eight to fourteen of them - is a day or so, which leaves
+    // something over
+    let armful = UNITS_IN_ONE_STORED_ITEM * 12.0;
     assert!(
         armful >= a_days_food,
         "an armful should be at least a day's food: {armful} against {a_days_food}"
