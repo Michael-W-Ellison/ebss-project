@@ -887,6 +887,12 @@ impl Simulation {
                 // the tool instead.
                 let action = self.make_what_this_wants(action, agent_index);
 
+                // And a job this one *could* do now, but would do faster with
+                // a tool worth stopping for. The turn was going to be work; it
+                // goes on the tool because the tool buys back more work than
+                // it costs. See `would_a_better_tool_pay`.
+                let action = self.would_a_better_tool_pay(action, agent_index);
+
                 // What the settlement spends its days doing
                 *self
                     .actions_taken
@@ -8809,12 +8815,53 @@ impl Simulation {
     /// turn's dice, or the same drive pressing slightly differently. Those are
     /// the things that used to turn an agent round.
     /// How much harder a drive has to press than the one an agent set out on
-    /// before it turns them round.
+    /// before it turns them round, at the moment of setting out.
     ///
     /// A quarter again. Measured, a bare comparison abandoned 58% of errands
     /// mid-walk, because the two drives at the head of the queue trade places
     /// almost every turn.
     const HOW_MUCH_HARDER_TO_TURN_SOMEBODY_ROUND: f32 = 1.25;
+
+    /// And how much harder again by the time the errand is all but done.
+    ///
+    /// "If an agent is a few steps away from getting a meal and hydration
+    /// drive suddenly kicks in, then the agent abandoning its current task to
+    /// get a drink could waste the invested energy the agent spent to get a
+    /// meal."
+    ///
+    /// The walk already made is spent whether the agent finishes or not, and
+    /// turning round two paces from the patch throws all of it away to save
+    /// two paces of the next trip. So what it takes to turn somebody round
+    /// climbs with how much of the errand is behind them.
+    const WHAT_A_WALK_ALREADY_MADE_IS_WORTH: f32 = 1.5;
+
+    /// How much harder a drive must press to turn this agent off this errand.
+    ///
+    /// Sunk cost, deliberately - which is a fallacy about *money already
+    /// spent* and not about a walk half made. The half-made walk is not the
+    /// sunk part: what is sunk is the energy, and what the nearness buys is
+    /// the *rest* of the trip at a fraction of what a fresh one would cost.
+    /// An agent two paces from a meal is two paces from a meal; one that turns
+    /// round is twenty paces from the next one and has paid eighteen for
+    /// nothing.
+    ///
+    /// It is a multiplier and not a veto, on purpose. `how_hard_it_presses`
+    /// grows without bound as a killing drive nears its clock -
+    /// `1.0 + deadly * SOONER_IS_WORSE` - so a body that will actually die of
+    /// thirst still turns round, however near its supper is. What this stops
+    /// is a drive merely crossing its threshold at an awkward moment.
+    pub(crate) fn what_it_takes_to_turn_me_round(
+        errand: &crate::agents::Errand,
+        here: (i32, i32, i32),
+    ) -> f32 {
+        let still_to_go = errand.how_far_it_was(here) as f32;
+        let already_walked = errand.turns_on_it as f32;
+        let how_much_is_behind_me =
+            already_walked / (already_walked + still_to_go).max(1.0);
+
+        Self::HOW_MUCH_HARDER_TO_TURN_SOMEBODY_ROUND
+            + how_much_is_behind_me * Self::WHAT_A_WALK_ALREADY_MADE_IS_WORTH
+    }
 
     fn stick_to_the_errand(
         &mut self,
@@ -8847,7 +8894,7 @@ impl Simulation {
                             .how_hard_it_presses(errand.for_drive);
                         let theirs =
                             self.population.agents[agent_index].how_hard_it_presses(other);
-                        theirs < mine * Self::HOW_MUCH_HARDER_TO_TURN_SOMEBODY_ROUND
+                        theirs < mine * Self::what_it_takes_to_turn_me_round(&errand, here)
                     }
                     None => true,
                 };
@@ -9244,6 +9291,182 @@ impl Simulation {
     /// So when the matrix is about to refuse an action for want of a tool,
     /// and this one knows a step towards that tool it could take right now,
     /// it takes the step. The turn was lost either way.
+    /// Which trade a job wants, whether or not it has a tool to want.
+    ///
+    /// `what_this_wants_that_is_missing` only names a trade when the action
+    /// cannot be done at all without a tool. This is the other question - what
+    /// hand is this work done with - which is what has to be asked before
+    /// anybody can weigh a better tool against the one they have.
+    fn what_trade_this_asks_for(
+        &self,
+        action: &Action,
+        agent_index: usize,
+    ) -> Option<crate::agents::skills::SkillType> {
+        use crate::agents::skills::SkillType;
+
+        Some(match action {
+            // The gather asks for whatever the thing is gathered with. Named
+            // by the request rather than by the node, because the request is
+            // what the agent has decided to do.
+            Action::Gather { resource_type } => {
+                let _ = agent_index;
+                match resource_type.as_str() {
+                    "wood" => SkillType::Woodcutting,
+                    "stone" | "iron" | "coal" | "clay" | "sand" => SkillType::Mining,
+                    "grain" | "flax" | "cotton" => SkillType::Farming,
+                    "food" | "greens" | "roots" | "herbs" => SkillType::Herbalism,
+                    "fish" => SkillType::Fishing,
+                    // Water wants nothing but hands, and a request for
+                    // something with no trade behind it is not a job a tool
+                    // makes faster
+                    _ => return None,
+                }
+            }
+            Action::Fish { .. } => SkillType::Fishing,
+            Action::Hunt { .. } => SkillType::Hunting,
+            Action::Build { .. } => SkillType::Construction,
+            _ => return None,
+        })
+    }
+
+    /// Stop and make a better tool, when the tool will save more than it costs.
+    ///
+    /// "The agent should look at the drive, their skills, the availability of
+    /// tools to decrease time, if they need to make any tools, and decide the
+    /// quickest method of satisfying their most important drive." And, from
+    /// the efficiency specification before it: "eight hours with this axe, or
+    /// two hours making a better one and six with that."
+    ///
+    /// `make_what_this_wants` already covers the case where the job is
+    /// impossible without a tool. This is the case the model has never had:
+    /// the job is perfectly possible, and doing it badly for the rest of the
+    /// season is the more expensive of the two. `Tool::how_much_better` has
+    /// been in the data since the tools were written and multiplied what came
+    /// *off* a job and nothing else, so a stone axe and a bronze axe felled a
+    /// tree at the same price and nobody ever had a reason to upgrade.
+    ///
+    /// The arithmetic is the specification's, and every term in it is a figure
+    /// this model already keeps:
+    ///
+    /// - `Tool::how_long_it_lasts` is how many pieces of work the new tool has
+    ///   in it. That is the horizon, and it is the honest one: a tool has to
+    ///   pay for itself inside its own working life, and nothing has to be
+    ///   assumed about how long the agent will go on wanting the trade.
+    /// - `how_much_my_tools_help` is what the work costs now, and
+    ///   `how_much_better` what it would cost after.
+    /// - `how_many_turns_to_make` is the price, counted along the same chain
+    ///   the agent will actually walk.
+    ///
+    /// So the saving is the work the tool has in it, at the difference between
+    /// the two rates, and it is worth stopping when that beats the making.
+    fn would_a_better_tool_pay(&mut self, action: Action, agent_index: usize) -> Action {
+        // Making something is not a job to interrupt with more making, and a
+        // survival action is not one to interrupt at all: a starving man does
+        // not knap a better knife first.
+        if matches!(
+            action,
+            Action::Craft { .. } | Action::Equip { .. } | Action::Unequip { .. } | Action::Eat { .. }
+        ) {
+            return action;
+        }
+
+        let Some(trade) = self.what_trade_this_asks_for(&action, agent_index) else {
+            return action;
+        };
+
+        let agent = &self.population.agents[agent_index];
+
+        // A body that is actually in trouble works with what it has.
+        if agent.state.physiology.is_starving() {
+            return action;
+        }
+
+        let Some(better) = agent.what_i_would_rather_have(trade) else {
+            return action;
+        };
+
+        let now = agent.how_much_my_tools_help(trade).max(0.01);
+        let after = better.how_much_better.max(now);
+        if after <= now {
+            return action;
+        }
+
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+        let Some(costs) =
+            crate::environment::making::how_many_turns_to_make(better.called, &holding, &knows)
+        else {
+            return action;
+        };
+        if costs == 0 {
+            return action;
+        }
+
+        // What the tool has in it, at the difference the tool makes
+        let saves = better.how_long_it_lasts * (1.0 / now - 1.0 / after);
+
+        if saves <= costs as f32 {
+            *self
+                .what_a_threat_came_to
+                .entry("tool: not worth the making".to_string())
+                .or_insert(0) += 1;
+            return action;
+        }
+
+        // It pays. Take the turn on the next step towards it.
+        //
+        // Walked here rather than handed to `make_what_this_wants`, which
+        // refuses a `Craft` on sight - it exists to rescue a job that *cannot*
+        // be done, and a craft that wants a craft is a loop. Asking it for a
+        // step towards a tool got the action straight back and counted as "no
+        // step available" a hundred and sixteen times in a run while never
+        // once diverting a turn.
+        let in_hand = |what: &str| agent.how_many_i_have(what) > 0;
+        let a_fire_is_to_hand = self
+            .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
+            .is_some();
+        let Some(step) = crate::environment::making::what_to_do_first_that_can_be_done(
+            better.called,
+            &holding,
+            &knows,
+            &in_hand,
+            a_fire_is_to_hand,
+        ) else {
+            // Short of something that has to be found. Worth fetching, but
+            // that is the errand `fetch_what_the_making_of_it_wants` runs and
+            // it is not this turn's job to start it - a job that can be done
+            // now beats a shopping trip.
+            *self
+                .what_a_threat_came_to
+                .entry("tool: worth making, nothing to be done towards it".to_string())
+                .or_insert(0) += 1;
+            return action;
+        };
+
+        let instead = Action::Craft {
+            item_type: step.makes.to_string(),
+        };
+
+        // And the step must not be short-handed itself, or this trades a job
+        // that works for a refusal and calls it planning
+        if self
+            .what_this_wants_that_is_missing(&instead, agent_index)
+            .is_some()
+        {
+            *self
+                .what_a_threat_came_to
+                .entry("tool: worth making, but short-handed for the step".to_string())
+                .or_insert(0) += 1;
+            return action;
+        }
+
+        *self
+            .what_a_threat_came_to
+            .entry("tool: stopped to make a better one".to_string())
+            .or_insert(0) += 1;
+        instead
+    }
+
     fn make_what_this_wants(&self, action: Action, agent_index: usize) -> Action {
         use crate::environment::verbs::Wants;
 

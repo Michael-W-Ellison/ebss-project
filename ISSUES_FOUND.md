@@ -5050,9 +5050,101 @@ Measured over thirty-two worlds: mean last-alive **1278 and 1279 against about
 1000** for the version it replaces, and it is the more consistent of the two as
 well as the better.
 
+### 85. Two hours making a better axe to save six cutting - and there was nothing to make
+
+"The agent should look at the drive, their skills, the availability of tools to
+decrease time, if they need to make any tools, and decide the quickest method of
+satisfying their most important drive." The arithmetic for that is the
+efficiency specification's own: "eight hours with this axe, or two hours making
+a better one and six with that."
+
+`make_what_this_wants` already rescues a job that *cannot* be done without a
+tool. The case the model had never had is the other one: the job is perfectly
+possible, and doing it badly for the rest of the season is the more expensive of
+the two. `Tool::how_much_better` has been in the data since the tools were
+written, multiplying what came *off* a job and nothing else, so a stone axe and
+a bronze axe felled a tree at the same price and nobody ever had a reason to
+upgrade.
+
+Every term in the sum is a figure this model already keeps:
+
+- `Tool::how_long_it_lasts` is the horizon, and it is the honest one. A tool has
+  to pay for itself inside its **own working life**, so nothing has to be
+  assumed about how long the agent will go on wanting the trade.
+- `how_much_my_tools_help` is what the work costs now; `how_much_better` what it
+  would cost after.
+- `how_many_turns_to_make` is new, and prices the chain along the same walk the
+  agent will actually take - `step_towards` named the next step and nothing
+  about how many followed it.
+
+So: worth stopping when `how_long_it_lasts * (1/now - 1/after)` beats the turns
+the making costs. A starving body works with what it has.
+
+#### And it fired zero times, twice, for two different reasons
+
+**First**: it asked `make_what_this_wants` for a step towards the tool, and that
+function refuses a `Craft` on sight - it exists to rescue a job that cannot be
+done, and a craft that wants a craft is a loop. So the arithmetic said yes a
+hundred and sixteen times in a run and got the action straight back every time.
+It now walks `what_to_do_first_that_can_be_done` itself.
+
+**Second, and the real one**: there was nothing to upgrade *to*. Every trade
+with a tool behind it - wood, stone, hunting, fishing, butchering, crafting -
+has one that founders arrive carrying or knowing how to make, and **Herbalism,
+which is the trade behind most food gathering and so most turns of most days,
+had no tool at all**. `what_i_would_rather_have` returned nothing for every
+trade an agent actually practised, and the whole mechanism reached its
+arithmetic twenty-one times in fourteen thousand agent-turns.
+
+So the digging stick, which is the oldest tool there is: a stick and an
+afternoon, worth half again at getting roots out of the ground, thirty jobs
+before it wears out. The point is not the multiplier, it is that the first rung
+of the ladder now exists for the trade that fills the day.
+
+With it, the mechanism is live: fourteen turns diverted onto a tool in a
+1,200-turn world, with fifty-three more where the sum said yes and the chain was
+short of wood.
+
+#### Measured null on survival, and honestly
+
+Thirty-two worlds, three runs: mean last-alive **1612, 1552, 1633** against
+**1633, 1584** for the commit before. A wash, and the spread is tight enough
+here (±40) to say so rather than to say "within the noise" and hope.
+
+Fourteen diversions a world cannot move a settlement's life and it would be
+surprising if they did. What this buys is the mechanism, correct and wired and
+measured to fire; what it is waiting on is #195, the rest of the tool ladder -
+sling, bow, pole, net, shovel - because a ladder with one rung is a step.
+
+### 86. Sunk cost: a walk nearly finished is worth finishing
+
+"If an agent is a few steps away from getting a meal and hydration drive
+suddenly kicks in, then the agent abandoning its current task to get a drink
+could waste the invested energy the agent spent to get a meal."
+
+What it takes to turn somebody off an errand now climbs with how much of it is
+behind them: a quarter again at the moment of setting out, and up to a
+three-quarters again by the time the patch is one pace off.
+
+Deliberately sunk cost, and deliberately not the fallacy of that name - which is
+about *money already spent*. The half-made walk is not the sunk part; the sunk
+part is the energy, and what the nearness buys is the rest of the trip at a
+fraction of what a fresh one would cost. An agent two paces from a meal is two
+paces from a meal. One that turns round is twenty paces from the next one and
+has paid eighteen for nothing.
+
+It is a multiplier and not a veto, on purpose. `how_hard_it_presses` grows
+without bound as a killing drive nears its clock - `1.0 + deadly *
+SOONER_IS_WORSE` - so a body that will actually die of thirst still turns round,
+however near its supper is. What this stops is a drive merely crossing its
+threshold at an awkward moment.
+
+Measured null on survival as well, within the same ±40 band. Both of these are
+correctness rather than performance, and the run that shows it is the same run.
+
 ## Housekeeping
 
-### 85. The other thirteen drive rates were never derived either
+### 87. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5061,23 +5153,23 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 86. The clock is spelled out in the interface too
+### 88. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 87. Committed backup file
+### 89. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 88. Build warnings
+### 90. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 89. Placeholder package metadata
+### 91. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

@@ -149,6 +149,30 @@ pub const KNAPPED_TIP_FROM_FLINT: Making = Making {
     wants_in_hand: None,
 };
 
+/// A stick with a hardened point, for getting roots out of the ground.
+///
+/// The oldest tool there is and the one this model did not have. Every trade
+/// with a tool behind it - wood, stone, hunting, fishing, butchering, crafting
+/// - had one that founders arrive carrying or knowing, and **Herbalism, which
+/// is what most turns of most days are spent on, had none at all**. So an
+/// agent weighing a better tool against the one in its hand always found there
+/// was nothing to weigh: `what_i_would_rather_have` returned nothing for every
+/// trade, and `would_a_better_tool_pay` reached its arithmetic twenty-one
+/// times in fourteen thousand agent-turns.
+///
+/// It is a stick and an afternoon, which is the point: the first upgrade a
+/// people can afford has to be one they can afford on their first day.
+pub const DIGGING_STICK: Making = Making {
+    makes: "diggingstick",
+    how_many: 1,
+    needs: &[("wood", 1)],
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("stoneknife"),
+};
+
 /// Stick, tip, lashing.
 pub const SPEAR: Making = Making {
     makes: "spear",
@@ -816,6 +840,7 @@ pub const EVERY_STEP: &[Making] = &[
     LASHING_FROM_RETTED,
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
+    DIGGING_STICK,
     SPEAR,
     HAND_AXE,
     STONE_KNIFE,
@@ -933,6 +958,63 @@ pub fn what_to_do_first_that_can_be_done(
     Some(step)
 }
 
+/// How many turns of work stand between this agent and a finished thing.
+///
+/// `step_towards` names the next step and nothing about how many follow it.
+/// An agent deciding whether a better axe is worth stopping for has to know
+/// the price, and the price is the whole chain from what is in the pack to the
+/// thing in the hand - "eight hours with this axe, or two hours making a
+/// better one and six with that" needs the two.
+///
+/// Counted the same way the chain is walked, so the answer agrees with what
+/// the agent will actually end up doing. `None` where the chain cannot be
+/// finished at all from here, which is the honest answer to "how long would
+/// this take" when it is short of something that has to be found.
+pub fn how_many_turns_to_make(
+    what: &str,
+    holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
+) -> Option<u32> {
+    fn count(
+        what: &str,
+        holding: &impl Fn(&str) -> u32,
+        knows: &impl Fn(&Making) -> bool,
+        how_far_back: usize,
+    ) -> Option<u32> {
+        if how_far_back >= AS_FAR_BACK_AS_ANYBODY_PLANS {
+            return None;
+        }
+
+        // Already in the pack: nothing to do
+        if holding(what) > 0 {
+            return Some(0);
+        }
+
+        every_way_to_make(what)
+            .filter(|step| knows(step))
+            .filter_map(|step| {
+                let mut turns = 1;
+                for (needed, how_many) in step.needs {
+                    if holding(needed) >= *how_many || *needed == what {
+                        continue;
+                    }
+                    if !is_made_not_found(needed) {
+                        // Short of something that has to be found. Fetching it
+                        // is a turn too, and only one - the trip is priced
+                        // where trips are priced.
+                        turns += 1;
+                        continue;
+                    }
+                    turns += count(needed, holding, knows, how_far_back + 1)?;
+                }
+                Some(turns)
+            })
+            .min()
+    }
+
+    count(what, holding, knows, 0)
+}
+
 fn step_towards(
     what: &str,
     holding: &impl Fn(&str) -> u32,
@@ -1040,6 +1122,27 @@ pub const AXE_FOR_WOOD: Tool = Tool {
     helps: SkillType::Woodcutting,
     how_much_better: 1.8,
     how_long_it_lasts: 40.0,
+};
+
+/// What a root is dug with, and what a patch of ground is turned with.
+///
+/// Modest and cheap, which is what a digging stick is. Its whole importance is
+/// that it exists at all: it is the first rung of a ladder that begins for
+/// most people at gathering, and without it the trade that fills most of the
+/// day had no ladder to stand on.
+pub const STICK_FOR_DIGGING: Tool = Tool {
+    called: "diggingstick",
+    helps: SkillType::Herbalism,
+    how_much_better: 1.5,
+    how_long_it_lasts: 30.0,
+};
+
+/// The same stick, put to the ground a field is broken with.
+pub const STICK_FOR_FARMING: Tool = Tool {
+    called: "diggingstick",
+    helps: SkillType::Farming,
+    how_much_better: 1.4,
+    how_long_it_lasts: 30.0,
 };
 
 /// The same tool, turned on the ground.
@@ -1151,6 +1254,8 @@ pub const METAL_SPEAR_FOR_FISHING: Tool = Tool {
 pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_WOOD,
     AXE_FOR_STONE,
+    STICK_FOR_DIGGING,
+    STICK_FOR_FARMING,
     SPEAR_FOR_HUNTING,
     SPEAR_FOR_FISHING,
     KNIFE_FOR_BUTCHERING,

@@ -686,6 +686,39 @@ original specifications.
   stomach is down to a tenth of a sitting, a spent one is hungry again at three
   quarters. That measured 1,278 against about 1,000 for the version it replaces.
   See ISSUES_FOUND.md #83, #84
+- ✅ Two hours making a better axe to save six cutting — and the discovery that
+  there was nothing to make. The arithmetic is the specification's own and every
+  term in it was already in the data: `how_long_it_lasts` is the horizon (a tool
+  must pay for itself inside its own working life, so nothing is assumed about
+  the future), `how_much_my_tools_help` against `how_much_better` is what the
+  work costs before and after, and a new `how_many_turns_to_make` prices the
+  chain along the walk the agent will actually take. Worth stopping when the
+  work the tool has in it, at the difference it makes, beats the making.
+
+  **It fired zero times, twice, for two different reasons.** It asked
+  `make_what_this_wants` for a step, and that function refuses a `Craft` on
+  sight — it rescues jobs that *cannot* be done, and a craft wanting a craft is
+  a loop — so the sum said yes 116 times a run and got the action straight back.
+  And underneath that: **there was nothing to upgrade to.** Every trade with a
+  tool behind it has one founders arrive with, and Herbalism — the trade behind
+  most food gathering, so most turns of most days — had no tool at all. So the
+  digging stick, the oldest tool there is: a stick and an afternoon, half again
+  at getting roots up, thirty jobs before it wears out. The point isn't the
+  multiplier; it's that the first rung of the ladder now exists for the trade
+  that fills the day. Live now: 14 turns diverted onto a tool in a 1,200-turn
+  world, 53 more where the sum said yes and the chain was short of wood.
+
+  And sunk cost on the errand: what it takes to turn somebody off a walk climbs
+  with how much of it is behind them — a quarter again at setting out, three
+  quarters again a pace from the patch. A multiplier and not a veto, so a body
+  that will actually die of thirst still turns round.
+
+  **Both measured null on survival**: 1,612 / 1,552 / 1,633 mean last-alive over
+  32 worlds against 1,633 / 1,584 before, a spread tight enough (±40) to say so
+  rather than to say "within the noise" and hope. Fourteen diversions a world
+  cannot move a settlement's life. What this buys is the mechanism, wired and
+  measured to fire; what it waits on is the rest of the tool ladder, because a
+  ladder with one rung is a step. See ISSUES_FOUND.md #85, #86
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

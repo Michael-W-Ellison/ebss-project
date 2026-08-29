@@ -101,3 +101,42 @@ fn even_the_shortest_errand_gets_a_few_turns() {
     assert!(errand.arrived((0, 0, 4)));
     assert!(!errand.arrived((1, 0, 0)));
 }
+
+/// The nearer the end of an errand, the more it takes to turn somebody off it.
+///
+/// "If an agent is a few steps away from getting a meal and hydration drive
+/// suddenly kicks in, then the agent abandoning its current task to get a drink
+/// could waste the invested energy the agent spent to get a meal."
+#[test]
+fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
+    // Twenty paces off, one turn in: almost all of the trip is still ahead
+    let just_set_out = Errand {
+        going_to: (20, 0, 0),
+        for_drive: crate::core::DriveType::Hunger,
+        pressed_this_hard: 1.0,
+        turns_on_it: 1,
+    };
+    // The same errand, nineteen turns later and one pace short of the patch
+    let nearly_there = Errand {
+        going_to: (20, 0, 0),
+        for_drive: crate::core::DriveType::Hunger,
+        pressed_this_hard: 1.0,
+        turns_on_it: 19,
+    };
+
+    let at_the_start = Simulation::what_it_takes_to_turn_me_round(&just_set_out, (0, 0, 0));
+    let at_the_end = Simulation::what_it_takes_to_turn_me_round(&nearly_there, (19, 0, 0));
+
+    assert!(
+        at_the_end > at_the_start,
+        "a walk nineteen twentieths done ({at_the_end:.2}) should be harder to \
+         abandon than one just begun ({at_the_start:.2})"
+    );
+
+    // And neither is a veto: a drive that presses hard enough still wins, which
+    // is what keeps a body from dying of thirst two paces from its supper
+    assert!(
+        at_the_end < 10.0,
+        "sunk cost is a thumb on the scale, not a lock: {at_the_end:.2}"
+    );
+}

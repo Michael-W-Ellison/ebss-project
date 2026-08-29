@@ -61,6 +61,7 @@ pub mod examine_tests;
 pub mod fluid_tests;
 pub mod hands_tests;
 pub mod errand_tests;
+pub mod tool_planning_tests;
 pub mod bearing_tests;
 pub mod beast_tests;
 pub mod keeping_tests;
