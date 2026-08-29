@@ -756,6 +756,47 @@ original specifications.
   guard is the specification's own rule: a body on the larder's bottom rung
   works with what it has. With it, **1,613 / 1,522 / 1,616** — a wash, with the
   ladder in and being climbed. See ISSUES_FOUND.md #87
+- ✅ The bottom of the ladder: bare hands were a fully competent workman.
+  `how_much_my_tools_help` returned **one** for every trade with nothing in the
+  hand, so a man with no tools was as good as a man with the right one and every
+  tool was a bonus on top of competence — which is why the ladder above measured
+  null. Each trade has a bare-hands figure now, read off the specification:
+  fishing "can be accomplished by hand but is highly inefficient" (a quarter);
+  butchering, where killing without a hand axe "makes it nearly impossible to
+  eat the dead animal" (0.15); digging, which "should take a significant amount
+  of time" (0.3). Picking stays at 0.85, because hands are what picking is for.
+
+  The handaxe does the third thing it was always said to do — "crude cutting,
+  digging, and chopping" — where it was in the table for two of them, so a people
+  with an axe and no flake could fell a tree and not butcher what it killed. And
+  "hunting any larger animal requires at least a spear" is a rule now: above the
+  gap the fauna tables put between a hare and a deer, the hunt refuses empty
+  hands. Two rungs of spear, a fire-hardened stick and a flint-tipped one.
+
+  The fishing ladder inverted at the top — hands 40 fish, spear 52, rod 94,
+  **net 91** — for two reasons, both duplicated vocabulary. `Action::Fish` had
+  looked for something named "rod" since the fishery was built and given it a
+  bonus of its own; that branch had never fired because nothing made a rod, and
+  the moment one existed it counted twice. And a cast's odds cap at nine tenths,
+  so past a point better tackle cannot land more *often* — which is exactly what
+  a net is for. It takes several at once.
+
+  **A cart is not the first thing a people builds.** The cart above was four
+  lengths of wood founders could turn out on their first afternoon. The advanced
+  part isn't the cart — it's the wheel, a disc that turns true on an axle — so
+  the wheel is its own found-out step, a cart wants two, and the same wood
+  without them makes a travois: dragged rather than rolled, carrying less and
+  costing more of the walking. A basket sits below both, and founders arrive
+  wearing one. Carrying now comes from arms and torso rather than from leg
+  health, which was the parting find of the entry above.
+
+  32 worlds, five runs: **1,698 / 1,492 / 1,729 / 1,661 / 1,645** against 1,613 /
+  1,522 / 1,616. Measured stage by stage, carrying was worth ~65 turns, the gates
+  ~55, the bare-hands floors ~20 — the floors matter least to survival and most
+  to the model, because they are what makes every rung of the ladder worth
+  climbing. One thing is deliberately unfinished: a bare hand should hold about a
+  dozen so a basket is the whole difference, and at twelve forty fixtures fall
+  over. That sweep is its own commit. See ISSUES_FOUND.md #88, #89, #90, #91
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
