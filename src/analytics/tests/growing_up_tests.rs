@@ -159,19 +159,33 @@ fn the_bands_are_the_ones_the_lifecycle_describes() {
     assert!(leash(LifeStage::Elderly).is_none());
 }
 
-/// A child too far from anybody grown heads back.
+/// A child too far from anybody grown, and out of sight of the camp, heads
+/// back.
 #[test]
 fn a_child_on_its_own_goes_back_to_somebody_grown() {
     let mut population = Population::new();
     population.agents.push(somebody_of(30, (10, 10, 0)));
-    population.agents.push(somebody_of(7, (40, 40, 0)));
+    population.agents.push(somebody_of(7, (0, 45, 0)));
 
     let simulation = Simulation::new(a_world(), population);
     let child = &simulation.population.agents[1];
 
+    // The rule is eyesight of an adult *or* of the camp, so the fixture has to
+    // put him out of both - the first cut of this stood him at (40, 40), which
+    // is within sight of a longhouse at the middle of the world.
+    let leash = Simulation::how_far_from_a_grown_person_this_one_may_be(LifeStage::Child).unwrap();
+    assert!(
+        !simulation.world.buildings.iter().any(|roof| Simulation::within(
+            (child.state.position.0, child.state.position.1),
+            (roof.position.x, roof.position.y),
+            leash
+        )),
+        "he has to be out of sight of any roof too"
+    );
+
     let answer = simulation
         .keeping_close_to_somebody_grown(child, child.state.position)
-        .expect("thirty paces off is not within sight of anybody");
+        .expect("he is out of sight of the camp and of anybody grown");
 
     match answer {
         Action::Move { target } => assert_eq!((target.0, target.1), (10, 10)),
@@ -311,5 +325,242 @@ fn a_parent_with_an_empty_pack_gives_nothing() {
         simulation
             .a_child_of_mine_to_feed(parent, parent.state.position)
             .is_none()
+    );
+}
+
+// --------------------------------------------------------------------------
+// Against the specification, clause by clause
+// --------------------------------------------------------------------------
+
+/// The capability table, read straight off the specification.
+#[test]
+fn the_capability_table_is_the_specification_verbatim() {
+    for (years, out_of_ten) in [
+        (2u32, 1),
+        (4, 2),
+        (6, 3),
+        (8, 4),
+        (10, 5),
+        (12, 6),
+        (13, 7),
+        (14, 8),
+        (15, 9),
+        (16, 10),
+        (40, 9),
+        (50, 8),
+        (55, 7),
+        (60, 6),
+        (65, 5),
+    ] {
+        assert_eq!(
+            what_a_body_this_age_can_do(years),
+            out_of_ten as f32 / 10.0,
+            "age {years} should be {out_of_ten} out of ten"
+        );
+    }
+}
+
+/// And the food table, likewise - including the fifteenth year, which the
+/// specification leaves between "14-15: 90%" and "16+: 100%".
+#[test]
+fn the_food_table_is_the_specification_verbatim() {
+    for (years, share) in [
+        (0u32, 0.20),
+        (3, 0.20),
+        (4, 0.25),
+        (5, 0.30),
+        (6, 0.35),
+        (7, 0.40),
+        (8, 0.45),
+        (9, 0.50),
+        (10, 0.55),
+        (11, 0.60),
+        (12, 0.70),
+        (13, 0.80),
+        (14, 0.90),
+        (16, 1.00),
+        (30, 1.00),
+    ] {
+        assert!(
+            (what_a_body_this_age_eats(years) - share).abs() < 1e-6,
+            "age {years} should eat {share} of a grown share, not {}",
+            what_a_body_this_age_eats(years)
+        );
+    }
+
+    // The gap: the last child band runs to the adult boundary rather than a
+    // fifteen-year-old eating a full share while doing nine tenths of the work
+    assert!((what_a_body_this_age_eats(15) - 0.90).abs() < 1e-6);
+}
+
+/// A whole life is 36,288,000 of the specification's ticks, and a year is
+/// 518,400 - which are this model's *minutes*, because a turn is a decision
+/// and not a minute.
+#[test]
+fn a_life_is_the_length_the_specification_gives() {
+    use crate::environment::seasons::{MINUTES_IN_A_WHOLE_LIFE, MINUTES_PER_YEAR};
+
+    assert_eq!(MINUTES_PER_YEAR, 518_400);
+    assert_eq!(MINUTES_IN_A_WHOLE_LIFE, 36_288_000);
+    assert_eq!(MINUTES_IN_A_WHOLE_LIFE / MINUTES_PER_YEAR, 70);
+}
+
+/// A child in sight of the camp is where it is supposed to be, with every
+/// adult out foraging.
+#[test]
+fn a_child_by_the_camp_is_left_alone() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (45, 45, 0)));
+    population.agents.push(somebody_of(7, (25, 25, 0)));
+
+    let simulation = Simulation::new(a_world(), population);
+    let child = &simulation.population.agents[1];
+
+    let leash = Simulation::how_far_from_a_grown_person_this_one_may_be(LifeStage::Child).unwrap();
+    assert!(
+        simulation.world.buildings.iter().any(|roof| Simulation::within(
+            (child.state.position.0, child.state.position.1),
+            (roof.position.x, roof.position.y),
+            leash
+        )),
+        "the fixture should put him in sight of the longhouse at the world's centre"
+    );
+
+    assert!(
+        simulation
+            .keeping_close_to_somebody_grown(child, child.state.position)
+            .is_none(),
+        "in eyesight of camp *or* of an adult, and he has the first"
+    );
+}
+
+/// But a child under six is kept with a parent, and a camp is not a parent.
+#[test]
+fn the_camp_is_not_a_parent_for_the_very_young() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (45, 45, 0)));
+    population.agents.push(somebody_of(3, (25, 25, 0)));
+
+    let simulation = Simulation::new(a_world(), population);
+    let infant = &simulation.population.agents[1];
+
+    assert!(
+        simulation
+            .keeping_close_to_somebody_grown(infant, infant.state.position)
+            .is_some(),
+        "under six the rule is to be *with* a parent, not near a building"
+    );
+}
+
+/// A parent carrying somebody under two has one hand occupied and carries half
+/// of what two hands hold.
+#[test]
+fn a_child_in_arms_takes_up_a_hand() {
+    let mut free = somebody_of(30, (0, 0, 0));
+    let mut carrying = somebody_of(30, (0, 0, 0));
+
+    carrying.hands_full_of_child = true;
+    carrying.take_up_the_cart();
+    free.take_up_the_cart();
+
+    assert!(
+        carrying.total_carrying_capacity() < free.total_carrying_capacity(),
+        "one hand is not two: {:.1} against {:.1}",
+        carrying.total_carrying_capacity(),
+        free.total_carrying_capacity()
+    );
+}
+
+/// The feeding bands, read straight off the specification.
+#[test]
+fn a_small_child_gets_what_its_parent_can_spare() {
+    let share = Simulation::what_share_a_small_child_gets;
+
+    assert_eq!(share(0.9), 1.0, "a parent four fifths full feeds it fully");
+    assert_eq!(share(0.7), 0.75);
+    assert_eq!(share(0.5), 0.5);
+    assert_eq!(share(0.3), 0.25);
+    assert_eq!(share(0.1), 0.0, "and below a fifth there is nothing to give");
+
+    // Monotone, and never more than the child asked for
+    let mut last = 0.0;
+    for step in 0..=20 {
+        let now = share(step as f32 / 20.0);
+        assert!(now >= last, "it should not go down as the parent fills up");
+        assert!(now <= 1.0);
+        last = now;
+    }
+}
+
+/// And it actually reaches the child, out of the parent.
+#[test]
+fn feeding_a_small_child_comes_out_of_the_parent() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (25, 25, 0)));
+    let parent = population.agents[0].id;
+
+    let mut child = somebody_of(3, (25, 25, 0));
+    child.parent_ids = vec![parent];
+    child.state.physiology.reserve = 0.0;
+    population.agents.push(child);
+
+    let mut simulation = Simulation::new(a_world(), population);
+    let was = simulation.population.agents[0].state.physiology.reserve;
+
+    simulation.feed_the_small_children();
+
+    assert!(
+        simulation.population.agents[1].state.physiology.reserve > 0.0,
+        "a three-year-old beside a full parent should have been fed"
+    );
+    assert!(
+        simulation.population.agents[0].state.physiology.reserve < was,
+        "and it came out of the parent: {was:.1} to {:.1}",
+        simulation.population.agents[0].state.physiology.reserve
+    );
+}
+
+/// A parent with almost nothing inside them feeds nobody, and both of them are
+/// still standing.
+#[test]
+fn a_parent_below_a_fifth_has_nothing_to_give() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (25, 25, 0)));
+    let parent = population.agents[0].id;
+
+    let mut child = somebody_of(3, (25, 25, 0));
+    child.parent_ids = vec![parent];
+    child.state.physiology.reserve = 0.0;
+    population.agents.push(child);
+
+    let mut simulation = Simulation::new(a_world(), population);
+    let capacity = simulation.population.agents[0].state.physiology.reserve_capacity;
+    simulation.population.agents[0].state.physiology.reserve = capacity * 0.1;
+
+    simulation.feed_the_small_children();
+
+    assert_eq!(
+        simulation.population.agents[1].state.physiology.reserve, 0.0,
+        "below a fifth the child receives nothing"
+    );
+    assert!(simulation.population.agents[0].state.is_alive);
+    assert!(simulation.population.agents[1].state.is_alive);
+}
+
+/// Nobody under ten puts anything on a fire.
+#[test]
+fn a_child_under_ten_cannot_cook() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(7, (25, 25, 0)));
+    let mut simulation = Simulation::new(a_world(), population);
+
+    let mut rng = crate::core::dice::roll();
+    let refused = simulation.cooking(&"generic".to_string(), 0, &mut rng);
+
+    assert!(!refused.success, "seven is too young for a fire");
+    assert!(
+        refused.message.as_deref().is_some_and(|m| m.contains("young")),
+        "and it should say why: {:?}",
+        refused.message
     );
 }

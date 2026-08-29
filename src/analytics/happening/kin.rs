@@ -177,6 +177,189 @@ impl Simulation {
     /// paid for all of it.
     pub(in crate::analytics) const A_FEED_IS_THIS_MUCH_OF_A_BELLY: f32 = 3.0;
 
+    /// What share of its requirement a small child gets, given how much its
+    /// parent has inside them.
+    ///
+    /// The specification's band table, and it is written on the *parent's*
+    /// internal store rather than on what is in their pack, because for a
+    /// child of five and under the food does not change hands as an item -
+    /// "child agents automatically receive their food/water from their parent
+    /// agent's internal food energy and water".
+    ///
+    /// | parent's store | child receives |
+    /// |---|---|
+    /// | above four fifths | all of it |
+    /// | above three fifths | three quarters |
+    /// | above two fifths | half |
+    /// | above a fifth | a quarter |
+    /// | below a fifth | nothing |
+    ///
+    /// Which is a settlement's hunger reaching its children a step behind
+    /// itself, and stopping altogether while the parents are still alive - a
+    /// parent a fifth full is a parent whose child gets nothing, and both of
+    /// them are still standing.
+    pub(in crate::analytics) fn what_share_a_small_child_gets(what_the_parent_has: f32) -> f32 {
+        if what_the_parent_has > 0.8 {
+            1.0
+        } else if what_the_parent_has > 0.6 {
+            0.75
+        } else if what_the_parent_has > 0.4 {
+            0.5
+        } else if what_the_parent_has > 0.2 {
+            0.25
+        } else {
+            0.0
+        }
+    }
+
+    /// The age at which a child stops being fed and starts asking.
+    ///
+    /// "Age 0-5: child agents automatically receive their food/water from
+    /// their parent agent's internal food energy and water. Age 5-10: child
+    /// agents can request food from a parent agent when hungry and eat any
+    /// wild food found."
+    pub(in crate::analytics) const FED_WITHOUT_ASKING_UNTIL: u32 = 5;
+
+    /// And the age at which one can put food on a fire.
+    ///
+    /// "Age 10-15: child agents can request food from a parent agent when
+    /// hungry, eat any wild food found, **and cook raw food into cooked food
+    /// for consumption**." Which is to say that under ten they cannot.
+    pub(in crate::analytics) const OLD_ENOUGH_TO_COOK: u32 = 10;
+
+    /// And the age up to which being carried occupies one of a parent's hands.
+    pub(in crate::analytics) const CARRIED_IN_ARMS_UNTIL: u32 = 2;
+
+    /// Feed the small children out of their parents, and fill the hands of the
+    /// parents carrying the smallest.
+    ///
+    /// Two things the specification asks for that nothing did. The nursing
+    /// machinery below fed an infant *on demand* - a mouthful whenever
+    /// somebody was standing near and there was room in the belly - and
+    /// charged the mother whatever it came to, however little she had. The
+    /// rule is not on demand: it is on what the parent has inside them, in
+    /// five bands, and it covers water as well as food and runs to five years
+    /// rather than to the end of a nursing period.
+    pub(in crate::analytics) fn feed_the_small_children(&mut self) {
+        use crate::agents::physiology::{A_DRINK_IS_WORTH, MINUTES_PER_DAY, MINUTES_PER_TURN};
+
+        /// One small child, the parent feeding it, and what a turn of it wants.
+        struct AMouthToFeed {
+            child: uuid::Uuid,
+            parent: uuid::Uuid,
+            in_arms: bool,
+            wants_food: f32,
+            wants_water: f32,
+        }
+
+        let grown: Vec<(uuid::Uuid, (i32, i32, i32))> = self
+            .population
+            .agents
+            .iter()
+            .filter(|a| a.state.is_alive)
+            .filter(|a| a.state.years_old() >= crate::agents::LifeStage::KEPT_WITHIN_AN_HOUR_UNTIL)
+            .map(|a| (a.id, a.state.position))
+            .collect();
+
+        let mouths: Vec<AMouthToFeed> = self
+            .population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.state.years_old() <= Self::FED_WITHOUT_ASKING_UNTIL)
+            .filter_map(|child| {
+                // Somebody of its own, grown, and near enough to be holding it
+                let (parent, _) = child
+                    .parent_ids
+                    .iter()
+                    .find_map(|id| grown.iter().find(|(who, _)| who == id))
+                    .filter(|(_, where_they_are)| {
+                        Self::within(
+                            (child.state.position.0, child.state.position.1),
+                            (where_they_are.0, where_they_are.1),
+                            Self::WITHIN_A_FEW_PACES,
+                        )
+                    })?;
+
+                // What this body burns in a turn, which is what it wants fed
+                let a_turn = child.state.physiology.what_i_burn_in_a_day
+                    * MINUTES_PER_TURN as f32
+                    / MINUTES_PER_DAY as f32;
+
+                Some(AMouthToFeed {
+                    child: child.id,
+                    parent: *parent,
+                    in_arms: child.state.years_old() <= Self::CARRIED_IN_ARMS_UNTIL,
+                    wants_food: a_turn,
+                    wants_water: A_DRINK_IS_WORTH * MINUTES_PER_TURN as f32 / MINUTES_PER_DAY as f32,
+                })
+            })
+            .collect();
+
+        let carrying: std::collections::BTreeSet<uuid::Uuid> = mouths
+            .iter()
+            .filter(|mouth| mouth.in_arms)
+            .map(|mouth| mouth.parent)
+            .collect();
+
+        for mouth in &mouths {
+            // The parent's own store decides the share
+            let Some(parent) = self
+                .population
+                .agents
+                .iter()
+                .find(|a| a.id == mouth.parent && a.state.is_alive)
+            else {
+                continue;
+            };
+
+            // Food and water are asked separately in the specification and
+            // banded the same way, so the leaner of the two decides: a parent
+            // with a full belly and no water has no water to give.
+            let store = (parent.state.physiology.reserve
+                / parent.state.physiology.reserve_capacity.max(f32::EPSILON))
+            .min(parent.state.physiology.hydration);
+
+            let share = Self::what_share_a_small_child_gets(store);
+            if share <= 0.0 {
+                continue;
+            }
+
+            let food = mouth.wants_food * share;
+            let water = mouth.wants_water * share;
+
+            // Straight into the body: it did not come out of a pack and it is
+            // not a meal anybody sat down to.
+            if let Some(child) = self
+                .population
+                .agents
+                .iter_mut()
+                .find(|a| a.id == mouth.child && a.state.is_alive)
+            {
+                child.state.physiology.reserve = (child.state.physiology.reserve + food)
+                    .min(child.state.physiology.reserve_capacity);
+                child.state.physiology.hydration =
+                    (child.state.physiology.hydration + water).min(1.0);
+            }
+
+            if let Some(parent) = self
+                .population
+                .agents
+                .iter_mut()
+                .find(|a| a.id == mouth.parent && a.state.is_alive)
+            {
+                parent.state.physiology.reserve =
+                    (parent.state.physiology.reserve - food).max(0.0);
+                parent.state.physiology.hydration =
+                    (parent.state.physiology.hydration - water).max(0.0);
+            }
+        }
+
+        for agent in &mut self.population.agents {
+            agent.hands_full_of_child = carrying.contains(&agent.id);
+        }
+    }
+
     /// Process nursing for infants
     pub(in crate::analytics) fn process_nursing(&mut self) {
         use crate::agents::childcare::{MAX_CAREGIVER_DISTANCE, NURSING_ENERGY_GAIN};

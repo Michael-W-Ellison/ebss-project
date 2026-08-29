@@ -220,6 +220,7 @@ impl Simulation {
         // drying is worth twenty times what cooking is.
         if !desperate
             && !putting_by
+            && agent.state.years_old() >= Self::OLD_ENOUGH_TO_COOK
             && Self::has_food_worth_cooking(agent)
             && self
                 .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
@@ -612,10 +613,12 @@ impl Simulation {
             return None;
         }
 
-        // Standing at a fire that is burning: put the food on it
-        if self
-            .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
-            .is_some()
+        // Standing at a fire that is burning: put the food on it, if this one
+        // is old enough to be trusted with it
+        if agent.state.years_old() >= Self::OLD_ENOUGH_TO_COOK
+            && self
+                .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
+                .is_some()
         {
             return Some(Action::Cook {
                 food_type: "generic".to_string(),

@@ -441,6 +441,34 @@ impl Simulation {
     ) -> Option<crate::environment::Action> {
         let leash = Self::how_far_from_a_grown_person_this_one_may_be(agent.state.life_stage)?;
 
+        // "Within eyesight of camp/tent/town **or** within eyesight of any
+        // adult agent", and the same *or* for the hour's walk. A child by the
+        // fire with everybody out foraging is where it is supposed to be, and
+        // the first cut of this marched it across the map after the nearest
+        // adult.
+        //
+        // Camp/tent/town is read as a *building*, not as
+        // `where_the_camp_is`. That function answers "the nearest roof to
+        // wherever you happen to be standing" when there are too few people
+        // about to make a knot, and its own doc comment says that is the wrong
+        // answer for somebody out on the moor - which would have excused a
+        // child that had wandered to a cave on the far side of the world. A
+        // building stays where it was put.
+        //
+        // And it is not an alternative for the very young: under six the rule
+        // is to be *with* a parent, and a roof is not a parent.
+        if agent.state.life_stage != crate::agents::LifeStage::Infant
+            && self.world.buildings.iter().any(|roof| {
+                Self::within(
+                    (agent_position.0, agent_position.1),
+                    (roof.position.x, roof.position.y),
+                    leash,
+                )
+            })
+        {
+            return None;
+        }
+
         let nearest = self
             .population
             .agents

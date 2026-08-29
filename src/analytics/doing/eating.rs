@@ -333,6 +333,22 @@ impl Simulation {
 
     /// `Action::Cook`.
     pub(in crate::analytics) fn cooking(&mut self, food_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng) -> ActionResult {
+        // And somebody old enough to be trusted with a fire.
+        //
+        // "Age 5-10: child agents can request food from a parent agent when
+        // hungry and eat any wild food found. Age 10-15: ... **and cook raw
+        // food into cooked food for consumption**." Which is to say that under
+        // ten they cannot, and until now a three-year-old could put a haunch
+        // on the fire.
+        //
+        // Refused here rather than only in the decision, on the same reasoning
+        // as `is_ground_a_pit_will_go_in`: a rule that lives only in the
+        // wanting layer is a rule anything reaching the verb another way can
+        // walk straight past.
+        if self.population.agents[agent_index].state.years_old() < Self::OLD_ENOUGH_TO_COOK {
+            return ActionResult::failure("Too young to cook".to_string());
+        }
+
         // Cooking needs a fire, and the agent has to be standing at it
         let agent_pos = self.population.agents[agent_index].state.position;
         let fire = self.nearest_fire_from(agent_pos, Self::FIRE_REACH, true);

@@ -620,7 +620,11 @@ pub fn what_a_body_this_age_eats(years: u32) -> f32 {
         11 => 0.60,
         12 => 0.70,
         13 => 0.80,
-        14 => 0.90,
+        // "Age 14-15: 90%" and then "Age 16+: 100%", so fifteen falls in a gap
+        // between the last child band and the first adult one. The last child
+        // band runs to the adult boundary: a fifteen-year-old is nine tenths
+        // of a grown worker on the capability table and is fed as one.
+        14..=15 => 0.90,
         _ => 1.00,
     }
 }
@@ -1244,6 +1248,20 @@ impl AgentState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub id: Uuid,
+
+    /// Whether one of this agent's hands has a child in it.
+    ///
+    /// "Age 0-2: must remain with a parent agent at all times. Parent agent
+    /// has one *hand* occupied with the child." Worked out once a turn in the
+    /// kin phase, which is where the caregivers and their charges are already
+    /// walked, and read by `update_inventory_capacity_from_transport`.
+    ///
+    /// A field rather than a question, because an agent cannot see the rest of
+    /// the population from inside itself and what it can carry is asked of it
+    /// alone, every turn, from four places.
+    #[serde(default)]
+    pub hands_full_of_child: bool,
+
     pub state: AgentState,
     pub drives: DriveState,
     pub behavior_trees: Vec<BehaviorTree>,
@@ -1380,6 +1398,7 @@ impl Agent {
     pub fn new(config: AgentConfig) -> Self {
         let mut agent = Self {
             id: crate::core::dice::name(),
+            hands_full_of_child: false,
             state: AgentState::new(),
             drives: if config.random_weights {
                 DriveState::with_random_weights()
@@ -4735,7 +4754,18 @@ impl Agent {
         // `what_a_body_this_age_can_do`. What goes in a basket is not scaled
         // - a travois drags the same load whoever is pulling it, and what
         // stops a child using one is the pulling, which is the movement half.
-        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * self.state.what_i_can_do_for_my_age();
+        let years = self.state.what_i_can_do_for_my_age();
+
+        // And whether one of those hands has a child in it.
+        //
+        // "Age 0-2: must remain with a parent agent at all times. Parent agent
+        // has one *hand* occupied with the child, limiting the types of work
+        // the parent agent can accomplish." One hand, so half of what two of
+        // them hold; the basket on the back is unaffected, which is exactly
+        // why somebody carrying a baby wants one.
+        let hands = if self.hands_full_of_child { 0.5 } else { 1.0 };
+
+        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years * hands;
         let in_something = self.transport.total_additional_capacity();
 
         self.inventory.max_weight = in_hand + in_something;

@@ -169,6 +169,12 @@ impl Simulation {
         self.process_pregnancies_and_births();
 
         // Process nursing for infants
+        // The small children are fed out of their parents before anybody
+        // nurses, because for a child of five and under that is where the food
+        // comes from: "child agents automatically receive their food/water
+        // from their parent agent's internal food energy and water". This also
+        // fills the hands of whoever is carrying somebody under two.
+        self.feed_the_small_children();
         self.process_nursing();
 
         // Tick world (building construction progress, etc.)

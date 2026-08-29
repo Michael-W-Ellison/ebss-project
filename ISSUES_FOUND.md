@@ -6515,6 +6515,83 @@ days, by which point both bodies are long dead and both read nought, so it
 could not have come out either way; it measures at three weeks now and reports
 the actual disagreement.
 
+### 111. The lifecycle against the specification, clause by clause
+
+The specification was handed over. Read against the model, the two tables were
+already right and five clauses were not.
+
+**Right, and now asserted verbatim rather than by resemblance:** the
+capability table (1 at two years, 10 at sixteen, 9 at forty, 5 at sixty-five)
+matches exactly; a year is 518,400 of the specification's ticks and a life
+36,288,000 of them, which are this model's *minutes* - a turn is a decision
+and not a minute, and the calendar has been written in minutes since #73 for
+exactly this reason; and the food table matches year for year.
+
+**Wrong, and fixed:**
+
+- **The fifteenth year fell in a gap.** "Age 14-15: 90%" then "Age 16+: 100%",
+  and the bands are half-open elsewhere ("Age 0-4: 20%" is ages nought to
+  three), so fifteen was unnamed and the model gave it a full grown share. A
+  fifteen-year-old was fed as an adult while doing nine tenths of an adult's
+  work. The last child band runs to the adult boundary now.
+
+- **A child in arms occupied no hands.** "Age 0-2: ... Parent agent has one
+  *hand* occupied with the child, limiting the types of work the parent agent
+  can accomplish." Nothing anywhere. A parent carrying somebody under two now
+  has half of what two hands hold; what is on their back is untouched, which
+  is exactly why somebody carrying a baby wants a basket.
+
+- **The supervision bands had no camp in them.** "Within eyesight of
+  camp/tent/town **or** within eyesight of any adult agent", and the same *or*
+  for the hour's walk. The first cut of this read only the second half and
+  marched a child by the fire across the map after the nearest adult. Read as
+  a *building* rather than as `where_the_camp_is`, which answers "the nearest
+  roof to wherever you happen to be standing" when there are too few people
+  about - its own doc comment says that is the wrong answer for somebody out
+  on the moor, and it would have excused a child that had wandered to a cave
+  on the far side of the world. Not an alternative under six: a roof is not a
+  parent.
+
+- **Small children were fed on demand rather than on what their parent had.**
+  The nursing machinery gave an infant a mouthful whenever somebody was
+  standing near and there was room in its belly, and charged the mother
+  whatever it came to however little she had. The specification is a band
+  table on the *parent's internal store*, and it covers water, and it runs to
+  five years rather than to the end of a nursing period:
+
+  | parent's store | child receives |
+  |---|---|
+  | above four fifths | all of it |
+  | above three fifths | three quarters |
+  | above two fifths | half |
+  | above a fifth | a quarter |
+  | below a fifth | nothing |
+
+  Which is a settlement's hunger reaching its children a step behind itself,
+  and stopping while the parents are still alive - a parent a fifth full is a
+  parent whose child gets nothing, and both of them are still standing.
+
+- **A three-year-old could cook.** "Age 5-10: ... eat any wild food found. Age
+  10-15: ... **and cook raw food into cooked food**", so under ten they cannot.
+  Refused in the executor as well as in the decision, on the same reasoning as
+  `is_ground_a_pit_will_go_in`: a rule that lives only in the wanting layer is
+  a rule anything reaching the verb another way walks straight past.
+
+**Measured: a wash, and it could not have been otherwise.** Two blocks of
+thirty-two worlds: last-alive 3619/3462 to 3578/3413, person-days 929/896 to
+926/878. Founders are twenty to forty and two children are born in 308,000
+turns, so none of the five clauses can fire in a run of this model as it
+stands. Failing tests unchanged at 29.
+
+**And one clause not done here.** "Agents are gender neutral. There are no
+male/female agents, merely child and adult agents." The model has a `Gender`
+enum, `can_mate` requires one of each, pregnancy lives on the female and
+`give_birth` reads the mother's position: forty-four references across ten
+files. That is its own change with its own measurement, and it bears directly
+on the largest failure in the model - a rule that only pairs opposite genders
+throws away about half of all candidate pairs in a settlement that manages two
+births in 308,000 turns. Filed and done next rather than tacked on here.
+
 ---
 
 ## Recently fixed
