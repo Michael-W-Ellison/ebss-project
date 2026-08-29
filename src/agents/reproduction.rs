@@ -577,11 +577,15 @@ mod tests {
     fn test_cannot_mate_infant() {
         let mut infant = Agent::new(AgentConfig::default());
         infant.gender = Gender::Male;
+        // In years. `Agent::new` makes a grown person now, so an infant has to
+        // say so - it used to be one by default, which is the trap that fix
+        // removed.
+        infant.state.now_this_many_years_old(2);
 
         let mut adult = Agent::new(AgentConfig::default());
         adult.gender = Gender::Female;
-        adult.state.age = 3000;
-        adult.state.life_stage = crate::agents::LifeStage::Adult;
+        adult.state.now_this_many_years_old(30);
+        
 
         let criteria = MateSelectionCriteria::default();
         assert!(!can_mate(&infant, &adult, &criteria));

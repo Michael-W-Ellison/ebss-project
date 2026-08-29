@@ -381,6 +381,21 @@ impl Physiology {
         self.reserve_capacity = RESERVE_OF_A_GROWN_BODY * share;
         self.stomach_capacity = STOMACH_CAPACITY * share;
         self.reserve = self.reserve.min(self.reserve_capacity);
+
+        // And what it burns, which this did not touch.
+        //
+        // `Physiology::for_a_body_of` sets all four together; this set three
+        // of them and left the burn where it was, so a body resized down to a
+        // child carried **a fifth of the reserve and went on burning at a
+        // grown man's rate**. Everything reading the reserve as a span of time
+        // then had that child dying five times sooner than the physiology's
+        // own `starved()` did - two answers to one question, four hundred
+        // lines apart, and neither ever compared to the other.
+        //
+        // Which is the whole of "a child and an adult come out identical" from
+        // the project status report, in reverse: they were not identical, they
+        // disagreed with themselves.
+        self.what_i_burn_in_a_day = UNITS_BURNED_IN_AN_ORDINARY_DAY * share;
     }
 
     /// Whether there is room for another mouthful.
@@ -669,7 +684,26 @@ impl Physiology {
             .map(|m| m.remaining * m.richness)
             .chain(self.gut.iter().map(|c| c.units * c.richness))
             .sum();
-        self.reserve + coming
+
+        // At the rate *this* body burns it.
+        //
+        // This returned `self.reserve + coming` - the reserve in energy,
+        // called minutes. It is the same number only for a grown body, because
+        // `UNITS_BURNED_IN_AN_ORDINARY_DAY` is `MINUTES_PER_DAY` and a grown
+        // body therefore burns one unit a minute. A small body burns its share
+        // of that, so its energy divided by its own rate is the same span of
+        // minutes - and dividing by nothing reported it as if it were burning
+        // at a grown man's rate.
+        //
+        // Measured: a body of nought years, fifteen days without food, read
+        // **14.4 turns from death against a grown body's 72.0** on the same
+        // going-without. Five times, which is exactly the ratio of the two
+        // bodies. The model held both answers at once - `Physiology::starved`
+        // has a small body and a grown one going at the same three weeks, and
+        // this had the child dying five times sooner - and the two of them
+        // never met, because nothing compared them.
+        let a_minute = (self.what_i_burn_in_a_day / MINUTES_PER_DAY as f32).max(f32::EPSILON);
+        (self.reserve + coming) / a_minute
     }
 
     /// How much this body wants water, as a drive.

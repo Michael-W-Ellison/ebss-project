@@ -115,31 +115,40 @@ fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
 /// A famine takes the young before it takes the grown.
 #[test]
 fn a_hungry_year_takes_the_children_first() {
-    fn health_after_famine(age: u32) -> f32 {
+    fn health_after_famine(years: u32) -> f32 {
         let mut agent = Agent::new(AgentConfig::default());
-        agent.state.age = age;
-        agent.update_life_stage();
+        // Years. This took *ticks*, and passed 900 and 4000 for "a child" and
+        // "an adult" - figures from the calendar where a year was about eleven
+        // hundred ticks. A year is 4,320 now, so both fixtures were nought
+        // years old and the test was comparing an infant with an infant.
+        agent.state.now_this_many_years_old(years);
         agent.state.health = 100.0;
         agent.state.energy = 100.0;
         agent.state.last_ate_tick = 0;
 
-        // Nobody eats for two thousand ticks
-        for tick in 1..=2000u32 {
+        // Nobody eats for three weeks, which is what a reserve is worth.
+        //
+        // This ran for two thousand ticks - a hundred and sixty-seven days -
+        // by which point both bodies are long dead and both read nought, so
+        // the comparison could not have come out either way. Three weeks is
+        // where the question is actually answerable.
+        let three_weeks = 21 * crate::environment::seasons::TICKS_PER_DAY;
+        for tick in 1..=three_weeks {
             agent.state.age_tick_with_modifier(tick, 1.0);
         }
 
         agent.state.health
     }
 
-    let child = health_after_famine(900);
-    let adult = health_after_famine(4000);
+    let child = health_after_famine(8);
+    let adult = health_after_famine(30);
 
     assert!(
         child < adult,
         "a child should suffer a famine sooner than an adult: {child:.1} against {adult:.1}"
     );
     assert_eq!(
-        LifeStage::from_age(900),
+        LifeStage::from_years(8),
         LifeStage::Child,
         "the fixture should be testing a child"
     );

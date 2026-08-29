@@ -1074,6 +1074,53 @@ original specifications.
   the entire run and its people die of hunger, illness and weather. The draw
   sequence shifted and a world already on the line fell the other side of it. Left
   failing rather than weakened. See ISSUES_FOUND.md #101
+- ✅ A six-year-old who carried what his father carried. Three things the
+  lifecycle described and nothing read — and two defects underneath them worth
+  more than any of the three.
+
+  **The curve.** `what_a_body_this_age_can_do` was written, hung on nothing,
+  and deleted as dead code in #93 — leaving **age deciding nothing but
+  appetite**. A six-year-old carried what a grown man carried, walked as fast,
+  worked as hard and hit as heavily, on a third of his food. Restored and hung
+  on what two hands hold, how fast a body walks, what a trip brings back and
+  what a blow is worth. **The bands.** `LifeStage`'s doc comment has carried
+  the supervision rules as prose since the lifecycle was written and nothing
+  consulted them; a five-year-old walked to the far side of the map like
+  anybody else. **Feeding.** A parent had no way to hand a child anything short
+  of the sacrifice branch, which waits for starvation.
+
+  **Underneath: `Agent::new` made newborns.** Hanging the curve on carrying
+  broke **87 tests and hung one** — every fixture that says `Agent::new` and
+  means "a person" was carrying a twentieth of a pack. This is #74 one layer
+  down: that entry fixed founders spawned at nought in `spawn_agent`, and the
+  constructor underneath went on making newborns for everybody else.
+
+  **And a body that burned at a grown rate on a child's reserve.**
+  `now_a_body_of` resized the reserve and the stomach and left the burn alone.
+  Measured: a body of nought years, fifteen days without food, read **14.4
+  turns from death against a grown body's 72.0** — five times, exactly the
+  ratio of the bodies. The model held both answers at once, four hundred lines
+  apart, and nothing ever compared them.
+
+  **And two vocabularies for one age.** `life_stage` is a stored field a dozen
+  places set without touching `age`. The status report listed **"a child and an
+  adult come out identical" as one of three blocking failures** — one of those
+  tests was one line in a fixture setting the stage and not the years, and got
+  47 against 47 because both bodies were the same age.
+
+  **Measured: nothing, and that is the honest answer.** Three blocks of 32
+  worlds: last-alive 3478→3564, person-days 920→916. A wash — and it could not
+  have been otherwise. Founders are 20–40 where the curve is at its full ten;
+  nobody reaches 40 in a year; and **two children are born in 308,000 turns**.
+  Correct, tested and idle, waiting on reproduction exactly as #109's larder
+  waits on somebody being alive in autumn to fill it.
+
+  Failing tests **25 → 29**: two cleared, and four are one question — *does a
+  child starve sooner than an adult?* The model now says no consistently (which
+  is what #74 decided); three tests say yes, and the physiology is on their
+  side. That is a specification question needing its own measurement, filed
+  rather than decided as a rider on a change this size.
+  See ISSUES_FOUND.md #110
 - ✅ Seven items for a winter, and a larder anybody could open in July. Two
   faults, and the second is the one the entry is named after.
 

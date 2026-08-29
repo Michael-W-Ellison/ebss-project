@@ -231,7 +231,14 @@ impl Simulation {
             // rate of a man with his bare hands.
             let tool = self.population.agents[agent_index].how_much_my_tools_help(trade);
 
-            let worth = ordinary as f32 * hand * tool;
+            // And how old the hands are. A six-year-old strips a bush at
+            // three tenths of what his father does, which is the working half
+            // of `what_a_body_this_age_can_do` - and until now a child
+            // gathered exactly what a grown man gathered while eating a fifth
+            // as much.
+            let years = self.population.agents[agent_index].state.what_i_can_do_for_my_age();
+
+            let worth = ordinary as f32 * hand * tool * years;
 
             // Carry the fraction as a chance rather than rounding it
             // away, so that a small difference in skill still tells

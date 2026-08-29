@@ -396,6 +396,27 @@ impl Simulation {
             return (action, false);
         }
 
+        // A child of one's own that is hungry, and food to spare in the pack.
+        //
+        // Not a want either, and the ordinary counterpart of the sacrifice
+        // override in `each_one`: that one waits until somebody is starving
+        // and hands over food the giver needs itself. This is what a parent
+        // does long before that, and nothing did it - a child in this model
+        // foraged for itself from the day it could walk or went without.
+        if let Some(to) = self.a_child_of_mine_to_feed(agent, agent_position) {
+            return (Action::GiveTo { to }, false);
+        }
+
+        // And somebody too young to be this far from anybody grown, heading
+        // back. `LifeStage` has described the three bands of this in prose
+        // since the lifecycle was written and nothing ever read them: with a
+        // parent under six, in sight of one under eleven, an errand's walk
+        // under sixteen. It sits below fear, which is right - a frightened
+        // child runs first - and above every want, which is also right.
+        if let Some(action) = self.keeping_close_to_somebody_grown(agent, agent_position) {
+            return (action, false);
+        }
+
         // And freezing, where there is a roof within reach. Exposure is
         // already doing damage by the time this fires, so it is not a matter
         // of how much the agent wants to be warm.

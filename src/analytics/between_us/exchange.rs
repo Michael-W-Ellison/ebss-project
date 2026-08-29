@@ -403,6 +403,138 @@ impl Simulation {
             .map(|them| them.id)
     }
 
+    /// How far from a grown person somebody of this age may be.
+    ///
+    /// `LifeStage`'s own doc comment has said this since the lifecycle was
+    /// written and nothing ever read it: "0-5 must be with a parent at all
+    /// times; 6-10 must stay within sight of the camp or of some adult; 11-15
+    /// must stay within an hour's walk". Three bands of rule, described in
+    /// prose, on a stage nothing consulted for the purpose. A five-year-old
+    /// walked to the far side of the map on its own like anybody else.
+    ///
+    /// Written in reaches this project already keeps rather than in new
+    /// numbers: a few paces for somebody who has to be *with* a parent, sight
+    /// for somebody who has to be in it, and the distance a person will walk
+    /// on an errand for an hour's walk.
+    pub(in crate::analytics) fn how_far_from_a_grown_person_this_one_may_be(
+        stage: crate::agents::LifeStage,
+    ) -> Option<i32> {
+        use crate::agents::LifeStage;
+        match stage {
+            LifeStage::Infant => Some(Self::WITHIN_A_FEW_PACES),
+            LifeStage::Child => Some(Self::WITHIN_SIGHT),
+            LifeStage::Adolescent => Some(Self::WORTH_WALKING_TO_THE_STORE as i32),
+            LifeStage::Adult | LifeStage::Elderly => None,
+        }
+    }
+
+    /// Somebody too young to be out here on their own, heading back.
+    ///
+    /// Returns the walk back to the nearest grown person when this one is
+    /// beyond the leash its age allows, and nothing otherwise. A child with no
+    /// adult left alive anywhere is not marched to a corpse: there is nobody
+    /// to go to, and it is on its own whatever the rule says.
+    pub(in crate::analytics) fn keeping_close_to_somebody_grown(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<crate::environment::Action> {
+        let leash = Self::how_far_from_a_grown_person_this_one_may_be(agent.state.life_stage)?;
+
+        let nearest = self
+            .population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| {
+                Self::how_far_from_a_grown_person_this_one_may_be(them.state.life_stage).is_none()
+            })
+            .min_by_key(|them| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+            })?;
+
+        let paces = (nearest.state.position.0 - agent_position.0)
+            .abs()
+            .max((nearest.state.position.1 - agent_position.1).abs());
+
+        if paces <= leash {
+            return None;
+        }
+
+        Some(crate::environment::Action::Move {
+            target: (
+                nearest.state.position.0,
+                nearest.state.position.1,
+                agent_position.2,
+            ),
+        })
+    }
+
+    /// A child of this agent's own, within reach, that is going hungry.
+    ///
+    /// Distinct from `somebody_of_mine_who_needs_it_more`, which is the
+    /// sacrifice: that one waits until a loved one is *starving* and this
+    /// agent is not, and hands over food this agent needs itself. This is the
+    /// ordinary thing a parent does long before that - a child is hungry, the
+    /// parent has food to spare, the food changes hands. Nothing did it, so a
+    /// child in this model foraged for itself from the day it could walk or
+    /// went without.
+    ///
+    /// Food to *spare*, so a parent with one meal does not hand it over and
+    /// then starve; the sacrifice branch above is where that decision belongs
+    /// and it has its own arithmetic for it.
+    pub(in crate::analytics) fn a_child_of_mine_to_feed(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        // Nothing spare, nothing doing
+        agent.what_food_i_can_spare()?;
+
+        self.population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| {
+                Self::how_far_from_a_grown_person_this_one_may_be(them.state.life_stage).is_some()
+            })
+            .filter(|them| {
+                Self::within(
+                    (agent_position.0, agent_position.1),
+                    (them.state.position.0, them.state.position.1),
+                    Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER,
+                )
+            })
+            .filter(|them| {
+                agent
+                    .relationships
+                    .get_relationship(&them.id)
+                    .is_some_and(|bond| {
+                        bond.relationship_type == crate::agents::emotions::RelationshipType::Child
+                    })
+            })
+            // Hungry, and with nothing of its own to eat
+            .filter(|them| {
+                Self::how_hungry_is_this_one(them) >= Self::WHEN_A_CHILD_IS_HUNGRY_ENOUGH_TO_FEED
+            })
+            .filter(|them| them.find_best_food_to_eat().is_none())
+            .min_by(|a, b| {
+                Self::how_hungry_is_this_one(b)
+                    .partial_cmp(&Self::how_hungry_is_this_one(a))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|them| them.id)
+    }
+
+    /// How hungry a child has to be before a parent hands food over.
+    ///
+    /// Ordinary hunger rather than the drive's own threshold: a parent does
+    /// not wait for a child to reach the point of setting off to forage before
+    /// giving it something.
+    pub(in crate::analytics) const WHEN_A_CHILD_IS_HUNGRY_ENOUGH_TO_FEED: f32 = 0.4;
+
     /// What going without for somebody is worth to them, against an ordinary
     /// gift.
     ///

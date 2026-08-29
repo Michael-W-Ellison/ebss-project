@@ -626,6 +626,44 @@ pub fn what_a_body_this_age_eats(years: u32) -> f32 {
 }
 
 
+/// What a body of this many years can bring to moving, carrying and working.
+///
+/// The specification's table, as a share of a grown adult's ten: one at two
+/// years, climbing to ten at sixteen, holding until forty and falling away
+/// after. At seventy it is over.
+///
+/// This was written once and hung on nothing, and was then deleted as dead
+/// code in the sweep of #93 - which was the right call for the code and left
+/// the model with a six-year-old who carried what a grown man carried, walked
+/// as fast, worked as hard and hit as heavily. The *only* thing age decided
+/// was appetite, and a body that eats a fifth as much while doing a full day's
+/// work is not a child, it is a bargain.
+///
+/// It is hung on four things now, which are the three the sentence above names
+/// and the one it implies: what two hands hold, how fast a body walks, what a
+/// trip brings back, and what a blow is worth.
+pub fn what_a_body_this_age_can_do(years: u32) -> f32 {
+    let out_of_ten = match years {
+        0..=1 => 0,
+        2..=3 => 1,
+        4..=5 => 2,
+        6..=7 => 3,
+        8..=9 => 4,
+        10..=11 => 5,
+        12 => 6,
+        13 => 7,
+        14 => 8,
+        15 => 9,
+        16..=39 => 10,
+        40..=49 => 9,
+        50..=54 => 8,
+        55..=59 => 7,
+        60..=64 => 6,
+        _ => 5,
+    };
+    out_of_ten as f32 / 10.0
+}
+
 /// Life stages of an agent, in years.
 ///
 /// The bands are the ones the lifecycle is specified in, and what separates
@@ -1128,6 +1166,43 @@ impl AgentState {
         what_a_body_this_age_eats(self.years_old()).max(0.05)
     }
 
+    /// Make this body this many years old, in both of the places that say so.
+    ///
+    /// Age and life stage are two spellings of one fact, and the stage is a
+    /// *stored* field: a dozen places set `life_stage` directly and leave
+    /// `age` where it was, which makes a body whose stage and years disagree.
+    /// Everything that actually reads a body's age reads the years -
+    /// `what_i_eat_for_my_age` and `what_i_can_do_for_my_age` both count them
+    /// - so such a body is an adult wearing a child's label.
+    ///
+    /// That is not a hypothetical. `a_child_and_an_adult_do_not_rank_the_same
+    /// _needs_the_same_way` set `life_stage = Child`, asked how long hunger
+    /// left the body, and got **47 against 47** - the same answer twice,
+    /// because both bodies were the same age. Two more tests in two other
+    /// modules reported the same thing, and the project status report listed
+    /// "a child and an adult come out identical" as one of three blocking
+    /// failures on the strength of them. It was one line in a fixture.
+    ///
+    /// Sizes the body as well as setting the number, because that is what a
+    /// body of a given age *is*: `what_a_body_this_age_eats` decides the
+    /// reserve, the stomach and the burn.
+    pub fn now_this_many_years_old(&mut self, years: u32) {
+        self.age = years * crate::environment::seasons::TICKS_PER_YEAR;
+        self.life_stage = LifeStage::from_age(self.age);
+        self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
+    }
+
+    /// And what it can bring to moving, carrying, working and fighting.
+    ///
+    /// Floored a little above nothing rather than at nothing: an infant is
+    /// worth nought out of ten on the specification's table, and a zero here
+    /// would divide the pack capacity to nothing and make every arithmetic
+    /// downstream of it a special case. Somebody in arms carries what an
+    /// infant carries, which is not nothing and is not much.
+    pub fn what_i_can_do_for_my_age(&self) -> f32 {
+        what_a_body_this_age_can_do(self.years_old()).max(0.05)
+    }
+
     /// Put this body where it would be after this long without food.
     ///
     /// Minutes, which is the scale the old `ticks_without_food` figures were
@@ -1375,6 +1450,26 @@ impl Agent {
         // this - it had no callers at all.
         agent.apply_trait_sensory_modifications();
 
+        // A bare `Agent::new` is a grown person.
+        //
+        // It was a body of age nought, which `LifeStage::from_age` calls an
+        // infant - and nothing minded while nothing read a body's age for
+        // anything but its appetite. The moment the age capability curve was
+        // hung on what two hands hold, every fixture in the project that says
+        // `Agent::new` and means "a person" was carrying a twentieth of a
+        // pack: **eighty-seven tests failed and one hung**, across carrying,
+        // bartering, portioning, the larder and tool wear.
+        //
+        // This is defect #74 one layer down. That entry found founders
+        // spawned at nought - "every world began with twelve newborns and
+        // nobody to feed them" - and fixed it in `spawn_agent`, which
+        // overrides this. The constructor underneath still made newborns, and
+        // every caller that was not `spawn_agent` got one.
+        //
+        // A newborn now says so: `with_parents` is the birth path and sets the
+        // age back to nought itself.
+        agent.state.now_this_many_years_old(Self::WHAT_AGE_A_PERSON_IS_UNLESS_TOLD);
+
         // And what this body can actually carry, which is what two hands hold
         // until it has something to put things in. A bare `Inventory` has no
         // body and no basket and cannot work this out for itself; an agent
@@ -1383,6 +1478,14 @@ impl Agent {
 
         agent
     }
+
+    /// What age a body is when nobody has said.
+    ///
+    /// Grown, and old enough that the capability curve is at its full ten out
+    /// of ten, so that a fixture which does not care about age gets a person
+    /// rather than a baby. `spawn_agent` rolls a real age over the top of it
+    /// and `with_parents` sets it back to nought.
+    pub const WHAT_AGE_A_PERSON_IS_UNLESS_TOLD: u32 = 25;
 
     /// Generate a personality-based reproduction drive modifier
     fn generate_reproduction_modifier() -> f32 {
@@ -1403,8 +1506,11 @@ impl Agent {
         agent.parent_ids = parent_ids.clone();
         agent.state.last_ate_tick = current_tick;
 
-        // Set up infant as newborn
-        agent.state.life_stage = LifeStage::Infant;
+        // Set up infant as newborn.
+        //
+        // In years as well as in the stored stage: `Agent::new` makes a grown
+        // person now, so a birth has to say that this one is not.
+        agent.state.now_this_many_years_old(0);
         agent.state.age = 0;
 
         // A newborn has just been fed and watered by being born.
@@ -4034,7 +4140,10 @@ impl Agent {
             1.0
         };
 
-        let base_strength = health_factor * body_factor;
+        // And the years. `LifeStage::can_fight` already keeps the very young
+        // out of a fight altogether; this is what separates a thirteen-year-old
+        // from his father, and his father from his grandfather.
+        let base_strength = health_factor * body_factor * self.state.what_i_can_do_for_my_age();
         let equipment_bonus = armor_bonus * 0.3 + weapon_bonus;
         let built = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
 
@@ -4620,7 +4729,13 @@ impl Agent {
     /// there is to put things in.
     fn update_inventory_capacity_from_transport(&mut self) {
         let how_strong = self.body.how_much_this_body_can_lift();
-        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong;
+
+        // And how old it is. A six-year-old's two hands are not a grown man's
+        // two hands, and until now they were: this is the carrying half of
+        // `what_a_body_this_age_can_do`. What goes in a basket is not scaled
+        // - a travois drags the same load whoever is pulling it, and what
+        // stops a child using one is the pulling, which is the movement half.
+        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * self.state.what_i_can_do_for_my_age();
         let in_something = self.transport.total_additional_capacity();
 
         self.inventory.max_weight = in_hand + in_something;
@@ -4645,7 +4760,15 @@ impl Agent {
             .map(|p| p.speed_modifier(current_tick))
             .unwrap_or(1.0);
 
-        body_speed * transport_speed * weight_penalty * fatigue_penalty * pregnancy_penalty
+        // A short pair of legs covers less ground. The movement half of
+        // `what_a_body_this_age_can_do`, and the reason a five-year-old is not
+        // simply a small adult who eats less.
+        body_speed
+            * self.state.what_i_can_do_for_my_age()
+            * transport_speed
+            * weight_penalty
+            * fatigue_penalty
+            * pregnancy_penalty
     }
 
     /// Check if agent can carry additional weight
