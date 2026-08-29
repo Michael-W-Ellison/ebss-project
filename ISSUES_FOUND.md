@@ -5590,7 +5590,57 @@ sat at line 12,003 of a sixteen-thousand-line file, because nothing could see
 it. Left as it is here, because this change is behaviour-neutral by contract,
 and filed as its own piece of work.
 
-### 96. The other thirteen drive rates were never derived either
+### 96. The tick, and a flag that would have been dropped silently
+
+With `execute_action` gone, `tick` was the largest function left: 852 lines. Its
+actual shape - a run of world phases, then everybody taking a turn, then a
+second run of world phases - was buried under six hundred and seventy lines of
+per-agent decision code sitting in the middle of it. That order is argued over
+in the comments, and several of the arguments were bought with a measurement:
+the beasts look before they move rather than after, the world is ticked once
+rather than twice, what a body has to pass goes back on the ground before
+anybody smells it. None of it could be read while the middle of the function was
+longer than the whole of anything else in the file.
+
+`analytics/turn/` now holds it. `tick` is 179 lines and reads as the sequence it
+is. `turn/each_one.rs` holds one person's turn in the order a person takes it,
+with the five stages named:
+
+1. `keep_the_goals_and_the_plan_current` - the standing intentions, refreshed on
+   their own clock rather than every turn.
+2. `choose_what_to_do` - the priority ladder, from starving down through fear,
+   shelter, what can be seen, the plan, the goals and the drives; and the note
+   of *why*, which is the only thing that makes the threat tally mean anything.
+3. `and_what_it_takes` - a real target rather than a nil id, an errand held
+   rather than re-decided, a reachable place, a free hand, the tool out of the
+   bag, the parts fetched, and whether a better tool would pay for itself.
+4. `execute_action` - the previous entry.
+5. `what_came_of_it` - the body's bill, the tally, the lesson, the plan.
+
+Then, on its own clock rather than on a drive, `look_in_at_the_storehouse`.
+
+`analytics/mod.rs` goes 11,060 to 10,213 - **16,779 to 10,213 over the two
+entries, a drop of 39 per cent** - and the largest function left in it is 378
+lines.
+
+#### The flag
+
+Cutting the choosing block out gave it a parameter, `ran_for_it`, because
+fleeing comes out as an ordinary `Move` and both the tally and the errand need
+to know it was one. The block already declared `let mut running_away = false;`
+of its own, so the parameter was **shadowed**: every assignment inside went to
+the local, the caller's flag stayed false, and `stick_to_the_errand` would have
+held a fleeing man to whatever errand he was on.
+
+The compiler said "unused variable" and nothing else. It is not an error to
+shadow a parameter, and a reader skimming a 225-line body would not have caught
+it; a test would only have caught it in a world where somebody had to run. The
+fingerprint harness would have caught it on the next run - which is the point of
+having one - but the warning caught it first, and only because the block had
+been given a signature to shadow. That is the second thing this split has found
+in two commits, and both were found by giving code a name.
+
+### 97. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5599,19 +5649,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 97. The clock is spelled out in the interface too
+### 98. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 98. Build warnings
+### 99. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 99. Placeholder package metadata
+### 100. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

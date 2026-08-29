@@ -895,6 +895,35 @@ original specifications.
   invisible at line 12,003 of a sixteen-thousand-line file. Left as it is here —
   this change is behaviour-neutral by contract — and filed. See ISSUES_FOUND.md
   #95
+- ✅ The tick, and a flag that would have been dropped silently. With
+  `execute_action` gone, `tick` was the largest function left at 852 lines — and
+  its actual shape, a run of world phases then everybody taking a turn then a
+  second run of world phases, was buried under 670 lines of per-agent decision
+  code sitting in the middle. That order is argued over in the comments and
+  several of the arguments were bought with a measurement (the beasts look
+  before they move, the world is ticked once not twice, waste goes back on the
+  ground before anybody smells it) — none of it readable while the middle of the
+  function was longer than anything else in the file.
+
+  `analytics/turn/` holds it now. `tick` is 179 lines and reads as the sequence
+  it is; `turn/each_one.rs` holds one person's turn with the five stages named —
+  **keep the goals and the plan current**, **choose what to do**, **and what it
+  takes**, execute, **what came of it**, then looking in at the storehouse on
+  its own clock. `analytics/mod.rs` goes 11,060 → 10,213: **16,779 → 10,213
+  across the two splits, down 39%**, with the largest function left at 378
+  lines.
+
+  **And it caught a flag that would have gone silently.** Cutting the choosing
+  block out gave it a `ran_for_it` parameter — fleeing comes out as an ordinary
+  `Move`, so the tally and the errand both need to know it was one — but the
+  block already declared `let mut running_away = false;` of its own, so the
+  parameter was *shadowed*: the caller's flag would have stayed false and
+  `stick_to_the_errand` would have held a fleeing man to whatever errand he was
+  on. Shadowing a parameter is not an error; the compiler said "unused variable"
+  and nothing more. The fingerprint harness would have caught it on the next run
+  — that is what it is for — but the warning caught it first, and only because
+  the block had been given a signature to shadow. Second find in two commits,
+  both from giving code a name. See ISSUES_FOUND.md #96
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
