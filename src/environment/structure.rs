@@ -5,7 +5,7 @@
 //! functionality like storage, crafting stations, or shelter.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Types of structures that can be built
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -89,7 +89,7 @@ pub struct Structure {
     pub is_complete: bool,
 
     // Custom properties
-    pub properties: HashMap<String, String>,
+    pub properties: BTreeMap<String, String>,
 }
 
 impl Structure {
@@ -117,7 +117,7 @@ impl Structure {
             max_health,
             build_progress: 0.0,
             is_complete: false,
-            properties: HashMap::new(),
+            properties: BTreeMap::new(),
         }
     }
 
@@ -204,8 +204,8 @@ impl Structure {
     }
 
     /// Get required materials for building
-    pub fn build_requirements(&self) -> HashMap<String, u32> {
-        let mut requirements = HashMap::new();
+    pub fn build_requirements(&self) -> BTreeMap<String, u32> {
+        let mut requirements = BTreeMap::new();
 
         let material_multiplier = self.level.as_u8() as u32;
 
@@ -249,15 +249,15 @@ impl Structure {
 /// Manager for all structures in the world
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructureRegistry {
-    structures: HashMap<String, Structure>,
-    position_index: HashMap<(i32, i32, i32), String>,
+    structures: BTreeMap<String, Structure>,
+    position_index: BTreeMap<(i32, i32, i32), String>,
 }
 
 impl StructureRegistry {
     pub fn new() -> Self {
         Self {
-            structures: HashMap::new(),
-            position_index: HashMap::new(),
+            structures: BTreeMap::new(),
+            position_index: BTreeMap::new(),
         }
     }
 

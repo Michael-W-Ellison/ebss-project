@@ -4,7 +4,7 @@
 //! Handles crafting recipes, material requirements, skill checks, and item creation.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// Material requirement for a recipe
@@ -141,13 +141,13 @@ impl CraftingRecipe {
 /// Recipe registry
 #[derive(Debug, Clone)]
 pub struct RecipeRegistry {
-    recipes: HashMap<String, CraftingRecipe>,
+    recipes: BTreeMap<String, CraftingRecipe>,
 }
 
 impl RecipeRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
-            recipes: HashMap::new(),
+            recipes: BTreeMap::new(),
         };
         registry.register_all_recipes();
         registry
@@ -537,8 +537,8 @@ impl CraftingManager {
     pub fn can_craft(
         &self,
         recipe_id: &str,
-        inventory_materials: &HashMap<String, u32>,
-        skills: &HashMap<String, u32>,
+        inventory_materials: &BTreeMap<String, u32>,
+        skills: &BTreeMap<String, u32>,
         available_tools: &[ToolRequirement],
     ) -> CraftingResult {
         let recipe = match self.registry.get(recipe_id) {
@@ -595,7 +595,7 @@ impl CraftingManager {
         let recipe = self.registry.get(&recipe_id)?;
 
         let job = CraftingJob {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             recipe_id,
             crafter_id,
             progress: 0,

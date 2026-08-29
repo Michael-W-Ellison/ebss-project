@@ -283,10 +283,10 @@ mod tests {
     #[test]
     fn test_set_favorite_person() {
         let mut prefs = Preferences::new();
-        let person_id = Uuid::new_v4();
+        let person_id = crate::core::dice::name();
         prefs.set_favorite_person(person_id);
         assert!(prefs.is_near_favorite_person(person_id));
-        assert!(!prefs.is_near_favorite_person(Uuid::new_v4()));
+        assert!(!prefs.is_near_favorite_person(crate::core::dice::name()));
     }
 
     #[test]

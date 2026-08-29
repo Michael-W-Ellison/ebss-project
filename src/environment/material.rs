@@ -2,7 +2,7 @@
 //! Material property system for environment plugins.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::agents::Quality;
 
 /// Tool tier required to harvest a material
@@ -146,7 +146,7 @@ pub struct Material {
     pub ore_yield: f32,
 
     // Custom properties for plugin-specific data
-    pub properties: HashMap<String, String>,
+    pub properties: BTreeMap<String, String>,
 }
 
 impl Material {
@@ -179,7 +179,7 @@ impl Material {
             is_ore: false,
             ore_metal_id: None,
             ore_yield: 0.0,
-            properties: HashMap::new(),
+            properties: BTreeMap::new(),
         }
     }
 

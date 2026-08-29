@@ -2,7 +2,7 @@
 //! Skill system for agent proficiency and progression.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use rand::Rng;
 
 /// Types of skills agents can develop

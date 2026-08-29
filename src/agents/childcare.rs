@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn test_nursing_state() {
-        let mother_id = Uuid::new_v4();
+        let mother_id = crate::core::dice::name();
         let mut nursing = NursingState::new(0, mother_id);
 
         assert!(nursing.needs_nursing(100));

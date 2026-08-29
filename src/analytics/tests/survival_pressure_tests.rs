@@ -336,7 +336,7 @@ fn what_agents_do_in_a_run_becomes_something_they_know() {
 #[test]
 fn a_newborn_is_not_born_parched() {
     let born_at = 9_000;
-    let mother = uuid::Uuid::new_v4();
+    let mother = crate::core::dice::name();
 
     let mut baby = Agent::with_parents(AgentConfig::default(), vec![mother], born_at);
 

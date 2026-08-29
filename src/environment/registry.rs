@@ -1,7 +1,7 @@
 // src/environment/registry.rs
 //! Plugin registry for managing environment plugins.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use super::{EnvironmentPlugin, EnvironmentError, EnvironmentResult, PluginConfig};
 
@@ -11,7 +11,7 @@ use super::{EnvironmentPlugin, EnvironmentError, EnvironmentResult, PluginConfig
 /// access to them by ID. Plugins can be registered, retrieved, and
 /// managed through this interface.
 pub struct PluginRegistry {
-    plugins: HashMap<String, Arc<RwLock<Box<dyn EnvironmentPlugin>>>>,
+    plugins: BTreeMap<String, Arc<RwLock<Box<dyn EnvironmentPlugin>>>>,
     active_plugin: Option<String>,
 }
 
@@ -19,7 +19,7 @@ impl PluginRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
         Self {
-            plugins: HashMap::new(),
+            plugins: BTreeMap::new(),
             active_plugin: None,
         }
     }

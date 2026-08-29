@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::world::{Position, Resource, ResourceType};
 
 /// Types of buildings
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum BuildingType {
     // Shelter progression
     /// Hides over a frame of poles. The first thing a people who have just
@@ -1089,9 +1089,9 @@ mod tests {
         assert!(building.can_house_agent());
         assert_eq!(building.building_type.capacity(), 2);
 
-        let agent1 = uuid::Uuid::new_v4();
-        let agent2 = uuid::Uuid::new_v4();
-        let agent3 = uuid::Uuid::new_v4();
+        let agent1 = crate::core::dice::name();
+        let agent2 = crate::core::dice::name();
+        let agent3 = crate::core::dice::name();
 
         assert!(building.add_occupant(agent1));
         assert!(building.add_occupant(agent2));

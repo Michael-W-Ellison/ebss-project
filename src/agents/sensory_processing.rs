@@ -182,7 +182,7 @@ pub fn process_sensory_input(senses: &Senses, agent_pos: (i32, i32, i32)) -> Vec
 /// Consolidate percepts detected by multiple senses
 fn consolidate_percepts(percepts: &mut Vec<Percept>) {
     // Find agents detected by multiple methods
-    let mut agent_detections: std::collections::HashMap<Uuid, Vec<usize>> = std::collections::HashMap::new();
+    let mut agent_detections: std::collections::BTreeMap<Uuid, Vec<usize>> = std::collections::BTreeMap::new();
 
     for (idx, percept) in percepts.iter().enumerate() {
         if let Percept::AgentDetected { agent_id, .. } = percept {

@@ -13,7 +13,7 @@
 //! - `PluginRegistry`: Manages loaded plugins and provides access to them
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::core::DriveType;
 
 pub mod making;
@@ -97,7 +97,7 @@ impl std::fmt::Display for EnvironmentError {
 impl std::error::Error for EnvironmentError {}
 
 /// Position in 3D space
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -129,7 +129,7 @@ pub struct ActionResult {
     /// Whether the action succeeded
     pub success: bool,
     /// Drives that were affected and by how much (positive = satisfied, negative = increased)
-    pub drive_changes: HashMap<DriveType, f32>,
+    pub drive_changes: BTreeMap<DriveType, f32>,
     /// Items produced or obtained
     pub items_gained: Vec<ItemStack>,
     /// Items consumed or lost
@@ -371,7 +371,7 @@ impl ActionResult {
     pub fn success() -> Self {
         Self {
             success: true,
-            drive_changes: HashMap::new(),
+            drive_changes: BTreeMap::new(),
             items_gained: Vec::new(),
             items_consumed: Vec::new(),
             experience: 0.0,
@@ -384,7 +384,7 @@ impl ActionResult {
     pub fn failure(message: String) -> Self {
         Self {
             success: false,
-            drive_changes: HashMap::new(),
+            drive_changes: BTreeMap::new(),
             items_gained: Vec::new(),
             items_consumed: Vec::new(),
             experience: 0.0,

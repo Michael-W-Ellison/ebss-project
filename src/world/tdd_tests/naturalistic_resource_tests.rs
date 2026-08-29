@@ -2,7 +2,7 @@
 //! Tests for naturalistic resource distribution system
 
 use crate::world::{World, WorldConfig, ResourceConfig, ResourceType, TerrainType};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[test]
 fn test_world_generates_all_resource_types() {
@@ -14,7 +14,7 @@ fn test_world_generates_all_resource_types() {
     let world = World::new(config);
 
     // Count resource types
-    let mut resource_counts: HashMap<ResourceType, usize> = HashMap::new();
+    let mut resource_counts: BTreeMap<ResourceType, usize> = BTreeMap::new();
     for resource in &world.resources {
         *resource_counts.entry(resource.resource_type).or_insert(0) += 1;
     }
@@ -89,7 +89,7 @@ fn test_terrain_diversity() {
     let world = World::new(config);
 
     // Count terrain types
-    let mut terrain_counts: HashMap<TerrainType, usize> = HashMap::new();
+    let mut terrain_counts: BTreeMap<TerrainType, usize> = BTreeMap::new();
     for row in &world.grid.tiles {
         for tile in row {
             *terrain_counts.entry(tile.terrain.terrain_type).or_insert(0) += 1;
@@ -161,7 +161,7 @@ fn test_naturalistic_spawning_disabled() {
     let world = World::new(config);
 
     // Count resource types
-    let mut resource_counts: HashMap<ResourceType, usize> = HashMap::new();
+    let mut resource_counts: BTreeMap<ResourceType, usize> = BTreeMap::new();
     for resource in &world.resources {
         *resource_counts.entry(resource.resource_type).or_insert(0) += 1;
     }
@@ -188,7 +188,7 @@ fn test_technology_progression_resources_available() {
     let world = World::new(config);
 
     // Count resource types
-    let mut resource_counts: HashMap<ResourceType, usize> = HashMap::new();
+    let mut resource_counts: BTreeMap<ResourceType, usize> = BTreeMap::new();
     for resource in &world.resources {
         *resource_counts.entry(resource.resource_type).or_insert(0) += 1;
     }

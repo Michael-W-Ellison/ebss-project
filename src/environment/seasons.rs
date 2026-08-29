@@ -131,7 +131,7 @@ pub fn month_of_the_year(day_of_year: u32) -> u32 {
 }
 
 /// Season of the year
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum Season {
     Spring,
     Summer,

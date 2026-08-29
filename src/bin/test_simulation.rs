@@ -400,7 +400,7 @@ fn print_population_status(population: &Population, tick: u32) {
         }
 
         // Calculate relationship statistics
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
         let mut total_relationships = 0;
         let mut total_positive = 0;
         let mut total_negative = 0;
@@ -462,11 +462,11 @@ fn print_population_status(population: &Population, tick: u32) {
         }
 
         // Calculate technology statistics
-        use std::collections::HashSet;
+        use std::collections::BTreeSet;
         
 
-        let mut all_known_techs: HashSet<String> = HashSet::new();
-        let mut tech_discovery_counts: HashMap<String, usize> = HashMap::new();
+        let mut all_known_techs: BTreeSet<String> = BTreeSet::new();
+        let mut tech_discovery_counts: BTreeMap<String, usize> = BTreeMap::new();
         let mut total_original_discoveries = 0;
         let mut agents_with_tech = 0;
 

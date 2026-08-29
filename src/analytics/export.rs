@@ -187,7 +187,7 @@ impl DataExporter {
         let mut file = File::create(path)?;
 
         // Collect all traits that appear in any snapshot
-        let mut all_traits = std::collections::HashSet::new();
+        let mut all_traits = std::collections::BTreeSet::new();
         for snapshot in &metrics.snapshots {
             for trait_item in snapshot.traits.keys() {
                 all_traits.insert(trait_item.clone());

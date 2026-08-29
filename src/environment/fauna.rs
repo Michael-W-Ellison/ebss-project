@@ -2,7 +2,7 @@
 //! Animal life and wildlife system with biome distributions.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::flora::ClimateZone;
 use crate::world::{Grid, TerrainType};
 use uuid::Uuid;
@@ -253,13 +253,13 @@ pub struct AnimalProduct {
 /// Animal species database
 #[derive(Debug, Clone)]
 pub struct FaunaRegistry {
-    species: HashMap<String, AnimalSpecies>,
+    species: BTreeMap<String, AnimalSpecies>,
 }
 
 impl FaunaRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
-            species: HashMap::new(),
+            species: BTreeMap::new(),
         };
 
         registry.register_all_species();
@@ -1704,7 +1704,7 @@ pub struct Animal {
     pub is_starving: bool,  // Taking starvation damage
 
     /// Living product timers
-    pub product_timers: HashMap<String, u32>, // material_id -> ticks until production
+    pub product_timers: BTreeMap<String, u32>, // material_id -> ticks until production
 }
 
 impl Animal {
@@ -1712,7 +1712,7 @@ impl Animal {
         use rand::Rng;
         let mut rng = crate::core::dice::roll();
 
-        let mut product_timers = HashMap::new();
+        let mut product_timers = BTreeMap::new();
         for product in &species.living_products {
             product_timers.insert(product.material_id.clone(), product.production_time);
         }
@@ -1721,7 +1721,7 @@ impl Animal {
         let max_lifespan = rng.gen_range(species.lifespan.0..=species.lifespan.1);
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             species_id,
             position,
             facing: 0.0,
@@ -1958,7 +1958,7 @@ impl Animal {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimalManager {
     animals: Vec<Animal>,
-    groups: HashMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
+    groups: BTreeMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
 
     /// Spawning parameters
     spawn_rate: f32, // Chance per tick to spawn
@@ -1967,7 +1967,7 @@ pub struct AnimalManager {
     /// The most of each species this world has ever held, which is what a
     /// depleted population is judged against
     #[serde(default)]
-    peak_population: HashMap<String, u32>,
+    peak_population: BTreeMap<String, u32>,
 
     /// Size of the map, so animals wandering in from outside know where the
     /// edge is
@@ -1987,10 +1987,10 @@ impl AnimalManager {
     pub fn new(max_population: usize) -> Self {
         Self {
             animals: Vec::new(),
-            groups: HashMap::new(),
+            groups: BTreeMap::new(),
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
-            peak_population: HashMap::new(),
+            peak_population: BTreeMap::new(),
             world_bounds: None,
             ticks_since_migration: 0,
             registry: Some(FaunaRegistry::new()),
@@ -2012,7 +2012,7 @@ impl AnimalManager {
 
     /// Spawn a herd/pack of animals
     pub fn spawn_group(&mut self, species_id: String, center: (i32, i32), count: u32) -> Option<Uuid> {
-        let group_id = Uuid::new_v4();
+        let group_id = crate::core::dice::name();
         let mut members = Vec::new();
 
         let species = self.registry.as_ref()?.get(&species_id)?;
@@ -2359,7 +2359,7 @@ impl AnimalManager {
         // nearly a hundred times what it burns, so hunger never becomes the
         // limit, and herds grew until they hit the hard population cap however
         // little ground they were on.
-        let mut crowding: HashMap<(i32, i32), u32> = HashMap::new();
+        let mut crowding: BTreeMap<(i32, i32), u32> = BTreeMap::new();
         for animal in &self.animals {
             if animal.is_alive() {
                 *crowding
@@ -2369,7 +2369,7 @@ impl AnimalManager {
         }
 
         // Find breeding candidates by species
-        let mut breeding_candidates: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut breeding_candidates: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         for (idx, animal) in self.animals.iter().enumerate() {
             if !animal.can_breed() {
                 continue;
@@ -2625,7 +2625,7 @@ impl AnimalManager {
         };
 
         // What is here now, and the most there has ever been
-        let mut present: HashMap<String, u32> = HashMap::new();
+        let mut present: BTreeMap<String, u32> = BTreeMap::new();
         for animal in &self.animals {
             if animal.is_alive() {
                 *present.entry(animal.species_id.clone()).or_insert(0) += 1;
@@ -2693,7 +2693,7 @@ impl AnimalManager {
         };
 
         // How many grazers are on each patch of ground
-        let mut crowding: HashMap<(i32, i32), f32> = HashMap::new();
+        let mut crowding: BTreeMap<(i32, i32), f32> = BTreeMap::new();
         for animal in &self.animals {
             if !animal.is_alive() {
                 continue;
@@ -2772,7 +2772,7 @@ impl AnimalManager {
             animal.state = AnimalState::Grazing; // Or hunting for carnivores
             animal.state_timer = 40;
             // Move while seeking food
-            let offset = (rand::random::<i32>() % 5 - 2, rand::random::<i32>() % 5 - 2);
+            let offset = (crate::core::dice::any::<i32>() % 5 - 2, crate::core::dice::any::<i32>() % 5 - 2);
             animal.position.0 += offset.0;
             animal.position.1 += offset.1;
             return;
@@ -2784,10 +2784,10 @@ impl AnimalManager {
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 50;
-                } else if is_hungry || rand::random::<f32>() < 0.3 {
+                } else if is_hungry || crate::core::dice::any::<f32>() < 0.3 {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 30;
-                    let offset = (rand::random::<i32>() % 3 - 1, rand::random::<i32>() % 3 - 1);
+                    let offset = (crate::core::dice::any::<i32>() % 3 - 1, crate::core::dice::any::<i32>() % 3 - 1);
                     animal.position.0 += offset.0;
                     animal.position.1 += offset.1;
                 } else {
@@ -2802,7 +2802,7 @@ impl AnimalManager {
                 } else if is_hungry {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 35;
-                } else if rand::random::<f32>() < 0.2 {
+                } else if crate::core::dice::any::<f32>() < 0.2 {
                     animal.state = AnimalState::Drinking;
                     animal.state_timer = 25;
                 } else {
@@ -2814,7 +2814,7 @@ impl AnimalManager {
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 45;
-                } else if is_hungry || rand::random::<f32>() < 0.5 {
+                } else if is_hungry || crate::core::dice::any::<f32>() < 0.5 {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 35;
                 } else {
@@ -2826,10 +2826,10 @@ impl AnimalManager {
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 60;
-                } else if is_wild && (is_hungry || rand::random::<f32>() < 0.3) {
+                } else if is_wild && (is_hungry || crate::core::dice::any::<f32>() < 0.3) {
                     animal.state = AnimalState::Hunting { target_id: None };
                     animal.state_timer = 50;
-                    let offset = (rand::random::<i32>() % 5 - 2, rand::random::<i32>() % 5 - 2);
+                    let offset = (crate::core::dice::any::<i32>() % 5 - 2, crate::core::dice::any::<i32>() % 5 - 2);
                     animal.position.0 += offset.0;
                     animal.position.1 += offset.1;
                 } else {
@@ -2916,7 +2916,7 @@ impl AnimalManager {
         let predator_herds = total_herds.saturating_sub(prey_herds);
 
         // Collect terrain positions by climate zone
-        let mut positions_by_climate: HashMap<ClimateZone, Vec<(i32, i32)>> = HashMap::new();
+        let mut positions_by_climate: BTreeMap<ClimateZone, Vec<(i32, i32)>> = BTreeMap::new();
         for y in 0..grid.height {
             for x in 0..grid.width {
                 let terrain = grid.tiles[y][x].terrain.terrain_type;
@@ -2933,7 +2933,7 @@ impl AnimalManager {
 
         // Spawn herbivore herds
         let mut spawned = 0;
-        let mut prey_present: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut prey_present: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for _ in 0..prey_herds {
             if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
                 break;
@@ -3012,8 +3012,8 @@ impl AnimalManager {
     }
 
     /// Get a summary of spawned animals by species
-    pub fn population_summary(&self) -> HashMap<String, usize> {
-        let mut summary = HashMap::new();
+    pub fn population_summary(&self) -> BTreeMap<String, usize> {
+        let mut summary = BTreeMap::new();
         for animal in &self.animals {
             if animal.is_alive() {
                 *summary.entry(animal.species_id.clone()).or_insert(0) += 1;

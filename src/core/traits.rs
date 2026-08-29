@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// All personality traits that can modify agent behavior
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum Trait {
     // Emotional Response Modifiers
     Anxious,        // Doubles fear increase, halves fear reduction

@@ -7,7 +7,7 @@
 //! - Time-based food spoilage with preservation methods
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::inventory::ItemType;
 
 /// Types of nutrients that agents need
@@ -520,7 +520,7 @@ pub struct FoodTemplate {
 
 /// Registry of food nutritional data
 pub struct FoodDatabase {
-    entries: HashMap<ItemType, FoodTemplate>,
+    entries: BTreeMap<ItemType, FoodTemplate>,
 }
 
 impl Default for FoodDatabase {
@@ -532,7 +532,7 @@ impl Default for FoodDatabase {
 impl FoodDatabase {
     pub fn new() -> Self {
         let mut db = Self {
-            entries: HashMap::new(),
+            entries: BTreeMap::new(),
         };
         db.register_all_foods();
         db

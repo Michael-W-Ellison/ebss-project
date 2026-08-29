@@ -4,7 +4,7 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use egui::{Color32, Pos2, Rect, Stroke, RichText};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::agents::LifeStage;
@@ -229,7 +229,7 @@ fn render_graph_area(
     let zoom = graph_data.zoom;
     let offset = graph_data.offset;
 
-    let positions: HashMap<Uuid, Pos2> = graph_data.node_positions.iter()
+    let positions: BTreeMap<Uuid, Pos2> = graph_data.node_positions.iter()
         .map(|(id, pos)| {
             let screen_x = center.x + (pos.x + offset.0) * zoom;
             let screen_y = center.y + (pos.y + offset.1) * zoom;
@@ -385,10 +385,10 @@ fn compute_layout(graph_data: &mut RelationshipGraphData, snapshot: &Relationshi
     }
 
     let relevant_nodes: Vec<&RelationshipGraphNode> = if let Some(focus_id) = graph_data.focus_agent {
-        let connected: std::collections::HashSet<Uuid> = nodes.iter()
+        let connected: std::collections::BTreeSet<Uuid> = nodes.iter()
             .find(|n| n.agent_id == focus_id)
             .map(|n| {
-                let mut set: std::collections::HashSet<Uuid> = n.relationships.iter()
+                let mut set: std::collections::BTreeSet<Uuid> = n.relationships.iter()
                     .map(|r| r.target_id)
                     .collect();
                 set.insert(focus_id);
@@ -461,7 +461,7 @@ fn run_force_directed_iteration(graph_data: &mut RelationshipGraphData, snapshot
 
     let node_ids: Vec<Uuid> = graph_data.node_positions.keys().copied().collect();
 
-    let mut forces: HashMap<Uuid, (f32, f32)> = HashMap::new();
+    let mut forces: BTreeMap<Uuid, (f32, f32)> = BTreeMap::new();
     for id in &node_ids {
         forces.insert(*id, (0.0, 0.0));
     }

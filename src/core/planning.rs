@@ -94,7 +94,7 @@ impl ActionPlan {
         let total_estimated_ticks = steps.iter().map(|s| s.estimated_ticks).sum();
 
         Self {
-            id: uuid::Uuid::new_v4(),
+            id: crate::core::dice::name(),
             goal_description,
             steps,
             total_estimated_ticks,

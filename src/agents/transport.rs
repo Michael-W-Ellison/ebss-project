@@ -359,7 +359,7 @@ impl Transport {
         };
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             transport_type,
             current_durability: transport_type.durability(),
             active: false,

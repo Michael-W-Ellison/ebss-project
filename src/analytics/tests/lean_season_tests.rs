@@ -41,7 +41,7 @@ fn midsummer_and_friends() -> [(Season, u32); 4] {
 #[test]
 fn a_deer_is_fatter_in_the_autumn_than_in_the_spring() {
     let mut calendar = SeasonalCalendar::default();
-    let mut by_season = std::collections::HashMap::new();
+    let mut by_season = std::collections::BTreeMap::new();
 
     for (season, day) in midsummer_and_friends() {
         calendar.day_of_year = day;

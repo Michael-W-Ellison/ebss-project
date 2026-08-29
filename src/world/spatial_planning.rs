@@ -5,7 +5,7 @@
 //! that minimize travel time and maximize production efficiency.
 
 use super::{World, BuildingType};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Position as (x, y, z) tuple for spatial planning
 pub type Position = (i32, i32, i32);
@@ -39,8 +39,8 @@ pub enum PlacementCriteria {
 /// Spatial planner for intelligent building placement
 pub struct SpatialPlanner<'a> {
     world: &'a World,
-    resource_locations: HashMap<String, Vec<Position>>,
-    building_locations: HashMap<BuildingType, Vec<Position>>,
+    resource_locations: BTreeMap<String, Vec<Position>>,
+    building_locations: BTreeMap<BuildingType, Vec<Position>>,
 }
 
 impl<'a> SpatialPlanner<'a> {
@@ -48,8 +48,8 @@ impl<'a> SpatialPlanner<'a> {
     pub fn new(world: &'a World) -> Self {
         let mut planner = Self {
             world,
-            resource_locations: HashMap::new(),
-            building_locations: HashMap::new(),
+            resource_locations: BTreeMap::new(),
+            building_locations: BTreeMap::new(),
         };
 
         planner.index_world();

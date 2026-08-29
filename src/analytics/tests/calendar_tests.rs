@@ -22,7 +22,7 @@ use crate::environment::{
 };
 use crate::world::soil::Soil;
 use crate::world::{ClimateManager, Position, ResourceNode, ResourceType, TerrainType, World, WorldConfig};
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 /// A year fits inside a run somebody would actually sit through.
 #[test]
@@ -48,7 +48,7 @@ fn a_year_is_shorter_than_a_run() {
 #[test]
 fn every_season_comes_round() {
     let mut climate = ClimateManager::new(false, false);
-    let mut seen: HashSet<Season> = HashSet::new();
+    let mut seen: BTreeSet<Season> = BTreeSet::new();
 
     for _ in 0..TICKS_PER_YEAR {
         climate.tick();

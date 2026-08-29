@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn test_remember_interaction() {
         let mut manager = MemoryManager::new();
-        let other_agent = Uuid::new_v4();
+        let other_agent = crate::core::dice::name();
 
         manager.remember_interaction(
             other_agent,
@@ -457,7 +457,7 @@ mod tests {
     #[test]
     fn test_emotional_association() {
         let mut manager = MemoryManager::new();
-        let friend = Uuid::new_v4();
+        let friend = crate::core::dice::name();
 
         // Multiple positive interactions
         for _ in 0..3 {
@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn test_recall_relevant() {
         let mut manager = MemoryManager::new();
-        let agent = Uuid::new_v4();
+        let agent = crate::core::dice::name();
 
         manager.record_event(
             EpisodeType::SocialInteraction,

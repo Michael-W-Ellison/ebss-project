@@ -248,7 +248,7 @@ impl Grid {
     fn ensure_terrain_diversity(&mut self, rng: &mut impl Rng) {
 
         // Count terrain types
-        let mut terrain_counts: std::collections::HashMap<TerrainType, usize> = std::collections::HashMap::new();
+        let mut terrain_counts: std::collections::BTreeMap<TerrainType, usize> = std::collections::BTreeMap::new();
         for row in &self.tiles {
             for tile in row {
                 *terrain_counts.entry(tile.terrain.terrain_type).or_insert(0) += 1;
@@ -360,7 +360,7 @@ impl Grid {
 
     /// Find path from start to end (simple breadth-first search)
     pub fn find_path(&self, start: &Position, end: &Position) -> Option<Vec<Position>> {
-        use std::collections::{HashMap, VecDeque};
+        use std::collections::{BTreeMap, VecDeque};
 
         if !self.is_valid_position(start) || !self.is_valid_position(end) {
             return None;
@@ -371,8 +371,8 @@ impl Grid {
         }
 
         let mut queue = VecDeque::new();
-        let mut came_from: HashMap<Position, Position> = HashMap::new();
-        let mut visited = HashMap::new();
+        let mut came_from: BTreeMap<Position, Position> = BTreeMap::new();
+        let mut visited = BTreeMap::new();
 
         queue.push_back(*start);
         visited.insert(*start, true);
@@ -418,7 +418,7 @@ impl Grid {
     /// Find path avoiding both terrain obstacles and occupied positions
     /// Returns the next position to move to (first step of path), not the full path
     pub fn find_path_with_agents(&self, start: &Position, end: &Position, occupied_positions: &[Position]) -> Option<Position> {
-        use std::collections::{HashMap, VecDeque};
+        use std::collections::{BTreeMap, VecDeque};
 
         if !self.is_valid_position(start) || !self.is_valid_position(end) {
             return None;
@@ -436,8 +436,8 @@ impl Grid {
         }
 
         let mut queue = VecDeque::new();
-        let mut came_from: HashMap<Position, Position> = HashMap::new();
-        let mut visited = HashMap::new();
+        let mut came_from: BTreeMap<Position, Position> = BTreeMap::new();
+        let mut visited = BTreeMap::new();
 
         queue.push_back(*start);
         visited.insert(*start, true);

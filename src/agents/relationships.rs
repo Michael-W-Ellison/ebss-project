@@ -4,7 +4,7 @@
 //! Tracks relationship status (how much they like each other) and trust
 //! (how much they believe information from each other) separately.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -275,13 +275,13 @@ impl Relationship {
 /// Agent's social network - all relationships with other agents
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SocialNetwork {
-    relationships: HashMap<Uuid, Relationship>,
+    relationships: BTreeMap<Uuid, Relationship>,
 }
 
 impl SocialNetwork {
     pub fn new() -> Self {
         Self {
-            relationships: HashMap::new(),
+            relationships: BTreeMap::new(),
         }
     }
 
@@ -374,14 +374,14 @@ mod tests {
 
     #[test]
     fn test_information_verification() {
-        let mut rel = Relationship::new(Uuid::new_v4(), 0);
+        let mut rel = Relationship::new(crate::core::dice::name(), 0);
 
         // Correct recent information builds trust quickly
         rel.verify_information(50, 100);
         assert!(rel.trust_level.value() > 0);
 
         // Wrong recent information hurts trust
-        let mut rel2 = Relationship::new(Uuid::new_v4(), 0);
+        let mut rel2 = Relationship::new(crate::core::dice::name(), 0);
         rel2.incorrect_information(50, 100);
         assert!(rel2.trust_level.value() < 0);
     }
@@ -389,14 +389,14 @@ mod tests {
     #[test]
     fn test_friendship_forgiveness() {
         // Friend with high relationship
-        let mut friend = Relationship::new(Uuid::new_v4(), 0);
+        let mut friend = Relationship::new(crate::core::dice::name(), 0);
         friend.relationship_level = RelationshipLevel::Loves(3);
 
         // Give wrong info
         friend.incorrect_information(50, 100);
 
         // Stranger with neutral relationship
-        let mut stranger = Relationship::new(Uuid::new_v4(), 0);
+        let mut stranger = Relationship::new(crate::core::dice::name(), 0);
         stranger.incorrect_information(50, 100);
 
         // Friend should have less trust penalty than stranger

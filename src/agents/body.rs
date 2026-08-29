@@ -3,7 +3,7 @@
 
 use crate::agents::equipment::{Equipment, EquipmentSlot};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Type of injury
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,7 +100,7 @@ impl Injury {
 }
 
 /// Body part types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum BodyPartType {
     Head,
     LeftArm,
@@ -412,14 +412,14 @@ impl BodyPart {
 /// Complete body system for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Body {
-    pub parts: HashMap<BodyPartType, BodyPart>,
+    pub parts: BTreeMap<BodyPartType, BodyPart>,
     /// Equipped items by slot
-    pub equipment: HashMap<EquipmentSlot, Equipment>,
+    pub equipment: BTreeMap<EquipmentSlot, Equipment>,
 }
 
 impl Body {
     pub fn new() -> Self {
-        let mut parts = HashMap::new();
+        let mut parts = BTreeMap::new();
 
         for part_type in BodyPartType::all() {
             parts.insert(part_type, BodyPart::new(part_type));
@@ -427,7 +427,7 @@ impl Body {
 
         Self {
             parts,
-            equipment: HashMap::new(),
+            equipment: BTreeMap::new(),
         }
     }
 

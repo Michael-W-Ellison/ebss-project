@@ -67,8 +67,8 @@ fn main() {
     println!("\n--- Part 2: Vision and Hearing ---");
 
     // Add visible agents
-    let agent_1 = Uuid::new_v4();
-    let agent_2 = Uuid::new_v4();
+    let agent_1 = ebss::core::dice::name();
+    let agent_2 = ebss::core::dice::name();
     agent.senses.vision.visible_agents.insert(agent_1);
     agent.senses.vision.visible_agents.insert(agent_2);
 

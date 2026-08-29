@@ -67,6 +67,7 @@ thread_local! {
 /// thread, which is what makes it safe under a test runner that gives every
 /// test a thread of its own.
 pub fn seed(what: u64) {
+    DRAWS.with(|d| d.set(0));
     THE_STREAM.with(|stream| *stream.borrow_mut() = StdRng::seed_from_u64(what));
 }
 
@@ -74,11 +75,64 @@ pub fn seed(what: u64) {
 ///
 /// Stands exactly where `crate::core::dice::roll()` stood. Draw one, roll it as many
 /// times as the job wants, and drop it.
+/// How many draws have been taken on this thread since it was last seeded.
+///
+/// The instrument that found the last of it. If two runs of the same seed
+/// disagree, the point at which this count parts company is the point at which
+/// something decided a branch on an input the seed does not fix - which is a
+/// different fault, and a different place to look, from a roll that came out
+/// the same but was *used* differently.
+#[doc(hidden)]
+pub fn draws_taken() -> u64 {
+    DRAWS.with(|d| d.get())
+}
+
+thread_local! {
+    static DRAWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 pub fn roll() -> StdRng {
+    DRAWS.with(|d| d.set(d.get() + 1));
     THE_STREAM.with(|stream| {
         let mut stream = stream.borrow_mut();
         StdRng::seed_from_u64(stream.next_u64())
     })
+}
+
+/// One value of whatever type is asked for, drawn from this stream.
+///
+/// Stands where `rand::random::<T>()` stood. That call is `thread_rng` under
+/// another name, so ten sites in the fauna and flora - every wander an animal
+/// takes, and whether it grazes, rests or hunts - were rolling outside the
+/// seeded stream. Those ten were enough on their own: **the beasts moved
+/// differently in every run of the same seed**, and by the fiftieth tick that
+/// had reached the people, through the Safety drive of anyone who could see
+/// one.
+pub fn any<T>() -> T
+where
+    rand::distributions::Standard: rand::distributions::Distribution<T>,
+{
+    use rand::Rng;
+    roll().gen::<T>()
+}
+
+/// A name for a new thing, drawn from the same stream as everything else.
+///
+/// `Uuid::new_v4` asks the operating system, not this stream, so every agent,
+/// building and relationship in a run got a name no seed could reach. That
+/// mattered far more than it looks: an id is not only a label. It is a
+/// `BTreeMap` key, a sort key and a tie-break, so **two runs of the same seed
+/// disagreed about who was who** before a single decision had been taken, and
+/// every ordering downstream of an id disagreed with them.
+///
+/// Same layout as a v4 - version and variant bits set the same way - so
+/// nothing that reads a `Uuid` can tell the difference. Only the source of the
+/// sixteen bytes has changed.
+pub fn name() -> uuid::Uuid {
+    DRAWS.with(|d| d.set(d.get() + 1));
+    let mut bytes = [0u8; 16];
+    THE_STREAM.with(|stream| stream.borrow_mut().fill_bytes(&mut bytes));
+    uuid::Builder::from_random_bytes(bytes).into_uuid()
 }
 
 #[cfg(test)]
@@ -121,5 +175,28 @@ mod tests {
         let mut mine = roll();
         let theirs = roll().gen_range(0..10);
         let _ = mine.gen_range(0..10) + theirs;
+    }
+
+    /// A name is drawn from the stream too, so the same seed names the same
+    /// people. This is the half of repeatability that `roll` alone does not
+    /// buy: ids are keys and tie-breaks, so if they differ the orderings that
+    /// hang off them differ with them.
+    #[test]
+    fn the_same_seed_names_the_same_people() {
+        let run = || {
+            seed(99);
+            (0..8).map(|_| name()).collect::<Vec<_>>()
+        };
+
+        assert_eq!(run(), run());
+    }
+
+    /// And it is still a v4 by its bits, so nothing downstream can tell.
+    #[test]
+    fn a_name_is_shaped_like_the_one_it_replaces() {
+        seed(5);
+        let it = name();
+        assert_eq!(it.get_version_num(), 4);
+        assert_ne!(it, uuid::Uuid::nil());
     }
 }

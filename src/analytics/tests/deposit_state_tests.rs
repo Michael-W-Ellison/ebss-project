@@ -49,7 +49,7 @@ fn seeing_a_place_again_is_seeing_how_much_is_left_of_it() {
 #[test]
 fn a_reported_place_is_remembered_at_the_size_it_was_reported() {
     let mut map = ExplorationKnowledge::new();
-    let told_me = uuid::Uuid::new_v4();
+    let told_me = crate::core::dice::name();
     let seam = Position::new(30, 30);
 
     map.take_their_word_for_it(seam, ResourceType::Clay, told_me, 90, Some(2), 100);
@@ -68,7 +68,7 @@ fn a_reported_place_is_remembered_at_the_size_it_was_reported() {
 
 fn said(how_much: Option<u32>) -> Hearsay {
     Hearsay {
-        who: uuid::Uuid::new_v4(),
+        who: crate::core::dice::name(),
         they_saw_it_on: 1000,
         told_me_on: 1000,
         how_much_they_said: how_much,

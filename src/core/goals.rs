@@ -76,7 +76,7 @@ impl Goal {
     /// Create a new internal goal
     pub fn new_internal(internal_goal: InternalGoal, priority: f32, tick: u32) -> Self {
         Self {
-            id: uuid::Uuid::new_v4(),
+            id: crate::core::dice::name(),
             goal_type: GoalType::Internal,
             internal: Some(internal_goal),
             external: None,
@@ -90,7 +90,7 @@ impl Goal {
     /// Create a new external goal
     pub fn new_external(external_goal: ExternalGoal, priority: f32, tick: u32) -> Self {
         Self {
-            id: uuid::Uuid::new_v4(),
+            id: crate::core::dice::name(),
             goal_type: GoalType::External,
             internal: None,
             external: Some(external_goal),
@@ -249,17 +249,17 @@ pub struct GoalWorldState {
     /// Whether agent has protection equipment
     pub has_protection: bool,
     /// Items the agent has crafted (item name -> count)
-    pub crafted_items: std::collections::HashMap<String, u32>,
+    pub crafted_items: std::collections::BTreeMap<String, u32>,
     /// Structures the agent has built (structure name -> count)
-    pub built_structures: std::collections::HashMap<String, u32>,
+    pub built_structures: std::collections::BTreeMap<String, u32>,
     /// Skills the agent has learned (skill name -> level)
-    pub learned_skills: std::collections::HashMap<String, i32>,
+    pub learned_skills: std::collections::BTreeMap<String, i32>,
     /// Relationships formed (relationship type -> count)
-    pub relationships_formed: std::collections::HashMap<String, u32>,
+    pub relationships_formed: std::collections::BTreeMap<String, u32>,
     /// Jobs completed (job name -> count)
-    pub jobs_completed: std::collections::HashMap<String, u32>,
+    pub jobs_completed: std::collections::BTreeMap<String, u32>,
     /// Current emotion levels (emotion type -> value 0.0-1.0)
-    pub emotion_levels: std::collections::HashMap<String, f32>,
+    pub emotion_levels: std::collections::BTreeMap<String, f32>,
     /// Current overall well-being (0.0-1.0)
     pub well_being: f32,
     /// Current stress level (0.0-1.0)

@@ -7,7 +7,7 @@ use crate::gui::events::{SimulationEvent, SimulationEventType, DeathCause};
 #[cfg(not(feature = "gui"))]
 use crate::agents::population::gui_stubs::{SimulationEvent, SimulationEventType, DeathCause};
 use uuid::Uuid;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[cfg(not(feature = "gui"))]
 mod gui_stubs {
@@ -61,7 +61,7 @@ mod gui_stubs {
     impl SimulationEvent {
         pub fn new(tick: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
             Self {
-                id: Uuid::new_v4(),
+                id: crate::core::dice::name(),
                 tick,
                 event_type,
                 position,
@@ -97,7 +97,7 @@ pub struct PopulationStats {
     /// causes of death were classified for a GUI timeline and then thrown
     /// away. A count of the dead by cause, and of the living who could not
     /// breed and why, is one hash lookup on paths that run rarely.
-    pub how_it_went: std::collections::HashMap<String, u64>,
+    pub how_it_went: std::collections::BTreeMap<String, u64>,
 }
 
 /// Configuration for population behavior
@@ -125,9 +125,9 @@ pub struct Population {
     pub agents: Vec<Agent>,
     pub stats: PopulationStats,
     pub mate_criteria: MateSelectionCriteria,
-    pub reproduction_cooldown: HashMap<Uuid, u32>,
+    pub reproduction_cooldown: BTreeMap<Uuid, u32>,
     pub config: PopulationConfig,
-    pub unhappiness_tracker: HashMap<Uuid, u32>, // Track how long agents have been unhappy
+    pub unhappiness_tracker: BTreeMap<Uuid, u32>, // Track how long agents have been unhappy
     pub current_tick: u32, // Current simulation tick for survival mechanics
     pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
     pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
@@ -151,9 +151,9 @@ impl Population {
             agents: Vec::new(),
             stats: PopulationStats::default(),
             mate_criteria: MateSelectionCriteria::default(),
-            reproduction_cooldown: HashMap::new(),
+            reproduction_cooldown: BTreeMap::new(),
             config: PopulationConfig::default(),
-            unhappiness_tracker: HashMap::new(),
+            unhappiness_tracker: BTreeMap::new(),
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
@@ -172,9 +172,9 @@ impl Population {
             agents: Vec::new(),
             stats: PopulationStats::default(),
             mate_criteria: MateSelectionCriteria::default(),
-            reproduction_cooldown: HashMap::new(),
+            reproduction_cooldown: BTreeMap::new(),
             config,
-            unhappiness_tracker: HashMap::new(),
+            unhappiness_tracker: BTreeMap::new(),
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
@@ -543,7 +543,7 @@ impl Population {
     /// Relationships fade over time if agents don't spend time together.
     fn decay_relationships(&mut self) {
         // First, collect agent positions to avoid borrowing issues
-        let agent_positions: std::collections::HashMap<Uuid, (i32, i32, i32)> =
+        let agent_positions: std::collections::BTreeMap<Uuid, (i32, i32, i32)> =
             self.agents.iter()
                 .map(|a| (a.id, a.state.position))
                 .collect();

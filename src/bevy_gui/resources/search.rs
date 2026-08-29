@@ -187,14 +187,14 @@ mod tests {
 
         // Add some mock results
         state.results.push(SearchResult::Agent {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             position: (0, 0),
             life_stage: LifeStage::Adult,
             health: 100.0,
             energy: 100.0,
         });
         state.results.push(SearchResult::Agent {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             position: (1, 1),
             life_stage: LifeStage::Child,
             health: 80.0,
@@ -224,7 +224,7 @@ mod tests {
         let mut state = SearchState::default();
         state.query = "test".to_string();
         state.results.push(SearchResult::Agent {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             position: (0, 0),
             life_stage: LifeStage::Adult,
             health: 100.0,

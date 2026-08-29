@@ -2,7 +2,7 @@
 //! Memory system for agents with dynamic expansion and management.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// Type of memory
@@ -118,7 +118,7 @@ pub enum MemoryData {
 impl MemoryEntry {
     pub fn new(memory_type: MemoryType, importance: MemoryImportance, data: MemoryData, timestamp: u64) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             memory_type,
             importance,
             strength: 1.0,
@@ -376,7 +376,7 @@ impl Memory {
         };
 
         // Count memories by type
-        let mut by_type: HashMap<String, usize> = HashMap::new();
+        let mut by_type: BTreeMap<String, usize> = BTreeMap::new();
         for memory in &self.spatial_memories {
             let type_name = format!("{:?}", memory.memory_type);
             *by_type.entry(type_name).or_insert(0) += 1;
@@ -385,7 +385,7 @@ impl Memory {
         *by_type.entry("Knowledge".to_string()).or_insert(0) += self.knowledge.len();
 
         // Categorize by strength/importance
-        let mut by_importance: HashMap<String, usize> = HashMap::new();
+        let mut by_importance: BTreeMap<String, usize> = BTreeMap::new();
         for memory in &self.spatial_memories {
             let importance = if memory.confidence > 0.8 {
                 "Strong"
@@ -502,9 +502,9 @@ impl Default for Memory {
 pub struct MemoryStats {
     pub total_memories: usize,
     /// Count of memories by type (e.g., "Food", "Water", "Knowledge")
-    pub by_type: HashMap<String, usize>,
+    pub by_type: BTreeMap<String, usize>,
     /// Count of memories by strength/importance (e.g., "Strong", "Moderate", "Weak")
-    pub by_importance: HashMap<String, usize>,
+    pub by_importance: BTreeMap<String, usize>,
     pub average_strength: f32,
 }
 

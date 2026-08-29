@@ -10,10 +10,10 @@
 //! - `agents::Inventory`: Full-featured personal inventory with weight limits
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Types of items that can be held in inventory
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum ItemType {
     // === Basic Resources ===
     Wood,
@@ -303,7 +303,7 @@ impl Item {
 /// durability, or quality - just quantities of each item type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorehouseInventory {
-    pub items: HashMap<ItemType, Item>,
+    pub items: BTreeMap<ItemType, Item>,
     pub capacity: u32, // Maximum total quantity
 }
 
@@ -313,7 +313,7 @@ pub type Inventory = StorehouseInventory;
 impl StorehouseInventory {
     pub fn new(capacity: u32) -> Self {
         Self {
-            items: HashMap::new(),
+            items: BTreeMap::new(),
             capacity,
         }
     }

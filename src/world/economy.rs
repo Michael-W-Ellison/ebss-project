@@ -2,7 +2,7 @@
 //! Economic system with trading, supply/demand, and marketplace mechanics.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 use crate::world::ItemType;
 
@@ -28,7 +28,7 @@ impl TradeOffer {
         duration: u32,
     ) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             seller_id,
             offering,
             requesting,
@@ -150,7 +150,7 @@ pub struct Marketplace {
     pub offers: Vec<TradeOffer>,
 
     /// Market data for each item type
-    pub market_data: HashMap<ItemType, MarketData>,
+    pub market_data: BTreeMap<ItemType, MarketData>,
 
     /// Completed trades (for history)
     pub completed_trades: Vec<CompletedTrade>,
@@ -167,7 +167,7 @@ pub struct CompletedTrade {
 
 impl Marketplace {
     pub fn new() -> Self {
-        let mut market_data = HashMap::new();
+        let mut market_data = BTreeMap::new();
 
         // Initialize base prices for all item types
         for item_type in ItemType::all_types() {
@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn test_trade_offer_creation() {
-        let seller = Uuid::new_v4();
+        let seller = crate::core::dice::name();
         let offer = TradeOffer::new(
             seller,
             vec![(ItemType::Bread, 5)],
@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn test_marketplace_post_offer() {
         let mut market = Marketplace::new();
-        let seller = Uuid::new_v4();
+        let seller = crate::core::dice::name();
 
         let offer = TradeOffer::new(
             seller,
@@ -513,8 +513,8 @@ mod tests {
     #[test]
     fn test_marketplace_complete_trade() {
         let mut market = Marketplace::new();
-        let seller = Uuid::new_v4();
-        let buyer = Uuid::new_v4();
+        let seller = crate::core::dice::name();
+        let buyer = crate::core::dice::name();
 
         let offer = TradeOffer::new(
             seller,
@@ -544,7 +544,7 @@ mod tests {
         let mut market = Marketplace::new();
 
         let offer1 = TradeOffer::new(
-            Uuid::new_v4(),
+            crate::core::dice::name(),
             vec![(ItemType::Bread, 5)],
             vec![],
             20,
@@ -553,7 +553,7 @@ mod tests {
         );
 
         let offer2 = TradeOffer::new(
-            Uuid::new_v4(),
+            crate::core::dice::name(),
             vec![(ItemType::Wood, 10)],
             vec![],
             15,
@@ -594,7 +594,7 @@ mod tests {
         let mut market = Marketplace::new();
 
         let offer1 = TradeOffer::new(
-            Uuid::new_v4(),
+            crate::core::dice::name(),
             vec![(ItemType::Bread, 5)],
             vec![(ItemType::Wood, 10)],
             20,
@@ -603,7 +603,7 @@ mod tests {
         );
 
         let offer2 = TradeOffer::new(
-            Uuid::new_v4(),
+            crate::core::dice::name(),
             vec![(ItemType::Wood, 15)],
             vec![(ItemType::Bread, 3)],
             25,

@@ -2,7 +2,7 @@
 //! Environment plugin trait and related types.
 
 use std::any::Any;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use super::{
     Material, Action, ActionContext, ActionResult,
@@ -53,7 +53,7 @@ pub struct WorldState {
     /// Temperature
     pub temperature: f32,
     /// Custom state data (plugin-specific)
-    pub custom_data: HashMap<String, String>,
+    pub custom_data: BTreeMap<String, String>,
 }
 
 impl WorldState {
@@ -64,7 +64,7 @@ impl WorldState {
             time_of_day: 0.0,
             weather: "clear".to_string(),
             temperature: 20.0,
-            custom_data: HashMap::new(),
+            custom_data: BTreeMap::new(),
         }
     }
 
@@ -84,7 +84,7 @@ pub struct PluginConfig {
     /// Difficulty level (0.0 to 1.0)
     pub difficulty: f32,
     /// Custom configuration (plugin-specific)
-    pub custom_config: HashMap<String, String>,
+    pub custom_config: BTreeMap<String, String>,
 }
 
 impl PluginConfig {
@@ -94,7 +94,7 @@ impl PluginConfig {
             seed,
             world_size: (256, 256, 128),
             difficulty: 0.5,
-            custom_config: HashMap::new(),
+            custom_config: BTreeMap::new(),
         }
     }
 
@@ -104,7 +104,7 @@ impl PluginConfig {
             seed,
             world_size: (64, 64, 64),
             difficulty: 0.5,
-            custom_config: HashMap::new(),
+            custom_config: BTreeMap::new(),
         }
     }
 
@@ -114,7 +114,7 @@ impl PluginConfig {
             seed,
             world_size: (128, 128, 96),
             difficulty: 0.5,
-            custom_config: HashMap::new(),
+            custom_config: BTreeMap::new(),
         }
     }
 
@@ -129,7 +129,7 @@ impl PluginConfig {
             seed,
             world_size: (512, 512, 160),
             difficulty: 0.5,
-            custom_config: HashMap::new(),
+            custom_config: BTreeMap::new(),
         }
     }
 
@@ -139,7 +139,7 @@ impl PluginConfig {
             seed,
             world_size: (1024, 1024, 192),
             difficulty: 0.5,
-            custom_config: HashMap::new(),
+            custom_config: BTreeMap::new(),
         }
     }
 
@@ -149,7 +149,7 @@ impl PluginConfig {
             seed,
             world_size: (width, depth, height),
             difficulty: 0.5,
-            custom_config: HashMap::new(),
+            custom_config: BTreeMap::new(),
         }
     }
 

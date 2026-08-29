@@ -4,14 +4,14 @@
 use ebss::environment::*;
 use ebss::core::DriveType;
 use std::any::Any;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 // Mock plugin for testing
 struct TestPlugin {
     metadata: PluginMetadata,
     world_state: WorldState,
-    materials: HashMap<String, Material>,
-    actions: HashMap<String, Action>,
+    materials: BTreeMap<String, Material>,
+    actions: BTreeMap<String, Action>,
     recipe_book: RecipeBook,
     initialized: bool,
 }
@@ -25,8 +25,8 @@ impl TestPlugin {
                 "1.0.0".to_string(),
             ),
             world_state: WorldState::new(0),
-            materials: HashMap::new(),
-            actions: HashMap::new(),
+            materials: BTreeMap::new(),
+            actions: BTreeMap::new(),
             recipe_book: RecipeBook::new(),
             initialized: false,
         };
@@ -274,7 +274,7 @@ fn test_crafting_requirements() {
         .with_input(Ingredient::new("wood".to_string(), 3))
         .with_input(Ingredient::new("sticks".to_string(), 2));
 
-    let mut inventory = HashMap::new();
+    let mut inventory = BTreeMap::new();
     inventory.insert("wood".to_string(), 3);
     inventory.insert("sticks".to_string(), 2);
 

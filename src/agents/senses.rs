@@ -2,7 +2,7 @@
 //! Sensory system for agents including sight, hearing, and speech.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use uuid::Uuid;
 
 /// Visual perception system
@@ -17,9 +17,9 @@ pub struct Vision {
     /// Whether vision is currently impaired (darkness, blindness, etc.)
     pub impaired: bool,
     /// Currently visible agents
-    pub visible_agents: HashSet<Uuid>,
+    pub visible_agents: BTreeSet<Uuid>,
     /// Currently visible positions (materials/terrain)
-    pub visible_positions: HashSet<(i32, i32, i32)>,
+    pub visible_positions: BTreeSet<(i32, i32, i32)>,
 }
 
 impl Vision {
@@ -29,8 +29,8 @@ impl Vision {
             detection_range,
             acuity: acuity.clamp(0.0, 1.0),
             impaired: false,
-            visible_agents: HashSet::new(),
-            visible_positions: HashSet::new(),
+            visible_agents: BTreeSet::new(),
+            visible_positions: BTreeSet::new(),
         }
     }
 
@@ -191,7 +191,7 @@ pub struct Speech {
     /// Speech impairment (injury, enchantment, etc.)
     pub impaired: bool,
     /// Languages known by agent
-    pub known_languages: HashSet<String>,
+    pub known_languages: BTreeSet<String>,
     /// Recent utterances
     pub recent_speech: Vec<Utterance>,
 }
@@ -719,7 +719,7 @@ mod tests {
     #[test]
     fn test_vision_impairment() {
         let mut vision = Vision::default();
-        vision.visible_agents.insert(Uuid::new_v4());
+        vision.visible_agents.insert(crate::core::dice::name());
 
         vision.set_impaired(true);
         assert!(vision.impaired);
@@ -859,7 +859,7 @@ mod tests {
     #[test]
     fn test_sensory_memory_agent() {
         let mut memory = SensoryMemory::new(10);
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
 
         memory.remember_agent(agent_id, (10, 10, 0));
         assert_eq!(memory.get_agent_position(agent_id), Some((10, 10, 0)));
@@ -885,7 +885,7 @@ mod tests {
         let mut memory = SensoryMemory::new(3);
 
         for i in 0..5 {
-            let id = Uuid::new_v4();
+            let id = crate::core::dice::name();
             memory.remember_agent(id, (i, i, 0));
         }
 

@@ -111,7 +111,7 @@ fn strange_plants_grow_in_the_world() {
         patches.len()
     );
 
-    let kinds: std::collections::HashSet<u8> =
+    let kinds: std::collections::BTreeSet<u8> =
         patches.iter().map(|resource| resource.kind).collect();
     assert!(
         kinds.len() >= 2,

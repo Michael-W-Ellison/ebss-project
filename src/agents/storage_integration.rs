@@ -2,8 +2,8 @@
 //! Integration layer between agent inventory and world storehouse.
 //!
 //! Bridges the gap between the two inventory systems:
-//! - Agent: HashMap<String, InventoryItem> (string-based IDs, weight tracking)
-//! - World: HashMap<ItemType, Item> (enum-based, simple quantity)
+//! - Agent: BTreeMap<String, InventoryItem> (string-based IDs, weight tracking)
+//! - World: BTreeMap<ItemType, Item> (enum-based, simple quantity)
 
 use crate::world::ItemType;
 use super::agent::{Inventory, InventoryItem};

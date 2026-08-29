@@ -2,7 +2,7 @@
 //! Time-series metrics tracking for simulation analysis.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::agents::Population;
 use crate::core::{DriveType, EmotionType, Trait};
@@ -12,9 +12,9 @@ use crate::core::{DriveType, EmotionType, Trait};
 pub struct TickSnapshot {
     pub tick: u32,
     pub population: PopulationSnapshot,
-    pub drives: HashMap<DriveType, DriveSnapshot>,
-    pub emotions: HashMap<EmotionType, EmotionSnapshot>,
-    pub traits: HashMap<Trait, u32>, // Count of agents with each trait
+    pub drives: BTreeMap<DriveType, DriveSnapshot>,
+    pub emotions: BTreeMap<EmotionType, EmotionSnapshot>,
+    pub traits: BTreeMap<Trait, u32>, // Count of agents with each trait
     pub relationships: RelationshipSnapshot,
     pub goals: GoalSnapshot,
     pub curiosity: CuriositySnapshot,
@@ -24,7 +24,7 @@ pub struct TickSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PopulationSnapshot {
     pub total: usize,
-    pub by_life_stage: HashMap<String, usize>, // Infant, Child, etc.
+    pub by_life_stage: BTreeMap<String, usize>, // Infant, Child, etc.
     pub births_this_tick: u32,
     pub deaths_this_tick: u32,
     pub abandonments_this_tick: u32,
@@ -55,7 +55,7 @@ pub struct EmotionSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipSnapshot {
     pub total_relationships: usize,
-    pub by_strength: HashMap<String, usize>, // CloseFriend, Friend, etc.
+    pub by_strength: BTreeMap<String, usize>, // CloseFriend, Friend, etc.
     pub average_trust: f32,
     pub average_affection: f32,
     pub family_bonds: usize,
@@ -76,7 +76,7 @@ pub struct GoalSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CuriositySnapshot {
     pub total_discoveries: usize,
-    pub discoveries_by_type: HashMap<String, usize>,
+    pub discoveries_by_type: BTreeMap<String, usize>,
     pub average_exploration_efficiency: f32,
     pub total_curiosity_driven_explorations: u32,
     pub average_curiosity_satisfaction: f32,
@@ -141,7 +141,7 @@ impl SimulationMetrics {
     fn snapshot_population(&self, population: &Population) -> PopulationSnapshot {
         let total = population.agents.len();
 
-        let mut by_life_stage = HashMap::new();
+        let mut by_life_stage = BTreeMap::new();
         let mut total_age = 0u32;
 
         for agent in &population.agents {
@@ -167,8 +167,8 @@ impl SimulationMetrics {
         }
     }
 
-    fn snapshot_drives(&self, population: &Population) -> HashMap<DriveType, DriveSnapshot> {
-        let mut drive_map: HashMap<DriveType, Vec<f32>> = HashMap::new();
+    fn snapshot_drives(&self, population: &Population) -> BTreeMap<DriveType, DriveSnapshot> {
+        let mut drive_map: BTreeMap<DriveType, Vec<f32>> = BTreeMap::new();
 
         // Collect all drive values
         for agent in &population.agents {
@@ -196,8 +196,8 @@ impl SimulationMetrics {
             .collect()
     }
 
-    fn snapshot_emotions(&self, population: &Population) -> HashMap<EmotionType, EmotionSnapshot> {
-        let mut emotion_map: HashMap<EmotionType, Vec<f32>> = HashMap::new();
+    fn snapshot_emotions(&self, population: &Population) -> BTreeMap<EmotionType, EmotionSnapshot> {
+        let mut emotion_map: BTreeMap<EmotionType, Vec<f32>> = BTreeMap::new();
         let mut well_being_sum = 0.0;
 
         for agent in &population.agents {
@@ -250,8 +250,8 @@ impl SimulationMetrics {
             .collect()
     }
 
-    fn snapshot_traits(&self, population: &Population) -> HashMap<Trait, u32> {
-        let mut trait_counts: HashMap<Trait, u32> = HashMap::new();
+    fn snapshot_traits(&self, population: &Population) -> BTreeMap<Trait, u32> {
+        let mut trait_counts: BTreeMap<Trait, u32> = BTreeMap::new();
 
         for agent in &population.agents {
             for trait_type in agent.traits.get_traits() {
@@ -264,7 +264,7 @@ impl SimulationMetrics {
 
     fn snapshot_relationships(&self, population: &Population) -> RelationshipSnapshot {
         let mut total_relationships = 0;
-        let mut by_strength: HashMap<String, usize> = HashMap::new();
+        let mut by_strength: BTreeMap<String, usize> = BTreeMap::new();
         let mut trust_sum = 0.0;
         let mut affection_sum = 0.0;
         let mut family_bonds = 0;
@@ -369,7 +369,7 @@ impl SimulationMetrics {
 
     fn snapshot_curiosity(&self, population: &Population) -> CuriositySnapshot {
         let mut total_discoveries = 0;
-        let mut combined_discoveries: HashMap<String, usize> = HashMap::new();
+        let mut combined_discoveries: BTreeMap<String, usize> = BTreeMap::new();
         let mut total_efficiency = 0.0;
         let mut total_explorations = 0u32;
         let mut total_satisfaction = 0.0;

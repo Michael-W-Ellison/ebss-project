@@ -2,7 +2,7 @@
 //! Crafting system for creating items from materials.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::{ToolType, ToolTier, MaterialCategory};
 use crate::agents::{Quality, skills::RecycledMaterial};
 
@@ -119,7 +119,7 @@ pub struct CraftingTemplate {
     pub unlocked: bool,
 
     /// Custom properties
-    pub properties: HashMap<String, String>,
+    pub properties: BTreeMap<String, String>,
 }
 
 impl CraftingTemplate {
@@ -140,7 +140,7 @@ impl CraftingTemplate {
             required_skill: None,
             discoverable: false,
             unlocked: true,
-            properties: HashMap::new(),
+            properties: BTreeMap::new(),
         }
     }
 
@@ -203,7 +203,7 @@ impl CraftingTemplate {
     }
 
     /// Check if agent has the required materials
-    pub fn has_materials(&self, inventory: &HashMap<String, u32>) -> bool {
+    pub fn has_materials(&self, inventory: &BTreeMap<String, u32>) -> bool {
         self.inputs.iter().all(|ingredient| {
             inventory
                 .get(&ingredient.material_id)
@@ -219,16 +219,16 @@ impl CraftingTemplate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecipeBook {
     /// All recipes in the game
-    recipes: HashMap<String, CraftingTemplate>,
+    recipes: BTreeMap<String, CraftingTemplate>,
     /// Recipes discovered by agent
-    discovered: HashMap<String, bool>,
+    discovered: BTreeMap<String, bool>,
 }
 
 impl RecipeBook {
     pub fn new() -> Self {
         Self {
-            recipes: HashMap::new(),
-            discovered: HashMap::new(),
+            recipes: BTreeMap::new(),
+            discovered: BTreeMap::new(),
         }
     }
 
@@ -261,7 +261,7 @@ impl RecipeBook {
             .collect()
     }
 
-    pub fn craftable_recipes(&self, inventory: &HashMap<String, u32>) -> Vec<&CraftingTemplate> {
+    pub fn craftable_recipes(&self, inventory: &BTreeMap<String, u32>) -> Vec<&CraftingTemplate> {
         self.available_recipes()
             .into_iter()
             .filter(|recipe| recipe.has_materials(inventory))
@@ -385,7 +385,7 @@ mod tests {
             .with_input(Ingredient::new("wood".to_string(), 4))
             .with_input(Ingredient::new("stone".to_string(), 2));
 
-        let mut inventory = HashMap::new();
+        let mut inventory = BTreeMap::new();
         inventory.insert("wood".to_string(), 5);
         inventory.insert("stone".to_string(), 2);
 
@@ -427,7 +427,7 @@ mod tests {
         book.discover_recipe("planks");
         book.discover_recipe("sticks");
 
-        let mut inventory = HashMap::new();
+        let mut inventory = BTreeMap::new();
         inventory.insert("wood".to_string(), 5);
 
         let craftable = book.craftable_recipes(&inventory);

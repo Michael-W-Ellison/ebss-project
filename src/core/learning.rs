@@ -9,7 +9,7 @@
 
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::agents::{Agent, LifeStage};
 use crate::core::DriveType;
 
@@ -143,20 +143,20 @@ impl Default for KnowledgeComplexity {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LearningExposure {
     /// Accumulated exposure per knowledge item (0.0 to threshold)
-    exposures: HashMap<String, f32>,
+    exposures: BTreeMap<String, f32>,
     /// Default threshold for unknown complexity (backwards compatible)
     pub default_threshold: f32,
     /// Override thresholds per knowledge item
     #[serde(default)]
-    custom_thresholds: HashMap<String, f32>,
+    custom_thresholds: BTreeMap<String, f32>,
 }
 
 impl LearningExposure {
     pub fn new() -> Self {
         Self {
-            exposures: HashMap::new(),
+            exposures: BTreeMap::new(),
             default_threshold: 1.0,
-            custom_thresholds: HashMap::new(),
+            custom_thresholds: BTreeMap::new(),
         }
     }
 

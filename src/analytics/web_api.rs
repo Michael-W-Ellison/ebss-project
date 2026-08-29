@@ -15,7 +15,7 @@
 //! - POST /control/resume - Resume simulation
 //! - POST /control/step - Single step
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
@@ -52,7 +52,7 @@ impl Default for ApiConfig {
 pub struct HttpResponse {
     pub status: u16,
     pub status_text: String,
-    pub headers: HashMap<String, String>,
+    pub headers: BTreeMap<String, String>,
     pub body: String,
 }
 
@@ -61,7 +61,7 @@ impl HttpResponse {
         Self {
             status: 200,
             status_text: "OK".to_string(),
-            headers: HashMap::new(),
+            headers: BTreeMap::new(),
             body,
         }
     }
@@ -77,7 +77,7 @@ impl HttpResponse {
         Self {
             status: 404,
             status_text: "Not Found".to_string(),
-            headers: HashMap::new(),
+            headers: BTreeMap::new(),
             body: message.to_string(),
         }
     }
@@ -86,7 +86,7 @@ impl HttpResponse {
         Self {
             status: 400,
             status_text: "Bad Request".to_string(),
-            headers: HashMap::new(),
+            headers: BTreeMap::new(),
             body: message.to_string(),
         }
     }
@@ -122,8 +122,8 @@ impl HttpResponse {
 pub struct HttpRequest {
     pub method: String,
     pub path: String,
-    pub query: HashMap<String, String>,
-    pub headers: HashMap<String, String>,
+    pub query: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, String>,
     pub body: String,
 }
 
@@ -188,11 +188,11 @@ fn parse_request(stream: &mut TcpStream) -> Option<HttpRequest> {
         let query = parse_query_string(query_str);
         (path, query)
     } else {
-        (full_path.to_string(), HashMap::new())
+        (full_path.to_string(), BTreeMap::new())
     };
 
     // Parse headers
-    let mut headers = HashMap::new();
+    let mut headers = BTreeMap::new();
     loop {
         let mut line = String::new();
         reader.read_line(&mut line).ok()?;
@@ -229,8 +229,8 @@ fn parse_request(stream: &mut TcpStream) -> Option<HttpRequest> {
     })
 }
 
-fn parse_query_string(query: &str) -> HashMap<String, String> {
-    let mut params = HashMap::new();
+fn parse_query_string(query: &str) -> BTreeMap<String, String> {
+    let mut params = BTreeMap::new();
     for part in query.split('&') {
         if let Some(idx) = part.find('=') {
             let key = part[..idx].to_string();
@@ -312,7 +312,7 @@ pub struct AgentDetail {
     pub energy: f32,
     pub age: u32,
     pub is_alive: bool,
-    pub drives: HashMap<String, f32>,
+    pub drives: BTreeMap<String, f32>,
     pub inventory_items: u32,
     pub relationships: usize,
     pub traits: Vec<String>,
@@ -616,7 +616,7 @@ impl SimulationDataProvider for MockDataProvider {
     fn get_agents(&self) -> Vec<AgentSummary> {
         vec![
             AgentSummary {
-                id: Uuid::new_v4().to_string(),
+                id: crate::core::dice::name().to_string(),
                 position: (10, 20, 0),
                 health: 100.0,
                 age: 500,
@@ -653,7 +653,7 @@ impl SimulationDataProvider for MockDataProvider {
     fn get_events(&self, _limit: usize) -> Vec<EventSummary> {
         vec![
             EventSummary {
-                id: Uuid::new_v4().to_string(),
+                id: crate::core::dice::name().to_string(),
                 tick: 999,
                 event_type: "AgentBorn".to_string(),
                 description: "New agent born".to_string(),
@@ -693,8 +693,8 @@ mod tests {
         let request = HttpRequest {
             method: "GET".to_string(),
             path: "/agents/123e4567-e89b-12d3-a456-426614174000".to_string(),
-            query: HashMap::new(),
-            headers: HashMap::new(),
+            query: BTreeMap::new(),
+            headers: BTreeMap::new(),
             body: String::new(),
         };
 

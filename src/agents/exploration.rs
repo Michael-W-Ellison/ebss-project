@@ -8,7 +8,7 @@
 //! - Terrain types encountered
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use crate::world::{Position, TerrainType, ResourceType, BuildingType};
 
 /// Types of discoveries agents can make
@@ -810,8 +810,8 @@ impl ExplorationKnowledge {
     }
 
     /// Get discoveries by type count
-    pub fn discoveries_by_type(&self) -> HashMap<String, usize> {
-        let mut counts: HashMap<String, usize> = HashMap::new();
+    pub fn discoveries_by_type(&self) -> BTreeMap<String, usize> {
+        let mut counts: BTreeMap<String, usize> = BTreeMap::new();
 
         for discovery in &self.discoveries {
             let type_name = match &discovery.discovery_type {

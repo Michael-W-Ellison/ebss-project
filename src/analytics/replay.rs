@@ -26,7 +26,7 @@ pub struct StateSnapshot {
     /// World state summary
     pub world_state: WorldSnapshot,
     /// Custom metadata
-    pub metadata: std::collections::HashMap<String, String>,
+    pub metadata: std::collections::BTreeMap<String, String>,
 }
 
 /// Snapshot of a single agent
@@ -39,7 +39,7 @@ pub struct AgentSnapshot {
     pub age: u32,
     pub is_alive: bool,
     /// Drive values (name -> value)
-    pub drives: std::collections::HashMap<String, f32>,
+    pub drives: std::collections::BTreeMap<String, f32>,
     /// Inventory item counts
     pub inventory_items: u32,
     /// Number of relationships
@@ -56,7 +56,7 @@ pub struct WorldSnapshot {
     /// Number of buildings
     pub building_count: usize,
     /// Resource counts by type
-    pub resources: std::collections::HashMap<String, u32>,
+    pub resources: std::collections::BTreeMap<String, u32>,
     /// Weather/season info
     pub environment: EnvironmentSnapshot,
 }
@@ -87,7 +87,7 @@ impl Default for WorldSnapshot {
             width: 100,
             height: 100,
             building_count: 0,
-            resources: std::collections::HashMap::new(),
+            resources: std::collections::BTreeMap::new(),
             environment: EnvironmentSnapshot::default(),
         }
     }
@@ -158,7 +158,7 @@ impl SessionRecorder {
             snapshots: VecDeque::new(),
             recording: false,
             last_snapshot_tick: 0,
-            session_id: Uuid::new_v4(),
+            session_id: crate::core::dice::name(),
             session_name: "Unnamed Session".to_string(),
             start_tick: 0,
         }
@@ -169,7 +169,7 @@ impl SessionRecorder {
         self.recording = true;
         self.start_tick = tick;
         self.last_snapshot_tick = tick;
-        self.session_id = Uuid::new_v4();
+        self.session_id = crate::core::dice::name();
         self.session_name = name.unwrap_or_else(|| format!("Session_{}", tick));
         self.snapshots.clear();
     }
@@ -467,7 +467,7 @@ impl AgentSnapshot {
             energy,
             age,
             is_alive,
-            drives: std::collections::HashMap::new(),
+            drives: std::collections::BTreeMap::new(),
             inventory_items: 0,
             relationship_count: 0,
             current_action: None,
@@ -498,7 +498,7 @@ impl StateSnapshot {
                 .unwrap_or(0),
             population_state: Vec::new(),
             world_state: WorldSnapshot::default(),
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::BTreeMap::new(),
         }
     }
 
@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn test_agent_snapshot() {
         let agent = AgentSnapshot::new(
-            Uuid::new_v4(),
+            crate::core::dice::name(),
             (10, 20, 0),
             80.0,
             90.0,
@@ -674,9 +674,9 @@ mod tests {
     #[test]
     fn test_snapshot_stats() {
         let agents = vec![
-            AgentSnapshot::new(Uuid::new_v4(), (0, 0, 0), 100.0, 100.0, 100, true),
-            AgentSnapshot::new(Uuid::new_v4(), (1, 1, 0), 50.0, 80.0, 200, true),
-            AgentSnapshot::new(Uuid::new_v4(), (2, 2, 0), 0.0, 0.0, 300, false),
+            AgentSnapshot::new(crate::core::dice::name(), (0, 0, 0), 100.0, 100.0, 100, true),
+            AgentSnapshot::new(crate::core::dice::name(), (1, 1, 0), 50.0, 80.0, 200, true),
+            AgentSnapshot::new(crate::core::dice::name(), (2, 2, 0), 0.0, 0.0, 300, false),
         ];
 
         let snapshot = StateSnapshot::new(100).with_agents(agents);

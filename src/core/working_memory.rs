@@ -79,7 +79,7 @@ pub struct WorkingTask {
 impl WorkingTask {
     pub fn new(description: String, priority: TaskPriority, created: u64) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             description,
             priority,
             status: TaskStatus::Pending,

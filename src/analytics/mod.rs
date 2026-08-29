@@ -91,14 +91,14 @@ pub struct Simulation {
     /// the kind of claim this project keeps needing and kept answering by
     /// patching a counter in by hand and throwing it away afterwards. Kept
     /// here so the answer is reproducible and costs one hash lookup a tick.
-    pub actions_taken: std::collections::HashMap<String, u64>,
+    pub actions_taken: std::collections::BTreeMap<String, u64>,
     /// And how many of those came to nothing.
     ///
     /// An action chosen is not an action that worked. Counting only the
     /// choosing hides the case where a settlement spends a sixth of its life
     /// attempting something that almost never succeeds, which is exactly what
     /// it turned out to be doing.
-    pub actions_failed: std::collections::HashMap<String, u64>,
+    pub actions_failed: std::collections::BTreeMap<String, u64>,
     /// And what they said when they did.
     ///
     /// A count of failures tells you a settlement is wasting its time; the
@@ -106,14 +106,14 @@ pub struct Simulation {
     /// runs when something has already gone wrong, and between them they turn
     /// "the drives ask for things that do not happen" into a list of named
     /// defects.
-    pub actions_failed_because: std::collections::HashMap<String, u64>,
+    pub actions_failed_because: std::collections::BTreeMap<String, u64>,
     /// Questions this settlement put to the world and got an answer to, by
     /// question - see `who_came_back_to_look`. Nobody wrote any of these down
     /// either; they are whatever anybody happened to leave lying about.
-    pub what_anybody_found_out: std::collections::HashMap<String, u64>,
+    pub what_anybody_found_out: std::collections::BTreeMap<String, u64>,
     /// And what one person told another, by discovery. The one way a thing
     /// somebody worked out has ever had of leaving the head that made it.
-    pub what_anybody_was_told: std::collections::HashMap<String, u64>,
+    pub what_anybody_was_told: std::collections::BTreeMap<String, u64>,
     /// How much of what was killed or gathered would not go in the pack and
     /// stayed where it fell. The other half of the waste - see
     /// `into_the_pack_or_on_the_ground`.
@@ -133,7 +133,7 @@ pub struct Simulation {
     /// measured `Freeze` at zero in sixty-four worlds and could say nothing
     /// about which of those it was, because every way of declining looks like
     /// `None` from outside. This counts the declining as well as the deciding.
-    pub what_a_threat_came_to: std::collections::HashMap<String, u64>,
+    pub what_a_threat_came_to: std::collections::BTreeMap<String, u64>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -295,12 +295,12 @@ impl Simulation {
             autosave_config: None,
             last_autosave_tick: 0,
             food_database: FoodDatabase::default(),
-            actions_taken: std::collections::HashMap::new(),
-            actions_failed: std::collections::HashMap::new(),
-            actions_failed_because: std::collections::HashMap::new(),
-            what_a_threat_came_to: std::collections::HashMap::new(),
-            what_anybody_found_out: std::collections::HashMap::new(),
-            what_anybody_was_told: std::collections::HashMap::new(),
+            actions_taken: std::collections::BTreeMap::new(),
+            actions_failed: std::collections::BTreeMap::new(),
+            actions_failed_because: std::collections::BTreeMap::new(),
+            what_a_threat_came_to: std::collections::BTreeMap::new(),
+            what_anybody_found_out: std::collections::BTreeMap::new(),
+            what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
             food_items_into_packs: 0,
         }
@@ -7498,7 +7498,7 @@ impl Simulation {
         // What is already growing, gathered once: asking the resource list per
         // candidate tile turns this into tens of thousands of comparisons per
         // agent per tick
-        let occupied: std::collections::HashSet<(i32, i32)> = self
+        let occupied: std::collections::BTreeSet<(i32, i32)> = self
             .world
             .resources
             .iter()
@@ -8125,14 +8125,14 @@ impl Simulation {
     /// the agent is better off getting on with something it can accomplish.
     fn nearest_shelter_from(&self, position: (i32, i32, i32)) -> Option<crate::world::Position> {
         use crate::world::Position;
-        use std::collections::{HashSet, VecDeque};
+        use std::collections::{BTreeSet, VecDeque};
 
         const MAX_VISITED: usize = 4096;
 
         let start = (position.0, position.1);
 
         let mut queue = VecDeque::new();
-        let mut seen = HashSet::new();
+        let mut seen = BTreeSet::new();
 
         queue.push_back(start);
         seen.insert(start);
@@ -8735,7 +8735,7 @@ impl Simulation {
         from: (i32, i32, i32),
         target: (i32, i32, i32),
     ) -> Option<(i32, i32, i32)> {
-        use std::collections::{HashMap, VecDeque};
+        use std::collections::{BTreeMap, VecDeque};
 
         const MAX_VISITED: usize = 4096;
 
@@ -8747,7 +8747,7 @@ impl Simulation {
         }
 
         let mut queue = VecDeque::new();
-        let mut came_from: HashMap<(i32, i32), (i32, i32)> = HashMap::new();
+        let mut came_from: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
 
         queue.push_back(start);
         came_from.insert(start, start);
@@ -11247,7 +11247,7 @@ impl Simulation {
                 let (agent_skill_level, agent_known_techs) = {
                     let agent = &mut self.population.agents[agent_index];
                     let skill = agent.skills.get_skill(SkillType::Crafting).level;
-                    let techs: std::collections::HashSet<String> = agent.technology_knowledge
+                    let techs: std::collections::BTreeSet<String> = agent.technology_knowledge
                         .known_technologies.keys().cloned().collect();
                     (skill, techs)
                 };
@@ -15900,7 +15900,7 @@ impl Simulation {
         let current_tick = self.current_tick;
 
         // Collect caregiver positions for distance checks
-        let caregiver_positions: std::collections::HashMap<uuid::Uuid, (i32, i32, i32)> =
+        let caregiver_positions: std::collections::BTreeMap<uuid::Uuid, (i32, i32, i32)> =
             self.population.agents.iter()
                 .filter(|a| a.state.is_alive)
                 .map(|a| (a.id, a.state.position))
@@ -16248,7 +16248,7 @@ impl Simulation {
             .collect();
 
         // Get climate data for each agent position
-        let climate_data: std::collections::HashMap<_, _> = agent_data.iter()
+        let climate_data: std::collections::BTreeMap<_, _> = agent_data.iter()
             .map(|(id, pos, terrain)| {
                 let climate = self.world.climate.get_climate(*pos, *terrain);
                 (*id, climate)
@@ -16398,7 +16398,7 @@ impl Simulation {
             },
         };
 
-        // Serialize to MessagePack (supports complex HashMap keys like Position)
+        // Serialize to MessagePack (supports complex BTreeMap keys like Position)
         let bytes = rmp_serde::to_vec(&state)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
@@ -16439,12 +16439,12 @@ impl Simulation {
             last_autosave_tick: 0,
             food_database: FoodDatabase::default(),
             // A tally of this run, not of the saved one
-            actions_taken: std::collections::HashMap::new(),
-            actions_failed: std::collections::HashMap::new(),
-            actions_failed_because: std::collections::HashMap::new(),
-            what_a_threat_came_to: std::collections::HashMap::new(),
-            what_anybody_found_out: std::collections::HashMap::new(),
-            what_anybody_was_told: std::collections::HashMap::new(),
+            actions_taken: std::collections::BTreeMap::new(),
+            actions_failed: std::collections::BTreeMap::new(),
+            actions_failed_because: std::collections::BTreeMap::new(),
+            what_a_threat_came_to: std::collections::BTreeMap::new(),
+            what_anybody_found_out: std::collections::BTreeMap::new(),
+            what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
             food_items_into_packs: 0,
         };
@@ -16718,7 +16718,7 @@ impl Simulation {
             .collect();
 
         // Calculate nearby believers for each agent
-        let nearby_believers: std::collections::HashMap<_, _> = agent_data.iter()
+        let nearby_believers: std::collections::BTreeMap<_, _> = agent_data.iter()
             .map(|(id, pos, _)| {
                 let count = agent_data.iter()
                     .filter(|(other_id, other_pos, is_believer)| {

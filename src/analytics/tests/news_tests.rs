@@ -26,7 +26,7 @@ fn somebody() -> Agent {
 #[test]
 fn a_week_old_sighting_found_empty_is_not_a_lie() {
     let a_week_ago = Hearsay {
-        who: uuid::Uuid::new_v4(),
+        who: crate::core::dice::name(),
         they_saw_it_on: 100,
         told_me_on: 110,
         how_much_they_said: Some(20),
@@ -44,7 +44,7 @@ fn a_week_old_sighting_found_empty_is_not_a_lie() {
 #[test]
 fn a_patch_just_passed_and_found_empty_is_a_lie() {
     let this_morning = Hearsay {
-        who: uuid::Uuid::new_v4(),
+        who: crate::core::dice::name(),
         they_saw_it_on: 1000,
         told_me_on: 1000,
         how_much_they_said: Some(20),
@@ -60,7 +60,7 @@ fn a_patch_just_passed_and_found_empty_is_a_lie() {
 #[test]
 fn a_fresh_claim_stops_being_answerable_once_it_is_old() {
     let said = Hearsay {
-        who: uuid::Uuid::new_v4(),
+        who: crate::core::dice::name(),
         they_saw_it_on: 1000,
         told_me_on: 1000,
         how_much_they_said: Some(20),
@@ -76,8 +76,8 @@ fn a_fresh_claim_stops_being_answerable_once_it_is_old() {
 /// Being out of date costs a man some standing and no anger at all.
 #[test]
 fn being_out_of_date_is_not_the_same_as_lying() {
-    let stale_teller = uuid::Uuid::new_v4();
-    let liar = uuid::Uuid::new_v4();
+    let stale_teller = crate::core::dice::name();
+    let liar = crate::core::dice::name();
 
     let mut heard_stale_news = somebody();
     let mut was_lied_to = somebody();
@@ -141,7 +141,7 @@ fn a_crowd_makes_a_man_think_twice() {
     liar.traits.add_trait(Trait::Dishonest);
     liar.traits.add_trait(Trait::Manipulative);
 
-    let room: Vec<uuid::Uuid> = (0..8).map(|_| uuid::Uuid::new_v4()).collect();
+    let room: Vec<uuid::Uuid> = (0..8).map(|_| crate::core::dice::name()).collect();
 
     let alone_with_one = (0..400)
         .filter(|_| liar.would_lie_to_this_room(&room[..1], 0))
@@ -296,16 +296,16 @@ fn news_reaches_everybody_within_earshot() {
 
     // How many people each speaker has been believed by. Telling used to be
     // strictly two-handed, so the most any one telling could reach was one.
-    let mut listeners_per_speaker: std::collections::HashMap<uuid::Uuid, usize> =
-        std::collections::HashMap::new();
+    let mut listeners_per_speaker: std::collections::BTreeMap<uuid::Uuid, usize> =
+        std::collections::BTreeMap::new();
     for agent in simulation
         .population
         .agents
         .iter()
         .filter(|a| a.state.is_alive)
     {
-        let mut heard_from: std::collections::HashSet<uuid::Uuid> =
-            std::collections::HashSet::new();
+        let mut heard_from: std::collections::BTreeSet<uuid::Uuid> =
+            std::collections::BTreeSet::new();
         for said in agent.exploration_knowledge.who_told_me.values() {
             heard_from.insert(said.who);
         }
@@ -344,7 +344,7 @@ fn honest_agents_do_not_end_up_accused() {
     // draw their own traits and are not necessarily honest, so the claim
     // being tested is that an *honest man* is never called a liar, not that
     // nobody in the settlement ever is.
-    let honest: std::collections::HashSet<uuid::Uuid> = simulation
+    let honest: std::collections::BTreeSet<uuid::Uuid> = simulation
         .population
         .agents
         .iter()

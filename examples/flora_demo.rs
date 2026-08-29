@@ -16,7 +16,6 @@ use ebss::environment::{
     PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize,
     Plant, PlantManager,
 };
-use uuid::Uuid;
 
 fn main() {
     println!("=== EBSS Flora (Plant) System Demonstration ===\n");
@@ -318,7 +317,7 @@ fn main() {
     // ===== Part 11: Farming System =====
     println!("--- Part 11: Farming (Cultivated Plants) ---");
 
-    let farmer_id = Uuid::new_v4();
+    let farmer_id = ebss::core::dice::name();
     println!("Farmer {} planting crops...", farmer_id);
 
     // Plant a farm

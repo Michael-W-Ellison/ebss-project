@@ -7,7 +7,7 @@
 //! - Session recordings
 //! - Configuration snapshots
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -95,7 +95,7 @@ impl std::error::Error for StorageError {}
 pub struct DataPoint {
     pub tick: u64,
     pub timestamp: u64,
-    pub values: HashMap<String, f64>,
+    pub values: BTreeMap<String, f64>,
 }
 
 impl DataPoint {
@@ -106,7 +106,7 @@ impl DataPoint {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0),
-            values: HashMap::new(),
+            values: BTreeMap::new(),
         }
     }
 
@@ -366,9 +366,9 @@ impl DocumentStore {
 pub struct StorageManager {
     config: StorageConfig,
     /// Time-series stores by name
-    time_series: HashMap<String, TimeSeriesStore>,
+    time_series: BTreeMap<String, TimeSeriesStore>,
     /// Document stores by name
-    documents: HashMap<String, DocumentStore>,
+    documents: BTreeMap<String, DocumentStore>,
 }
 
 impl StorageManager {
@@ -380,8 +380,8 @@ impl StorageManager {
 
         Ok(Self {
             config,
-            time_series: HashMap::new(),
-            documents: HashMap::new(),
+            time_series: BTreeMap::new(),
+            documents: BTreeMap::new(),
         })
     }
 

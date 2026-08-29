@@ -8,11 +8,11 @@
 //! - Have technologies gated by prerequisites and discovery conditions
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// State of knowledge about a technology
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum TechnologyState {
     /// Never heard of this technology
     Unknown,
@@ -45,7 +45,7 @@ impl TechnologyState {
 }
 
 /// How a technology was discovered
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum DiscoveryMethod {
     /// Agent experimented with materials (Curiosity-driven)
     Experimentation,
@@ -219,7 +219,7 @@ impl Technology {
 
 
     /// Check if agent meets prerequisites
-    pub fn can_discover(&self, known_techs: &HashMap<String, DiscoveryRecord>) -> bool {
+    pub fn can_discover(&self, known_techs: &BTreeMap<String, DiscoveryRecord>) -> bool {
         // Check all prerequisites are known
         for prereq in &self.prerequisites {
             if let Some(record) = known_techs.get(prereq) {
@@ -238,7 +238,7 @@ impl Technology {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TechnologyKnowledge {
     /// All technologies this agent knows about
-    pub known_technologies: HashMap<String, DiscoveryRecord>,
+    pub known_technologies: BTreeMap<String, DiscoveryRecord>,
 
     /// Technologies discovered by this agent (first in world)
     pub original_discoveries: Vec<String>,
@@ -247,7 +247,7 @@ pub struct TechnologyKnowledge {
 impl TechnologyKnowledge {
     pub fn new() -> Self {
         Self {
-            known_technologies: HashMap::new(),
+            known_technologies: BTreeMap::new(),
             original_discoveries: Vec::new(),
         }
     }
@@ -327,8 +327,8 @@ impl TechnologyKnowledge {
 
     /// Get statistics
     pub fn stats(&self) -> TechnologyStats {
-        let mut by_state = HashMap::new();
-        let mut by_method = HashMap::new();
+        let mut by_state = BTreeMap::new();
+        let mut by_method = BTreeMap::new();
 
         for record in self.known_technologies.values() {
             let state = record.get_state(0);
@@ -356,24 +356,24 @@ impl Default for TechnologyKnowledge {
 pub struct TechnologyStats {
     pub total_known: usize,
     pub original_discoveries: usize,
-    pub by_state: HashMap<TechnologyState, usize>,
-    pub by_method: HashMap<DiscoveryMethod, usize>,
+    pub by_state: BTreeMap<TechnologyState, usize>,
+    pub by_method: BTreeMap<DiscoveryMethod, usize>,
 }
 
 /// Global technology registry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TechnologyRegistry {
-    technologies: HashMap<String, Technology>,
+    technologies: BTreeMap<String, Technology>,
 
     /// First discoverer of each technology in the world
-    pub first_discoverers: HashMap<String, (Uuid, u64)>,
+    pub first_discoverers: BTreeMap<String, (Uuid, u64)>,
 }
 
 impl TechnologyRegistry {
     pub fn new() -> Self {
         Self {
-            technologies: HashMap::new(),
-            first_discoverers: HashMap::new(),
+            technologies: BTreeMap::new(),
+            first_discoverers: BTreeMap::new(),
         }
     }
 
@@ -404,7 +404,7 @@ impl TechnologyRegistry {
 
 
     /// Get technologies that can be discovered with given prerequisites
-    pub fn available_for_discovery(&self, known_techs: &HashMap<String, DiscoveryRecord>) -> Vec<&Technology> {
+    pub fn available_for_discovery(&self, known_techs: &BTreeMap<String, DiscoveryRecord>) -> Vec<&Technology> {
         self.technologies
             .values()
             .filter(|tech| tech.can_discover(known_techs))
@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_technology_state_progression() {
-        let agent = Uuid::new_v4();
+        let agent = crate::core::dice::name();
         let mut record = DiscoveryRecord::new("test".to_string(), agent, DiscoveryMethod::Experimentation, 0);
 
         // Starts as Known (0.7 confidence from experimentation)
@@ -440,7 +440,7 @@ mod tests {
 
     #[test]
     fn test_discovery_confidence() {
-        let agent = Uuid::new_v4();
+        let agent = crate::core::dice::name();
         let mut record = DiscoveryRecord::new("test".to_string(), agent, DiscoveryMethod::Gossip, 0);
 
         // Gossip starts with low confidence
@@ -457,8 +457,8 @@ mod tests {
 
     #[test]
     fn test_technology_prerequisites() {
-        let mut known = HashMap::new();
-        let agent = Uuid::new_v4();
+        let mut known = BTreeMap::new();
+        let agent = crate::core::dice::name();
 
         // Add prerequisite technology
         let mut prereq_record = DiscoveryRecord::new("flint_knapping".to_string(), agent, DiscoveryMethod::Initial, 0);
@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn test_technology_knowledge() {
-        let agent = Uuid::new_v4();
+        let agent = crate::core::dice::name();
         let mut knowledge = TechnologyKnowledge::new();
 
         // Initially unknown
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_learning_from_teacher() {
-        let agent = Uuid::new_v4();
+        let agent = crate::core::dice::name();
         let mut knowledge = TechnologyKnowledge::new();
 
         // Learn from highly trusted, confident teacher
@@ -540,8 +540,8 @@ mod tests {
     #[test]
     fn test_first_discovery_tracking() {
         let mut registry = TechnologyRegistry::new();
-        let agent1 = Uuid::new_v4();
-        let agent2 = Uuid::new_v4();
+        let agent1 = crate::core::dice::name();
+        let agent2 = crate::core::dice::name();
 
         // First discovery
         assert!(registry.record_first_discovery("copper_smelting".to_string(), agent1, 100));
@@ -566,7 +566,7 @@ mod tests {
 
     #[test]
     fn test_success_rate_calculation() {
-        let agent = Uuid::new_v4();
+        let agent = crate::core::dice::name();
         let mut record = DiscoveryRecord::new("test".to_string(), agent, DiscoveryMethod::Experimentation, 0);
 
         // No attempts yet

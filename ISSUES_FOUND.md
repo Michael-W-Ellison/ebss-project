@@ -5386,17 +5386,23 @@ everything an agent remembers about a place.
 
 Flaky tests: **fifteen to seven**, measured the same way over three runs.
 
-#### What is left, and why it is the argument for modularising
+#### What was left, and what it turned out to be
 
-Not finished, and the shape of what is left matters. A settlement is still not
-reproducible run to run - eight worlds gave 1102, 1199, 1104 - because there are
-**eighty-three choose-operations in `analytics/mod.rs` alone**, and every one of
-them is a place where an unordered collection can decide something.
+Not finished at this point. A settlement was still not reproducible run to run
+- eight worlds gave 1102, 1199, 1104 - and the reading taken here was that the
+remainder lay in the **eighty-three choose-operations in `analytics/mod.rs`**,
+each a place where an unordered collection could decide something.
 
-Chasing them one at a time is how the last three rounds went, and each round
-found another. That is not a bug list, it is a missing property: *the decision
-layer's inputs must have a stable order*. A layer with a boundary can be made
-to hold that property once. A sixteen-thousand-line file cannot.
+That reading was half right and half wrong, and the wrong half is worth
+keeping. Right: it is a missing property, not a bug list - *the decision
+layer's inputs must have a stable order* - and chasing call sites one at a time
+is how three rounds had already gone. Wrong: the remaining faults were not in
+those eighty-three at all. Two of the four were randomness taken outside the
+stream, one was a `HashMap` in the *fauna registry* four modules away, and the
+last was `rand::random()` in the animals. See #94, which finished it - and note
+what actually finished it: not more diligence over the same file, but an
+instrument that could see across two processes, and then holding the property
+with the type system rather than by hand.
 
 ## Housekeeping
 
@@ -5465,7 +5471,80 @@ which already has an open task against it, and the equipment durability model,
 which should either replace the `making` vocabulary or come out of the design
 as well as out of the code.
 
-### 94. The other thirteen drive rates were never derived either
+### 94. The sweep finished: the same seed is now the same world, to the berry
+
+#92 halved the flakiness and named what was left as *eighty-three
+choose-operations in `analytics/mod.rs`* - somewhere in there, it assumed, an
+unordered table was still deciding something. That guess was wrong in an
+instructive way. The instrument was the thing that had been missing, not the
+diligence: a harness that runs one seed, prints a fingerprint of the whole
+world per tick, and is run **as two separate processes** and diffed. Rust seeds
+hash iteration per *process*, so no test inside one process could ever have
+seen this.
+
+The first diff put the divergence at tick **-1** - before a single tick had
+run. From there it was four faults, each found by the same loop of fingerprint,
+diff, narrow.
+
+**One: names came from the operating system.** `Uuid::new_v4()`, 270 call
+sites. An id is not a label in this model - it is a map key, a sort key and a
+tie-break - so two runs of one seed disagreed about who was who before anything
+had happened, and every ordering downstream of an id disagreed with them.
+`dice::name()` draws the sixteen bytes from the seeded stream and sets the same
+version bits, so nothing that reads a `Uuid` can tell.
+
+**Two: `all_species()` handed back a `HashMap`'s values.** With the ids fixed,
+world generation still spent a different number of rolls each time - 480, 464,
+544. A draw counter on the stream put it in `spawn_naturalistic`: the herbivore
+list came out in a different order, so a different species was picked, so a
+different `herd_size` was rolled, so a different number of animals were spawned.
+Not a tie being broken by a coin - a *variable amount of randomness consumed*,
+which puts every later draw in the run out of step.
+
+**Three, and the reason to stop chasing call sites: every `HashMap` in the
+model.** 439 uses across 87 files. Converting them all to `BTreeMap`/`BTreeSet`
+took a script, fifteen `#[derive(PartialOrd, Ord)]`s and about an hour, and it
+turns the property from a thing that must be remembered at each new
+`.iter()` into a thing the type system holds. Two guard tests now keep it that
+way. There is a real cost, stated plainly: **the model runs about 20% slower**
+(32 worlds x 4,000 ticks, 39.6s to 47.5s). For a project where the binding
+constraint has been the trustworthiness of a measurement, that is a good trade.
+
+**Four: `rand::random()`.** Ten sites in the fauna and flora, missed by #92's
+sweep because that one looked for `thread_rng()` and this is the same function
+under a friendlier name. Every wander an animal takes, and whether it grazes,
+rests or hunts. These ten were enough on their own: with everything else fixed,
+the beasts still moved differently in every run, and **by tick 49 it had
+reached the people** - `Safety` at 0.020 in one run and 0.034 in the other, for
+a man who could see one, with every other number about him identical.
+
+#### What it buys
+
+- **One seed, three runs, 4,000 ticks: byte-identical.** Three seeds tried;
+  different seeds still give different worlds.
+- **Flaky tests 7 to 0.** Same 28 failures in each of three runs of the whole
+  suite. Five of the seven that came and went now fail every time and two pass
+  every time - which is the point: each of them now has an answer.
+- **A measurement is a fact.** The survival harness gave 2,586 and 2,350 on two
+  runs of the *same code and the same seeds* before this; it gives 2,418 twice
+  now. The old published means, spread ~120 turns, were reading a sample where
+  they claimed to read a number. Nothing here changes what the model does - the
+  new figure sits inside the old band - but every figure after it can be
+  compared with one run instead of thirty-two.
+
+#### What holds it
+
+`analytics/tests/repeatable_tests.rs`. Two behavioural tests - the same seed is
+the same world, a different seed is not - and two source-level guards, which are
+unusual and deliberate: `every_roll_comes_from_the_one_stream` fails on any
+`thread_rng`, `rand::random` or `Uuid::new_v4` in `src/`, and
+`nothing_decides_anything_by_walking_an_unordered_table` fails on any `HashMap`
+or `HashSet`. A behavioural test catches a stray roll only if the branch
+carrying it happens to run in the test's hundred and twenty ticks; the fourth
+fault above sat in exactly such a branch through the whole of #92. This class of
+defect has now recurred three times, and the guard is cheap.
+
+### 95. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5474,19 +5553,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 95. The clock is spelled out in the interface too
+### 96. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 96. Build warnings
+### 97. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 97. Placeholder package metadata
+### 98. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

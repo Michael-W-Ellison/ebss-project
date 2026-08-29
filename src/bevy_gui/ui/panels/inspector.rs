@@ -543,7 +543,7 @@ fn drive_icon(drive_type: crate::core::DriveType) -> &'static str {
     }
 }
 
-fn render_agent_skills(ui: &mut egui::Ui, skills: &std::collections::HashMap<String, SkillData>, state: &mut InspectorState) {
+fn render_agent_skills(ui: &mut egui::Ui, skills: &std::collections::BTreeMap<String, SkillData>, state: &mut InspectorState) {
     ui.horizontal(|ui| {
         ui.heading("Skills");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -592,7 +592,7 @@ fn render_agent_skills(ui: &mut egui::Ui, skills: &std::collections::HashMap<Str
     }
 
     // Group by category
-    let mut categories: std::collections::HashMap<&str, Vec<&SkillData>> = std::collections::HashMap::new();
+    let mut categories: std::collections::BTreeMap<&str, Vec<&SkillData>> = std::collections::BTreeMap::new();
     for skill in &sorted_skills {
         categories.entry(&skill.category).or_default().push(skill);
     }

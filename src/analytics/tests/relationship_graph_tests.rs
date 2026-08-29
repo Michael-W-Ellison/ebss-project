@@ -44,7 +44,7 @@ fn two_neighbours() -> Simulation {
 /// Being near somebody makes them a familiar face and no more.
 #[test]
 fn standing_beside_a_man_for_a_year_does_not_make_him_a_friend() {
-    let mut bond = Relationship::new_neutral(uuid::Uuid::new_v4(), 0);
+    let mut bond = Relationship::new_neutral(crate::core::dice::name(), 0);
 
     // A whole year of never once leaving his side
     for _ in 0..1152 {
@@ -65,7 +65,7 @@ fn standing_beside_a_man_for_a_year_does_not_make_him_a_friend() {
 /// But it does get you there.
 #[test]
 fn and_it_does_make_him_a_familiar_face() {
-    let mut bond = Relationship::new_neutral(uuid::Uuid::new_v4(), 0);
+    let mut bond = Relationship::new_neutral(crate::core::dice::name(), 0);
     let stranger = bond.bond_strength;
 
     // A season of it
@@ -82,7 +82,7 @@ fn and_it_does_make_him_a_familiar_face() {
 /// A grudge pulls the bond down, and beats standing next to them.
 #[test]
 fn a_grudge_outweighs_being_near_somebody() {
-    let them = uuid::Uuid::new_v4();
+    let them = crate::core::dice::name();
 
     let mut resented = Relationship::new_neutral(them, 0);
     let mut ignored = Relationship::new_neutral(them, 0);
@@ -110,7 +110,7 @@ fn a_grudge_outweighs_being_near_somebody() {
 /// Nursing nothing changes nothing.
 #[test]
 fn holding_nothing_against_somebody_costs_them_nothing() {
-    let mut bond = Relationship::new_neutral(uuid::Uuid::new_v4(), 0);
+    let mut bond = Relationship::new_neutral(crate::core::dice::name(), 0);
     bond.strengthen(0.4);
     let before = bond.bond_strength;
 
@@ -124,7 +124,7 @@ fn holding_nothing_against_somebody_costs_them_nothing() {
 /// What two people are follows what they think of each other.
 #[test]
 fn what_two_people_are_follows_what_they_think_of_each_other() {
-    let mut bond = Relationship::new(uuid::Uuid::new_v4(), RelationshipType::Acquaintance);
+    let mut bond = Relationship::new(crate::core::dice::name(), RelationshipType::Acquaintance);
 
     // Acquaintances start at 0.2
     bond.strengthen(0.5);
@@ -154,7 +154,7 @@ fn what_two_people_are_follows_what_they_think_of_each_other() {
 /// Blood is not renamed.
 #[test]
 fn a_brother_you_cannot_stand_is_still_a_brother() {
-    let mut bond = Relationship::new(uuid::Uuid::new_v4(), RelationshipType::Sibling);
+    let mut bond = Relationship::new(crate::core::dice::name(), RelationshipType::Sibling);
 
     bond.weaken(1.5);
     bond.settle_what_we_are();

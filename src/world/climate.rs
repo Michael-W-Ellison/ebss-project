@@ -9,7 +9,7 @@ use crate::environment::{
 };
 use crate::agents::temperature::{Climate, Temperature};
 use crate::world::{Position, TerrainType};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Maps terrain types to biome types
 pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
@@ -58,7 +58,7 @@ pub struct ClimateManager {
 
     /// Biome data per position (cached for performance)
     #[serde(skip)]
-    biome_cache: HashMap<Position, Biome>,
+    biome_cache: BTreeMap<Position, Biome>,
 
 
     /// Recent lightning strikes
@@ -93,7 +93,7 @@ impl ClimateManager {
             weather,
             weather_gen,
             base_climate: Climate::temperate(), // Default temperate
-            biome_cache: HashMap::new(),
+            biome_cache: BTreeMap::new(),
             lightning_strikes: Vec::new(),
             current_tick: 0,
             cold_climate,
@@ -119,7 +119,7 @@ impl ClimateManager {
             weather,
             weather_gen,
             base_climate: Climate::temperate(),
-            biome_cache: HashMap::new(),
+            biome_cache: BTreeMap::new(),
             lightning_strikes: Vec::new(),
             current_tick: 0,
             cold_climate,

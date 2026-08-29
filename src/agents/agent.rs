@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
 use crate::core::planning::{ActionPlan, PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use super::senses::Senses;
 use super::body::Body;
@@ -312,11 +312,11 @@ pub struct Inventory {
     /// Items stored by item_id
     /// What is in it, in a stable order.
     ///
-    /// A `BTreeMap` rather than a `HashMap`, and not for speed. Twenty-two
+    /// A `BTreeMap` rather than a `BTreeMap`, and not for speed. Twenty-two
     /// places iterate this map and several of them pick a *best* - the best
     /// food to eat, the tool that helps most, what can be spared - so when two
     /// candidates tie, the winner is whichever the iterator reached first. A
-    /// `HashMap` orders by a hash seeded per process, so that answer changed
+    /// `BTreeMap` orders by a hash seeded per process, so that answer changed
     /// between runs of the same binary on the same seed.
     ///
     /// Measured: with the dice seeded, five tests still came and went across
@@ -1199,11 +1199,11 @@ pub struct Agent {
     /// for ever. Equilibrium there sits at a 37 per cent illness rate, which
     /// is poison rather than a gamble.
     #[serde(default)]
-    pub times_laid_up: std::collections::HashMap<String, u32>,
+    pub times_laid_up: std::collections::BTreeMap<String, u32>,
     /// The steps this agent has found out how to do that it was not born
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
-    found_out: std::collections::HashSet<String>,
+    found_out: std::collections::BTreeSet<String>,
     /// What has answered which need, and where it answered it.
     #[serde(default)]
     pub patterns: super::patterns::Patterns,
@@ -1304,7 +1304,7 @@ pub struct Agent {
 impl Agent {
     pub fn new(config: AgentConfig) -> Self {
         let mut agent = Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             state: AgentState::new(),
             drives: if config.random_weights {
                 DriveState::with_random_weights()
@@ -1328,8 +1328,8 @@ impl Agent {
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
-            times_laid_up: std::collections::HashMap::new(),
-            found_out: std::collections::HashSet::new(),
+            times_laid_up: std::collections::BTreeMap::new(),
+            found_out: std::collections::BTreeSet::new(),
             wonderings: Vec::new(),
             food_i_ate: 0,
             food_that_rotted_on_me: 0,
@@ -1957,9 +1957,9 @@ impl Agent {
     /// is short of.
     pub fn what_i_am_short_of(&self) -> Vec<&'static str> {
         use crate::environment::making;
-        use std::collections::HashSet;
+        use std::collections::BTreeSet;
 
-        let mut wanted: HashSet<&'static str> = HashSet::new();
+        let mut wanted: BTreeSet<&'static str> = BTreeSet::new();
 
         for step in making::EVERY_STEP {
             for (what, _) in step.needs {
@@ -2229,7 +2229,7 @@ impl Agent {
     }
 
     /// Everything this agent has found out that it was not born knowing.
-    pub fn what_i_found_out(&self) -> &std::collections::HashSet<String> {
+    pub fn what_i_found_out(&self) -> &std::collections::BTreeSet<String> {
         &self.found_out
     }
 

@@ -91,7 +91,7 @@ fn every_family_has_verbs_in_it() {
 /// Every verb is named once, and named something.
 #[test]
 fn no_verb_is_declared_twice_or_nameless() {
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = std::collections::BTreeSet::new();
 
     for one in EVERY_VERB {
         assert!(!one.called.is_empty(), "a verb with no name");

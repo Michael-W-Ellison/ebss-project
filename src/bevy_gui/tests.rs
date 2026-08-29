@@ -195,7 +195,7 @@ mod tests {
         assert!(!selection.follow_selected);
 
         // toggle_follow only works when something is selected
-        selection.current = EntitySelection::Agent(uuid::Uuid::new_v4());
+        selection.current = EntitySelection::Agent(crate::core::dice::name());
 
         selection.toggle_follow();
         assert!(selection.follow_selected);

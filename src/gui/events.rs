@@ -2,7 +2,7 @@
 //! Simulation event types and event log for the timeline panel.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 use uuid::Uuid;
 use crate::world::{BuildingType, Position};
 
@@ -119,7 +119,7 @@ impl SimulationEvent {
     /// Create a new simulation event
     pub fn new(tick: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             tick,
             event_type,
             position,
@@ -234,7 +234,7 @@ impl SimulationEvent {
 }
 
 /// Filter types for the timeline
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum EventFilterType {
     Birth,
     Death,
@@ -352,7 +352,7 @@ impl EventLog {
     /// Get events filtered by type and search query
     pub fn filtered_events(
         &self,
-        filter_types: &HashSet<EventFilterType>,
+        filter_types: &BTreeSet<EventFilterType>,
         search_query: &str,
         newest_first: bool,
     ) -> Vec<&SimulationEvent> {
@@ -396,7 +396,7 @@ pub struct TimelineState {
     /// Event log
     pub event_log: EventLog,
     /// Active filter types (empty = show all)
-    pub filter_types: HashSet<EventFilterType>,
+    pub filter_types: BTreeSet<EventFilterType>,
     /// Search query for filtering events
     pub search_query: String,
     /// Sort order (true = newest first)
@@ -413,7 +413,7 @@ impl Default for TimelineState {
     fn default() -> Self {
         Self {
             event_log: EventLog::new(),
-            filter_types: HashSet::new(),
+            filter_types: BTreeSet::new(),
             search_query: String::new(),
             newest_first: true,
             events_per_page: 50,
@@ -530,8 +530,8 @@ mod tests {
             log.push(SimulationEvent::new(
                 i,
                 SimulationEventType::Birth {
-                    mother_id: Uuid::new_v4(),
-                    child_id: Uuid::new_v4(),
+                    mother_id: crate::core::dice::name(),
+                    child_id: crate::core::dice::name(),
                     father_id: None,
                 },
                 None,
@@ -550,8 +550,8 @@ mod tests {
         log.push(SimulationEvent::new(
             1,
             SimulationEventType::Birth {
-                mother_id: Uuid::new_v4(),
-                child_id: Uuid::new_v4(),
+                mother_id: crate::core::dice::name(),
+                child_id: crate::core::dice::name(),
                 father_id: None,
             },
             None,
@@ -560,13 +560,13 @@ mod tests {
         log.push(SimulationEvent::new(
             2,
             SimulationEventType::Death {
-                agent_id: Uuid::new_v4(),
+                agent_id: crate::core::dice::name(),
                 cause: DeathCause::OldAge,
             },
             None,
         ));
 
-        let mut filter = HashSet::new();
+        let mut filter = BTreeSet::new();
         filter.insert(EventFilterType::Birth);
 
         let filtered = log.filtered_events(&filter, "", true);
@@ -583,8 +583,8 @@ mod tests {
             state.add_event(SimulationEvent::new(
                 i,
                 SimulationEventType::Birth {
-                    mother_id: Uuid::new_v4(),
-                    child_id: Uuid::new_v4(),
+                    mother_id: crate::core::dice::name(),
+                    child_id: crate::core::dice::name(),
                     father_id: None,
                 },
                 None,

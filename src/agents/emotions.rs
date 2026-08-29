@@ -2,7 +2,7 @@
 //! Emotion system for agents responding to threats and relationships.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// Twelve two-hour ticks to a day - see `crate::environment::seasons`
 const TICKS_PER_DAY: f32 = 12.0;
@@ -30,7 +30,7 @@ pub struct EmotionState {
     /// Ordered maps, and not for speed. `worst_agent` and `worst_creature`
     /// take a `max_by` over these, so when two things frighten somebody
     /// equally the winner is whichever the iterator reached first - and a
-    /// `HashMap` orders by a hash seeded per process. **What an agent was most
+    /// `BTreeMap` orders by a hash seeded per process. **What an agent was most
     /// afraid of, and so whether it ran or stood, changed between runs of the
     /// same binary on the same seed.** That is the threat tree deciding on a
     /// coin, and it is why five tests came and went with the dice already
@@ -895,13 +895,13 @@ pub enum RelationshipType {
 /// Tracks all relationships for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipMap {
-    relationships: HashMap<Uuid, Relationship>,
+    relationships: BTreeMap<Uuid, Relationship>,
 }
 
 impl RelationshipMap {
     pub fn new() -> Self {
         Self {
-            relationships: HashMap::new(),
+            relationships: BTreeMap::new(),
         }
     }
 
@@ -938,7 +938,7 @@ impl RelationshipMap {
 
 
     /// Get all relationships
-    pub fn get_all(&self) -> &HashMap<Uuid, Relationship> {
+    pub fn get_all(&self) -> &BTreeMap<Uuid, Relationship> {
         &self.relationships
     }
 
@@ -1194,7 +1194,7 @@ mod tests {
 
     #[test]
     fn test_relationship_creation() {
-        let other_agent = Uuid::new_v4();
+        let other_agent = crate::core::dice::name();
         let rel = Relationship::new(other_agent, RelationshipType::Parent);
 
         assert_eq!(rel.bond_strength, 0.9);
@@ -1205,8 +1205,8 @@ mod tests {
     #[test]
     fn test_relationship_map() {
         let mut map = RelationshipMap::new();
-        let parent_id = Uuid::new_v4();
-        let friend_id = Uuid::new_v4();
+        let parent_id = crate::core::dice::name();
+        let friend_id = crate::core::dice::name();
 
         map.add_relationship(Relationship::new(parent_id, RelationshipType::Parent));
         map.add_relationship(Relationship::new(friend_id, RelationshipType::Friend));
@@ -1244,7 +1244,7 @@ mod tests {
 
     #[test]
     fn test_strengthen_relationship() {
-        let mut rel = Relationship::new(Uuid::new_v4(), RelationshipType::Friend);
+        let mut rel = Relationship::new(crate::core::dice::name(), RelationshipType::Friend);
         assert_eq!(rel.bond_strength, 0.5);
 
         rel.strengthen(0.2);
@@ -1265,8 +1265,8 @@ mod tests {
 
     #[test]
     fn test_trait_incompatibility_weakens_relationship() {
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         let mut agent1_traits = TraitSet::new();
         agent1_traits.add_trait(Trait::Believer);
@@ -1291,8 +1291,8 @@ mod tests {
 
     #[test]
     fn test_compatible_traits_strengthen_relationship() {
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         let mut agent1_traits = TraitSet::new();
         agent1_traits.add_trait(Trait::Empathetic);
@@ -1325,8 +1325,8 @@ mod tests {
 
     #[test]
     fn test_forgiving_trait_reduces_conflict_impact() {
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         // Agent 1 is forgiving
         let mut agent1_traits = TraitSet::new();
@@ -1356,8 +1356,8 @@ mod tests {
 
     #[test]
     fn test_family_bonds_more_resilient() {
-        let parent_id = Uuid::new_v4();
-        let child_id = Uuid::new_v4();
+        let parent_id = crate::core::dice::name();
+        let child_id = crate::core::dice::name();
 
         let mut parent_traits = TraitSet::new();
         parent_traits.add_trait(Trait::Diligent);
@@ -1388,7 +1388,7 @@ mod tests {
 
     #[test]
     fn test_relationship_quality_descriptor() {
-        let other_id = Uuid::new_v4();
+        let other_id = crate::core::dice::name();
 
         let excellent = Relationship::new(other_id, RelationshipType::Parent);
         assert_eq!(excellent.quality_descriptor(), "Excellent");
@@ -1403,8 +1403,8 @@ mod tests {
     #[test]
     fn test_relationship_map_trait_update() {
         let mut map = RelationshipMap::new();
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         map.add_relationship(Relationship::new(agent2_id, RelationshipType::Friend));
 
@@ -1468,8 +1468,8 @@ mod tests {
     fn test_get_degrading_relationships() {
         let mut map = RelationshipMap::new();
 
-        let friend_id = Uuid::new_v4();
-        let enemy_id = Uuid::new_v4();
+        let friend_id = crate::core::dice::name();
+        let enemy_id = crate::core::dice::name();
 
         let mut friend_rel = Relationship::new(friend_id, RelationshipType::Friend);
         friend_rel.bond_strength = -0.2; // Degraded
@@ -1486,8 +1486,8 @@ mod tests {
     fn test_get_hostile_relationships() {
         let mut map = RelationshipMap::new();
 
-        let rival_id = Uuid::new_v4();
-        let enemy_id = Uuid::new_v4();
+        let rival_id = crate::core::dice::name();
+        let enemy_id = crate::core::dice::name();
 
         let rival_rel = Relationship::new(rival_id, RelationshipType::Rival);
         map.add_relationship(rival_rel); // -0.3, not hostile yet
@@ -1501,7 +1501,7 @@ mod tests {
 
     #[test]
     fn test_relationship_becomes_hostile_from_traits() {
-        let other_id = Uuid::new_v4();
+        let other_id = crate::core::dice::name();
 
         let mut agent1_traits = TraitSet::new();
         agent1_traits.add_trait(Trait::Believer);

@@ -31,7 +31,7 @@ fn predators_can_live_off_what_the_world_holds() {
     for _ in 0..8 {
         let world = World::new(WorldConfig::default());
 
-        let present: std::collections::HashSet<String> = world
+        let present: std::collections::BTreeSet<String> = world
             .animals
             .get_all()
             .iter()

@@ -8,7 +8,7 @@
 //! - Real-time notifications
 //! - Event-driven architectures
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::RwLock;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
@@ -68,7 +68,7 @@ pub struct EventData {
     /// Position where event occurred (if applicable)
     pub position: Option<(i32, i32, i32)>,
     /// Event-specific data as key-value pairs
-    pub data: HashMap<String, EventValue>,
+    pub data: BTreeMap<String, EventValue>,
     /// Human-readable description
     pub description: String,
     /// Severity/importance (0.0 to 1.0)
@@ -90,13 +90,13 @@ impl EventData {
     /// Create a new event
     pub fn new(event_type: EventType, tick: u64, description: String) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             event_type,
             tick,
             agent_id: None,
             secondary_agent_id: None,
             position: None,
-            data: HashMap::new(),
+            data: BTreeMap::new(),
             description,
             severity: 0.5,
         }
@@ -155,7 +155,7 @@ pub struct SubscriptionId(Uuid);
 
 impl SubscriptionId {
     fn new() -> Self {
-        Self(Uuid::new_v4())
+        Self(crate::core::dice::name())
     }
 }
 
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn test_event_creation() {
         let event = EventData::new(EventType::AgentBorn, 100, "Test event".to_string())
-            .with_agent(Uuid::new_v4())
+            .with_agent(crate::core::dice::name())
             .with_severity(0.8)
             .with_string("test", "value".to_string());
 

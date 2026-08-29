@@ -5,7 +5,7 @@
 //! organizing settlement development and preventing building conflicts.
 
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub type Position = (i32, i32, i32);
 pub type AgentId = u32;
@@ -96,7 +96,7 @@ pub struct TerritoryManager {
     territories: Vec<Territory>,
     next_id: TerritoryId,
     // Cache for quick ownership lookups
-    owner_cache: HashMap<Position, AgentId>,
+    owner_cache: BTreeMap<Position, AgentId>,
 }
 
 impl TerritoryManager {
@@ -104,7 +104,7 @@ impl TerritoryManager {
         Self {
             territories: Vec::new(),
             next_id: 0,
-            owner_cache: HashMap::new(),
+            owner_cache: BTreeMap::new(),
         }
     }
 

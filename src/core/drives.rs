@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The 14 core drives that motivate agent behavior
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum DriveType {
     /// Need for food
     Hunger,

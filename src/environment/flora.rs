@@ -2,11 +2,11 @@
 //! Plant life and vegetation system with biome distributions.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// Climate zone classification (broad categories)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum ClimateZone {
     Arctic,
     Temperate,
@@ -91,13 +91,13 @@ impl PlantDrop {
 /// Plant species database
 #[derive(Debug, Clone)]
 pub struct FloraRegistry {
-    species: HashMap<String, PlantSpecies>,
+    species: BTreeMap<String, PlantSpecies>,
 }
 
 impl FloraRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
-            species: HashMap::new(),
+            species: BTreeMap::new(),
         };
 
         registry.register_all_species();
@@ -1361,7 +1361,7 @@ impl Plant {
     /// Create a new plant instance
     pub fn new(species_id: String, position: (i32, i32)) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             species_id,
             position,
             current_health: 0.0, // Set from species
@@ -1568,8 +1568,8 @@ impl PlantManager {
         let count = ((radius * radius) as f32 * density) as u32;
 
         for _ in 0..count {
-            let offset_x = (rand::random::<i32>() % (radius as i32 * 2)) - radius as i32;
-            let offset_y = (rand::random::<i32>() % (radius as i32 * 2)) - radius as i32;
+            let offset_x = (crate::core::dice::any::<i32>() % (radius as i32 * 2)) - radius as i32;
+            let offset_y = (crate::core::dice::any::<i32>() % (radius as i32 * 2)) - radius as i32;
 
             let pos = (center.0 + offset_x, center.1 + offset_y);
 
@@ -1807,8 +1807,8 @@ impl PlantManager {
 
         // What is standing over each tile, gathered once. Doing this per plant
         // would be a comparison against every other plant in the world.
-        let mut canopy: std::collections::HashMap<(i32, i32), f32> =
-            std::collections::HashMap::new();
+        let mut canopy: std::collections::BTreeMap<(i32, i32), f32> =
+            std::collections::BTreeMap::new();
 
         for plant in &self.plants {
             let species = match registry.get(&plant.species_id) {

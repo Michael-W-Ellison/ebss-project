@@ -2,7 +2,7 @@
 //! Complete world simulation system with terrain, resources, buildings, and spatial management.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use rand::Rng;
 
 /// World size presets for common use cases
@@ -125,7 +125,7 @@ pub struct World {
     pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
     pub tick: u32,
     pub config: WorldConfig, // Store configuration for spatial planning
-    pub resource_nodes: std::collections::HashMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
+    pub resource_nodes: std::collections::BTreeMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
     pub zone_manager: zoning::ZoneManager, // Spatial zoning for settlement planning
     pub road_network: path_planning::RoadNetwork, // Road and path network
     pub territory_manager: territory::TerritoryManager, // Territory claiming and ownership
@@ -168,7 +168,7 @@ pub struct World {
     /// Ground that has been worked looks worked. This is the world
     /// remembering that.
     #[serde(default)]
-    pub where_it_was_worked_out: std::collections::HashSet<Position>,
+    pub where_it_was_worked_out: std::collections::BTreeSet<Position>,
 
     /// What has dried out in the sun since anybody last looked, and where.
     ///
@@ -806,7 +806,7 @@ impl World {
         // thing was lying. It is a question now, and it cuts both ways - a
         // thing under a roof does not rot in the rain and does not dry in the
         // sun either.
-        let under_a_roof: std::collections::HashSet<Position> = self
+        let under_a_roof: std::collections::BTreeSet<Position> = self
             .buildings
             .iter()
             .map(|building| building.position)
@@ -966,14 +966,14 @@ impl World {
             crafting_manager: crafting::CraftingManager::new(),
             tick: 0,
             config: config.clone(),
-            resource_nodes: std::collections::HashMap::new(),
+            resource_nodes: std::collections::BTreeMap::new(),
             zone_manager: zoning::ZoneManager::new(),
             road_network: path_planning::RoadNetwork::new(),
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             dropped: Vec::new(),
             pits: Vec::new(),
-            where_it_was_worked_out: std::collections::HashSet::new(),
+            where_it_was_worked_out: std::collections::BTreeSet::new(),
             what_dried_in_the_sun: Vec::new(),
             food_that_rotted_where_it_lay: 0,
             food_that_rotted_in_the_ground: 0,
@@ -2244,8 +2244,8 @@ impl World {
 
     /// Get pending production info for display (without collecting)
     /// Returns map of position -> (building_type, resource_count)
-    pub fn get_pending_production_info(&self) -> HashMap<Position, (BuildingType, usize)> {
-        let mut info = HashMap::new();
+    pub fn get_pending_production_info(&self) -> BTreeMap<Position, (BuildingType, usize)> {
+        let mut info = BTreeMap::new();
 
         for building in &self.buildings {
             if building.is_completed() && !building.pending_production.is_empty() {

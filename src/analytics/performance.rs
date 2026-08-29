@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Performance metrics for a single operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,7 +50,7 @@ pub struct PerformanceSnapshot {
 /// Performance monitor for tracking simulation performance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceMonitor {
-    pub operations: HashMap<String, OperationMetrics>,
+    pub operations: BTreeMap<String, OperationMetrics>,
     pub snapshots: Vec<PerformanceSnapshot>,
     pub max_snapshots: usize,
 
@@ -61,7 +61,7 @@ pub struct PerformanceMonitor {
 impl PerformanceMonitor {
     pub fn new(max_snapshots: usize) -> Self {
         Self {
-            operations: HashMap::new(),
+            operations: BTreeMap::new(),
             snapshots: Vec::new(),
             max_snapshots,
             last_tick_start: None,

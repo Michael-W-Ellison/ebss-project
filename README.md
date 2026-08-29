@@ -839,6 +839,39 @@ original specifications.
   aggregate the suite agreed: 25 deterministic failures and 7 flaky before, 24
   and 7 after, with the five names that moved between the lists each flipping
   on their own between runs of the same tree. See ISSUES_FOUND.md #93
+- ✅ The sweep finished: the same seed is now the same world, to the last berry.
+  The entry above it halved the flakiness and left a guess about where the rest
+  was — eighty-three choose-operations in one file. The guess was wrong, and
+  what was actually missing was an **instrument**: Rust seeds hash iteration per
+  *process*, so no test inside one process could ever have seen this. A harness
+  that prints a fingerprint of the whole world per tick, run as two processes
+  and diffed, put the first divergence at tick **-1** — before anything had
+  happened.
+
+  Four faults, none of them in the eighty-three. **Names came from the operating
+  system**: 270 `Uuid::new_v4()` sites, and an id here is a map key, a sort key
+  and a tie-break, so two runs of one seed disagreed about who was who before
+  the first tick. **`all_species()` handed back a `HashMap`'s values**, so world
+  generation picked a different species, rolled a different herd size, and spent
+  a *different number of rolls* — putting every later draw out of step. **Every
+  `HashMap` in the model** — 439 uses across 87 files, now `BTreeMap`, which
+  moves the property from something to remember at each new `.iter()` to
+  something the type system holds. And **`rand::random()`**, ten sites in the
+  fauna and flora: the same function as `thread_rng` under a friendlier name,
+  which is why the previous sweep walked past it. Those ten alone were enough —
+  with everything else fixed the beasts still moved differently in every run,
+  and by tick 49 it had reached the people, through the Safety drive of a man
+  who could see one.
+
+  **Flaky tests 7 → 0**: the same 28 failures in each of three runs of the whole
+  suite. Five of the seven that used to come and go now fail every time and two
+  pass every time, which is the point — each of them now has an answer. And a
+  measurement is a fact: the survival harness gave 2,586 and 2,350 on two runs
+  of the *same code and seeds* before this, and gives 2,418 twice now. The cost
+  is stated plainly: the model runs about **20% slower** (39.6s → 47.5s for 32
+  worlds × 4,000 ticks). Held by two behavioural tests and two source-level
+  guards that fail on any `thread_rng`, `rand::random`, `Uuid::new_v4`,
+  `HashMap` or `HashSet` in `src/`. See ISSUES_FOUND.md #94
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

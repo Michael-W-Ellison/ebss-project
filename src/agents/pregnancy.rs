@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_pregnancy_progress() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(100, father_id);
 
         assert_eq!(pregnancy.progress(100), 0.0);
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_pregnancy_due() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(100, father_id);
 
         assert!(!pregnancy.is_due(100));
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_trimester() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(0, father_id);
 
         assert_eq!(pregnancy.trimester(0), 1);
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_speed_modifier() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(0, father_id);
 
         // First half: no penalty
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_nutrition_tracking() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let mut pregnancy = PregnancyState::new(0, father_id);
 
         // Well-fed mother

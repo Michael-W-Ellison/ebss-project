@@ -1,7 +1,7 @@
 // src/gui/state.rs
 //! State management and communication types for the GUI.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 use crate::agents::{LifeStage, Gender, JobCategory};
 use crate::core::DriveType;
@@ -158,7 +158,7 @@ pub struct SelectedAgentData {
     pub life_stage: LifeStage,
     pub drives: Vec<DriveData>,
     pub traits: Vec<String>,
-    pub skills: HashMap<String, SkillData>,
+    pub skills: BTreeMap<String, SkillData>,
     pub inventory: Vec<InventoryItemData>,
     pub relationships: Vec<RelationshipData>,
     pub emotions: EmotionData,
@@ -515,7 +515,7 @@ pub struct RelationshipGraphState {
     pub layout_mode: GraphLayoutMode,
     pub show_labels: bool,
     pub focus_agent: Option<Uuid>,
-    pub node_positions: HashMap<Uuid, GraphNodePosition>,
+    pub node_positions: BTreeMap<Uuid, GraphNodePosition>,
     pub layout_iterations: u32,
     pub needs_layout: bool,
 }
@@ -531,7 +531,7 @@ impl Default for RelationshipGraphState {
             layout_mode: GraphLayoutMode::default(),
             show_labels: true,
             focus_agent: None,
-            node_positions: HashMap::new(),
+            node_positions: BTreeMap::new(),
             layout_iterations: 0,
             needs_layout: true,
         }

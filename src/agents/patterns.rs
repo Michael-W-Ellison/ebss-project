@@ -16,7 +16,7 @@
 //! against it is how often it worked, when it last worked, and the ground it
 //! was standing on when it did.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -39,7 +39,7 @@ pub struct Patterns {
     /// Keyed by the need, and then by the thing done - see
     /// `Agent::what_was_tried`. Nested rather than keyed by a pair so that it
     /// survives a round trip through a format whose map keys are strings.
-    what_answers: HashMap<DriveType, HashMap<String, Habit>>,
+    what_answers: BTreeMap<DriveType, BTreeMap<String, Habit>>,
 }
 
 impl Patterns {

@@ -2,7 +2,7 @@
 //! Relationship graph panel state resource.
 
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 use crate::gui::state::{RelationshipGraphSnapshot, RelationshipFilter, GraphLayoutMode, GraphNodePosition};
 
@@ -27,7 +27,7 @@ pub struct RelationshipGraphData {
     /// Current layout mode
     pub layout_mode: GraphLayoutMode,
     /// Computed node positions
-    pub node_positions: HashMap<Uuid, GraphNodePosition>,
+    pub node_positions: BTreeMap<Uuid, GraphNodePosition>,
     /// Whether layout needs to be recomputed
     pub needs_layout: bool,
     /// Number of force-directed iterations run
@@ -46,7 +46,7 @@ impl Default for RelationshipGraphData {
             show_labels: true,
             filter: RelationshipFilter::default(),
             layout_mode: GraphLayoutMode::default(),
-            node_positions: HashMap::new(),
+            node_positions: BTreeMap::new(),
             needs_layout: true,
             layout_iterations: 0,
         }

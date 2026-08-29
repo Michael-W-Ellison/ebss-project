@@ -256,7 +256,7 @@ fn render_resources_tab(
     }
 
     // Count resources by type
-    let mut resource_counts: std::collections::HashMap<String, (u32, u32)> = std::collections::HashMap::new();
+    let mut resource_counts: std::collections::BTreeMap<String, (u32, u32)> = std::collections::BTreeMap::new();
     for resource in resources {
         let entry = resource_counts.entry(format!("{:?}", resource.resource_type)).or_insert((0, 0));
         entry.0 += 1;
@@ -308,7 +308,7 @@ fn render_economy_tab(
     // Activity breakdown
     ui.heading("Agent Activities");
 
-    let mut activities: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut activities: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
     for agent in &snapshot.population.agents {
         if let Some(activity) = &agent.current_activity {
             let key = if activity.len() > 20 {

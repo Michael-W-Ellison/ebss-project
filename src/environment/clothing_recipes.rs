@@ -3,7 +3,7 @@
 
 use super::crafting::{CraftingTemplate, Ingredient, CraftingOutput, CraftingStation};
 use super::MaterialCategory;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Get all clothing crafting recipes
 pub fn clothing_recipes() -> Vec<CraftingTemplate> {
@@ -43,7 +43,7 @@ fn leather_tunic_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -70,7 +70,7 @@ fn leather_pants_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -97,7 +97,7 @@ fn leather_gloves_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -125,7 +125,7 @@ fn fur_coat_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -152,7 +152,7 @@ fn fur_hat_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -179,7 +179,7 @@ fn wool_cloak_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -206,7 +206,7 @@ fn linen_shirt_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -234,7 +234,7 @@ fn hide_armor_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 
@@ -261,7 +261,7 @@ fn bark_boots_recipe() -> CraftingTemplate {
         required_skill: None,
         discoverable: true,
         unlocked: true,
-        properties: HashMap::new(),
+        properties: BTreeMap::new(),
     }
 }
 

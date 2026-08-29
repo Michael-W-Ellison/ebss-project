@@ -209,7 +209,7 @@ pub fn agent_to_detailed(agent: &Agent) -> SelectedAgentData {
         .collect();
 
     // Skills with full data
-    let mut skills = std::collections::HashMap::new();
+    let mut skills = std::collections::BTreeMap::new();
     for skill in agent.skills.get_all_skills().values() {
         skills.insert(
             format!("{:?}", skill.skill_type),

@@ -35,7 +35,7 @@ fn main() {
     println!("✓ Recorded discovery: Dark cave at (15, 20, 5)");
 
     // Record a social interaction
-    let friend_id = Uuid::new_v4();
+    let friend_id = ebss::core::dice::name();
     let social_episode = memory.record_event(
         EpisodeType::SocialInteraction,
         "Had a great conversation with a friend".to_string(),
@@ -140,9 +140,9 @@ fn main() {
     // ===== Part 4: Social Memory =====
     println!("--- Part 4: Social Memory (Relationships) ---");
 
-    let ally_id = Uuid::new_v4();
-    let stranger_id = Uuid::new_v4();
-    let rival_id = Uuid::new_v4();
+    let ally_id = ebss::core::dice::name();
+    let stranger_id = ebss::core::dice::name();
+    let rival_id = ebss::core::dice::name();
 
     // Build relationships
     memory.remember_interaction(

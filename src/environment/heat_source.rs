@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::smelting::{SmeltingRegistry, check_smelting, SmeltingCheck};
 
 /// Type of heat source
@@ -153,7 +153,7 @@ pub struct HeatSource {
 impl HeatSource {
     pub fn new(heat_source_type: HeatSourceType, position: (i32, i32, i32), timestamp: u64) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             heat_source_type,
             position,
             is_lit: false,
@@ -357,8 +357,8 @@ pub struct SmeltingResult {
 /// Registry of all heat sources in the world
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeatSourceRegistry {
-    heat_sources: HashMap<Uuid, HeatSource>,
-    position_index: HashMap<(i32, i32, i32), Uuid>,
+    heat_sources: BTreeMap<Uuid, HeatSource>,
+    position_index: BTreeMap<(i32, i32, i32), Uuid>,
     #[serde(skip)]
     smelting_registry: SmeltingRegistry,
 }
@@ -366,8 +366,8 @@ pub struct HeatSourceRegistry {
 impl HeatSourceRegistry {
     pub fn new() -> Self {
         Self {
-            heat_sources: HashMap::new(),
-            position_index: HashMap::new(),
+            heat_sources: BTreeMap::new(),
+            position_index: BTreeMap::new(),
             smelting_registry: SmeltingRegistry::new(),
         }
     }

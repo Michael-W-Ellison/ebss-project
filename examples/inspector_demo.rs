@@ -213,7 +213,7 @@ fn demo_selection_system(inspector: &mut Inspector) {
     println!("1. No selection:");
     println!("   Current selection: {:?}", inspector.get_selection());
 
-    let test_id = uuid::Uuid::new_v4();
+    let test_id = ebss::core::dice::name();
 
     println!("\n2. Selecting an agent...");
     inspector.select_agent(test_id);

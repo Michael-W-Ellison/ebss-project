@@ -9,7 +9,7 @@
 //! - Compound pattern detection (multiple related patterns)
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::analytics::metrics::SimulationMetrics;
 use crate::core::{Trait, DriveType, EmotionType};
@@ -103,7 +103,7 @@ pub struct TrainingSample {
     /// Pattern type that was observed
     pub pattern_type: String,
     /// Metric values when pattern occurred
-    pub metric_values: HashMap<String, f32>,
+    pub metric_values: BTreeMap<String, f32>,
     /// Was this a true positive detection?
     pub is_positive: bool,
     /// Severity rating from training data
@@ -114,7 +114,7 @@ pub struct TrainingSample {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CalibrationResult {
     pub success: bool,
-    pub adjustments: HashMap<String, f32>,
+    pub adjustments: BTreeMap<String, f32>,
     pub message: String,
 }
 
@@ -210,15 +210,15 @@ impl EmergenceDetector {
         if self.training_samples.is_empty() {
             return CalibrationResult {
                 success: false,
-                adjustments: HashMap::new(),
+                adjustments: BTreeMap::new(),
                 message: "No training samples available".to_string(),
             };
         }
 
-        let mut adjustments = HashMap::new();
+        let mut adjustments = BTreeMap::new();
 
         // Group samples by pattern type
-        let mut samples_by_type: HashMap<String, Vec<&TrainingSample>> = HashMap::new();
+        let mut samples_by_type: BTreeMap<String, Vec<&TrainingSample>> = BTreeMap::new();
         for sample in &self.training_samples {
             samples_by_type
                 .entry(sample.pattern_type.clone())
@@ -261,7 +261,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn apply_calibration(&mut self, adjustments: &HashMap<String, f32>) {
+    fn apply_calibration(&mut self, adjustments: &BTreeMap<String, f32>) {
         if let Some(&v) = adjustments.get("trait_clustering_threshold") {
             self.thresholds.trait_clustering = v;
         }
@@ -1020,7 +1020,7 @@ mod tests {
         let sample = TrainingSample {
             pattern_type: "population_boom".to_string(),
             metric_values: {
-                let mut m = HashMap::new();
+                let mut m = BTreeMap::new();
                 m.insert("growth_rate".to_string(), 0.75);
                 m
             },
@@ -1049,7 +1049,7 @@ mod tests {
             detector.add_training_sample(TrainingSample {
                 pattern_type: "population_boom".to_string(),
                 metric_values: {
-                    let mut m = HashMap::new();
+                    let mut m = BTreeMap::new();
                     m.insert("growth_rate".to_string(), growth);
                     m
                 },
@@ -1063,7 +1063,7 @@ mod tests {
             detector.add_training_sample(TrainingSample {
                 pattern_type: "population_boom".to_string(),
                 metric_values: {
-                    let mut m = HashMap::new();
+                    let mut m = BTreeMap::new();
                     m.insert("growth_rate".to_string(), growth);
                     m
                 },
@@ -1162,7 +1162,7 @@ mod tests {
         let result = CalibrationResult {
             success: true,
             adjustments: {
-                let mut m = HashMap::new();
+                let mut m = BTreeMap::new();
                 m.insert("threshold_a".to_string(), 0.55);
                 m
             },

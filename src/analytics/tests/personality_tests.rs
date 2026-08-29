@@ -53,7 +53,7 @@ fn a_settlement_is_not_one_person_repeated() {
         population.spawn_agent(AgentConfig::default());
     }
 
-    let mut seen: std::collections::HashSet<Trait> = std::collections::HashSet::new();
+    let mut seen: std::collections::BTreeSet<Trait> = std::collections::BTreeSet::new();
     for agent in &population.agents {
         for held in agent.traits.get_traits() {
             seen.insert(*held);
@@ -68,8 +68,8 @@ fn a_settlement_is_not_one_person_repeated() {
     );
 
     // And no two of them should be the same person
-    let mut fingerprints: std::collections::HashSet<Vec<String>> =
-        std::collections::HashSet::new();
+    let mut fingerprints: std::collections::BTreeSet<Vec<String>> =
+        std::collections::BTreeSet::new();
     for agent in &population.agents {
         let mut names: Vec<String> = agent
             .traits

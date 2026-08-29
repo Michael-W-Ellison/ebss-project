@@ -2,7 +2,7 @@
 //! Relationship graph panel showing agent social network visualization.
 
 use egui::{Ui, Color32, RichText, Pos2, Rect, Stroke};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::agents::LifeStage;
@@ -209,7 +209,7 @@ fn render_graph_area(ui: &mut Ui, state: &mut GuiState, rect: Rect) {
     let offset = state.relationship_graph_state.offset;
 
     // Build position lookup
-    let positions: HashMap<Uuid, Pos2> = state.relationship_graph_state.node_positions.iter()
+    let positions: BTreeMap<Uuid, Pos2> = state.relationship_graph_state.node_positions.iter()
         .map(|(id, pos)| {
             let screen_x = center.x + (pos.x + offset.0) * zoom;
             let screen_y = center.y + (pos.y + offset.1) * zoom;
@@ -372,10 +372,10 @@ fn compute_layout(state: &mut GuiState, snapshot: &RelationshipGraphSnapshot, re
 
     // Filter to focus agent's connections if set
     let relevant_nodes: Vec<&RelationshipGraphNode> = if let Some(focus_id) = state.relationship_graph_state.focus_agent {
-        let connected: std::collections::HashSet<Uuid> = nodes.iter()
+        let connected: std::collections::BTreeSet<Uuid> = nodes.iter()
             .find(|n| n.agent_id == focus_id)
             .map(|n| {
-                let mut set: std::collections::HashSet<Uuid> = n.relationships.iter()
+                let mut set: std::collections::BTreeSet<Uuid> = n.relationships.iter()
                     .map(|r| r.target_id)
                     .collect();
                 set.insert(focus_id);
@@ -451,7 +451,7 @@ fn run_force_directed_iteration(state: &mut GuiState, snapshot: &RelationshipGra
     let node_ids: Vec<Uuid> = state.relationship_graph_state.node_positions.keys().copied().collect();
 
     // Calculate forces
-    let mut forces: HashMap<Uuid, (f32, f32)> = HashMap::new();
+    let mut forces: BTreeMap<Uuid, (f32, f32)> = BTreeMap::new();
     for id in &node_ids {
         forces.insert(*id, (0.0, 0.0));
     }

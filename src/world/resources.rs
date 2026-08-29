@@ -6,7 +6,7 @@ use crate::environment::seasons::Season;
 use crate::world::{Position, Soil, TerrainType};
 
 /// Types of resources
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum ResourceType {
     // === Basic Resources (Existing) ===
     Wood,

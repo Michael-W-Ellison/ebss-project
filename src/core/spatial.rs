@@ -6,7 +6,7 @@
 //! - Distance calculations with squared-distance optimization
 //! - Grid-based spatial partitioning
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// Cell size for spatial grid (agents within same or adjacent cells can interact)
@@ -25,16 +25,16 @@ pub const CLOSE_RANGE_SQUARED: f32 = 25.0;
 #[derive(Debug, Default)]
 pub struct SpatialGrid {
     /// Maps grid cell coordinates to list of entity IDs in that cell
-    cells: HashMap<(i32, i32), Vec<Uuid>>,
+    cells: BTreeMap<(i32, i32), Vec<Uuid>>,
     /// Maps entity IDs to their current cell for fast lookup
-    entity_cells: HashMap<Uuid, (i32, i32)>,
+    entity_cells: BTreeMap<Uuid, (i32, i32)>,
 }
 
 impl SpatialGrid {
     pub fn new() -> Self {
         Self {
-            cells: HashMap::new(),
-            entity_cells: HashMap::new(),
+            cells: BTreeMap::new(),
+            entity_cells: BTreeMap::new(),
         }
     }
 
@@ -142,9 +142,9 @@ mod tests {
     fn test_spatial_grid_insert_and_get_nearby() {
         let mut grid = SpatialGrid::new();
 
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-        let id3 = Uuid::new_v4();
+        let id1 = crate::core::dice::name();
+        let id2 = crate::core::dice::name();
+        let id3 = crate::core::dice::name();
 
         grid.insert(id1, 5, 5);    // Cell (0, 0)
         grid.insert(id2, 15, 15);  // Cell (1, 1)
@@ -160,7 +160,7 @@ mod tests {
     fn test_spatial_grid_remove() {
         let mut grid = SpatialGrid::new();
 
-        let id = Uuid::new_v4();
+        let id = crate::core::dice::name();
         grid.insert(id, 5, 5);
         assert_eq!(grid.len(), 1);
 

@@ -135,7 +135,7 @@ fn a_lie_about_what_a_man_needs_costs_more() {
         hunger.denied_ticks = 400;
     }
 
-    let liar = uuid::Uuid::new_v4();
+    let liar = crate::core::dice::name();
 
     let about_food = starving.what_a_lie_about_this_costs(Some("food"), liar);
     let about_stone = starving.what_a_lie_about_this_costs(Some("stone"), liar);
@@ -150,7 +150,7 @@ fn a_lie_about_what_a_man_needs_costs_more() {
 /// And the same lie costs less when the need is not pressing.
 #[test]
 fn the_same_lie_costs_less_to_a_man_who_is_not_hungry() {
-    let liar = uuid::Uuid::new_v4();
+    let liar = crate::core::dice::name();
 
     let mut starving = somebody();
     starving.state.gone_without_food_for(9_600);
@@ -173,7 +173,7 @@ fn the_same_lie_costs_less_to_a_man_who_is_not_hungry() {
 /// Being deceived by a friend is worse than by somebody you had no time for.
 #[test]
 fn a_lie_from_a_friend_cuts_deeper() {
-    let liar = uuid::Uuid::new_v4();
+    let liar = crate::core::dice::name();
 
     let mut trusted_him = somebody();
     trusted_him
@@ -198,7 +198,7 @@ fn a_lie_from_a_friend_cuts_deeper() {
 /// A vengeful man holds it against you and a forgiving one does not.
 #[test]
 fn what_sort_of_person_was_lied_to_decides_what_it_costs() {
-    let liar = uuid::Uuid::new_v4();
+    let liar = crate::core::dice::name();
 
     let plain = somebody();
     let mut vengeful = somebody();
@@ -218,7 +218,7 @@ fn an_honest_man_does_not_lie_even_to_somebody_he_cannot_stand() {
     let mut honest = somebody();
     honest.traits.add_trait(Trait::Honest);
 
-    let them = uuid::Uuid::new_v4();
+    let them = crate::core::dice::name();
     honest
         .relationships
         .get_or_create_relationship(them, 0)
@@ -236,7 +236,7 @@ fn an_honest_man_does_not_lie_even_to_somebody_he_cannot_stand() {
 #[test]
 fn a_lie_is_found_out_by_going_there() {
     let mut listener = somebody();
-    let liar = uuid::Uuid::new_v4();
+    let liar = crate::core::dice::name();
 
     let nowhere = Position::new(40, 40);
     listener.exploration_knowledge.take_their_word_for_it(
@@ -284,7 +284,7 @@ fn what_you_saw_yourself_is_nobodys_fault() {
 #[test]
 fn nobody_passes_on_hearsay_as_though_they_had_seen_it() {
     let mut middleman = somebody();
-    let liar = uuid::Uuid::new_v4();
+    let liar = crate::core::dice::name();
 
     let seen = Position::new(10, 10);
     let heard = Position::new(40, 40);

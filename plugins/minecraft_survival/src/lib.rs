@@ -10,7 +10,7 @@
 use ebss::environment::*;
 use ebss::core::DriveType;
 use std::any::Any;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use rand::Rng;
 use noise::{NoiseFn, Perlin};
 
@@ -47,12 +47,12 @@ impl ActionProfile {
 pub struct MinecraftSurvivalPlugin {
     metadata: PluginMetadata,
     world_state: WorldState,
-    materials: HashMap<String, Material>,
-    actions: HashMap<String, Action>,
+    materials: BTreeMap<String, Material>,
+    actions: BTreeMap<String, Action>,
     /// Cost and requirement data for each registered action, by the same id
-    action_profiles: HashMap<String, ActionProfile>,
+    action_profiles: BTreeMap<String, ActionProfile>,
     recipe_book: RecipeBook,
-    world_map: HashMap<Position, String>, // Position -> Material ID
+    world_map: BTreeMap<Position, String>, // Position -> Material ID
     structures: StructureRegistry,
     config: Option<PluginConfig>,
 }
@@ -75,11 +75,11 @@ impl MinecraftSurvivalPlugin {
         let mut plugin = Self {
             metadata,
             world_state: WorldState::new(0),
-            materials: HashMap::new(),
-            actions: HashMap::new(),
-            action_profiles: HashMap::new(),
+            materials: BTreeMap::new(),
+            actions: BTreeMap::new(),
+            action_profiles: BTreeMap::new(),
             recipe_book: RecipeBook::new(),
-            world_map: HashMap::new(),
+            world_map: BTreeMap::new(),
             structures: StructureRegistry::new(),
             config: None,
         };

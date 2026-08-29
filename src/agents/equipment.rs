@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Type of equipment slot
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum EquipmentSlot {
     // Clothing/Armor slots
     Head,
@@ -506,7 +506,7 @@ impl Equipment {
         let max_durability = material.base_durability() * quality_mult;
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             name,
             slot,
             material,
@@ -660,7 +660,7 @@ impl EquipmentItem {
         };
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             name,
             equipment_type,
             slot,
@@ -771,7 +771,7 @@ impl EquipmentItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EquipmentManager {
     /// Currently equipped items by slot
-    equipped: std::collections::HashMap<EquipmentSlot, EquipmentItem>,
+    equipped: std::collections::BTreeMap<EquipmentSlot, EquipmentItem>,
 
     /// Total weight of equipped items
     total_weight: f32,
@@ -784,7 +784,7 @@ impl EquipmentManager {
     /// Create a new equipment manager
     pub fn new(max_carry_weight: f32) -> Self {
         Self {
-            equipped: std::collections::HashMap::new(),
+            equipped: std::collections::BTreeMap::new(),
             total_weight: 0.0,
             max_carry_weight,
         }

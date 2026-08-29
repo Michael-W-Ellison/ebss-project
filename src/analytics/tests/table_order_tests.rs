@@ -67,7 +67,7 @@ fn a_people_with_the_same_materials_does_not_all_make_the_same_thing() {
         agent.inventory.recalculate_weight();
     }
 
-    let chosen: std::collections::HashSet<(String, String)> = simulation
+    let chosen: std::collections::BTreeSet<(String, String)> = simulation
         .population
         .agents
         .iter()
@@ -100,8 +100,8 @@ fn the_same_man_reaches_for_the_same_thing() {
     // Sampled rather than asserted once: whether he can be bothered today is a
     // coin toss by design - see `Lessons::will_try_this_again` - and it is only
     // *where he starts* that is fixed.
-    let mut reached: std::collections::HashMap<(String, String), u32> =
-        std::collections::HashMap::new();
+    let mut reached: std::collections::BTreeMap<(String, String), u32> =
+        std::collections::BTreeMap::new();
     for _ in 0..200 {
         if let Some(what) = simulation.population.agents[0].what_i_would_work_on() {
             *reached.entry(what).or_insert(0) += 1;
