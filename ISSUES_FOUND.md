@@ -5754,7 +5754,72 @@ that #93 deleted the rest of. It is left where it is rather than given a home in
 `happening/`, because giving dead code a good address is how it survives the next
 sweep.
 
-### 99. The other thirteen drive rates were never derived either
+### 99. What one agent makes of another, which is not a layer but a seam
+
+The last big cluster, and the one that would not sit in any of the three:
+being afraid of somebody, angry at somebody, willing to trade with them,
+willing to give to them, worth asking. `analytics/between_us/`, 22 functions:
+
+| | |
+|---|---|
+| `threat` | fear, anger, and the four answers to a thing in the way |
+| `seeing` | what everybody saw, and what they made of it |
+| `exchange` | trading, taking, and giving |
+| `asking` | putting a question to somebody who might know |
+
+A beast counts as another here. What these have in common is not that the other
+party is a person: it is that there *is* another party, and that what this one
+does next depends on what it makes of them.
+
+#### Why it is its own directory
+
+It does not fit the three-layer shape, and forcing it would have been worse than
+leaving it. `wanting` consults it - a drive that needs somebody else to answer it
+asks who. `turn` runs part of it as a phase - what somebody feels has to be
+worked out before they can act on it. Splitting it between the two would put
+`what_this_threat_comes_to` in one place and `how_this_one_answers_a_threat` in
+another, which is the exact fault the last four entries have been undoing.
+
+So it is a seam rather than a layer, and saying so in the module note is worth
+more than a tidier diagram would be.
+
+#### The end of it
+
+`analytics/mod.rs` is **1,208 lines** and 35 functions, the largest of them 86.
+It was **16,779 lines and 176 functions, the largest 5,723**, five commits ago -
+**down 93 per cent**. What is left in it is what belongs in a file called
+`analytics/mod.rs`: the configuration, the builders, save and load, the two
+tallies, and a handful of gather helpers that could go either way.
+
+Across all five: three seeds run six hundred ticks give byte-identical worlds at
+every step, the suite gives the same 28 failures throughout, and four
+configurations build clean at each step. Nothing about the model changed in any
+of them.
+
+#### The three orphans, and one that looked worse than it is
+
+Three methods are now visible as never used outside the tests, one in each of
+three directories:
+
+- `process_information_verification` (`analytics/mod.rs`) - the last remnant of
+  the second gossip pipeline #93 deleted the rest of.
+- `nearest_edible_this_one_would_go_to` (`wanting/food.rs`).
+- `how_this_one_answers_a_threat` (`between_us/threat.rs`).
+
+The third looked alarming for about a minute - the choosing code names it in a
+comment as where "the whole tree lives", and nothing calls it - so it was worth
+reading before writing down. It is **a one-line wrapper**:
+`self.what_this_threat_comes_to(agent, position).1`, dropping the branch name.
+`what_this_threat_comes_to` is the tree, and the live path calls it. The tree
+runs.
+
+What is actually wrong is smaller and worth fixing anyway: two names for one
+question, one of them used only by tests, and a comment pointing at the wrong
+one. That is defect #3 in miniature, and it survived precisely because a reader
+who wanted to check would have had to hold two places four thousand lines apart
+in their head. It took ten seconds once they were forty lines apart.
+
+### 100. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5763,19 +5828,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 100. The clock is spelled out in the interface too
+### 101. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 101. Build warnings
+### 102. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 102. Placeholder package metadata
+### 103. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

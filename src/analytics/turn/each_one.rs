@@ -346,10 +346,10 @@ impl Simulation {
             // what is in front of the agent, or from being attacked)
             else if agent.emotions.should_flee() {
                 // Frightened of something that is actually there. The
-                // whole tree lives in `how_this_one_answers_a_threat`
-                // - run, or turn and fight if there is nowhere to run,
-                // or freeze if there is neither. The attacker branches
-                // below it are for agents, who are not creatures.
+                // whole tree lives in `what_this_threat_comes_to` - run,
+                // or turn and fight if there is nowhere to run, or freeze
+                // if there is neither. The attacker branches below it are
+                // for agents, who are not creatures.
                 let tree = self.what_this_threat_comes_to(agent, agent_position);
                 came_to = Some(tree.0);
 

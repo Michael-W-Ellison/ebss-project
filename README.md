@@ -979,6 +979,40 @@ original specifications.
   Largest function 5,723 → 121; 176 functions in it → 57. Byte-identical worlds
   at every step, the same 28 failures throughout, four configurations clean at
   each step. See ISSUES_FOUND.md #98
+- ✅ What one agent makes of another — which is not a layer but a seam. The last
+  big cluster, and the one that would not sit in any of the three: being afraid
+  of somebody, angry at somebody, willing to trade with them, willing to give to
+  them, worth asking. `analytics/between_us/` — **threat**, **seeing**,
+  **exchange**, **asking**, 22 functions. A beast counts as another here: what
+  these have in common is not that the other party is a person, but that there
+  *is* another party and what this one does next depends on what it makes of
+  them.
+
+  It gets its own directory because forcing it into the three-layer shape would
+  have been worse than leaving it. `wanting` consults it when a drive needs
+  somebody else to answer it; `turn` runs part of it as a phase, because what
+  somebody feels has to be settled before they can act on it. Splitting it
+  between the two would have put `what_this_threat_comes_to` in one place and
+  `how_this_one_answers_a_threat` in another — the exact fault the last four
+  commits have been undoing.
+
+  **`analytics/mod.rs` is 1,208 lines and 35 functions, largest 86.** It was
+  **16,779 lines, 176 functions, largest 5,723** five commits ago — **down 93%**.
+  What is left is what belongs in a file of that name: configuration, builders,
+  save and load, two tallies, and a few gather helpers that could go either way.
+  Byte-identical worlds at every step across all five, the same 28 failures
+  throughout.
+
+  **And a finding that shrank on inspection.** Three methods are now visible as
+  used only by tests, and one looked alarming: `how_this_one_answers_a_threat`,
+  which the choosing code names in a comment as where "the whole tree lives" —
+  and nothing calls. Reading it took a minute: it is a one-line wrapper over
+  `what_this_threat_comes_to`, which *is* called. The tree runs. What is
+  actually wrong is two names for one question and a comment pointing at the
+  wrong one — both now fixed. Worth recording as the shape of the win: that
+  check would have meant holding two places four thousand lines apart in your
+  head, and took ten seconds once they were forty lines apart.
+  See ISSUES_FOUND.md #99
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
