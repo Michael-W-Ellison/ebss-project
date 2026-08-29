@@ -924,6 +924,34 @@ original specifications.
   — that is what it is for — but the warning caught it first, and only because
   the block had been given a signature to shadow. Second find in two commits,
   both from giving code a name. See ISSUES_FOUND.md #96
+- ✅ The decision layer had no boundary at all — and that was the original
+  argument. The determinism entry above ended by naming what was missing as a
+  *property* rather than a bug list: *the decision layer's inputs must have a
+  stable order; a layer with a boundary can be made to hold that property once.*
+  There was no such layer. What answers **given a drive, what would answer it?**
+  was 2,900 lines scattered the length of the file — the ladder in one place,
+  what hunger asks for eight hundred lines below it, what the errand machinery
+  does with the answer three thousand lines after that, and the constants each
+  turns on wherever they happened to be written.
+
+  `analytics/wanting/` is that layer now: the ladder in `mod.rs`, and below it
+  one module per question, named for what it is about rather than for the drive
+  that happens to ask — **food** (hunger and thirst), **quarry**, **ground**,
+  **store**, **shelter**, **camp**, **errands**. 88 functions and 56 constants
+  moved, the constants going with the functions they belong to for the first
+  time. `analytics/mod.rs` goes 10,213 → **5,276**.
+
+  The boundary earns its keep by what it forbids: **nothing in `wanting/` does
+  anything.** Every function answers a question and hands the answer back; the
+  doing is in `doing/` and the order of a turn is in `turn/`. A change to what
+  hunger *asks for* can no longer quietly change what eating *does* — and that
+  rule is now checkable from a directory listing.
+
+  **Across the three splits: 16,779 → 5,276 lines, down 69%**, largest remaining
+  function 170 lines against 5,723. Byte-identical worlds at every step, and the
+  same 28 failures throughout. That the check passed three times running is the
+  point: a refactor this size is normally argued about rather than verified.
+  See ISSUES_FOUND.md #97
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

@@ -1,0 +1,298 @@
+// src/analytics/wanting/quarry.rs
+//! Hunting and fishing: going after something that would rather not be
+//! caught.
+//!
+//! Part of the decision layer - see [`super`]. Nothing here does anything: it
+//! answers what would be worth doing, and hands that answer back up the ladder.
+
+use super::super::Simulation;
+use crate::core::DriveType;
+use crate::environment::Action;
+
+impl Simulation {
+    /// Whether this agent should be taking on this animal at all.
+    ///
+    /// Anything that fights back is a job for someone with a weapon in hand.
+    /// An unarmed agent that walks up to a bear is not hunting, it is dying.
+    pub(in crate::analytics) fn worth_hunting(
+        &self,
+        agent: &crate::agents::Agent,
+        animal: &crate::environment::Animal,
+    ) -> bool {
+        use crate::environment::AnimalBehavior;
+
+        if !animal.is_alive() || animal.is_domesticated {
+            return false;
+        }
+
+        let species = match self.world.animals.get_species(&animal.species_id) {
+            Some(species) => species,
+            None => return false,
+        };
+
+        let dangerous = matches!(
+            species.behavior,
+            AnimalBehavior::Aggressive | AnimalBehavior::Territorial
+        );
+
+        !dangerous || agent.equipment.get_weapon().is_some()
+    }
+
+    /// The nearest animal this agent could reasonably take, and where it is
+    pub(in crate::analytics) fn nearest_prey(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(uuid::Uuid, (i32, i32))> {
+        self.world
+            .get_animals_in_radius(
+                (agent_position.0, agent_position.1),
+                Self::HUNT_SEARCH_RADIUS,
+            )
+            .into_iter()
+            .filter(|animal| self.worth_hunting(agent, animal))
+            .min_by_key(|animal| {
+                (animal.position.0 - agent_position.0).abs()
+                    + (animal.position.1 - agent_position.1).abs()
+            })
+            .map(|animal| (animal.id, animal.position))
+    }
+
+    /// Whether the agent has a reason to go after an animal.
+    ///
+    /// Two of them: nothing to eat, or nothing warm to wear and no skins to
+    /// make it from. Fur and hides are the warm half of the garment table and
+    /// the only way to them is off an animal.
+    pub(in crate::analytics) fn wants_to_hunt(agent: &crate::agents::Agent) -> bool {
+        // An agent hunts for skins, and the meat is a bonus.
+        //
+        // Hunting for the meat as such does not pay: berries and fish are
+        // there for the taking and an animal has to be found, walked to and
+        // hit. Agents that went after every animal because their pack was
+        // empty starved for it, and two settlements in forty died out.
+        //
+        // It also keeps hunting until there are enough skins for the garment,
+        // not until there is one skin: a fur coat takes five hides, and an
+        // agent that stopped at the first came home with a single pelt over
+        // and over and never wore anything warmer than woven flax.
+        if !Self::wants_more_clothing(agent) {
+            return false;
+        }
+
+        let quality = Self::expected_garment_quality(agent);
+
+        let wants = crate::agents::equipment::GARMENT_RECIPES.iter().any(|recipe| {
+            matches!(recipe.material_item, "hides" | "leather" | "wool")
+                && Self::worth_making(
+                    Self::garment_warmth(recipe, quality),
+                    Self::warmth_worn(agent, recipe.slot),
+                )
+        });
+
+        if !wants {
+            return false;
+        }
+
+        // Stop once there is enough of anything to make one. An agent with a
+        // pack full of hides has no business going after a sheep for the wool
+        // it has never had.
+        let can_already_make = crate::agents::equipment::GARMENT_RECIPES.iter().any(|recipe| {
+            matches!(recipe.material_item, "hides" | "leather" | "wool")
+                && Self::worth_making(
+                    Self::garment_warmth(recipe, quality),
+                    Self::warmth_worn(agent, recipe.slot),
+                )
+                && Self::can_spare_material(agent, recipe)
+        });
+
+        !can_already_make
+    }
+
+    /// Going after an animal: strike if it is within reach, close on it if not.
+    ///
+    /// Nothing in the simulation had ever selected `Action::Hunt` - the one
+    /// place it appeared passed a nil animal id that the executor could not
+    /// resolve - so no agent had ever hunted, and meat, hides and wool never
+    /// reached an inventory at all.
+    pub(in crate::analytics) fn hunting_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+
+        if !Self::wants_to_hunt(agent) {
+            return None;
+        }
+
+        // Somebody who has gone after animals a dozen times and come back
+        // empty every time stops going after animals. Nothing tells them to:
+        // it is what their own record says, and a hunter with a good record
+        // keeps at it on the same evidence.
+        if !agent.lessons.worth_trying(Undertaking::Hunting) {
+            return None;
+        }
+
+        let (animal_id, animal_position) = self.nearest_prey(agent, agent_position)?;
+
+        let reach = (animal_position.0 - agent_position.0)
+            .abs()
+            .max((animal_position.1 - agent_position.1).abs());
+
+        if reach <= Self::HUNT_REACH {
+            return Some(Action::Hunt {
+                animal_id,
+                weapon: agent.equipment.get_weapon().map(|weapon| weapon.name.clone()),
+            });
+        }
+
+        Some(Action::Move {
+            target: (animal_position.0, animal_position.1, agent_position.2),
+        })
+    }
+
+    /// How far a parent lets a child of its own get before going after it
+    pub(in crate::analytics) const CHILD_LEASH: i32 = 8;
+
+    /// How far an agent can work a reach from where it stands
+    pub(in crate::analytics) const CAST: i32 = 1;
+
+    /// How far an agent will walk to get to water
+    pub(in crate::analytics) const WORTH_WALKING_TO_WATER: i32 = 14;
+
+    /// A reach carrying this many fish is as good as fishing gets
+    pub(in crate::analytics) const A_GOOD_REACH: f32 = 60.0;
+
+    /// What comes out of the water on a cast that works
+    pub(in crate::analytics) const FISH_PER_CAST: u32 = 2;
+
+    /// How often a thrust tells in an empty reach, for somebody with nothing
+    /// in his hands.
+    ///
+    /// Everything worth having is added to this: the thickness of the run, the
+    /// hand, a rod, a spear. On its own it is a man standing in a river
+    /// hoping.
+    pub(in crate::analytics) const A_THRUST_THAT_TELLS: f32 = 0.15;
+
+    /// What standing in the water costs, whether or not anything takes.
+    pub(in crate::analytics) const WHAT_A_THRUST_COSTS: f32 = 8.0;
+
+    /// What share of a fish is guts, heads and bone rather than meat.
+    ///
+    /// It goes to waste in the pack the moment the fish is caught, which is
+    /// what puts a fishing agent in the way of doing a field good without ever
+    /// meaning to.
+    pub(in crate::analytics) const OFFAL_SHARE: f32 = 0.35;
+
+    /// The reach an agent standing here can work, if there is one.
+    pub(in crate::analytics) fn reach_within_cast(
+        &self,
+        agent_position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        self.world
+            .resources
+            .iter()
+            .filter(|resource| resource.resource_type.grows_in_water())
+            .filter(|resource| resource.amount > 0)
+            .map(|resource| resource.position)
+            .find(|position| {
+                (position.x - agent_position.0).abs() <= Self::CAST
+                    && (position.y - agent_position.1).abs() <= Self::CAST
+            })
+    }
+
+    /// Standing in a river after fish, and walking to a river worth standing in.
+    ///
+    /// A fishery is not another way of getting a meal. It is the only food a
+    /// settlement can take that the land does not pay for, because a fish is
+    /// grown at sea and comes up the river under its own power - so what is
+    /// left of it, put on a field, makes the country richer rather than
+    /// slower to run down. Everything else a settlement does with the ground
+    /// is at best a return of what it already took.
+    ///
+    /// Nobody is told this. An agent fishes because it is hungry and there is
+    /// water; the guts go into its pack as waste like anything else; and if it
+    /// has learned that tipping the pack on a field does the ground good, the
+    /// two habits meet on their own. What the agent keeps of that meeting is
+    /// its own record of whether fishing pays - a person who stood in an empty
+    /// winter river a dozen times stops going.
+    pub(in crate::analytics) fn fishing_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+
+        // Somebody who has stood in the water a dozen times and come out with
+        // nothing stops going to the water.
+        if !agent.lessons.worth_trying(Undertaking::Fishing) {
+            return None;
+        }
+
+        // Fishing is what an agent does when it wants food or wants a store of
+        // it. Both, in a settlement beside a river, most of the year.
+        let hunger = agent
+            .drives
+            .get(DriveType::Hunger)
+            .map(|drive| drive.urgency())
+            .unwrap_or(0.0);
+        let sustenance = agent
+            .drives
+            .get(DriveType::Sustenance)
+            .map(|drive| drive.urgency())
+            .unwrap_or(0.0);
+
+        if hunger.max(sustenance) < Self::WORTH_GETTING_WET {
+            return None;
+        }
+
+        // And nobody stands in a river for more fish than he will eat. This is
+        // where it bites hardest: whole fish is the largest single thing that
+        // goes off in anybody's pack in this model.
+        if Self::more_food_than_he_will_get_through(agent) {
+            return None;
+        }
+
+        if self.reach_within_cast(agent_position).is_some() {
+            return Some(Action::Fish);
+        }
+
+        // Otherwise walk to the best water within reason: the thickest reach,
+        // discounted by how far it is. A river in the run is worth crossing a
+        // settlement for and an empty pool next door is not.
+        let (best, _) = self
+            .world
+            .resources
+            .iter()
+            .filter(|resource| resource.resource_type.grows_in_water())
+            .filter(|resource| resource.amount > 0)
+            .filter_map(|resource| {
+                let reach = (resource.position.x - agent_position.0)
+                    .abs()
+                    .max((resource.position.y - agent_position.1).abs());
+
+                if reach > Self::WORTH_WALKING_TO_WATER {
+                    return None;
+                }
+
+                let worth = resource.amount as f32 / (1.0 + reach as f32);
+                Some((resource.position, worth))
+            })
+            .fold(
+                None,
+                |best: Option<(crate::world::Position, f32)>, (position, worth)| {
+                    match best {
+                        Some((_, best_worth)) if best_worth >= worth => best,
+                        _ => Some((position, worth)),
+                    }
+                },
+            )?;
+
+        Some(Action::Move {
+            target: (best.x, best.y, agent_position.2),
+        })
+    }
+
+    /// How much an agent has to want food before it will go and stand in a river
+    pub(in crate::analytics) const WORTH_GETTING_WET: f32 = 0.35;
+}

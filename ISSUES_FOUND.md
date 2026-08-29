@@ -5640,7 +5640,62 @@ having one - but the warning caught it first, and only because the block had
 been given a signature to shadow. That is the second thing this split has found
 in two commits, and both were found by giving code a name.
 
-### 97. The other thirteen drive rates were never derived either
+### 97. The decision layer had no boundary at all, and that was the original argument
+
+#92 ended by naming what was missing as a *property* rather than a bug list:
+"the decision layer's inputs must have a stable order... a layer with a boundary
+can be made to hold that property once." There was no such layer. What answers
+*given a drive, what would answer it?* was 2,900 lines scattered the length of
+the file: the ladder in one place, what hunger asks for eight hundred lines
+below it, what the errand machinery does with the answer three thousand lines
+after that, and the constants each of them turns on wherever they happened to be
+written.
+
+`analytics/wanting/` is that layer now. The ladder is in `mod.rs`; below it,
+one module per question, named for what it is about rather than for the drive
+that happens to ask - because more than one drive asks most of them:
+
+| | |
+|---|---|
+| `food` | hunger and thirst, the two that kill |
+| `quarry` | hunting and fishing |
+| `ground` | working the soil before there is anything on it to take |
+| `store` | putting by, and taking out again |
+| `shelter` | keeping warm and dry |
+| `camp` | whether to stay, and where to go instead |
+| `errands` | turning a want into a step somebody can actually take |
+
+Eighty-eight functions and fifty-six constants moved; the constants went with
+the functions they belong to, which is the first time most of them have been
+anywhere near their use. `analytics/mod.rs` goes 10,213 to **5,276**.
+
+#### What the boundary is actually for
+
+**Nothing in `wanting/` does anything.** Every function in it answers a question
+and hands the answer back; the doing is in `doing/`, and the order of a turn is
+in `turn/`. That is the whole point of the boundary, and it is a rule that can
+now be checked by reading a directory listing rather than by reading sixteen
+thousand lines. A change to what hunger *asks for* can no longer quietly change
+what eating *does*.
+
+It also makes #92's property tractable. "The decision layer's inputs must have a
+stable order" is a sentence about `wanting/`. Before this it was a sentence about
+a file.
+
+#### Across the three splits
+
+`analytics/mod.rs` was **16,779 lines** four commits ago and is **5,276** now -
+down 69 per cent - and the largest function left in it is 170 lines against
+5,723. Nothing about the model changed in any of the three: three seeds run six
+hundred ticks give byte-identical worlds at every step, and the suite gives the
+same 28 failures throughout.
+
+That the same check passed three times running is worth stating plainly. A
+refactor of this size is normally argued about rather than verified. This one was
+verified, at each step, in about ninety seconds - and the reason is #94, four
+commits back, which at the time looked like housekeeping.
+
+### 98. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5649,19 +5704,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 98. The clock is spelled out in the interface too
+### 99. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 99. Build warnings
+### 100. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 100. Placeholder package metadata
+### 101. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
