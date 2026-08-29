@@ -5695,7 +5695,66 @@ refactor of this size is normally argued about rather than verified. This one wa
 verified, at each step, in about ninety seconds - and the reason is #94, four
 commits back, which at the time looked like housekeeping.
 
-### 98. The other thirteen drive rates were never derived either
+### 98. The third layer, and the parts of it that had never been next to each other
+
+What happens whether or not anybody decides anything: the ground coming up, the
+weather on a body, the beasts, birth and nursing, what a person finds out by
+being somewhere at the time. It was the last big cluster in `analytics/mod.rs`
+and the hardest of the three to see, because **its parts were never next to each
+other**. The ground coming up in berries sat two thousand lines from the weather
+that made it wet. The beasts deciding what to make of us sat a thousand lines
+from the beasts acting on it. Nothing in the file's layout said these were one
+subject; only the order they are called in did, and that was buried in `tick`.
+
+`analytics/happening/`, eight modules and 36 functions:
+
+| | |
+|---|---|
+| `soil` | what the ground does, and what goes back into it |
+| `weather` | the weather on a body, and what a clear day dries |
+| `beasts` | what they make of us, and what they do about it |
+| `kin` | carrying, bearing, and feeding what cannot feed itself |
+| `noticing` | what a person finds out by being somewhere at the time |
+| `senses` | what can be smelled, and what stops being worth remembering |
+| `situation` | reading the world, so a drive rises on a condition |
+| `buildings` | buildings, and what standing in one does to somebody |
+
+`analytics/mod.rs` goes 5,276 to **2,491**.
+
+#### The three layers, finished
+
+- [`wanting`] decides - given a drive, what would answer it
+- [`doing`] acts - fifty-two verbs, grouped by what they are about
+- [`happening`] happens - whether or not anybody decided anything
+- [`turn`] says what order they run in, and holds the arguments about that order
+
+That is the shape the modularisation was for. It is worth saying what it buys
+beyond tidiness: **each of the three has a different rule about what it may
+touch**, and those rules are now checkable by looking at a directory rather than
+by reading a file. `wanting` may not change the world. `doing` may not decide.
+`happening` runs on the world's clock, not on anybody's drive. Before this, all
+three rules were true only by the discipline of whoever last edited line 9,412.
+
+#### Across four commits
+
+`analytics/mod.rs`: **16,779 to 2,491 lines, down 85 per cent.** Largest function
+5,723 to 121. Fifty-seven functions left in it, against 176.
+
+Nothing about the model changed in any of the four. Three seeds run six hundred
+ticks give byte-identical worlds at every step, and the suite gives the same 28
+failures throughout, stable across runs. Four configurations build clean at each
+step.
+
+#### One orphan left behind
+
+`process_information_verification` stayed in `analytics/mod.rs`, and it is the
+only thing in there that looks like a world process. It is not one: the compiler
+has it as never used, and it is the last remnant of the second gossip pipeline
+that #93 deleted the rest of. It is left where it is rather than given a home in
+`happening/`, because giving dead code a good address is how it survives the next
+sweep.
+
+### 99. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5704,19 +5763,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 99. The clock is spelled out in the interface too
+### 100. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 100. Build warnings
+### 101. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 101. Placeholder package metadata
+### 102. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

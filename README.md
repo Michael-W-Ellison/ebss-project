@@ -952,6 +952,33 @@ original specifications.
   same 28 failures throughout. That the check passed three times running is the
   point: a refactor this size is normally argued about rather than verified.
   See ISSUES_FOUND.md #97
+- ✅ The third layer, and the parts of it that had never been next to each other.
+  What happens whether or not anybody decides anything — the ground coming up,
+  the weather on a body, the beasts, birth and nursing, what a person finds out
+  by being somewhere at the time. It was the hardest of the three to see,
+  because **its parts were never next to each other**: the ground coming up in
+  berries sat two thousand lines from the weather that made it wet, and the
+  beasts deciding what to make of us sat a thousand lines from the beasts acting
+  on it. Nothing in the layout said these were one subject; only the order they
+  were called in did, and that was buried in `tick`.
+
+  `analytics/happening/` — **soil**, **weather**, **beasts**, **kin**,
+  **noticing**, **senses**, **situation**, **buildings**: 8 modules, 36
+  functions. `analytics/mod.rs` goes 5,276 → **2,491**.
+
+  **The three layers are finished.** `wanting` decides, `doing` acts,
+  `happening` happens, and `turn` says what order they run in and holds the
+  arguments about that order. What that buys beyond tidiness is that each layer
+  has a *different rule about what it may touch* — `wanting` may not change the
+  world, `doing` may not decide, `happening` runs on the world's clock and not
+  on anybody's drive — and those rules are now checkable from a directory
+  listing. Before this they were true only by the discipline of whoever last
+  edited line 9,412.
+
+  **Across four commits: `analytics/mod.rs` 16,779 → 2,491 lines, down 85%.**
+  Largest function 5,723 → 121; 176 functions in it → 57. Byte-identical worlds
+  at every step, the same 28 failures throughout, four configurations clean at
+  each step. See ISSUES_FOUND.md #98
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
