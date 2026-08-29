@@ -872,6 +872,29 @@ original specifications.
   worlds × 4,000 ticks). Held by two behavioural tests and two source-level
   guards that fail on any `thread_rng`, `rand::random`, `Uuid::new_v4`,
   `HashMap` or `HashSet` in `src/`. See ISSUES_FOUND.md #94
+- ✅ The five-thousand-line function, and the first thing it hid. `execute_action`
+  was 5,723 lines — a third of `analytics/mod.rs` — and one `match` of fifty-two
+  arms: every arm reachable only by scrolling, no two readable side by side, and
+  a change to one producing a diff nobody could review against the other
+  fifty-one. It is a dispatcher now, in `analytics/doing/`, with the arms
+  grouped by what they are about rather than by the order somebody added them —
+  **eating**, **getting**, **making**, **ground**, **keeping**, **meeting**,
+  **fighting**, **moving**, **looking**. `analytics/mod.rs` goes **16,779 →
+  11,060**; the largest of the nine new files is 1,129 lines.
+
+  A refactor this size is normally an act of faith. This one is not: **three
+  seeds run six hundred ticks give byte-identical worlds either side of the
+  move** — every agent, beast, resource and pit, tick by tick — and the suite
+  gives the same 28 failures, stable across runs. That check exists only because
+  of the entry above it, and it arrived one commit later.
+
+  **And the split immediately found something.** `Action::Fight` never reads its
+  `weapon`: a man standing his ground against a wolf fights it the same with a
+  flint spear in his hand as with nothing, while `hunting` two modules away is
+  careful about exactly that. Presumably true since `Fight` was added, and
+  invisible at line 12,003 of a sixteen-thousand-line file. Left as it is here —
+  this change is behaviour-neutral by contract — and filed. See ISSUES_FOUND.md
+  #95
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

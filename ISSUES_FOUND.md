@@ -5544,7 +5544,53 @@ carrying it happens to run in the test's hundred and twenty ticks; the fourth
 fault above sat in exactly such a branch through the whole of #92. This class of
 defect has now recurred three times, and the guard is cheap.
 
-### 95. The other thirteen drive rates were never derived either
+### 95. The five-thousand-line function, and the first thing it hid
+
+`execute_action` was 5,723 lines - a third of `analytics/mod.rs` - and one
+`match` of fifty-two arms. Every arm was reachable only by scrolling, no two
+could be read side by side, and a change to one produced a diff nobody could
+review against the other fifty-one.
+
+It is a dispatcher now, in `analytics/doing/`, and the arms are methods grouped
+by what they are about rather than by the order somebody happened to add them:
+**eating** (food into a body, and the keeping of it), **getting** (taking what
+the country has), **making**, **ground**, **keeping** (carrying and putting by),
+**meeting** (what passes between two people), **fighting**, **moving**,
+**looking**. `analytics/mod.rs` goes 16,779 to 11,060; the largest of the nine
+new files is 1,129 lines and the smallest is 195.
+
+Two things stayed in the dispatcher on purpose, because they belong to *doing
+something* rather than to any one verb: the single roll, drawn once and lent to
+whichever verb needs it - so that how many draws a turn takes does not depend
+on which arm is chosen - and the one check against the verb matrix for what
+these hands are short of.
+
+#### The proof, which is the point
+
+A refactor of five thousand lines is normally an act of faith. This one is not:
+**three seeds run six hundred ticks give byte-identical worlds either side of
+the move** - every agent, beast, resource and pit, tick by tick - and the suite
+gives the same 28 failures it gave before, stable over two runs. That check
+exists only because of #94. It is the first return on that work, and it arrived
+one commit later.
+
+#### And the first thing the split found
+
+`Action::Fight` never reads its `weapon`. Two hundred lines from the top of
+`fighting.rs`, in a signature that now fits on one line, the compiler pointed at
+an unused parameter: **a man standing his ground against a wolf fights it the
+same with a flint spear in his hand as with nothing.** `hunting`, two modules
+away, is careful about exactly this. The specification is explicit - *"Hunting
+any larger animal requires at least a spear... A flint spear should reduce the
+number of attacks"* - and standing your ground is the same problem from the
+other side.
+
+It has presumably been true since `Fight` was added. Nothing found it while it
+sat at line 12,003 of a sixteen-thousand-line file, because nothing could see
+it. Left as it is here, because this change is behaviour-neutral by contract,
+and filed as its own piece of work.
+
+### 96. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5553,19 +5599,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 96. The clock is spelled out in the interface too
+### 97. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 97. Build warnings
+### 98. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 98. Placeholder package metadata
+### 99. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
