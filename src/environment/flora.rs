@@ -1686,7 +1686,7 @@ impl PlantManager {
             None => return,
         };
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // What grows where, and how thickly
         for y in 0..grid.height {

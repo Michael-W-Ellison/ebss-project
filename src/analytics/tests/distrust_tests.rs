@@ -249,7 +249,7 @@ fn a_lie_is_found_out_by_going_there() {
     );
 
     // Nothing of the sort is there, and the agent is standing looking at it
-    let really_here = std::collections::HashSet::new();
+    let really_here = std::collections::BTreeSet::new();
     let found_out = listener
         .exploration_knowledge
         .hearsay_in_view(nowhere, 3, &really_here);
@@ -269,7 +269,7 @@ fn what_you_saw_yourself_is_nobodys_fault() {
         .exploration_knowledge
         .discover_resource(here, ResourceType::Food, 0);
 
-    let really_here = std::collections::HashSet::new();
+    let really_here = std::collections::BTreeSet::new();
     assert!(
         agent
             .exploration_knowledge

@@ -317,7 +317,19 @@ pub struct Inventory {
     pub what_would_not_go_in: u32,
 
     /// Items stored by item_id
-    items: HashMap<String, InventoryItem>,
+    /// What is in it, in a stable order.
+    ///
+    /// A `BTreeMap` rather than a `HashMap`, and not for speed. Twenty-two
+    /// places iterate this map and several of them pick a *best* - the best
+    /// food to eat, the tool that helps most, what can be spared - so when two
+    /// candidates tie, the winner is whichever the iterator reached first. A
+    /// `HashMap` orders by a hash seeded per process, so that answer changed
+    /// between runs of the same binary on the same seed.
+    ///
+    /// Measured: with the dice seeded, five tests still came and went across
+    /// three runs. An inventory has no business having an order that depends
+    /// on which process is looking at it.
+    items: std::collections::BTreeMap<String, InventoryItem>,
     /// Maximum number of item stacks
     pub max_slots: usize,
     /// Maximum weight that can be carried
@@ -329,7 +341,7 @@ pub struct Inventory {
 impl Inventory {
     pub fn new(max_slots: usize, max_weight: f32) -> Self {
         Self {
-            items: HashMap::new(),
+            items: std::collections::BTreeMap::new(),
             max_slots,
             max_weight,
             current_weight: 0.0,
@@ -507,13 +519,13 @@ impl Inventory {
     }
 
     /// Get all items
-    pub fn get_all_items(&self) -> &HashMap<String, InventoryItem> {
+    pub fn get_all_items(&self) -> &std::collections::BTreeMap<String, InventoryItem> {
         &self.items
     }
 
     /// The same, to be changed rather than read. Draining a vessel is the
     /// caller this was wanting.
-    pub fn get_all_items_mut(&mut self) -> &mut HashMap<String, InventoryItem> {
+    pub fn get_all_items_mut(&mut self) -> &mut std::collections::BTreeMap<String, InventoryItem> {
         &mut self.items
     }
 
@@ -905,7 +917,7 @@ pub struct AgentState {
 impl AgentState {
     pub fn new() -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         // Max age varies between 9000-11000 ticks
         // Seventy years, and that is the end of it. There is no spread: the
         // specification says "Age 70: Death from old age", and everything
@@ -1412,7 +1424,7 @@ impl Agent {
     /// Generate a personality-based reproduction drive modifier
     fn generate_reproduction_modifier() -> f32 {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         // Range from 0.5 (low drive) to 1.5 (high drive)
         // Normal distribution centered at 1.0
         let base: f32 = rng.gen_range(0.5..1.5);
@@ -1448,7 +1460,7 @@ impl Agent {
         agent.state.ticks_without_water = 0;
 
         // Rare chance of congenital infertility (~1.5% chance)
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         if rng.gen_bool(0.015) {
             agent.traits.add_trait(crate::core::traits::Trait::Infertile);
         }
@@ -1774,7 +1786,7 @@ impl Agent {
         let spread = Ailment::THE_LONGEST_IT_LASTS - Ailment::THE_SHORTEST_IT_LASTS;
         let how_long = Ailment::THE_SHORTEST_IT_LASTS
             + (spread as f32 * severity) as u32
-            + rand::thread_rng().gen_range(0..=Ailment::THE_SHORTEST_IT_LASTS);
+            + crate::core::dice::roll().gen_range(0..=Ailment::THE_SHORTEST_IT_LASTS);
 
         self.state.ailing = Some(Ailment {
             from: from.to_string(),
@@ -5777,7 +5789,7 @@ impl Agent {
 
     fn random_direction(&self) -> (i32, i32, i32) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         (
             rng.gen_range(-1..=1),
             rng.gen_range(-1..=1),
@@ -6389,7 +6401,7 @@ impl Agent {
         // reason to fetch wood for a fire you did not strictly need.
         {
             use rand::Rng;
-            let mut rng = rand::thread_rng();
+            let mut rng = crate::core::dice::roll();
 
             let raw_flesh = food_data.preparation
                 == crate::world::nutrition::PreparationState::Raw
@@ -8363,7 +8375,7 @@ impl Agent {
 
                             // Simple probability check
                             use rand::Rng;
-                            let roll: f32 = rand::thread_rng().gen();
+                            let roll: f32 = crate::core::dice::roll().gen();
 
                             if roll < effective_chance || !is_correct {
                                 // We detected this information as incorrect
@@ -9168,7 +9180,7 @@ impl Agent {
         // abolished lying altogether, which is not what "take into account"
         // means.
         let extra_ears = (room.len() - 1) as f64;
-        rand::thread_rng().gen_bool((1.0 / (1.0 + 0.5 * extra_ears)).clamp(0.0, 1.0))
+        crate::core::dice::roll().gen_bool((1.0 / (1.0 + 0.5 * extra_ears)).clamp(0.0, 1.0))
     }
 
     /// Check if this agent would lie when sharing information
@@ -9210,7 +9222,7 @@ impl Agent {
             lie_chance -= 0.2;
         }
 
-        let roll: f32 = rand::thread_rng().gen();
+        let roll: f32 = crate::core::dice::roll().gen();
         roll < lie_chance.clamp(0.0, 0.8) // Max 80% chance to lie
     }
 

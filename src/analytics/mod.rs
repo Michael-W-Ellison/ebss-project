@@ -765,7 +765,7 @@ impl Simulation {
                             } else {
                                 // Attacker not found, flee in random direction
                                 use rand::Rng;
-                                let mut rng = rand::thread_rng();
+                                let mut rng = crate::core::dice::roll();
                                 let flee_x = agent_position.0 + rng.gen_range(-15..=15);
                                 let flee_y = agent_position.1 + rng.gen_range(-15..=15);
                                 (crate::environment::Action::Move {
@@ -1238,7 +1238,7 @@ impl Simulation {
                         } else {
                             // Unknown danger location - move to random safe spot
                             use rand::Rng;
-                            let mut rng = rand::thread_rng();
+                            let mut rng = crate::core::dice::roll();
                             let safe_x = agent_position.0 + rng.gen_range(-10..=10);
                             let safe_y = agent_position.1 + rng.gen_range(-10..=10);
 
@@ -1370,7 +1370,7 @@ impl Simulation {
     /// Generate an action based on drive type and position
     fn generate_action_for_drive(drive_type: DriveType, position: (i32, i32, i32)) -> Action {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Map drive type to a representative action
         match drive_type {
@@ -2852,7 +2852,7 @@ impl Simulation {
                 // anything comes of it.
                 let feeling_experimental = {
                     use rand::Rng;
-                    rand::thread_rng().gen_bool(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP)
+                    crate::core::dice::roll().gen_bool(Self::HOW_OFTEN_ANYBODY_TRIES_A_SWAP)
                 };
 
                 if feeling_experimental {
@@ -3035,7 +3035,7 @@ impl Simulation {
     fn somebody_notices_something(&mut self) {
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let mut found: Vec<(usize, &'static str)> = Vec::new();
 
         for (index, agent) in self.population.agents.iter().enumerate() {
@@ -4483,7 +4483,7 @@ impl Simulation {
             .weather_type
             .precipitation_intensity();
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         for index in 0..self.population.agents.len() {
             if !self.population.agents[index].state.is_alive {
@@ -4546,7 +4546,7 @@ impl Simulation {
         use crate::world::{Position, ResourceNode, ResourceType};
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let mut took_root: Vec<Position> = Vec::new();
 
         for agent in self.population.agents.iter_mut() {
@@ -6525,7 +6525,7 @@ impl Simulation {
         }
 
         let now = self.current_tick;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         for agent in self.population.agents.iter_mut() {
             if !agent.state.is_alive || agent.is_ailing() {
@@ -6905,7 +6905,7 @@ impl Simulation {
             return;
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let mut hardened: Vec<crate::world::Position> = Vec::new();
 
         for index in 0..self.population.agents.len() {
@@ -7596,7 +7596,7 @@ impl Simulation {
             .map(|drive| drive.value)
             .unwrap_or(0.0);
 
-        let roll = rand::thread_rng().gen::<f32>();
+        let roll = crate::core::dice::roll().gen::<f32>();
 
         if agent
             .practices
@@ -7668,7 +7668,7 @@ impl Simulation {
 
         let roll = {
             use rand::Rng;
-            rand::thread_rng().gen::<f32>()
+            crate::core::dice::roll().gen::<f32>()
         };
 
         if !agent.practices.would_try(
@@ -7925,7 +7925,7 @@ impl Simulation {
             return Some(Action::Taste);
         }
 
-        if !rand::thread_rng().gen_bool(Self::HOW_OFTEN_ANYBODY_RISKS_IT) {
+        if !crate::core::dice::roll().gen_bool(Self::HOW_OFTEN_ANYBODY_RISKS_IT) {
             return None;
         }
 
@@ -9747,7 +9747,7 @@ impl Simulation {
         use crate::world::nutrition::CookingOutcome;
         use crate::world::Position;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Doing the work is what keeps a hand in it - see
         // `Skills::let_unused_skills_rust`
@@ -15286,7 +15286,7 @@ impl Simulation {
 
                 // What is really out here, before anybody's opinion of it
                 let exploration_radius = 3; // Can see 3 tiles in each direction
-                let really_here: std::collections::HashSet<crate::world::Position> = self
+                let really_here: std::collections::BTreeSet<crate::world::Position> = self
                     .world
                     .resources
                     .iter()
@@ -15470,7 +15470,7 @@ impl Simulation {
         use crate::agents::body::{BodyPartType, InjuryType, CripplingType};
         use crate::world::{Position, TerrainType};
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         for agent in &mut self.population.agents {
             let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
@@ -16109,7 +16109,7 @@ impl Simulation {
     fn process_predator_attacks(&mut self) {
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let current_tick = self.current_tick;
 
         // Who is where, and who is desperate enough to try

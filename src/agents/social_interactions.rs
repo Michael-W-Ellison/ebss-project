@@ -266,7 +266,7 @@ pub fn select_conversation_topic(
     _recipient_traits: &[Trait],
 ) -> ConversationTopic {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
 
     // Close relationships can discuss deeper topics
     match relationship {
@@ -363,7 +363,7 @@ pub fn would_accept_gift(
     let acceptance_rate = (base_rate + trust_modifier) * suspicion_modifier;
 
     use rand::Rng;
-    rand::thread_rng().gen_bool(acceptance_rate.max(0.0).min(1.0) as f64)
+    crate::core::dice::roll().gen_bool(acceptance_rate.max(0.0).min(1.0) as f64)
 }
 
 #[cfg(test)]

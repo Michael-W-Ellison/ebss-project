@@ -8,7 +8,7 @@
 //! - Terrain types encountered
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use crate::world::{Position, TerrainType, ResourceType, BuildingType};
 
 /// Types of discoveries agents can make
@@ -50,9 +50,9 @@ pub struct Discovery {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplorationKnowledge {
     /// Set of explored tile positions
-    pub explored_tiles: HashSet<Position>,
+    pub explored_tiles: BTreeSet<Position>,
     /// Discovered resource positions (position -> resource type)
-    pub known_resources: HashMap<Position, ResourceType>,
+    pub known_resources: BTreeMap<Position, ResourceType>,
     /// Which of those places this agent was told about rather than saw, who
     /// said so, and how fresh they said it was.
     ///
@@ -63,13 +63,13 @@ pub struct ExplorationKnowledge {
     /// laid at somebody's door - and keeping the age is what stops it being
     /// laid there unfairly.
     #[serde(default)]
-    pub who_told_me: HashMap<Position, Hearsay>,
+    pub who_told_me: BTreeMap<Position, Hearsay>,
     /// Discovered building positions (position -> building type)
-    pub known_buildings: HashMap<Position, BuildingType>,
+    pub known_buildings: BTreeMap<Position, BuildingType>,
     /// Discovered storage positions (position -> (storage type, capacity))
-    pub known_storage: HashMap<Position, (String, f32)>,
+    pub known_storage: BTreeMap<Position, (String, f32)>,
     /// Terrain types encountered
-    pub encountered_terrains: HashSet<TerrainType>,
+    pub encountered_terrains: BTreeSet<TerrainType>,
     /// History of discoveries
     pub discoveries: Vec<Discovery>,
     /// Total tiles explored
@@ -85,7 +85,7 @@ pub struct ExplorationKnowledge {
     /// The tick a thing was *first* found, and nothing else. Skill experience
     /// is paid on this being the current tick, so it must never be touched
     /// again afterwards - see `last_seen_ticks` for the other question.
-    pub resource_discovery_ticks: HashMap<Position, u32>,
+    pub resource_discovery_ticks: BTreeMap<Position, u32>,
     /// When this agent last laid eyes on each place it knows.
     ///
     /// Distinct from the tick of discovery, because they answer different
@@ -93,9 +93,9 @@ pub struct ExplorationKnowledge {
     /// what an agent can vouch for. Folding the second into the first paid
     /// somebody Farming experience every tick they stood near a field.
     #[serde(default)]
-    pub last_seen_ticks: HashMap<Position, u32>,
+    pub last_seen_ticks: BTreeMap<Position, u32>,
     /// Building discovery tick tracking (position -> tick discovered)
-    pub building_discovery_ticks: HashMap<Position, u32>,
+    pub building_discovery_ticks: BTreeMap<Position, u32>,
     /// Where this one has seen something it would rather not meet again.
     ///
     /// The map held explored tiles, resources with an age and a source,
@@ -105,7 +105,7 @@ pub struct ExplorationKnowledge {
     /// no more hesitation than the first time, because there was nowhere for
     /// "there are wolves in that wood" to live.
     #[serde(default)]
-    pub where_it_went_badly: HashMap<Position, Danger>,
+    pub where_it_went_badly: BTreeMap<Position, Danger>,
     /// And where each person this one knows was last actually seen.
     ///
     /// Everything social in the model reads live positions, which is to say
@@ -113,7 +113,7 @@ pub struct ExplorationKnowledge {
     /// what somebody would actually know: where they last laid eyes on them,
     /// and when.
     #[serde(default)]
-    pub where_i_last_saw: HashMap<uuid::Uuid, (Position, u32)>,
+    pub where_i_last_saw: BTreeMap<uuid::Uuid, (Position, u32)>,
     /// And where this one went for something and found the place picked bare.
     ///
     /// The map knew *what* was at a place and never whether there was any of
@@ -126,7 +126,7 @@ pub struct ExplorationKnowledge {
     /// again by September, and a man who writes it off for life is as wrong
     /// as the man who goes back every morning.
     #[serde(default)]
-    pub where_it_ran_out: HashMap<Position, u32>,
+    pub where_it_ran_out: BTreeMap<Position, u32>,
     /// And how much was standing at each place this one last laid eyes on.
     ///
     /// `where_it_ran_out` is the same question asked as a yes or no, and a
@@ -135,7 +135,7 @@ pub struct ExplorationKnowledge {
     /// rich seam, last week" rather than "a seam, last week", and lets the
     /// man hearing it tell that from "the last handful, this morning".
     #[serde(default)]
-    pub how_much_was_there: HashMap<Position, u32>,
+    pub how_much_was_there: BTreeMap<Position, u32>,
 }
 
 /// Something met on a particular piece of ground, and how badly it went.
@@ -272,24 +272,24 @@ impl Hearsay {
 impl ExplorationKnowledge {
     pub fn new() -> Self {
         Self {
-            explored_tiles: HashSet::new(),
-            known_resources: HashMap::new(),
-            who_told_me: HashMap::new(),
-            how_much_was_there: HashMap::new(),
-            where_it_ran_out: HashMap::new(),
-            known_buildings: HashMap::new(),
-            known_storage: HashMap::new(),
-            encountered_terrains: HashSet::new(),
+            explored_tiles: BTreeSet::new(),
+            known_resources: BTreeMap::new(),
+            who_told_me: BTreeMap::new(),
+            how_much_was_there: BTreeMap::new(),
+            where_it_ran_out: BTreeMap::new(),
+            known_buildings: BTreeMap::new(),
+            known_storage: BTreeMap::new(),
+            encountered_terrains: BTreeSet::new(),
             discoveries: Vec::new(),
             total_tiles_explored: 0,
             last_exploration_tick: 0,
             curiosity_driven_explorations: 0,
             total_curiosity_satisfaction: 0.0,
-            resource_discovery_ticks: HashMap::new(),
-            last_seen_ticks: HashMap::new(),
-            building_discovery_ticks: HashMap::new(),
-            where_it_went_badly: HashMap::new(),
-            where_i_last_saw: HashMap::new(),
+            resource_discovery_ticks: BTreeMap::new(),
+            last_seen_ticks: BTreeMap::new(),
+            building_discovery_ticks: BTreeMap::new(),
+            where_it_went_badly: BTreeMap::new(),
+            where_i_last_saw: BTreeMap::new(),
         }
     }
 
@@ -540,7 +540,7 @@ impl ExplorationKnowledge {
         &self,
         centre: Position,
         radius: i32,
-        really_here: &std::collections::HashSet<Position>,
+        really_here: &std::collections::BTreeSet<Position>,
     ) -> Vec<(Position, Hearsay, ResourceType)> {
         self.who_told_me
             .iter()
@@ -568,7 +568,7 @@ impl ExplorationKnowledge {
         &self,
         centre: Position,
         radius: i32,
-        really_here: &std::collections::HashSet<Position>,
+        really_here: &std::collections::BTreeSet<Position>,
     ) -> Vec<(Position, Hearsay)> {
         self.who_told_me
             .iter()
@@ -887,7 +887,7 @@ impl ExplorationKnowledge {
         viewer_pos: Position,
         visibility_radius: u32,
         positions: &[Position],
-    ) -> HashMap<Position, VisibilityStatus> {
+    ) -> BTreeMap<Position, VisibilityStatus> {
         positions
             .iter()
             .map(|pos| {

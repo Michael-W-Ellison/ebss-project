@@ -163,7 +163,7 @@ impl Preferences {
         use rand::Rng;
         use rand::seq::SliceRandom;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let mut prefs = Preferences::new();
 
         // Common foods
@@ -202,7 +202,7 @@ impl Preferences {
         use rand::Rng;
         use rand::seq::SliceRandom;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let mut prefs = Preferences::new();
 
         // Derive favorite job from traits

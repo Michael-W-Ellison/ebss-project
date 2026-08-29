@@ -250,7 +250,7 @@ impl Population {
         // the founders are spawned here. See ISSUES #74.
         {
             use rand::Rng;
-            let mut rng = rand::thread_rng();
+            let mut rng = crate::core::dice::roll();
             // Grown people, between twenty and forty
             let years = rng.gen_range(20..40);
             agent.state.age = years * crate::environment::seasons::TICKS_PER_YEAR;
@@ -689,7 +689,7 @@ impl Population {
         use crate::environment::technology::DiscoveryMethod;
         use crate::core::DriveType;
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         let current_tick = self.current_tick;
 
@@ -958,7 +958,7 @@ impl Population {
     /// Agents who are severely unhappy for extended periods may leave the town
     pub fn process_abandonments(&mut self) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Track unhappiness and identify agents who should abandon (with position)
         let mut agents_to_remove: Vec<(Uuid, (i32, i32))> = Vec::new();
@@ -1330,7 +1330,7 @@ impl Population {
         use crate::core::DriveType;
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let current_tick = self.current_tick;
 
         // Collect interaction pairs (to avoid borrowing issues)
@@ -1509,7 +1509,7 @@ impl Population {
 
         const GOSSIP_RANGE_SQUARED: f32 = 36.0; // 6 tiles - slightly further than social range
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let current_tick = self.current_tick;
 
         // Collect gossip pairs and what info to share
@@ -1766,7 +1766,7 @@ impl Population {
             // renewable ones are kept when they are emptied. Reading an empty
             // patch as a lie had agents concluding that four thousand honest
             // tips were falsehoods and half the settlement liars.
-            let really_here: std::collections::HashSet<crate::world::Position> = world
+            let really_here: std::collections::BTreeSet<crate::world::Position> = world
                 .resources
                 .iter()
                 .map(|resource| resource.position)
@@ -2126,7 +2126,7 @@ impl Population {
         use rand::seq::SliceRandom;
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let current_tick = self.current_tick;
 
         let standing: Vec<(uuid::Uuid, (i32, i32, i32), bool)> = self
@@ -2397,7 +2397,7 @@ impl Population {
         // Agents share knowledge about buildings, resources, and terrain when in proximity
         use rand::seq::SliceRandom;
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         for i in 0..self.agents.len() {
             let (agent_i_id, pos_i, alive_i) = agent_positions[i];

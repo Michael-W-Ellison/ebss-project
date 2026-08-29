@@ -753,7 +753,7 @@ impl World {
         // Severe weather may completely prevent movement
         if movement_modifier < 0.3 {
             use rand::Rng;
-            let mut rng = rand::thread_rng();
+            let mut rng = crate::core::dice::roll();
             if rng.gen::<f32>() > movement_modifier / 0.3 {
                 return ActionResult::Failure {
                     reason: format!("Severe weather ({:?}) prevents movement", self.climate.weather.weather_type),

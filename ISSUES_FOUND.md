@@ -5345,9 +5345,62 @@ hunting and butchering gates about fifty-five. The floors are the piece that
 matters least to survival and most to the model - they are what makes every rung
 of #87's ladder worth climbing, and without them the ladder was decoration.
 
+### 92. No run of this model was ever repeatable, and the threat tree decided on a coin
+
+The first half of making the suite trustworthy, and it found a live defect on
+the way.
+
+**Nothing was seeded.** Every roll in the simulation came from
+`rand::thread_rng()` - eighty call sites across twenty-six files - which draws
+from the operating system and cannot be reseeded. Measured over three runs of
+the same binary: twenty tests failed every time and **fifteen more came and
+went**. A test that fails two runs in three is worse than one that fails always,
+because it cannot tell a regression from a coin.
+
+It cost more than the suite. The survival harness reads a mean over thirty-two
+worlds with a spread of about a hundred and twenty turns, so a change worth
+fifty turns could not be seen without running it repeatedly and squinting -
+and at least two judgements in this project's history were made on differences
+inside that band and were wrong.
+
+`core::dice` is the answer and it is deliberately small: `roll()` stands exactly
+where `thread_rng()` stood, and the stream behind it is thread-local and can be
+set. Under test it starts from a fixed number, so every test is the same world
+without two thousand tests each having to remember to ask.
+
+#### And then five tests still came and went
+
+With the dice seeded, the same binary on the same seed still gave different
+answers - so the residue was not the dice. It was **map iteration order**.
+Rust's `HashMap` orders by a hash seeded per *process*, and this model iterates
+maps to pick a best: the best food to eat, the tool that helps most, the place
+worth walking to.
+
+The worst of them is not a test problem at all. `Emotions::worst_agent` and
+`worst_creature` take a `max_by` over `fear_sources` and `anger_sources`, so
+**when two things frightened an agent equally, which one it feared - and so
+whether it ran, stood or froze - was decided by the process's hash seed.** The
+whole threat tree hangs off that answer. Five collections in the decision path
+are ordered now: the inventory, the two emotion tables, an agent's skills, and
+everything an agent remembers about a place.
+
+Flaky tests: **fifteen to seven**, measured the same way over three runs.
+
+#### What is left, and why it is the argument for modularising
+
+Not finished, and the shape of what is left matters. A settlement is still not
+reproducible run to run - eight worlds gave 1102, 1199, 1104 - because there are
+**eighty-three choose-operations in `analytics/mod.rs` alone**, and every one of
+them is a place where an unordered collection can decide something.
+
+Chasing them one at a time is how the last three rounds went, and each round
+found another. That is not a bug list, it is a missing property: *the decision
+layer's inputs must have a stable order*. A layer with a boundary can be made
+to hold that property once. A sixteen-thousand-line file cannot.
+
 ## Housekeeping
 
-### 92. The other thirteen drive rates were never derived either
+### 93. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5356,23 +5409,23 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 93. The clock is spelled out in the interface too
+### 94. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 94. Committed backup file
+### 95. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 95. Build warnings
+### 96. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 96. Placeholder package metadata
+### 97. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

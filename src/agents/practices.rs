@@ -331,7 +331,7 @@ impl Lessons {
     /// Whether this agent will try it this time.
     pub fn will_try_again(&self, undertaking: Undertaking) -> bool {
         use rand::Rng;
-        rand::thread_rng().gen_bool(self.how_likely_to_try(undertaking) as f64)
+        crate::core::dice::roll().gen_bool(self.how_likely_to_try(undertaking) as f64)
     }
 
 
@@ -379,7 +379,7 @@ impl Lessons {
     /// Whether it will bother this time.
     pub fn will_try_this_again(&self, what: &str) -> bool {
         use rand::Rng;
-        rand::thread_rng().gen_bool(self.how_likely_to_try_this(what) as f64)
+        crate::core::dice::roll().gen_bool(self.how_likely_to_try_this(what) as f64)
     }
 
     /// How many times this particular thing has been tried.
@@ -481,7 +481,7 @@ impl Lessons {
     /// Whether it will bother, here and now.
     pub fn will_try_this_here(&self, what: &str, here: &[Circumstance]) -> bool {
         use rand::Rng;
-        rand::thread_rng().gen_bool(self.how_likely_to_try_this_here(what, here) as f64)
+        crate::core::dice::roll().gen_bool(self.how_likely_to_try_this_here(what, here) as f64)
     }
 
     /// How many times this thing has been tried under this circumstance.

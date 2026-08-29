@@ -403,7 +403,7 @@ fn learn_action(
 
         // Check for breakthrough learning (random chance even before threshold)
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let exposure_pct = observer.learning_exposure.exposure_percentage(action_name);
         let breakthrough_chance = exposure_pct * learning_rate * 0.2; // Higher exposure = higher breakthrough chance
 
@@ -453,7 +453,7 @@ fn learn_drive_satisfaction(
 
         // Breakthrough chance scales with accumulated exposure
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let exposure_pct = observer.learning_exposure.exposure_percentage(&knowledge_name);
         let breakthrough_chance = exposure_pct * learning_rate * 0.25;
 
@@ -505,7 +505,7 @@ fn learn_discovery(
 
         // Higher breakthrough chance for discoveries (they're exciting!)
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let exposure_pct = observer.learning_exposure.exposure_percentage(knowledge_name);
         let breakthrough_chance = exposure_pct * learning_rate * 0.35;
 
@@ -575,7 +575,7 @@ fn learn_behavior(
 
         // Breakthrough chance (lower for complex behaviors)
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let exposure_pct = observer.learning_exposure.exposure_percentage(&behavior_key);
         let breakthrough_chance = if success {
             exposure_pct * learning_rate * 0.15

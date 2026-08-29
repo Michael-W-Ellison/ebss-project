@@ -933,7 +933,7 @@ impl World {
 
         let how_many = Self::HOW_MANY_STRANGE_PLANTS as usize;
         let mut what_they_are: Vec<bool> = (0..how_many).map(|i| i % 2 == 0).collect();
-        what_they_are.shuffle(&mut rand::thread_rng());
+        what_they_are.shuffle(&mut crate::core::dice::roll());
         what_they_are
     }
 
@@ -1019,7 +1019,7 @@ impl World {
     fn scatter_the_strange_plants(&mut self) {
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let width = self.grid.width as i32;
         let height = self.grid.height as i32;
 
@@ -1065,7 +1065,7 @@ impl World {
     }
 
     fn generate_resources(&mut self, config: &ResourceConfig) {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Generate basic resources (legacy method for backward compatibility)
         self.generate_basic_resources(config, &mut rng);
@@ -1349,7 +1349,7 @@ impl World {
 
     fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
         use rand::seq::SliceRandom;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // First, try random sampling (efficient for common terrain types)
         for _ in 0..100 {

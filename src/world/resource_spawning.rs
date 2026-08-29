@@ -219,14 +219,14 @@ pub fn what_this_ground_carries(
 /// Spawns resources in naturalistic clusters
 pub struct NaturalisticSpawner<'a> {
     grid: &'a Grid,
-    rng: rand::rngs::ThreadRng,
+    rng: rand::rngs::StdRng,
 }
 
 impl<'a> NaturalisticSpawner<'a> {
     pub fn new(grid: &'a Grid) -> Self {
         Self {
             grid,
-            rng: rand::thread_rng(),
+            rng: crate::core::dice::roll(),
         }
     }
 

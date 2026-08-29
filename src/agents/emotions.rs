@@ -2,7 +2,7 @@
 //! Emotion system for agents responding to threats and relationships.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// Twelve two-hour ticks to a day - see `crate::environment::seasons`
 const TICKS_PER_DAY: f32 = 12.0;
@@ -25,11 +25,21 @@ pub struct EmotionState {
     /// Decay rate per tick for each emotion
     pub decay_rate: f32,
     /// Emotion sources: what/who triggered each emotion
-    pub anger_sources: HashMap<EmotionSource, f32>,
-    pub fear_sources: HashMap<EmotionSource, f32>,
-    pub sadness_sources: HashMap<EmotionSource, f32>,
-    pub happiness_sources: HashMap<EmotionSource, f32>,
-    pub curiosity_sources: HashMap<EmotionSource, f32>,
+    /// What is making this one angry, and how much of it each thing is.
+    ///
+    /// Ordered maps, and not for speed. `worst_agent` and `worst_creature`
+    /// take a `max_by` over these, so when two things frighten somebody
+    /// equally the winner is whichever the iterator reached first - and a
+    /// `HashMap` orders by a hash seeded per process. **What an agent was most
+    /// afraid of, and so whether it ran or stood, changed between runs of the
+    /// same binary on the same seed.** That is the threat tree deciding on a
+    /// coin, and it is why five tests came and went with the dice already
+    /// seeded.
+    pub anger_sources: BTreeMap<EmotionSource, f32>,
+    pub fear_sources: BTreeMap<EmotionSource, f32>,
+    pub sadness_sources: BTreeMap<EmotionSource, f32>,
+    pub happiness_sources: BTreeMap<EmotionSource, f32>,
+    pub curiosity_sources: BTreeMap<EmotionSource, f32>,
     /// Last agent who attacked this agent (for retaliation)
     pub last_attacker: Option<Uuid>,
     /// Tick when last attacked (for recency)
@@ -45,11 +55,11 @@ impl EmotionState {
             happiness: 0.0,
             curiosity: 0.0,
             decay_rate: 0.01, // 1% per tick
-            anger_sources: HashMap::new(),
-            fear_sources: HashMap::new(),
-            sadness_sources: HashMap::new(),
-            happiness_sources: HashMap::new(),
-            curiosity_sources: HashMap::new(),
+            anger_sources: BTreeMap::new(),
+            fear_sources: BTreeMap::new(),
+            sadness_sources: BTreeMap::new(),
+            happiness_sources: BTreeMap::new(),
+            curiosity_sources: BTreeMap::new(),
             last_attacker: None,
             last_attack_tick: 0,
         }
@@ -203,7 +213,7 @@ impl EmotionState {
             .collect()
     }
 
-    fn worst_agent(sources: &HashMap<EmotionSource, f32>) -> Option<(Uuid, f32)> {
+    fn worst_agent(sources: &BTreeMap<EmotionSource, f32>) -> Option<(Uuid, f32)> {
         sources
             .iter()
             .filter_map(|(source, amount)| match source {
@@ -232,7 +242,7 @@ impl EmotionState {
         (at_people, at_creatures, at_everything_else)
     }
 
-    fn worst_creature(sources: &HashMap<EmotionSource, f32>) -> Option<(&str, f32)> {
+    fn worst_creature(sources: &BTreeMap<EmotionSource, f32>) -> Option<(&str, f32)> {
         sources
             .iter()
             .filter_map(|(source, amount)| match source {
@@ -520,7 +530,9 @@ impl Default for EmotionState {
 }
 
 /// Source of an emotion
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Ordered, because the maps keyed by it are searched for a *maximum* and a
+/// tie has to break the same way twice. See `Emotions::anger_sources`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum EmotionSource {
     /// Another agent (by UUID)
     Agent(Uuid),

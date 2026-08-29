@@ -6,7 +6,14 @@ use rand::Rng;
 use crate::world::{Tile, TerrainType};
 
 /// 2D Position in the world
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Ordered, so that maps keyed by a place can be iterated the same way twice.
+///
+/// An agent's memory of the world is keyed by `Position` - what it knows is
+/// where, what it was told and when it last looked - and the decision layer
+/// searches those maps for a best or a nearest. Ordering by hash meant the
+/// answer changed between runs of the same binary. See
+/// `ExplorationKnowledge`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -81,7 +88,7 @@ impl Grid {
     /// - Plains, meadows, and forests
     /// - Desert regions in appropriate areas
     pub fn generate_terrain(&mut self) {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // First pass: generate base terrain using noise
         for y in 0..self.height {
@@ -162,7 +169,7 @@ impl Grid {
 
     /// Generate transition terrain between water and land
     fn generate_transition_terrain(&mut self) {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Create a copy of terrain types for reference
         let terrain_copy: Vec<Vec<TerrainType>> = self.tiles.iter()

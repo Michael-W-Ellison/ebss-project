@@ -842,7 +842,7 @@ impl DriveState {
     /// Ensures survival drives (Hunger, Rest, Safety, Shelter) have higher minimum weights
     pub fn with_random_weights() -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         Self {
             drives: DriveType::all()

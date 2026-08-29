@@ -265,7 +265,7 @@ impl ClimateManager {
             return;
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let chance = self.weather.weather_type.lightning_chance_per_tick();
 
         if rng.gen::<f32>() < chance {

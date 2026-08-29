@@ -598,7 +598,6 @@ impl TraitSet {
     /// Generate random traits for a new agent
     pub fn generate_random(count: usize) -> Self {
         use rand::seq::SliceRandom;
-        use rand::thread_rng;
 
         let all_traits = [
             Trait::Anxious, Trait::Brave, Trait::HotHeaded, Trait::Calm,
@@ -619,7 +618,7 @@ impl TraitSet {
             Trait::Callous, Trait::Diligent, Trait::Manipulator, Trait::Imaginative,
         ];
 
-        let mut rng = thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Walk the whole pool in a random order rather than drawing a fixed
         // handful. Drawing twice the wanted number and stopping was near
@@ -658,7 +657,7 @@ impl TraitSet {
     pub fn a_person() -> Self {
         use rand::Rng;
 
-        let count = rand::thread_rng().gen_range(Self::TRAITS_AT_BIRTH);
+        let count = crate::core::dice::roll().gen_range(Self::TRAITS_AT_BIRTH);
 
         // Ordinary tendencies only. Blindness, deafness and muteness are in
         // the pool `inherit_traits` mutates from but not in this one, so they
