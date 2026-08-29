@@ -1074,6 +1074,42 @@ original specifications.
   the entire run and its people die of hunger, illness and weather. The draw
   sequence shifted and a world already on the line fell the other side of it. Left
   failing rather than weakened. See ISSUES_FOUND.md #101
+- ✅ Every bush in full fruit, whatever the date. A world was made with
+  everything standing at what its ground would carry and never asked what day
+  of the year it was. The year opens in spring, so every settlement ever run in
+  this project began with berries, standing grain and full hives on the hedges
+  around it — measured over sixteen worlds, **216 units of fruit, 254 of grain
+  and 34 of honey** on day nought, which the shedding rule then took off over
+  ten days. A world is seeded on its opening day now, and the bearing check is
+  asked *before* `is_it_grown`, because honey is not a growing thing and has a
+  season all the same.
+
+  **A third spawner, found by the test rather than by reading.**
+  `what_this_ground_carries` was written to be the one vocabulary after two
+  spawners were found to have had two. There were three:
+  `scatter_the_strange_plants` builds its nodes directly and never went near
+  it. The end-to-end assertion written for this entry is what caught it — not
+  a grep for the vocabulary, but asserting the property over the whole world
+  and letting it find the path nobody had touched.
+
+  Measured, five blocks of 32 worlds over a full year: **person-days alive fall
+  about five per cent**, down in four blocks of five; mean last-alive falls
+  3.4%. Landed as a correctness fix that **costs** survival, not as a win.
+
+  What is interesting is the size. Those 504 units are a day and a third of
+  food for twelve people — half a per cent of a run — and they measure ten
+  times that, because the ten days they are handed over are exactly the ten in
+  which the founders eat down the reserve they arrive with and half of them
+  die. **A day's food at the crisis is worth ten days of it anywhere else.**
+  Anything meaning to move this model's survival has to land in that fortnight.
+
+  And one guess that measured the other way: the seeding comment first said a
+  patch seeded short would be full again in a day or two. Stripped bare and
+  timed, **a fruit node is back to full in one day and greens and roots are
+  still short after thirty** — true for a third of the foods it was written
+  about. Corrected, and worth carrying forward: a settlement that strips its
+  greens in early spring has no greens for a month, and nothing has yet asked
+  whether that is happening. See ISSUES_FOUND.md #108
 - ✅ The bearing year was written for a twenty-four-day season. `when_it_bears`
   returned a *set of seasons*, so a thing came on for the first day of a season
   and went over on the last — fine at twenty-four days, and at ninety a year of

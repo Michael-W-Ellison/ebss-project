@@ -267,6 +267,82 @@ fn a_window_can_run_round_the_turn_of_the_year() {
 // And it actually tells on the world
 // --------------------------------------------------------------------------
 
+/// A world opens on the day it opens on, and carries what that day carries.
+///
+/// It used to be made with every bush in full fruit whatever the date. The
+/// year opens in spring, so every settlement ever run began with berries,
+/// standing grain and full hives on the hedges around it - 216 units of
+/// fruit, 254 of grain and 34 of honey over sixteen worlds, about a day and a
+/// third of food for twelve people - which then fell off over the following
+/// ten days as the shedding rule caught up with it.
+///
+/// It mattered out of all proportion to its size, because those ten days are
+/// exactly the ones in which the founders eat down the reserve they arrive
+/// with. Removing it costs about five per cent of the person-days a settlement
+/// lives, against the half a per cent its share of a year would suggest.
+#[test]
+fn a_world_opens_with_nothing_on_it_that_is_out_of_season() {
+    let simulation = a_world();
+
+    let opening_day = simulation.world.climate.calendar.day_of_year;
+    let standing = |what: ResourceType| -> u32 {
+        simulation
+            .world
+            .resources
+            .iter()
+            .filter(|resource| resource.resource_type == what)
+            .map(|resource| resource.amount)
+            .sum()
+    };
+
+    for what in [
+        ResourceType::Food,
+        ResourceType::Grain,
+        ResourceType::Greens,
+        ResourceType::Roots,
+        ResourceType::Honey,
+    ] {
+        if what.is_it_bearing(opening_day) {
+            assert!(
+                standing(what) > 0,
+                "{what:?} bears on day {opening_day} and the world should hold some"
+            );
+        } else {
+            assert_eq!(
+                standing(what),
+                0,
+                "{what:?} does not bear on day {opening_day}, so none of it should be standing"
+            );
+        }
+    }
+
+    // And the year does open in spring, so this test is about a spring world:
+    // fruit, grain and honey are all out of season and greens and roots are
+    // not. If the opening day ever moves, the loop above still holds and this
+    // line is what will say so.
+    assert_eq!(Season::from_day_of_year(opening_day), Season::Spring);
+    assert_eq!(standing(ResourceType::Food), 0);
+    assert!(standing(ResourceType::Greens) > 0);
+}
+
+/// A tree still has wood in it in February, and the world is stocked with it
+/// whatever the date.
+#[test]
+fn what_never_bears_is_stocked_whatever_the_date() {
+    let simulation = a_world();
+
+    for what in [ResourceType::Wood, ResourceType::Stone, ResourceType::Water] {
+        assert!(
+            simulation
+                .world
+                .resources
+                .iter()
+                .any(|resource| resource.resource_type == what && resource.amount > 0),
+            "{what:?} does not bear, so it cannot be out of season"
+        );
+    }
+}
+
 /// A bush carrying fruit sheds it once its season goes by.
 #[test]
 fn what_a_bush_carries_falls_off_out_of_season() {

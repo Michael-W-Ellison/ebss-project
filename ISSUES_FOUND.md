@@ -6166,6 +6166,91 @@ It deliberately asserts no *rate*. The share that reach winter and come out of
 it measures 40%, 60% and 85% on three different blocks, so at eight worlds any
 bar for it would have been fitted to the block rather than to the model.
 
+### 108. Every bush in full fruit, whatever the date
+
+A world was made with everything standing at what its ground would carry,
+without ever asking what day of the year it was. The year opens in spring, so
+every settlement ever run in this project began with berries, standing grain
+and full hives on the hedges around it. Measured over sixteen worlds with no
+agents in them, day nought:
+
+| | Fish | Food | Grain | Greens | Honey | Roots |
+|---|---|---|---|---|---|---|
+| day 0 | 2881 | **216** | **254** | 3202 | **34** | 1576 |
+| day 5 | 2881 | 8 | 21 | 3202 | 1 | 1576 |
+| day 10 | 2881 | 0 | 0 | 3202 | 0 | 1576 |
+
+**504 units of food that had no business being there**, which the shedding
+rule then took off over ten days. Greens, roots and fish are right and do not
+move; the three that are wrong are the three that do not bear in spring.
+
+A world is seeded on its opening day now: `what_this_ground_carries` takes the
+day of the year, and anything outside its bearing window starts bare. The
+check is asked *before* `is_it_grown`, because honey is not a growing thing
+and has a season all the same - a hive worth robbing in autumn is not one in
+March, and it used to spawn full in March.
+
+#### And a third spawner, found by the test rather than by reading
+
+`what_this_ground_carries` was written to be the one vocabulary after two
+spawners were found to have had two. There were three.
+`scatter_the_strange_plants` builds its nodes directly and never went near it,
+so the fix reached the hedgerows and not the strange plants, and a spring
+world still opened with thirty units of something-or-other standing in it.
+The end-to-end assertion written for this entry is what caught it. That is
+defect number three in this document's list for the eleventh time, and the
+useful part is *how* it surfaced: not by grepping for the vocabulary, but by
+asserting the property over the whole world and letting the assertion find the
+path that had not been touched.
+
+#### Measured, and it costs
+
+Five independent blocks of thirty-two worlds, a full year each, against the
+commit before:
+
+| seeds | mean last alive | person-days alive | worlds emptied |
+|---|---|---|---|
+| 1000 | 3088 → 3617 | 879 → 899 | 15 → 11 |
+| 2000 | 3607 → 3227 | 995 → 909 | 17 → 16 |
+| 3000 | 3559 → 3281 | 1005 → 960 | 12 → 12 |
+| 4000 | 3576 → 3679 | 1015 → 1010 | 15 → 12 |
+| 5000 | 3760 → 3179 | 1074 → 948 | 11 → 22 |
+
+**Person-days alive fall about five per cent**, down in four blocks of five;
+mean last-alive falls 3.4%, down in three of five; worlds standing empty at a
+year go 44% to 46%. This is landed as a correctness fix that **costs**
+survival, not as a win, and the honest reading of the block-to-block spread is
+that everything except the person-days figure is inside the noise.
+
+What is interesting is the size of it. Those 504 units are about 22,300
+energy, or a day and a third of food for twelve people. Against a run whose
+mean is some 280 days that is half a per cent, and it measures ten times that
+- because the ten days it is handed over are exactly the ten days in which the
+founders eat down the reserve they arrive with, and half of them die. **A
+day's food at the crisis is worth ten days of it anywhere else.** Anything
+that means to move this model's survival has to land in that fortnight; a
+change that adds food to the year at large, as #107 did, does not.
+
+#### A measurement that came out the other way from the guess
+
+The doc comment on the seeding was first written saying that a patch seeded
+short would be full again within a day or two, so the exact opening amount did
+not matter. Measured by stripping a patch bare and waiting: **a fruit node is
+back to full in one day, and greens and roots are still short after thirty.**
+The claim was true for a third of the foods it was written about. Corrected in
+place, and worth carrying forward on its own account - a settlement that
+strips its greens in early spring has no greens for a month, and nothing in
+this document has yet asked whether that is happening.
+
+#### Three tests that indexed a corpse
+
+Harder springs took the lone agent out of three single-agent tests, and
+`population.agents[0]` panics rather than reporting a death, because the dead
+are removed from the vector. `an_agent_ages_by_the_calendar` had a comment
+saying in as many words that one person alone often does not get through the
+year, directly above the line that assumed he had. All three now ask whether
+he is there before asking how he is.
+
 ---
 
 ## Recently fixed

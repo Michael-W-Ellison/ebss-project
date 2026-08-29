@@ -1016,7 +1016,7 @@ impl World {
     /// clustered: the point is that a people walking about its own country
     /// keeps coming across them, and has to decide each time whether today is
     /// the day somebody tries one.
-    fn scatter_the_strange_plants(&mut self) {
+    fn scatter_the_strange_plants(&mut self, today: u32) {
         use rand::Rng;
 
         let mut rng = crate::core::dice::roll();
@@ -1053,12 +1053,25 @@ impl World {
                     continue;
                 }
 
-                self.resources.push(ResourceNode::of_kind(
+                let mut patch = ResourceNode::of_kind(
                     ResourceType::StrangePlant,
                     where_it_is,
                     Self::WHAT_A_STRANGE_PATCH_CARRIES,
                     kind,
-                ));
+                );
+
+                // Nobody knows what these do, including when they bear - but
+                // they do bear, and out of season there is nothing on them.
+                // This is the *third* spawner in this project and it had its
+                // own vocabulary too: it does not go through
+                // `what_this_ground_carries`, so the seeding fix reached the
+                // hedgerows and not these. A test written for the fix is what
+                // found it.
+                if !ResourceType::StrangePlant.is_it_bearing(today) {
+                    patch.amount = 0;
+                }
+
+                self.resources.push(patch);
                 placed += 1;
             }
         }
@@ -1067,23 +1080,27 @@ impl World {
     fn generate_resources(&mut self, config: &ResourceConfig) {
         let mut rng = crate::core::dice::roll();
 
+        // What is standing on the plants depends on the date the world opens,
+        // not only on the ground - see `what_this_ground_carries`.
+        let today = self.climate.calendar.day_of_year;
+
         // Generate basic resources (legacy method for backward compatibility)
-        self.generate_basic_resources(config, &mut rng);
+        self.generate_basic_resources(config, today, &mut rng);
 
         // Generate additional resources using naturalistic spawning
         if config.use_naturalistic_spawning {
-            self.generate_naturalistic_resources(config);
+            self.generate_naturalistic_resources(config, today);
         }
 
         // And the things nobody has tried
-        self.scatter_the_strange_plants();
+        self.scatter_the_strange_plants(today);
 
         // Update resource_nodes map for spatial queries
         self.update_resource_node_map();
     }
 
     /// Generate basic resources (wood, stone, iron, food)
-    fn generate_basic_resources(&mut self, config: &ResourceConfig, rng: &mut impl Rng) {
+    fn generate_basic_resources(&mut self, config: &ResourceConfig, today: u32, rng: &mut impl Rng) {
         // Generate wood nodes (in forest areas)
         for _ in 0..config.wood_nodes {
             let pos = self.find_random_terrain_position(TerrainType::Forest);
@@ -1142,6 +1159,7 @@ impl World {
                     ResourceType::Food,
                     pos,
                     rng.gen_range(thin..=heavy),
+                    today,
                 ));
         }
 
@@ -1169,6 +1187,7 @@ impl World {
                         what,
                         pos,
                         rng.gen_range(thin..=heavy),
+                        today,
                     ));
             }
         }
@@ -1277,7 +1296,7 @@ impl World {
     }
 
     /// Generate naturalistic resources for technology progression
-    fn generate_naturalistic_resources(&mut self, config: &ResourceConfig) {
+    fn generate_naturalistic_resources(&mut self, config: &ResourceConfig, today: u32) {
         use resource_spawning::{NaturalisticResourceConfig, NaturalisticSpawner};
 
         // Convert ResourceConfig to NaturalisticResourceConfig
@@ -1296,7 +1315,7 @@ impl World {
         };
 
         // Use naturalistic spawner
-        let mut spawner = NaturalisticSpawner::new(&self.grid);
+        let mut spawner = NaturalisticSpawner::new(&self.grid, today);
         let new_resources = spawner.spawn_all(&nat_config);
 
         // Add spawned resources

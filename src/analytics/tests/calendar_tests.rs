@@ -143,9 +143,18 @@ fn an_agent_ages_by_the_calendar() {
     );
 
     // Read against the calendar rather than against whether this particular
-    // agent got through the year: one person alone in a world sometimes does
-    // not, and that is a different test.
-    let agent = &mut simulation.population.agents[0];
+    // agent got through the year: one person alone in a world usually does
+    // not, and that is a different test. The comment said exactly this and
+    // the line under it still reached for `agents[0]`, which is gone once
+    // somebody dies - so spawn the one this assertion is about.
+    simulation
+        .population
+        .spawn_agent(AgentConfig::default());
+    let agent = simulation
+        .population
+        .agents
+        .last_mut()
+        .expect("just spawned");
     agent.state.age = TICKS_PER_YEAR;
     assert!(
         (agent.age_in_years() - 1.0).abs() < 0.01,

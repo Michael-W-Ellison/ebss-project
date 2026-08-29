@@ -220,10 +220,28 @@ fn test_resource_amounts_reasonable() {
     };
 
     let world = World::new(config);
+    let opening_day = world.climate.calendar.day_of_year;
 
-    // Check that resource amounts are within reasonable ranges
+    // Check that resource amounts are within reasonable ranges.
+    //
+    // "Every node carries something" used to be one of these, and it was the
+    // old bug written down as an assertion: a world was made with every bush
+    // in full fruit whatever the date. A patch out of its season carries
+    // nothing, and that is the point of it - see ISSUES_FOUND #208.
     for resource in &world.resources {
-        assert!(resource.amount > 0, "Resource has zero amount: {:?}", resource);
+        if resource.resource_type.is_it_bearing(opening_day) {
+            assert!(
+                resource.amount > 0,
+                "in season and carrying nothing: {:?}",
+                resource
+            );
+        } else {
+            assert_eq!(
+                resource.amount, 0,
+                "out of season and carrying something: {:?}",
+                resource
+            );
+        }
         assert!(resource.amount <= 500, "Resource has unreasonably high amount: {:?}", resource);
         assert!(resource.max_amount >= resource.amount, "Max amount less than current: {:?}", resource);
     }

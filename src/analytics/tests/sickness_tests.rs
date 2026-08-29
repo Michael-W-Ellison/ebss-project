@@ -293,11 +293,18 @@ fn living_on_a_midden_makes_people_ill() {
             simulation.population.agents[0].state.position = (25, 25, 0);
             simulation.tick();
 
-            if simulation.population.agents[0].is_ailing() {
+            // A dead man is taken out of the population, so this has to ask
+            // whether he is still there before asking how he is. It used to
+            // index straight in, and only stayed up because a lone agent
+            // happened to survive its month.
+            let Some(agent) = simulation.population.agents.first() else {
+                break;
+            };
+            if agent.is_ailing() {
                 ill += 1;
                 break;
             }
-            if !simulation.population.agents[0].state.is_alive {
+            if !agent.state.is_alive {
                 break;
             }
         }
