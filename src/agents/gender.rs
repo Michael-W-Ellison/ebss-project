@@ -14,7 +14,7 @@ pub enum Gender {
 impl Gender {
     /// Generate a random gender (50/50 distribution)
     pub fn random() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         if rng.gen_bool(0.5) {
             Gender::Male
         } else {

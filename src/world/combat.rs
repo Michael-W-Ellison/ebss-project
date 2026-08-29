@@ -84,7 +84,7 @@ impl CombatStats {
     /// Roll for critical hit
     pub fn roll_critical(&self) -> bool {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         rng.gen::<f32>() < self.crit_chance
     }
 

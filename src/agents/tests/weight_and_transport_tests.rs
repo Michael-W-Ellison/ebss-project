@@ -9,23 +9,29 @@ use crate::agents::{
 fn test_inventory_weight_enforcement() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Agent starts with 100kg capacity (default)
-    assert_eq!(agent.inventory.max_weight, 100.0);
+    // An agent with nothing to carry things in holds what two hands hold
+    let room = agent.inventory.max_weight;
+    assert_eq!(room, Agent::WHAT_TWO_HANDS_HOLD);
     assert_eq!(agent.inventory.current_weight, 0.0);
 
-    // Add light item (10kg)
-    let light_item = InventoryItem::new_with_weight("stone".to_string(), 10, 1.0);
+    // A stone in each hand goes in
+    let a_couple = (room / 4.0).floor() as u32;
+    let light_item = InventoryItem::new_with_weight("stone".to_string(), a_couple, 1.0);
     assert!(agent.inventory.add_item(light_item));
-    assert_eq!(agent.inventory.current_weight, 10.0);
+    assert_eq!(agent.inventory.current_weight, a_couple as f32);
 
-    // Add medium item (80kg) - should fit
-    let medium_item = InventoryItem::new_with_weight("iron_block".to_string(), 16, 5.0);
+    // And so does an armful on top of it
+    let an_armful = ((room - a_couple as f32) / 1.0).floor() as u32;
+    let medium_item =
+        InventoryItem::new_with_weight("iron_block".to_string(), an_armful, 1.0);
     assert!(agent.inventory.add_item(medium_item));
-    assert_eq!(agent.inventory.current_weight, 90.0);
 
-    // Try to add more (20kg) - should fail (over capacity)
+    // But nothing past that
     let heavy_item = InventoryItem::new_with_weight("wood".to_string(), 20, 1.0);
-    assert!(!agent.inventory.add_item(heavy_item), "Should not add item over weight limit");
+    assert!(
+        !agent.inventory.add_item(heavy_item),
+        "Should not add item over weight limit"
+    );
 }
 
 #[test]
@@ -57,7 +63,12 @@ fn test_backpack_increases_capacity() {
     let mut agent = Agent::new(AgentConfig::default());
 
     // Base capacity is 100kg
-    assert_eq!(agent.total_carrying_capacity(), 100.0);
+    // What two bare hands hold, which is an armful rather than a backpack.
+    // Asked of the constant rather than written down here: the base was a
+    // hundred, and a hundred in two bare hands made every container in the
+    // model decorative. See ISSUES #88.
+    let bare_hands = Agent::WHAT_TWO_HANDS_HOLD;
+    assert_eq!(agent.total_carrying_capacity(), bare_hands);
 
     // Add a backpack
     let backpack = Transport::new(TransportType::Backpack);
@@ -65,13 +76,16 @@ fn test_backpack_increases_capacity() {
     agent.add_transport(backpack);
 
     // Capacity shouldn't change until equipped
-    assert_eq!(agent.total_carrying_capacity(), 100.0);
+    assert_eq!(agent.total_carrying_capacity(), bare_hands);
 
     // Equip backpack
     assert!(agent.equip_transport(&backpack_id));
 
-    // Capacity should increase by 30kg
-    assert_eq!(agent.total_carrying_capacity(), 130.0);
+    // Capacity should increase by what a backpack holds
+    assert_eq!(
+        agent.total_carrying_capacity(),
+        bare_hands + TransportType::Backpack.weight_capacity()
+    );
 }
 
 #[test]
@@ -90,8 +104,13 @@ fn test_multiple_transports() {
     agent.add_transport(cart);
     agent.equip_transport(&cart_id);
 
-    // Total capacity: 100 + 30 + 150 = 280kg
-    assert_eq!(agent.total_carrying_capacity(), 280.0);
+    // Two hands, a backpack and a cart
+    assert_eq!(
+        agent.total_carrying_capacity(),
+        Agent::WHAT_TWO_HANDS_HOLD
+            + TransportType::Backpack.weight_capacity()
+            + TransportType::Cart.weight_capacity()
+    );
 }
 
 #[test]
@@ -105,7 +124,10 @@ fn test_pack_animal() {
     agent.equip_transport(&donkey_id);
 
     // Capacity should increase
-    assert_eq!(agent.total_carrying_capacity(), 200.0); // 100 base + 100 donkey
+    assert_eq!(
+        agent.total_carrying_capacity(),
+        Agent::WHAT_TWO_HANDS_HOLD + TransportType::PackDonkey.weight_capacity()
+    );
 }
 
 #[test]
@@ -118,7 +140,9 @@ fn test_movement_speed_with_weight() {
 
     // Add some weight
     let mut loaded_agent = Agent::new(AgentConfig::default());
-    let heavy_item = InventoryItem::new_with_weight("stone".to_string(), 50, 1.0);
+    let half_a_load = (loaded_agent.inventory.max_weight / 2.0).floor() as u32;
+    let heavy_item =
+        InventoryItem::new_with_weight("stone".to_string(), half_a_load, 1.0);
     loaded_agent.inventory.add_item(heavy_item);
 
     // 50% loaded should have slight speed penalty
@@ -205,35 +229,43 @@ fn test_pack_animal_health() {
 fn test_can_carry_check() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Can carry 100kg
-    assert!(agent.can_carry(50.0));
-    assert!(agent.can_carry(100.0));
-    assert!(!agent.can_carry(101.0));
+    // Can carry what two hands hold, and no more
+    let room = agent.inventory.max_weight;
+    assert!(agent.can_carry(room / 2.0));
+    assert!(agent.can_carry(room));
+    assert!(!agent.can_carry(room + 1.0));
 
     // Add some weight
-    let item = InventoryItem::new_with_weight("stone".to_string(), 30, 1.0);
-    agent.inventory.add_item(item);
+    let a_few = (room / 3.0).floor() as u32;
+    let item = InventoryItem::new_with_weight("stone".to_string(), a_few, 1.0);
+    assert!(agent.inventory.add_item(item));
 
-    // Can now carry 70kg more
-    assert!(agent.can_carry(70.0));
-    assert!(!agent.can_carry(71.0));
+    // Can now carry the rest of it and no more
+    let left = room - a_few as f32;
+    assert!(agent.can_carry(left));
+    assert!(!agent.can_carry(left + 1.0));
 }
 
 #[test]
 fn test_remove_item_updates_weight() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Add items
-    let item = InventoryItem::new_with_weight("stone".to_string(), 50, 1.0);
-    agent.inventory.add_item(item);
-    assert_eq!(agent.inventory.current_weight, 50.0);
+    // Add an armful of stone - as much as two hands hold
+    let an_armful = agent.inventory.max_weight.floor() as u32;
+    let item = InventoryItem::new_with_weight("stone".to_string(), an_armful, 1.0);
+    assert!(agent.inventory.add_item(item));
+    assert_eq!(agent.inventory.current_weight, an_armful as f32);
 
     // Remove some
-    agent.inventory.remove_item("stone", 20);
-    assert_eq!(agent.inventory.current_weight, 30.0);
+    let put_down = an_armful / 2;
+    agent.inventory.remove_item("stone", put_down);
+    assert_eq!(
+        agent.inventory.current_weight,
+        (an_armful - put_down) as f32
+    );
 
     // Remove rest
-    agent.inventory.remove_item("stone", 30);
+    agent.inventory.remove_item("stone", an_armful - put_down);
     assert_eq!(agent.inventory.current_weight, 0.0);
 }
 
@@ -242,11 +274,12 @@ fn test_recalculate_weight() {
     let mut agent = Agent::new(AgentConfig::default());
 
     // Add items
-    let item1 = InventoryItem::new_with_weight("stone".to_string(), 10, 2.0);
-    let item2 = InventoryItem::new_with_weight("wood".to_string(), 5, 1.0);
+    let item1 = InventoryItem::new_with_weight("stone".to_string(), 4, 2.0);
+    let item2 = InventoryItem::new_with_weight("wood".to_string(), 2, 1.0);
 
-    agent.inventory.add_item(item1);
-    agent.inventory.add_item(item2);
+    assert!(agent.inventory.add_item(item1));
+    assert!(agent.inventory.add_item(item2));
+    let actually_carrying = agent.inventory.current_weight;
 
     // Manually corrupt weight
     agent.inventory.current_weight = 0.0;
@@ -254,8 +287,7 @@ fn test_recalculate_weight() {
     // Recalculate
     agent.inventory.recalculate_weight();
 
-    // Should be 20 + 5 = 25kg
-    assert_eq!(agent.inventory.current_weight, 25.0);
+    assert_eq!(agent.inventory.current_weight, actually_carrying);
 }
 
 #[test]
@@ -269,7 +301,10 @@ fn test_wagon_for_bulk_transport() {
     agent.equip_transport(&wagon_id);
 
     // Wagon adds 500kg capacity
-    assert_eq!(agent.total_carrying_capacity(), 600.0);
+    assert_eq!(
+        agent.total_carrying_capacity(),
+        Agent::WHAT_TWO_HANDS_HOLD + TransportType::Wagon.weight_capacity()
+    );
 
     // Can carry massive loads
     let huge_item = InventoryItem::new_with_weight("ore".to_string(), 400, 1.0);
@@ -286,13 +321,16 @@ fn test_unequip_transport_reduces_capacity() {
     agent.add_transport(backpack);
     agent.equip_transport(&backpack_id);
 
-    assert_eq!(agent.total_carrying_capacity(), 130.0);
+    assert_eq!(
+        agent.total_carrying_capacity(),
+        Agent::WHAT_TWO_HANDS_HOLD + TransportType::Backpack.weight_capacity()
+    );
 
     // Unequip
     agent.unequip_transport(&backpack_id);
 
-    // Back to base
-    assert_eq!(agent.total_carrying_capacity(), 100.0);
+    // Back to what two hands hold
+    assert_eq!(agent.total_carrying_capacity(), Agent::WHAT_TWO_HANDS_HOLD);
 }
 
 #[test]
@@ -305,7 +343,10 @@ fn test_large_backpack() {
     agent.add_transport(backpack);
     agent.equip_transport(&backpack_id);
 
-    assert_eq!(agent.total_carrying_capacity(), 150.0);
+    assert_eq!(
+        agent.total_carrying_capacity(),
+        Agent::WHAT_TWO_HANDS_HOLD + TransportType::LargeBackpack.weight_capacity()
+    );
 
     // But slower speed
     let speed = agent.movement_speed();

@@ -29,6 +29,7 @@ fn a_week_old_sighting_found_empty_is_not_a_lie() {
         who: uuid::Uuid::new_v4(),
         they_saw_it_on: 100,
         told_me_on: 110,
+        how_much_they_said: Some(20),
     };
 
     // A week is eighty-four ticks
@@ -46,6 +47,7 @@ fn a_patch_just_passed_and_found_empty_is_a_lie() {
         who: uuid::Uuid::new_v4(),
         they_saw_it_on: 1000,
         told_me_on: 1000,
+        how_much_they_said: Some(20),
     };
 
     assert!(
@@ -61,6 +63,7 @@ fn a_fresh_claim_stops_being_answerable_once_it_is_old() {
         who: uuid::Uuid::new_v4(),
         they_saw_it_on: 1000,
         told_me_on: 1000,
+        how_much_they_said: Some(20),
     };
 
     assert!(said.was_he_answerable_for_it(1010));
@@ -176,7 +179,7 @@ fn a_thirsty_man_keeps_the_waterholes_and_lets_the_flax_go() {
         thirst.value = 0.95;
         thirst.denied_ticks = 400;
     }
-    agent.state.ticks_without_water = 3_000;
+    agent.state.gone_without_water_for(3_000);
 
     // More places than anybody can hold in mind, half of them water and half
     // of them flax

@@ -458,6 +458,28 @@ impl Memory {
         }
     }
 
+    /// Add or update a spatial memory, and note how much was standing there.
+    ///
+    /// `SpatialMemory::value` has existed since the model had memories and was
+    /// set to 1.0 for everything, so an agent remembered a spring and a puddle
+    /// as the same place. Foraging and migration both read this store, and
+    /// both of them chose between remembered places on distance alone.
+    pub fn remember_how_much_is_there(
+        &mut self,
+        memory_type: SpatialMemoryType,
+        position: (i32, i32, i32),
+        how_much: u32,
+    ) {
+        self.remember_location(memory_type.clone(), position);
+
+        if let Some(remembered) = self.spatial_memories.iter_mut().find(|m| {
+            std::mem::discriminant(&m.memory_type) == std::mem::discriminant(&memory_type)
+                && m.position == position
+        }) {
+            remembered.value = how_much as f32;
+        }
+    }
+
     /// Forget a spatial memory that turned out to be wrong.
     ///
     /// Used when an agent travels to a remembered resource and finds nothing

@@ -129,7 +129,7 @@ fn being_caught_out_costs_a_man_his_credit() {
 #[test]
 fn a_lie_about_what_a_man_needs_costs_more() {
     let mut starving = somebody();
-    starving.state.ticks_without_food = 9_600;
+    starving.state.gone_without_food_for(9_600);
     if let Some(hunger) = starving.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
         hunger.denied_ticks = 400;
@@ -153,14 +153,14 @@ fn the_same_lie_costs_less_to_a_man_who_is_not_hungry() {
     let liar = uuid::Uuid::new_v4();
 
     let mut starving = somebody();
-    starving.state.ticks_without_food = 9_600;
+    starving.state.gone_without_food_for(9_600);
     if let Some(hunger) = starving.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
         hunger.denied_ticks = 400;
     }
 
     let mut fed = somebody();
-    fed.state.ticks_without_food = 0;
+    fed.state.gone_without_food_for(0);
 
     assert!(
         starving.what_a_lie_about_this_costs(Some("food"), liar)
@@ -244,11 +244,12 @@ fn a_lie_is_found_out_by_going_there() {
         ResourceType::Food,
         liar,
         0,
+        Some(20),
         0,
     );
 
     // Nothing of the sort is there, and the agent is standing looking at it
-    let really_here = std::collections::HashSet::new();
+    let really_here = std::collections::BTreeSet::new();
     let found_out = listener
         .exploration_knowledge
         .hearsay_in_view(nowhere, 3, &really_here);
@@ -268,7 +269,7 @@ fn what_you_saw_yourself_is_nobodys_fault() {
         .exploration_knowledge
         .discover_resource(here, ResourceType::Food, 0);
 
-    let really_here = std::collections::HashSet::new();
+    let really_here = std::collections::BTreeSet::new();
     assert!(
         agent
             .exploration_knowledge
@@ -293,7 +294,7 @@ fn nobody_passes_on_hearsay_as_though_they_had_seen_it() {
         .discover_resource(seen, ResourceType::Wood, 0);
     middleman
         .exploration_knowledge
-        .take_their_word_for_it(heard, ResourceType::Food, liar, 0, 0);
+        .take_their_word_for_it(heard, ResourceType::Food, liar, 0, None, 0);
 
     let would_pass_on = middleman.exploration_knowledge.seen_for_myself();
 

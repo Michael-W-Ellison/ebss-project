@@ -74,12 +74,16 @@ fn two_people() -> Simulation {
 }
 
 fn give(simulation: &mut Simulation, who: usize, what: &str, how_many: u32) {
+    // Light enough that forty of them fit in a basket. Carrying capacity is
+    // what two hands hold plus what there is to put things in - see
+    // `Agent::WHAT_TWO_HANDS_HOLD` - and these fixtures are about who wants
+    // what, not about how much anybody can lift.
     simulation.population.agents[who]
         .inventory
         .add_item(InventoryItem::new_with_weight(
             what.to_string(),
             how_many,
-            1.0,
+            0.25,
         ));
 }
 

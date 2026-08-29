@@ -294,7 +294,7 @@ impl WeatherGenerator {
     /// Generate new weather based on current conditions
     pub fn generate_weather(&mut self) -> Weather {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Check for biome-specific weather first
         if let Some(biome_weather) = self.generate_biome_specific_weather(&mut rng) {
@@ -447,7 +447,7 @@ impl WeatherGenerator {
     /// Predict upcoming weather (returns likely next weather and confidence)
     pub fn forecast(&self, hours_ahead: u32) -> (WeatherType, f32) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Base confidence decreases with time
         let confidence = (1.0 - (hours_ahead as f32 / 48.0)).max(0.2);

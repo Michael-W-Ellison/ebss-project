@@ -521,7 +521,7 @@ impl Attention {
             if self.current_duration > self.attention_span {
                 // Chance to lose focus based on distractibility
                 use rand::Rng;
-                let mut rng = rand::thread_rng();
+                let mut rng = crate::core::dice::roll();
                 if rng.gen_bool(self.distractibility as f64 * 0.1) {
                     self.clear_focus();
                 }

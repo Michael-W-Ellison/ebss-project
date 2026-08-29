@@ -8,7 +8,7 @@
 //! - Terrain types encountered
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use crate::world::{Position, TerrainType, ResourceType, BuildingType};
 
 /// Types of discoveries agents can make
@@ -50,9 +50,9 @@ pub struct Discovery {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplorationKnowledge {
     /// Set of explored tile positions
-    pub explored_tiles: HashSet<Position>,
+    pub explored_tiles: BTreeSet<Position>,
     /// Discovered resource positions (position -> resource type)
-    pub known_resources: HashMap<Position, ResourceType>,
+    pub known_resources: BTreeMap<Position, ResourceType>,
     /// Which of those places this agent was told about rather than saw, who
     /// said so, and how fresh they said it was.
     ///
@@ -63,13 +63,13 @@ pub struct ExplorationKnowledge {
     /// laid at somebody's door - and keeping the age is what stops it being
     /// laid there unfairly.
     #[serde(default)]
-    pub who_told_me: HashMap<Position, Hearsay>,
+    pub who_told_me: BTreeMap<Position, Hearsay>,
     /// Discovered building positions (position -> building type)
-    pub known_buildings: HashMap<Position, BuildingType>,
+    pub known_buildings: BTreeMap<Position, BuildingType>,
     /// Discovered storage positions (position -> (storage type, capacity))
-    pub known_storage: HashMap<Position, (String, f32)>,
+    pub known_storage: BTreeMap<Position, (String, f32)>,
     /// Terrain types encountered
-    pub encountered_terrains: HashSet<TerrainType>,
+    pub encountered_terrains: BTreeSet<TerrainType>,
     /// History of discoveries
     pub discoveries: Vec<Discovery>,
     /// Total tiles explored
@@ -85,7 +85,7 @@ pub struct ExplorationKnowledge {
     /// The tick a thing was *first* found, and nothing else. Skill experience
     /// is paid on this being the current tick, so it must never be touched
     /// again afterwards - see `last_seen_ticks` for the other question.
-    pub resource_discovery_ticks: HashMap<Position, u32>,
+    pub resource_discovery_ticks: BTreeMap<Position, u32>,
     /// When this agent last laid eyes on each place it knows.
     ///
     /// Distinct from the tick of discovery, because they answer different
@@ -93,9 +93,9 @@ pub struct ExplorationKnowledge {
     /// what an agent can vouch for. Folding the second into the first paid
     /// somebody Farming experience every tick they stood near a field.
     #[serde(default)]
-    pub last_seen_ticks: HashMap<Position, u32>,
+    pub last_seen_ticks: BTreeMap<Position, u32>,
     /// Building discovery tick tracking (position -> tick discovered)
-    pub building_discovery_ticks: HashMap<Position, u32>,
+    pub building_discovery_ticks: BTreeMap<Position, u32>,
     /// Where this one has seen something it would rather not meet again.
     ///
     /// The map held explored tiles, resources with an age and a source,
@@ -105,7 +105,7 @@ pub struct ExplorationKnowledge {
     /// no more hesitation than the first time, because there was nowhere for
     /// "there are wolves in that wood" to live.
     #[serde(default)]
-    pub where_it_went_badly: HashMap<Position, Danger>,
+    pub where_it_went_badly: BTreeMap<Position, Danger>,
     /// And where each person this one knows was last actually seen.
     ///
     /// Everything social in the model reads live positions, which is to say
@@ -113,7 +113,7 @@ pub struct ExplorationKnowledge {
     /// what somebody would actually know: where they last laid eyes on them,
     /// and when.
     #[serde(default)]
-    pub where_i_last_saw: HashMap<uuid::Uuid, (Position, u32)>,
+    pub where_i_last_saw: BTreeMap<uuid::Uuid, (Position, u32)>,
     /// And where this one went for something and found the place picked bare.
     ///
     /// The map knew *what* was at a place and never whether there was any of
@@ -126,7 +126,16 @@ pub struct ExplorationKnowledge {
     /// again by September, and a man who writes it off for life is as wrong
     /// as the man who goes back every morning.
     #[serde(default)]
-    pub where_it_ran_out: HashMap<Position, u32>,
+    pub where_it_ran_out: BTreeMap<Position, u32>,
+    /// And how much was standing at each place this one last laid eyes on.
+    ///
+    /// `where_it_ran_out` is the same question asked as a yes or no, and a
+    /// yes-or-no cannot be passed on usefully: everything an agent told
+    /// anybody else was a place and a date. This is what lets a man say "a
+    /// rich seam, last week" rather than "a seam, last week", and lets the
+    /// man hearing it tell that from "the last handful, this morning".
+    #[serde(default)]
+    pub how_much_was_there: BTreeMap<Position, u32>,
 }
 
 /// Something met on a particular piece of ground, and how badly it went.
@@ -186,6 +195,15 @@ pub struct Hearsay {
     pub they_saw_it_on: u32,
     /// The tick they said so
     pub told_me_on: u32,
+    /// And how much they said was there.
+    ///
+    /// A place-name and a date was the whole of what one agent could tell
+    /// another, so a listener could weigh "a seam I passed last week" against
+    /// "a seam I passed this morning" and had no way at all to weigh either
+    /// against "the last handful of a worked-out one". `None` is somebody who
+    /// did not say — old saves, and a speaker who cannot remember.
+    #[serde(default)]
+    pub how_much_they_said: Option<u32>,
 }
 
 impl Hearsay {
@@ -222,30 +240,56 @@ impl Hearsay {
     /// because there are two copies of the verification sweep and the first
     /// fix went into one of them. See ISSUES_FOUND #48.
     pub fn does_bare_ground_convict_him(&self, now: u32, somebody_got_here_first: bool) -> bool {
-        self.was_he_answerable_for_it(now) && !somebody_got_here_first
+        self.was_he_answerable_for_it(now)
+            && !somebody_got_here_first
+            && !self.he_did_say_it_was_nearly_gone()
     }
+
+    /// Whether what he said was, in effect, "there is hardly anything there".
+    ///
+    /// The third way bare ground fails to convict, and the one the other two
+    /// could not cover. A man who says he saw the last handful of a seam this
+    /// morning, and is found to have told the truth about the last handful of
+    /// a seam, is plainly not lying - somebody took the handful. Holding him
+    /// to it makes honesty about a poor place more dangerous than silence,
+    /// which is the opposite of what the reporting is for.
+    ///
+    /// It cannot shelter a liar, because a liar claims a place worth walking
+    /// to - see `Population::tell_them_where_it_is`. Nobody invents a seam
+    /// with nothing in it.
+    pub fn he_did_say_it_was_nearly_gone(&self) -> bool {
+        self.how_much_they_said
+            .is_some_and(|how_much| how_much <= Self::THE_LAST_OF_IT)
+    }
+
+    /// What counts as the last of a place.
+    ///
+    /// A handful. Small enough that one person clears it in a turn or two,
+    /// which is exactly the case this is about.
+    pub const THE_LAST_OF_IT: u32 = 3;
 }
 
 impl ExplorationKnowledge {
     pub fn new() -> Self {
         Self {
-            explored_tiles: HashSet::new(),
-            known_resources: HashMap::new(),
-            who_told_me: HashMap::new(),
-            where_it_ran_out: HashMap::new(),
-            known_buildings: HashMap::new(),
-            known_storage: HashMap::new(),
-            encountered_terrains: HashSet::new(),
+            explored_tiles: BTreeSet::new(),
+            known_resources: BTreeMap::new(),
+            who_told_me: BTreeMap::new(),
+            how_much_was_there: BTreeMap::new(),
+            where_it_ran_out: BTreeMap::new(),
+            known_buildings: BTreeMap::new(),
+            known_storage: BTreeMap::new(),
+            encountered_terrains: BTreeSet::new(),
             discoveries: Vec::new(),
             total_tiles_explored: 0,
             last_exploration_tick: 0,
             curiosity_driven_explorations: 0,
             total_curiosity_satisfaction: 0.0,
-            resource_discovery_ticks: HashMap::new(),
-            last_seen_ticks: HashMap::new(),
-            building_discovery_ticks: HashMap::new(),
-            where_it_went_badly: HashMap::new(),
-            where_i_last_saw: HashMap::new(),
+            resource_discovery_ticks: BTreeMap::new(),
+            last_seen_ticks: BTreeMap::new(),
+            building_discovery_ticks: BTreeMap::new(),
+            where_it_went_badly: BTreeMap::new(),
+            where_i_last_saw: BTreeMap::new(),
         }
     }
 
@@ -436,6 +480,7 @@ impl ExplorationKnowledge {
         resource_type: ResourceType,
         who_said_so: uuid::Uuid,
         they_saw_it_on: u32,
+        how_much_they_said: Option<u32>,
         current_tick: u32,
     ) -> bool {
         if self.discover_resource(position, resource_type, current_tick) {
@@ -445,8 +490,20 @@ impl ExplorationKnowledge {
                     who: who_said_so,
                     they_saw_it_on,
                     told_me_on: current_tick,
+                    how_much_they_said,
                 },
             );
+
+            // What he said is what this one now thinks is there, until it goes
+            // and looks. Kept in the same book as a first-hand sighting on
+            // purpose: everything downstream that weighs a place - what to
+            // keep in mind, where to walk - should weigh a reported seam and a
+            // seen one on the same scale, and `who_told_me` is what says which
+            // it was when that matters.
+            if let Some(how_much) = how_much_they_said {
+                self.how_much_was_there.insert(position, how_much);
+            }
+
             true
         } else {
             false
@@ -483,7 +540,7 @@ impl ExplorationKnowledge {
         &self,
         centre: Position,
         radius: i32,
-        really_here: &std::collections::HashSet<Position>,
+        really_here: &std::collections::BTreeSet<Position>,
     ) -> Vec<(Position, Hearsay, ResourceType)> {
         self.who_told_me
             .iter()
@@ -500,6 +557,30 @@ impl ExplorationKnowledge {
             .collect()
     }
 
+    /// And what it was told is here, and is.
+    ///
+    /// The other half of `hearsay_in_view`, which filters to claims that have
+    /// *failed* and is therefore structurally incapable of noticing one that
+    /// held up. Being right was unrecordable in a running settlement:
+    /// `TrustRating::correct_count` was zero across thirty-two worlds while
+    /// `wrong_count` ran to 1,646, so trust could only ever fall.
+    pub fn hearsay_borne_out(
+        &self,
+        centre: Position,
+        radius: i32,
+        really_here: &std::collections::BTreeSet<Position>,
+    ) -> Vec<(Position, Hearsay)> {
+        self.who_told_me
+            .iter()
+            .filter(|(where_it_is, _)| {
+                (where_it_is.x - centre.x).abs() <= radius
+                    && (where_it_is.y - centre.y).abs() <= radius
+            })
+            .filter(|(where_it_is, _)| really_here.contains(*where_it_is))
+            .map(|(where_it_is, said)| (*where_it_is, *said))
+            .collect()
+    }
+
     /// When this agent last saw a place for itself, if it ever did.
     ///
     /// What an honest man passes on: not "there is food there" but "there was
@@ -511,9 +592,19 @@ impl ExplorationKnowledge {
             .copied()
     }
 
-    /// Note that this agent has just laid eyes on a place again.
-    pub fn saw_it_again(&mut self, where_it_is: Position, current_tick: u32) {
+    /// Note that this agent has just laid eyes on a place again, and what was
+    /// standing there when it did.
+    pub fn saw_it_again(&mut self, where_it_is: Position, how_much: u32, current_tick: u32) {
         self.last_seen_ticks.insert(where_it_is, current_tick);
+        self.how_much_was_there.insert(where_it_is, how_much);
+    }
+
+    /// How much was there when this one last looked, if it knows.
+    ///
+    /// What an honest man can say about a place beyond where it is: not "there
+    /// is clay there" but "there was a good seam of it there when I went past".
+    pub fn how_much_was_there_then(&self, where_it_is: &Position) -> Option<u32> {
+        self.how_much_was_there.get(where_it_is).copied()
     }
 
     /// Discover a resource at a position
@@ -796,7 +887,7 @@ impl ExplorationKnowledge {
         viewer_pos: Position,
         visibility_radius: u32,
         positions: &[Position],
-    ) -> HashMap<Position, VisibilityStatus> {
+    ) -> BTreeMap<Position, VisibilityStatus> {
         positions
             .iter()
             .map(|pos| {

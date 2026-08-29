@@ -149,6 +149,231 @@ pub const KNAPPED_TIP_FROM_FLINT: Making = Making {
     wants_in_hand: None,
 };
 
+/// A stick with a hardened point, for getting roots out of the ground.
+///
+/// The oldest tool there is and the one this model did not have. Every trade
+/// with a tool behind it - wood, stone, hunting, fishing, butchering, crafting
+/// - had one that founders arrive carrying or knowing, and **Herbalism, which
+/// is what most turns of most days are spent on, had none at all**. So an
+/// agent weighing a better tool against the one in its hand always found there
+/// was nothing to weigh: `what_i_would_rather_have` returned nothing for every
+/// trade, and `would_a_better_tool_pay` reached its arithmetic twenty-one
+/// times in fourteen thousand agent-turns.
+///
+/// It is a stick and an afternoon, which is the point: the first upgrade a
+/// people can afford has to be one they can afford on their first day.
+pub const DIGGING_STICK: Making = Making {
+    makes: "diggingstick",
+    how_many: 1,
+    needs: &[("wood", 1)],
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("stoneknife"),
+};
+
+/// Cord and a pouch of stone: what a people hunts with when it has no spear.
+///
+/// Arrived-with, like the sling, the rod and the shovel below it. The line
+/// between what a people knows and what it has to find out is drawn at
+/// *invention*, not at usefulness: a sling, a line and a hafted blade are the
+/// same three ideas as the handaxe these founders already carry, put to
+/// different ends. A bow, a net and a wheel are not - each is a thing somebody
+/// had to think of.
+///
+/// The whole ladder was found-out at first, and measured that way nobody ever
+/// climbed a rung of it: two digging sticks in a run and nothing else, because
+/// a settlement dies at about a hundred days and discovery is slower than
+/// that. A ladder whose first rung is above the ceiling is not a ladder.
+///
+/// Below the spear, and that is the point of it. A spear wants a knapped tip
+/// and a haft; a sling wants a length of cordage and something to put in it,
+/// so it is what a man whose spear has broken in a place with no flint can
+/// still make. `what_i_would_rather_have` only proposes what beats the tool in
+/// hand, so nobody carrying a good spear will ever want one - and somebody
+/// carrying nothing will.
+pub const SLING: Making = Making {
+    makes: "sling",
+    how_many: 1,
+    needs: &[("lashing", 1), ("hides", 1)],
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// A stave, and a cord strung tight enough to throw.
+///
+/// The top of the stone-age hunting ladder and a thing that has to be found
+/// out. No arrows in it: a bow that spends ammunition wants a whole model of
+/// ammunition behind it - fletching, recovery, running out mid-hunt - and
+/// there is none, so this is a bow as the rest of the tools are, a multiplier
+/// that wears out. Arrows are worth building when there is something for
+/// running out of them to mean.
+pub const BOW: Making = Making {
+    makes: "bow",
+    how_many: 1,
+    needs: &[("wood", 2), ("lashing", 2)],
+    hands: SkillType::Crafting,
+    effort: 12.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: Some("stoneknife"),
+};
+
+/// A pole, a line, and patience.
+///
+/// The `Fish` action has looked for something with "rod" in its name since the
+/// fishery was built, and has been giving a fifth of a chance to nobody at all,
+/// because nothing in the making chain ever produced one. This is that thing,
+/// so it tells twice: once through the tool multiplier and once through the
+/// odds of a cast.
+pub const FISHING_ROD: Making = Making {
+    makes: "fishingrod",
+    how_many: 1,
+    needs: &[("wood", 1), ("lashing", 1)],
+    hands: SkillType::Crafting,
+    effort: 6.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("stoneknife"),
+};
+
+/// Cordage, and a great deal of it.
+///
+/// The best thing a stone-age people can put in the water and the most
+/// expensive: four lashings is a season of retting and twisting, and it is the
+/// clearest case in the chain of a tool that is plainly worth it and plainly
+/// out of reach on the first day.
+pub const FISHING_NET: Making = Making {
+    makes: "fishingnet",
+    how_many: 1,
+    needs: &[("lashing", 4)],
+    hands: SkillType::Crafting,
+    effort: 14.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// A blade lashed to a haft, for ground rather than for wood.
+///
+/// A pit is twenty-two energy of digging with bare hands, which is most of a
+/// turn's work, and a settlement that cannot dig cheaply cannot build a larder.
+pub const SHOVEL: Making = Making {
+    makes: "shovel",
+    how_many: 1,
+    needs: &[("wood", 1), ("knappedtip", 1), ("lashing", 1)],
+    hands: SkillType::Crafting,
+    effort: 9.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("stoneknife"),
+};
+
+/// Woven cordage: what a berry goes into when it is not going into a mouth.
+///
+/// "An agent can eat from a berry bush but cannot carry additional berries
+/// unless they are carrying a pack or container. This means that the act of
+/// walking to and from the berry patch each time the agent is hungry will take
+/// additional time, making it less efficient."
+///
+/// So carrying is a thing you need a thing for. A pair of hands holds what a
+/// pair of hands holds, and everything past that wants a basket - which is why
+/// this is the cheapest making in the chain and the one founders arrive with.
+/// A people that knows how to twist cordage knows how to weave it.
+pub const BASKET: Making = Making {
+    makes: "basket",
+    how_many: 1,
+    needs: &[("lashing", 2)],
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// Two poles and a hide, dragged.
+///
+/// "A cart should be a rather advanced piece of technology. An initial method
+/// of moving things would likely be more of a travois." Which is right, and
+/// the cart was standing in the travois's place: a stone-age people had one
+/// rung between a basket and a wagon, and it had wheels on it.
+///
+/// A travois is two poles, a lashing and something to lie across them. No
+/// wheel, no axle, no bearing - the load drags, so it costs more of the
+/// walking than a cart does and carries less. That is the whole difference
+/// between them, and it is why one comes first.
+pub const TRAVOIS: Making = Making {
+    makes: "travois",
+    how_many: 1,
+    needs: &[("wood", 2), ("lashing", 1), ("hides", 1)],
+    hands: SkillType::Crafting,
+    effort: 9.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("handaxe"),
+};
+
+/// The wheel itself, which is the advanced part.
+///
+/// Not the cart: the cart is a box on poles and anybody can see how to build
+/// one. What nobody can see how to build is a disc that turns true on an axle,
+/// and that is the thing that has to be found out. Two of them and a bed makes
+/// a cart; without them the same wood and lashing makes a travois.
+pub const WHEEL: Making = Making {
+    makes: "wheel",
+    how_many: 1,
+    needs: &[("wood", 2), ("lashing", 1)],
+    hands: SkillType::Carpentry,
+    effort: 16.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: Some("handaxe"),
+};
+
+/// A bed on two wheels, which is what the wheels were for.
+///
+/// Advanced, now, in the only way that means anything: it wants two wheels and
+/// nobody is born knowing how to make one. It was four lengths of wood and a
+/// lashing that founders could turn out on their first afternoon, which put
+/// the wheel in the same bracket as a digging stick.
+///
+/// What it does is carry, and `TransportSystem` has been able to model exactly
+/// that since it was written - capacity already summed into
+/// `Inventory::max_weight`, speed already multiplied into
+/// `movement_speed_at_tick`. Nothing had ever put a transport into it.
+pub const HANDCART: Making = Making {
+    makes: "handcart",
+    how_many: 1,
+    needs: &[("wheel", 2), ("wood", 3), ("lashing", 2)],
+    hands: SkillType::Carpentry,
+    effort: 20.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: Some("handaxe"),
+};
+
+/// A stick with a point burnt into it.
+///
+/// "Hunting any larger animal requires at least a spear. A wooden spear is
+/// enough, but should take several attacks to kill the animal, depending on
+/// the size of the animal. A flint spear should reduce the number of attacks."
+/// So there are two spears, and this is the first: no tip, no lashing, one
+/// length of wood and an evening at the fire.
+pub const SHARPENED_STICK: Making = Making {
+    makes: "sharpenedstick",
+    how_many: 1,
+    needs: &[("wood", 1)],
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("stoneknife"),
+};
+
 /// Stick, tip, lashing.
 pub const SPEAR: Making = Making {
     makes: "spear",
@@ -816,6 +1041,17 @@ pub const EVERY_STEP: &[Making] = &[
     LASHING_FROM_RETTED,
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
+    DIGGING_STICK,
+    BASKET,
+    TRAVOIS,
+    WHEEL,
+    SHARPENED_STICK,
+    SLING,
+    BOW,
+    FISHING_ROD,
+    FISHING_NET,
+    SHOVEL,
+    HANDCART,
     SPEAR,
     HAND_AXE,
     STONE_KNIFE,
@@ -933,6 +1169,63 @@ pub fn what_to_do_first_that_can_be_done(
     Some(step)
 }
 
+/// How many turns of work stand between this agent and a finished thing.
+///
+/// `step_towards` names the next step and nothing about how many follow it.
+/// An agent deciding whether a better axe is worth stopping for has to know
+/// the price, and the price is the whole chain from what is in the pack to the
+/// thing in the hand - "eight hours with this axe, or two hours making a
+/// better one and six with that" needs the two.
+///
+/// Counted the same way the chain is walked, so the answer agrees with what
+/// the agent will actually end up doing. `None` where the chain cannot be
+/// finished at all from here, which is the honest answer to "how long would
+/// this take" when it is short of something that has to be found.
+pub fn how_many_turns_to_make(
+    what: &str,
+    holding: &impl Fn(&str) -> u32,
+    knows: &impl Fn(&Making) -> bool,
+) -> Option<u32> {
+    fn count(
+        what: &str,
+        holding: &impl Fn(&str) -> u32,
+        knows: &impl Fn(&Making) -> bool,
+        how_far_back: usize,
+    ) -> Option<u32> {
+        if how_far_back >= AS_FAR_BACK_AS_ANYBODY_PLANS {
+            return None;
+        }
+
+        // Already in the pack: nothing to do
+        if holding(what) > 0 {
+            return Some(0);
+        }
+
+        every_way_to_make(what)
+            .filter(|step| knows(step))
+            .filter_map(|step| {
+                let mut turns = 1;
+                for (needed, how_many) in step.needs {
+                    if holding(needed) >= *how_many || *needed == what {
+                        continue;
+                    }
+                    if !is_made_not_found(needed) {
+                        // Short of something that has to be found. Fetching it
+                        // is a turn too, and only one - the trip is priced
+                        // where trips are priced.
+                        turns += 1;
+                        continue;
+                    }
+                    turns += count(needed, holding, knows, how_far_back + 1)?;
+                }
+                Some(turns)
+            })
+            .min()
+    }
+
+    count(what, holding, knows, 0)
+}
+
 fn step_towards(
     what: &str,
     holding: &impl Fn(&str) -> u32,
@@ -1040,6 +1333,97 @@ pub const AXE_FOR_WOOD: Tool = Tool {
     helps: SkillType::Woodcutting,
     how_much_better: 1.8,
     how_long_it_lasts: 40.0,
+};
+
+/// Crude cutting: the handaxe taking a carcass apart.
+///
+/// "The most basic tool should be a stone hand axe. This tool allows for crude
+/// cutting, digging, and chopping." It did digging and chopping - Mining and
+/// Woodcutting - and not cutting, so a people with an axe and no knife could
+/// fell a tree and could not butcher what it killed. Crude, and well below the
+/// flake that is made for the job, but not nothing.
+pub const AXE_FOR_BUTCHERING: Tool = Tool {
+    called: "handaxe",
+    helps: SkillType::Leatherworking,
+    how_much_better: 1.25,
+    how_long_it_lasts: 40.0,
+};
+
+/// What a root is dug with, and what a patch of ground is turned with.
+///
+/// Modest and cheap, which is what a digging stick is. Its whole importance is
+/// that it exists at all: it is the first rung of a ladder that begins for
+/// most people at gathering, and without it the trade that fills most of the
+/// day had no ladder to stand on.
+pub const STICK_FOR_DIGGING: Tool = Tool {
+    called: "diggingstick",
+    helps: SkillType::Herbalism,
+    how_much_better: 1.5,
+    how_long_it_lasts: 30.0,
+};
+
+/// The same stick, put to the ground a field is broken with.
+pub const STICK_FOR_FARMING: Tool = Tool {
+    called: "diggingstick",
+    helps: SkillType::Farming,
+    how_much_better: 1.4,
+    how_long_it_lasts: 30.0,
+};
+
+/// A point burnt into a stick: enough to bring a deer down, several throws in.
+pub const STICK_FOR_HUNTING: Tool = Tool {
+    called: "sharpenedstick",
+    helps: SkillType::Hunting,
+    how_much_better: 1.4,
+    how_long_it_lasts: 15.0,
+};
+
+/// What a people hunts with when it has nothing better.
+pub const SLING_FOR_HUNTING: Tool = Tool {
+    called: "sling",
+    helps: SkillType::Hunting,
+    how_much_better: 1.5,
+    how_long_it_lasts: 20.0,
+};
+
+/// And what it hunts with when it has worked out how.
+pub const BOW_FOR_HUNTING: Tool = Tool {
+    called: "bow",
+    helps: SkillType::Hunting,
+    how_much_better: 3.0,
+    how_long_it_lasts: 60.0,
+};
+
+/// A line beats a thrust, and a net beats a line.
+pub const ROD_FOR_FISHING: Tool = Tool {
+    called: "fishingrod",
+    helps: SkillType::Fishing,
+    how_much_better: 1.9,
+    how_long_it_lasts: 35.0,
+};
+
+/// The best thing a stone-age people puts in the water.
+pub const NET_FOR_FISHING: Tool = Tool {
+    called: "fishingnet",
+    helps: SkillType::Fishing,
+    how_much_better: 2.6,
+    how_long_it_lasts: 40.0,
+};
+
+/// For ground, which is what a pit is dug out of.
+pub const SHOVEL_FOR_DIGGING: Tool = Tool {
+    called: "shovel",
+    helps: SkillType::Mining,
+    how_much_better: 1.9,
+    how_long_it_lasts: 45.0,
+};
+
+/// And for the footings of anything anybody puts up.
+pub const SHOVEL_FOR_BUILDING: Tool = Tool {
+    called: "shovel",
+    helps: SkillType::Construction,
+    how_much_better: 1.6,
+    how_long_it_lasts: 45.0,
 };
 
 /// The same tool, turned on the ground.
@@ -1151,6 +1535,16 @@ pub const METAL_SPEAR_FOR_FISHING: Tool = Tool {
 pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_WOOD,
     AXE_FOR_STONE,
+    AXE_FOR_BUTCHERING,
+    STICK_FOR_DIGGING,
+    STICK_FOR_FARMING,
+    STICK_FOR_HUNTING,
+    SLING_FOR_HUNTING,
+    BOW_FOR_HUNTING,
+    ROD_FOR_FISHING,
+    NET_FOR_FISHING,
+    SHOVEL_FOR_DIGGING,
+    SHOVEL_FOR_BUILDING,
     SPEAR_FOR_HUNTING,
     SPEAR_FOR_FISHING,
     KNIFE_FOR_BUTCHERING,

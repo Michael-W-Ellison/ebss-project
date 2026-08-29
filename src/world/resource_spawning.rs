@@ -159,8 +159,14 @@ impl TerrainResourceMapper {
             // Wild leaf, shoot and the first roots. Thin stuff: a person
             // living on greens has to pick a great many of them, which is
             // why there are more patches of them than there are bushes.
-            ResourceType::Greens => (10, 28),
-            ResourceType::Roots => (8, 20),
+            // Spring is not a lean season, it is the opposite: everything
+            // green is putting out leaf at once and there is far more of it
+            // than a small band can eat. Thin stuff by weight - greens carry
+            // a sixth of the energy of ordinary forage - so it takes a great
+            // deal of picking, and that is the cost of living on it rather
+            // than scarcity.
+            ResourceType::Greens => (40, 110),
+            ResourceType::Roots => (30, 80),
 
             // Default for others
             _ => (10, 30),
@@ -213,14 +219,14 @@ pub fn what_this_ground_carries(
 /// Spawns resources in naturalistic clusters
 pub struct NaturalisticSpawner<'a> {
     grid: &'a Grid,
-    rng: rand::rngs::ThreadRng,
+    rng: rand::rngs::StdRng,
 }
 
 impl<'a> NaturalisticSpawner<'a> {
     pub fn new(grid: &'a Grid) -> Self {
         Self {
             grid,
-            rng: rand::thread_rng(),
+            rng: crate::core::dice::roll(),
         }
     }
 

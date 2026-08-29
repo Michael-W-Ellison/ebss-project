@@ -8,6 +8,8 @@ use std::collections::HashMap;
 
 use super::senses::Senses;
 use super::body::Body;
+use super::physiology;
+use super::provision;
 use super::skills::Skills;
 use super::emotions::{EmotionState, EmotionSource, RelationshipMap};
 use crate::core::traits::TraitSet;
@@ -133,6 +135,57 @@ impl InventoryItem {
     }
 
     /// Check if this is a food item
+    /// Take another lot of the same thing onto this stack.
+    ///
+    /// A stack that has food data keeps it when something without any is
+    /// added, and picks one up if it had none. An item with no `food_data`
+    /// **never rots**, so letting a dataless lot swallow a real stack made
+    /// food that could sit in a pit for the life of the world without ever
+    /// going off - which is where the several hundred units of immortal food
+    /// in ISSUES_FOUND #45 came from.
+    ///
+    /// # What this deliberately does not do
+    ///
+    /// It does not merge the two clocks. It keeps the clock of whichever
+    /// stack was already there, which is what the bare
+    /// `quantity += other.quantity` it replaces did.
+    ///
+    /// That is **not** because the clock rule is wrong. Fresh food tipped
+    /// into a basket that has been going over ought to come down to meet it -
+    /// mould spreads - and `FoodData` had a `the_older_clock` written and unit
+    /// tested for exactly that. It was measured at thirty-two worlds a side
+    /// and held back:
+    ///
+    /// | | before | with the clock rule |
+    /// |---|---|---|
+    /// | food eaten | 9,703 | **4,638** (t = -8.4) |
+    /// | people alive | 55.5 | 48.0 (t = -2.2) |
+    /// | winter store | 320 | 105 |
+    ///
+    /// A settlement ate **less than half as much**, and the loss does not
+    /// turn up in any waste column - eaten plus waste falls from 12,874 to
+    /// 6,692, so something like six thousand units leave the ledger without
+    /// being eaten, rotting or being left anywhere. Every other change in that
+    /// batch was measured null with the clock rule off, so the rule is
+    /// responsible and the hole is not explained. Shipping a rule that loses
+    /// half a settlement's food to an unexplained sink is worse than shipping
+    /// a stack that lies about its age.
+    ///
+    /// See ISSUES_FOUND #61, and the task that goes with it.
+    pub fn absorb(&mut self, other: InventoryItem) {
+        let mine = self.quantity;
+        let theirs = other.quantity;
+        self.quantity += other.quantity;
+
+        self.food_data = match (self.food_data.take(), other.food_data) {
+            (Some(clock), Some(other_clock)) => {
+                Some(clock.the_older_clock(other_clock, mine, theirs))
+            }
+            (Some(only), None) | (None, Some(only)) => Some(only),
+            (None, None) => None,
+        };
+    }
+
     pub fn is_food(&self) -> bool {
         self.food_data.is_some()
     }
@@ -254,8 +307,29 @@ impl InventoryItem {
 /// Agent inventory system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inventory {
+    /// How much food this pack has refused for want of room, in units.
+    ///
+    /// A refused `add_item` returns `false` and almost every caller ignores
+    /// it, so the food simply stops existing. That is a real sink and it had
+    /// no counter anywhere: a whole batch's worth of missing food was traced
+    /// to it. See ISSUES_FOUND #65.
+    #[serde(default)]
+    pub what_would_not_go_in: u32,
+
     /// Items stored by item_id
-    items: HashMap<String, InventoryItem>,
+    /// What is in it, in a stable order.
+    ///
+    /// A `BTreeMap` rather than a `HashMap`, and not for speed. Twenty-two
+    /// places iterate this map and several of them pick a *best* - the best
+    /// food to eat, the tool that helps most, what can be spared - so when two
+    /// candidates tie, the winner is whichever the iterator reached first. A
+    /// `HashMap` orders by a hash seeded per process, so that answer changed
+    /// between runs of the same binary on the same seed.
+    ///
+    /// Measured: with the dice seeded, five tests still came and went across
+    /// three runs. An inventory has no business having an order that depends
+    /// on which process is looking at it.
+    items: std::collections::BTreeMap<String, InventoryItem>,
     /// Maximum number of item stacks
     pub max_slots: usize,
     /// Maximum weight that can be carried
@@ -267,10 +341,11 @@ pub struct Inventory {
 impl Inventory {
     pub fn new(max_slots: usize, max_weight: f32) -> Self {
         Self {
-            items: HashMap::new(),
+            items: std::collections::BTreeMap::new(),
             max_slots,
             max_weight,
             current_weight: 0.0,
+            what_would_not_go_in: 0,
         }
     }
 
@@ -285,16 +360,31 @@ impl Inventory {
         // Check weight limit
         let item_weight = item.total_weight();
         if self.current_weight + item_weight > self.effective_max_weight() {
+            // What will not go in is not carried, and something ought to know
+            // it happened - see `what_would_not_go_in`.
+            if item.is_food() {
+                self.what_would_not_go_in += item.quantity;
+            }
             return false; // Too heavy
         }
 
-        // Update weight
-        self.current_weight += item_weight;
-
-        // Add or stack item
+        // Add or stack item, and weigh the pack by what is actually in it.
+        //
+        // The weight added is **not** the incoming item's weight when the two
+        // stacks merge, because merging can change what the whole stack is:
+        // `absorb` settles the preparation, and preparation is what decides
+        // weight - a dried stack weighs a third of the same thing raw. Adding
+        // only the newcomer's weight left `current_weight` reading low, and
+        // the next `recalculate_weight` corrected it in one jump. If that jump
+        // put the pack over its limit, **every subsequent `add_item` returned
+        // false and the food was silently destroyed**, because almost every
+        // caller ignores the bool. See ISSUES_FOUND #65.
         if let Some(existing) = self.items.get_mut(&item.item_id) {
-            existing.quantity += item.quantity;
+            let before = existing.total_weight();
+            existing.absorb(item);
+            self.current_weight += existing.total_weight() - before;
         } else {
+            self.current_weight += item_weight;
             self.items.insert(item.item_id.clone(), item);
         }
 
@@ -429,13 +519,13 @@ impl Inventory {
     }
 
     /// Get all items
-    pub fn get_all_items(&self) -> &HashMap<String, InventoryItem> {
+    pub fn get_all_items(&self) -> &std::collections::BTreeMap<String, InventoryItem> {
         &self.items
     }
 
     /// The same, to be changed rather than read. Draining a vessel is the
     /// caller this was wanting.
-    pub fn get_all_items_mut(&mut self) -> &mut HashMap<String, InventoryItem> {
+    pub fn get_all_items_mut(&mut self) -> &mut std::collections::BTreeMap<String, InventoryItem> {
         &mut self.items
     }
 
@@ -505,39 +595,128 @@ impl Inventory {
 
 impl Default for Inventory {
     fn default() -> Self {
-        Self::new(20, 100.0) // Default: 20 slots, 100 weight units
+        // Twenty slots and a nominal allowance. What an *agent* can carry is
+        // not this: it is what two hands hold plus what it has to put things
+        // in, worked out by `update_inventory_capacity_from_transport` and
+        // brought up to date every turn by `take_up_the_cart`. A bare
+        // `Inventory` has no body and no basket, so it has nothing to work it
+        // out from.
+        Self::new(20, 100.0)
     }
 }
 
-/// Life stages of an agent
+/// What share of a grown appetite a body of this many years wants.
 ///
-/// A year is [`crate::environment::TICKS_PER_YEAR`] ticks, so the boundaries
-/// below are roughly: infancy to five months, childhood to a year and a
-/// quarter, adolescence to two years, adulthood to seven, old age after that.
-/// An agent lives eight or nine years and sees thirty-odd seasons turn.
+/// The specification's own table, year by year: a fifth of an adult's food and
+/// water until four, then rising a twentieth a year to ten, then faster, and a
+/// full share from sixteen.
+///
+/// This replaces a guess. The reserve used to be sized by life stage in five
+/// crude bands, and what a body burned was the three-quarter power of that -
+/// which is the right shape for real animals and is not what was asked for.
+/// Here the figure is the food and water a body of that age needs, so it sizes
+/// the burn directly, and the reserve and the stomach with it. Everybody still
+/// starves in three weeks, whatever size they are; a small body simply has
+/// less to go without.
+pub fn what_a_body_this_age_eats(years: u32) -> f32 {
+    match years {
+        0..=3 => 0.20,
+        4 => 0.25,
+        5 => 0.30,
+        6 => 0.35,
+        7 => 0.40,
+        8 => 0.45,
+        9 => 0.50,
+        10 => 0.55,
+        11 => 0.60,
+        12 => 0.70,
+        13 => 0.80,
+        14 => 0.90,
+        _ => 1.00,
+    }
+}
+
+/// What a body of this many years can bring to moving, carrying and working.
+///
+/// The specification's table, as a share of a grown adult's ten: one at two
+/// years, climbing to ten at sixteen, holding until forty and falling away
+/// after. At seventy it is over.
+pub fn what_a_body_this_age_can_do(years: u32) -> f32 {
+    let out_of_ten = match years {
+        0..=1 => 0,
+        2..=3 => 1,
+        4..=5 => 2,
+        6..=7 => 3,
+        8..=9 => 4,
+        10..=11 => 5,
+        12 => 6,
+        13 => 7,
+        14 => 8,
+        15 => 9,
+        16..=39 => 10,
+        40..=49 => 9,
+        50..=54 => 8,
+        55..=59 => 7,
+        60..=64 => 6,
+        _ => 5,
+    };
+    out_of_ten as f32 / 10.0
+}
+
+/// Life stages of an agent, in years.
+///
+/// The bands are the ones the lifecycle is specified in, and what separates
+/// them is how far from a grown person somebody of that age may be:
+///
+/// - **0-5** must be with a parent at all times. Under two the parent has a
+///   hand occupied carrying them.
+/// - **6-10** must stay within sight of the camp or of some adult.
+/// - **11-15** must stay within an hour's walk of the camp or of some adult.
+/// - **16+** is a functional adult with no restrictions.
+/// - **70** is death from old age.
+///
+/// These used to be counted in turns - infancy to five hundred of them,
+/// adulthood at two and a half thousand - on a calendar where a year was
+/// eleven hundred turns and a whole life eight of them. A year is
+/// `TICKS_PER_YEAR` turns now and a life is seventy years.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifeStage {
-    /// 0-500 ticks, cannot reproduce, learns from parents
+    /// Under six: with a parent at all times
     Infant,
-    /// 500-1500 ticks, cannot reproduce, high learning rate
+    /// Six to ten: within sight of the camp or an adult
     Child,
-    /// 1500-2500 ticks, can reproduce, still learning
+    /// Eleven to fifteen: within an hour's walk
     Adolescent,
-    /// 2500-8000 ticks, prime reproduction age
+    /// Sixteen to forty-nine: a functional adult
     Adult,
-    /// 8000+ ticks, reduced fertility, wisdom phase
+    /// Fifty and over, when what a body can do starts falling away
     Elderly,
 }
 
 impl LifeStage {
-    /// Get life stage based on age
+    /// The year of life each stage begins in.
+    pub const KEPT_IN_ARMS_UNTIL: u32 = 6;
+    pub const KEPT_IN_SIGHT_UNTIL: u32 = 11;
+    pub const KEPT_WITHIN_AN_HOUR_UNTIL: u32 = 16;
+    pub const STRENGTH_STARTS_GOING_AT: u32 = 50;
+
+    /// Get life stage based on age in turns.
     pub fn from_age(age: u32) -> Self {
-        match age {
-            0..=500 => LifeStage::Infant,
-            501..=1500 => LifeStage::Child,
-            1501..=2500 => LifeStage::Adolescent,
-            2501..=8000 => LifeStage::Adult,
-            _ => LifeStage::Elderly,
+        Self::from_years(age / crate::environment::seasons::TICKS_PER_YEAR)
+    }
+
+    /// The same, from years already counted.
+    pub fn from_years(years: u32) -> Self {
+        if years < Self::KEPT_IN_ARMS_UNTIL {
+            LifeStage::Infant
+        } else if years < Self::KEPT_IN_SIGHT_UNTIL {
+            LifeStage::Child
+        } else if years < Self::KEPT_WITHIN_AN_HOUR_UNTIL {
+            LifeStage::Adolescent
+        } else if years < Self::STRENGTH_STARTS_GOING_AT {
+            LifeStage::Adult
+        } else {
+            LifeStage::Elderly
         }
     }
 
@@ -610,12 +789,15 @@ impl LifeStage {
     /// a hungry year shows up as a missing generation rather than as a smaller
     /// one.
     pub fn hunger_reserve(&self) -> f32 {
+        // The middle of each band, for the places that still only know a
+        // stage. `what_a_body_this_age_eats` is the real answer and takes the
+        // years - a five-year-old and a one-year-old are not the same size.
         match self {
-            LifeStage::Infant => 0.25,
-            LifeStage::Child => 0.45,
-            LifeStage::Adolescent => 0.75,
+            LifeStage::Infant => what_a_body_this_age_eats(3),
+            LifeStage::Child => what_a_body_this_age_eats(8),
+            LifeStage::Adolescent => what_a_body_this_age_eats(13),
             LifeStage::Adult => 1.0,
-            LifeStage::Elderly => 0.6,
+            LifeStage::Elderly => 1.0,
         }
     }
 }
@@ -674,6 +856,32 @@ pub struct AgentState {
     pub last_ate_tick: u32, // Track when agent last ate
     pub ticks_without_food: u32, // Count starvation duration
     pub last_drank_tick: u32, // Track when agent last drank water
+
+    /// The body: water, stomach, gut and reserve, on a clock of minutes.
+    ///
+    /// This is the truth about whether an agent is hungry, thirsty, weakened
+    /// or dead of either. The two turn counters above are kept only so the
+    /// interface and older tests have something to read; they decide nothing.
+    /// See `agents::physiology`.
+    #[serde(default)]
+    pub physiology: physiology::Physiology,
+
+    /// Winters this agent has counted its way through.
+    #[serde(default)]
+    pub winters_seen: provision::WintersSeen,
+
+    /// What this agent last made of its own provisions, and the winter coming.
+    #[serde(default)]
+    pub what_the_larder_says: Option<provision::WhatIsPutBy>,
+
+    /// What the last turn's work cost, which is what the body burned doing it.
+    ///
+    /// "Increased physical activity should increase the rate at which hunger
+    /// and thirst increase." The action matrix already prices every action in
+    /// energy; this carries that figure through to the body, and is spent when
+    /// the body reads it.
+    #[serde(default)]
+    pub effort_this_turn: f32,
     pub ticks_without_water: u32, // Count dehydration duration
     /// What this body has to pass, waiting to be left on the ground.
     ///
@@ -685,6 +893,18 @@ pub struct AgentState {
     /// What is wrong with this one, if anything.
     #[serde(default)]
     pub ailing: Option<Ailment>,
+    /// What last took health off this one, in a word.
+    ///
+    /// Causes of death used to be worked out *after* the fact, by asking a
+    /// corpse whether it was hungry - and by then the hunger has been eaten
+    /// away, the exposure has cleared, and the answer is no. Measured over
+    /// eight worlds, **70% of every death in this model came out as "unknown
+    /// cause"**: a settlement could not say what killed its people.
+    ///
+    /// So each thing that takes health says so as it takes it, and the
+    /// reckoning reads what is written rather than guessing from what is left.
+    #[serde(default)]
+    pub what_last_took_health: Option<String>,
     /// How much salt this one has drunk and not yet got rid of.
     ///
     /// "If they do so it should increase their hydration drive more over time
@@ -697,9 +917,14 @@ pub struct AgentState {
 impl AgentState {
     pub fn new() -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         // Max age varies between 9000-11000 ticks
-        let max_age = rng.gen_range(9000..11000);
+        // Seventy years, and that is the end of it. There is no spread: the
+        // specification says "Age 70: Death from old age", and everything
+        // before it - the strength curve, the appetite curve - is written
+        // against that one figure.
+        let max_age = crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
+            * crate::environment::seasons::TICKS_PER_YEAR;
 
         Self {
             health: 100.0,
@@ -712,9 +937,14 @@ impl AgentState {
             last_ate_tick: 0,
             ticks_without_food: 0,
             last_drank_tick: 0,
+            physiology: physiology::Physiology::new(),
+            winters_seen: provision::WintersSeen::default(),
+            what_the_larder_says: None,
+            effort_this_turn: 0.0,
             ticks_without_water: 0,
             waste_carried: 0.0,
             ailing: None,
+            what_last_took_health: None,
             salt_in_me: 0.0,
         }
     }
@@ -740,62 +970,52 @@ impl AgentState {
         // Track dehydration (faster than starvation - 3 days vs 7 days)
         self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
 
-        // What this body has stored to go on. A grown adult carries fat and
-        // muscle worth weeks of it; a small child carries days. Every
-        // threshold below is measured against that, so a famine takes the
-        // young and the old first and the people in their prime last.
-        let reserve = self.life_stage.hunger_reserve().max(0.05);
+        // What this body has stored to go on. A grown adult carries three weeks
+        // of it; a small child carries days. A famine therefore takes the young
+        // and the old first and the people in their prime last, without anybody
+        // having written that down.
+        let reserve = self.what_i_eat_for_my_age();
+        self.physiology.now_a_body_of(reserve);
 
-        // Energy depletion (normal metabolism)
-        let base_energy_loss = 0.05 * energy_multiplier; // Apply pregnancy/other multiplier
-        let mut energy_loss = base_energy_loss;
+        // Two hours of living, at whatever the last turn's work cost. Water,
+        // the stomach, the gut and the reserve all move on the body's own
+        // clock; see `agents::physiology`. The turn counters above are kept
+        // only for the interface and for older tests to read, and are derived
+        // rather than counted so they cannot disagree with the body.
+        let effort = std::mem::take(&mut self.effort_this_turn);
+        self.physiology
+            .advance(physiology::MINUTES_PER_TURN, effort * energy_multiplier);
 
-        // After a day without food: energy depletes faster, and a small body
-        // with little put by depletes faster still
-        if self.ticks_without_food as f32 > 1440.0 * reserve {
-            energy_loss *= 1.0 + 1.0 / reserve;
+        // Going short of water is felt before it is fatal: the bands in
+        // `Physiology::capability` take a quarter off everything the agent can
+        // do at each of three-quarters, half and a quarter. Nought is death.
+        if self.physiology.died_of_thirst() {
+            self.lose_health(self.health, "dehydration");
+        } else if self.physiology.is_parched() {
+            // Not damage so much as the body starting to fail at the edges
+            self.lose_health(0.15 * (1.0 - self.physiology.capability()), "thirst");
         }
 
-        // Three days on an adult's reserves; sooner on a child's
-        if self.ticks_without_food as f32 > 4320.0 * reserve {
-            let health_loss = 0.1 / reserve;
-            self.health = (self.health - health_loss).max(0.0);
+        // And the reserve running out is starvation. Three weeks for an adult.
+        if self.physiology.starved() {
+            self.lose_health(self.health, "starvation");
+        } else if self.physiology.is_wasting() {
+            self.lose_health(0.1 / reserve, "hunger");
         }
 
-        // A week on an adult's reserves, and death is close
-        if self.ticks_without_food as f32 > 10080.0 * reserve {
-            let severe_health_loss = 1.0 / reserve;
-            self.health = (self.health - severe_health_loss).max(0.0);
-        }
-
-        // === DEHYDRATION MECHANICS (faster than starvation) ===
-        // After 12 hours (720 ticks) without water: energy depletes faster
-        if self.ticks_without_water > 720 {
-            energy_loss *= 1.5; // Additional 50% energy depletion
-        }
-
-        // After 1.5 days (2160 ticks) without water: health starts decreasing
-        if self.ticks_without_water > 2160 {
-            let health_loss = 0.15; // Moderate health degradation
-            self.health = (self.health - health_loss).max(0.0);
-        }
-
-        // After 3 days (4320 ticks) without water: rapid health loss (death imminent)
-        if self.ticks_without_water > 4320 {
-            let severe_health_loss = 1.5; // Rapid health loss (faster than starvation)
-            self.health = (self.health - severe_health_loss).max(0.0);
-        }
-
-        // Apply energy loss
+        // Energy depletion (normal metabolism), made worse by working thirsty
+        let base_energy_loss = 0.05 * energy_multiplier;
+        let energy_loss = base_energy_loss / self.physiology.capability().max(0.25);
         self.energy = (self.energy - energy_loss).max(0.0);
 
         // When energy is depleted, health starts decreasing too
         if self.energy <= 0.0 {
-            self.health = (self.health - 0.05).max(0.0);
+            self.lose_health(0.05, "exhaustion");
         }
 
         // Check for death from old age
         if self.age >= self.max_age {
+            self.what_last_took_health = Some("old age".to_string());
             self.is_alive = false;
         }
 
@@ -807,7 +1027,24 @@ impl AgentState {
 
     /// Take damage
     pub fn take_damage(&mut self, amount: f32) {
+        self.lose_health(amount, "a blow");
+    }
+
+    /// Lose health to a named thing.
+    ///
+    /// One place, so that every drain says what it was as it happens. Working
+    /// the cause out afterwards, by asking a corpse whether it was hungry,
+    /// gave **"unknown cause" for 70% of every death in this model** - by the
+    /// time anybody asks, the hunger has been eaten away and the cold has
+    /// worn off, and the honest answer to every question is no.
+    pub fn lose_health(&mut self, amount: f32, to: &str) {
+        if amount <= 0.0 {
+            return;
+        }
+
         self.health = (self.health - amount).max(0.0);
+        self.what_last_took_health = Some(to.to_string());
+
         if self.health <= 0.0 {
             self.is_alive = false;
         }
@@ -869,7 +1106,6 @@ impl AgentState {
             }
         }
 
-        let reserve = self.life_stage.hunger_reserve().max(0.05);
         let health = self.health.max(0.0);
 
         match drive_type {
@@ -877,31 +1113,16 @@ impl AgentState {
             // and goes fifteen times faster after three days, which is why a
             // thirsty agent should stop whatever it is doing even if that
             // thing is fetching food.
-            DriveType::Thirst => {
-                let dry = self.ticks_without_water as f32;
-                let until_it_bites = (2_160.0 - dry).max(0.0);
-                let until_it_races = (4_320.0 - dry).max(0.0);
-
-                // Slow loss while between the two, then rapid
-                let slow_span = (until_it_races - until_it_bites).max(0.0);
-                let lost_slowly = slow_span * 0.15;
-                let left_for_the_race = (health - lost_slowly).max(0.0);
-
-                Some(until_it_races + once_health_goes(left_for_the_race, 1.5))
-            }
+            DriveType::Thirst => Some(
+                self.physiology.minutes_before_thirst_kills_me()
+                    / physiology::MINUTES_PER_TURN as f32,
+            ),
 
             // Starvation is slower and scales with what the body has put by
-            DriveType::Hunger => {
-                let empty = self.ticks_without_food as f32;
-                let until_it_bites = (4_320.0 * reserve - empty).max(0.0);
-                let until_it_races = (10_080.0 * reserve - empty).max(0.0);
-
-                let slow_span = (until_it_races - until_it_bites).max(0.0);
-                let lost_slowly = slow_span * (0.1 / reserve);
-                let left_for_the_race = (health - lost_slowly).max(0.0);
-
-                Some(until_it_races + once_health_goes(left_for_the_race, 1.0 / reserve))
-            }
+            DriveType::Hunger => Some(
+                self.physiology.minutes_before_hunger_kills_me()
+                    / physiology::MINUTES_PER_TURN as f32,
+            ),
 
             // Exhaustion is only a death clock once the energy is nearly
             // gone. Reckoning it from a full tank the way thirst is reckoned
@@ -931,13 +1152,49 @@ impl AgentState {
 
     /// Check if agent is starving (critical survival state)
     pub fn is_starving(&self) -> bool {
-        self.ticks_without_food > 1440 || self.energy < 20.0
+        self.physiology.is_starving() || self.energy < 20.0
+    }
+
+    /// How old this body is, in years.
+    pub fn years_old(&self) -> u32 {
+        self.age / crate::environment::seasons::TICKS_PER_YEAR
+    }
+
+    /// What share of a grown appetite this body wants, for its age.
+    pub fn what_i_eat_for_my_age(&self) -> f32 {
+        what_a_body_this_age_eats(self.years_old()).max(0.05)
+    }
+
+    /// Put this body where it would be after this long without food.
+    ///
+    /// Minutes, which is the scale the old `ticks_without_food` figures were
+    /// always written on. Sizes the body to its life stage first, so a child
+    /// set to two days empty is two days into a *child's* reserve.
+    pub fn gone_without_food_for(&mut self, minutes: u32) {
+        self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
+        self.physiology.gone_without_food_for(minutes);
+        self.ticks_without_food = minutes;
+    }
+
+    /// Likewise, without water.
+    pub fn gone_without_water_for(&mut self, minutes: u32) {
+        self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
+        self.physiology.gone_without_water_for(minutes);
+        self.ticks_without_water = minutes;
+    }
+
+    /// What share of itself this body can bring to anything.
+    ///
+    /// A quarter comes off at each of three-quarters, half and a quarter of a
+    /// full body of water. See `Physiology::capability`.
+    pub fn capability(&self) -> f32 {
+        self.physiology.capability()
     }
 
     /// Check if agent is dehydrated (critical survival state)
     /// Dehydration is more urgent than starvation (720 ticks = 12 hours)
     pub fn is_dehydrated(&self) -> bool {
-        self.ticks_without_water > 720
+        self.physiology.is_parched()
     }
 
     /// Check if agent is in critical survival state
@@ -1044,6 +1301,16 @@ pub struct Agent {
     pub equipment: super::equipment::EquipmentManager, // Equipped items (weapons, armor, tools)
     pub satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker, // Tracks who/what satisfies which drives
     /// Current active plan being executed
+    /// What this one set out to do, and has not finished doing.
+    ///
+    /// "Once an agent plans an action, it would not change its mind unless its
+    /// situation changed in some manner. For example, an agent wants to walk
+    /// to get a drink of water and the trip takes an estimated 10 minutes
+    /// one-way. The agent begins walking and for the next ten ticks no new
+    /// decisions need be made."
+    ///
+    /// See `Errand`.
+    pub errand: Option<Errand>,
     pub current_plan: Option<ActionPlan>,
     /// Planning engine for generating and learning from plans
     pub planner: Planner,
@@ -1114,6 +1381,7 @@ impl Agent {
             preferences: Preferences::default(),
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
             satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker::new(),
+            errand: None,
             current_plan: None,
             planner: Planner::new(),
             plan_step_ticks: 0,
@@ -1144,13 +1412,19 @@ impl Agent {
         // this - it had no callers at all.
         agent.apply_trait_sensory_modifications();
 
+        // And what this body can actually carry, which is what two hands hold
+        // until it has something to put things in. A bare `Inventory` has no
+        // body and no basket and cannot work this out for itself; an agent
+        // can, and does again every turn - see `take_up_the_cart`.
+        agent.update_inventory_capacity_from_transport();
+
         agent
     }
 
     /// Generate a personality-based reproduction drive modifier
     fn generate_reproduction_modifier() -> f32 {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         // Range from 0.5 (low drive) to 1.5 (high drive)
         // Normal distribution centered at 1.0
         let base: f32 = rng.gen_range(0.5..1.5);
@@ -1186,7 +1460,7 @@ impl Agent {
         agent.state.ticks_without_water = 0;
 
         // Rare chance of congenital infertility (~1.5% chance)
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         if rng.gen_bool(0.015) {
             agent.traits.add_trait(crate::core::traits::Trait::Infertile);
         }
@@ -1512,7 +1786,7 @@ impl Agent {
         let spread = Ailment::THE_LONGEST_IT_LASTS - Ailment::THE_SHORTEST_IT_LASTS;
         let how_long = Ailment::THE_SHORTEST_IT_LASTS
             + (spread as f32 * severity) as u32
-            + rand::thread_rng().gen_range(0..=Ailment::THE_SHORTEST_IT_LASTS);
+            + crate::core::dice::roll().gen_range(0..=Ailment::THE_SHORTEST_IT_LASTS);
 
         self.state.ailing = Some(Ailment {
             from: from.to_string(),
@@ -1794,8 +2068,28 @@ impl Agent {
     /// They are the same named things the chain in `environment::making`
     /// turns out, so that what a founder wears through is a thing his people
     /// know how to replace.
-    const WHAT_THEY_CARRY: [(&'static str, u32, f32); 2] =
-        [("handaxe", 1, 2.0), ("stoneknife", 1, 0.5)];
+    /// And a basket, because a people that walked in carrying two days of food
+    /// carried it in something. Without one an agent holds what two hands hold
+    /// and nothing else - see `WHAT_TWO_HANDS_HOLD`.
+    const WHAT_THEY_CARRY: [(&'static str, u32, f32); 3] = [
+        ("handaxe", 1, 2.0),
+        ("stoneknife", 1, 0.5),
+        ("basket", 1, 1.0),
+    ];
+
+    /// And what they arrive with in the way of food.
+    ///
+    /// A people that walks into a valley has been eating on the way. Founders
+    /// arrived with an empty pack and had to find their first meal before they
+    /// had found the water, the wood or anywhere to sleep, which is not a
+    /// stone-age start - it is a shipwreck.
+    ///
+    /// Two days of it, and no more. A stone-age start rather than a stone-age
+    /// stockpile is the rule these founders are set up by, and giving them a
+    /// winter's worth would answer the question this model exists to ask. Two
+    /// days is enough to be looking for the good ground rather than for
+    /// tonight's supper.
+    const DAYS_OF_FOOD_THEY_WALK_IN_WITH: f32 = 2.0;
 
     /// Whether this agent can do a step at all.
     ///
@@ -2648,13 +2942,62 @@ impl Agent {
         }
     }
 
+    /// What a pair of bare hands manages at a trade, against a whole one.
+    ///
+    /// "Many actions can be completed by the agent, but without tools, these
+    /// actions are not very efficient." This was one for every trade, so a man
+    /// with nothing was a fully competent workman and every tool in the model
+    /// was a bonus on top of competence. That is why the ladder measured null:
+    /// there was nothing wrong with the bottom of it.
+    ///
+    /// The figures are the specification's own reading of each job. Fishing
+    /// "can be accomplished by hand but is highly inefficient" - a man standing
+    /// in a river grabbing at trout. Digging without a tool "should take a
+    /// significant amount of time". Butchering is the hard one: "killing any
+    /// animal without at least a stone hand axe makes it nearly impossible to
+    /// eat the dead animal", so bare hands get almost nothing off a carcass.
+    ///
+    /// Picking is the exception and is nearly whole, because hands are what
+    /// picking is *for*; what a digging stick adds is roots, not berries.
+    pub fn what_bare_hands_manage(trade: super::SkillType) -> f32 {
+        use super::SkillType;
+
+        match trade {
+            // Hands were made for this
+            SkillType::Herbalism => 0.85,
+
+            // Grabbing at fish in a river
+            SkillType::Fishing => 0.25,
+
+            // Throwing stones at something that runs faster than you
+            SkillType::Hunting => 0.3,
+
+            // Tearing at a carcass: nearly impossible
+            SkillType::Leatherworking => 0.15,
+
+            // Scraping a hole out of the ground, breaking wood by hand
+            SkillType::Mining => 0.3,
+            SkillType::Woodcutting => 0.25,
+
+            // Work that is mostly the hands anyway, hindered rather than
+            // stopped by having nothing in them
+            SkillType::Crafting | SkillType::Construction | SkillType::Farming => 0.6,
+
+            // Everything with no tool in the world behind it is unchanged, or
+            // this would quietly tax half the model for no stated reason
+            _ => 1.0,
+        }
+    }
+
     pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
+        let bare_hands = Self::what_bare_hands_manage(trade);
+
         let Some(tool) = self.what_i_have_to_work_with(trade) else {
-            return 1.0;
+            return bare_hands;
         };
 
         let Some(carried) = self.inventory.get_item(tool.called) else {
-            return 1.0;
+            return bare_hands;
         };
 
         let left = carried.durability_percentage();
@@ -2861,6 +3204,22 @@ impl Agent {
             let carried = self.a_tool_fresh_from_these_hands(what, how_many, each);
             self.inventory.add_item(carried);
         }
+
+        // And the food they have been walking on. Counted off the body's own
+        // arithmetic rather than a number picked here, so that if what a body
+        // burns in a day changes, what a founder walks in with changes with it.
+        let handfuls = (Self::DAYS_OF_FOOD_THEY_WALK_IN_WITH
+            * super::physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY
+            / super::provision::UNITS_IN_ONE_STORED_ITEM)
+            .round() as u32;
+        let mut travelling_food = InventoryItem::new_with_weight("food".to_string(), handfuls, 0.5);
+        travelling_food.food_data = crate::world::FoodDatabase::new()
+            .create_food_data(&crate::world::ItemType::Food, 0);
+        self.inventory.add_item(travelling_food);
+
+        // And the basket goes on the back on the way in, rather than on the
+        // first turn after arriving.
+        self.take_up_the_cart();
     }
 
     pub const MATERIALS: [&'static str; 7] = [
@@ -3203,6 +3562,9 @@ impl Agent {
         // Check for stale storage knowledge and trigger curiosity
         self.update_storage_curiosity(current_tick);
 
+        // A cart in the pack is a cart in the hand. See `take_up_the_cart`.
+        self.take_up_the_cart();
+
         // Update emotions based on drive states (every tick)
         self.update_emotions_from_drives();
         // Drives rise differently depending on whether the agent has anything
@@ -3210,6 +3572,29 @@ impl Agent {
         let secure = self.immediate_needs_met();
         let situation = self.what_the_situation_asks();
         self.drives.tick_in(&situation, secure);
+
+        // Hunger and thirst are not accumulated; they are read off the body.
+        //
+        // Every other drive builds at a rate somebody chose. These two do not
+        // need to, because there is a stomach, a gut and a reserve to ask, and
+        // asking them is the only way the drive and the body can agree about
+        // when an agent is in trouble. Four separate spellings of that clock
+        // disagreed before this - see ISSUES #73 - and the agent starved
+        // holding a drive that had not yet noticed.
+        // Hunger rises at the rate the three tables give, rather than being
+        // read straight off the body: the tables are headed "Hunger Drive
+        // Increase" and that is what they are. Thirst has no such table and is
+        // still read directly.
+        let how_fast_hunger_rises = self.state.physiology.how_fast_hunger_rises();
+        let body_wants_water = self.state.physiology.thirst();
+        if let Some(drive) = self.drives.get_mut(DriveType::Hunger) {
+            let a_turn_of_it =
+                DriveType::Hunger.base_accumulation_rate() * how_fast_hunger_rises;
+            drive.value = (drive.value + a_turn_of_it).clamp(0.0, 1.0);
+        }
+        if let Some(drive) = self.drives.get_mut(DriveType::Thirst) {
+            drive.value = body_wants_water;
+        }
 
         // Process sensory input into percepts and store them
         let new_percepts = super::sensory_processing::process_sensory_input(&self.senses, self.state.position);
@@ -3290,7 +3675,22 @@ impl Agent {
     /// settlement's whole want of a harvest. At half a day a satisfied need
     /// scores about a seventh, a need a day out scores a half, and one twelve
     /// hours off starts taking the agent over.
-    const A_LONG_WAY_OFF: f32 = 720.0;
+    ///
+    /// Every figure in that paragraph is still exactly right; only the unit
+    /// was stale. It was written when a tick was a minute, so half a day was
+    /// seven hundred and twenty of them. `ticks_before_this_kills_me` now
+    /// answers in turns off a real body - thirst at thirty-six turns from a
+    /// full skin rather than four thousand - and against 720 that read as
+    /// twenty, so a fully watered agent was permanently in mortal danger and
+    /// went to the water on nine turns in ten. Derived from the calendar now,
+    /// so it cannot fall behind it again. See ISSUES #74.
+    const A_LONG_WAY_OFF: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 / 2.0;
+
+    /// How much any one drive may press, before its band is applied.
+    ///
+    /// Just under the ratio between one band and the next, so a need in a
+    /// lower band can approach a need in a higher one and never pass it.
+    const AS_MUCH_AS_A_BAND_ALLOWS: f32 = 9.0;
 
     /// How hard this need is pressing on this agent, right now.
     ///
@@ -3315,7 +3715,17 @@ impl Agent {
             return 0.0;
         }
 
-        let wanting = drive.urgency();
+        // A band is a band.
+        //
+        // "Wide enough that no amount of wanting a fine coat outweighs being
+        // thirsty" is what the hundred against ten is for, and an unbounded
+        // `pressure()` was quietly defeating it: Preparedness on a settlement
+        // that can never quite lay a week by goes unanswered for thousands of
+        // turns, and the pressure of that carried its urgency past ten, at
+        // which point a secondary need outranked a primary one that was
+        // actively asking. Agents walked away from the water to go on
+        // gathering and died of thirst with a full larder in front of them.
+        let wanting = drive.urgency().min(Self::AS_MUCH_AS_A_BAND_ALLOWS);
 
         let deadly = self
             .state
@@ -3486,7 +3896,7 @@ impl Agent {
         // Apply deficiency health penalties
         let penalty = self.nutrition.deficiency_health_penalty();
         if penalty > 0.0 {
-            self.state.health = (self.state.health - penalty).max(0.0);
+            self.state.lose_health(penalty, "a poor diet");
         }
 
         // Couple state energy to nutritional reserves.
@@ -3593,7 +4003,7 @@ impl Agent {
 
         // Apply exposure damage to health
         if damage > 0.0 {
-            self.state.health = (self.state.health - damage * 10.0).max(0.0);
+            self.state.lose_health(damage * 10.0, "the weather");
         }
 
         damage
@@ -4389,22 +4799,100 @@ impl Agent {
         self.transport.add_transport(transport);
     }
 
-    /// Update inventory max_weight based on active transports and body strength
+    /// Take up whatever this one has to carry things in, or put it down.
+    ///
+    /// `TransportSystem` has been able to model a basket, a travois and a cart
+    /// since it was written - capacity, speed, durability, twenty-odd kinds of
+    /// vehicle and pack animal - and **nothing has ever put a transport into
+    /// it**, so the whole of it was tables with no caller.
+    /// `total_additional_capacity` is already added into `max_weight` and
+    /// `speed_modifier` is already multiplied into `movement_speed_at_tick`;
+    /// the only missing link was somebody actually owning one.
+    ///
+    /// So: what is in the pack is what is on the back. Called each turn,
+    /// because a thing to carry with can arrive by making it, by trade or by
+    /// inheriting it, and can leave by wearing out.
+    ///
+    /// This is the largest waste in the model at the far end of it. Measured,
+    /// nearly nine thousand items of gathered food went back on the bush in one
+    /// run because packs were full.
+    pub fn take_up_the_cart(&mut self) {
+        use super::transport::{Transport, TransportType};
+
+        // Best first: nobody drags a travois while pushing a cart.
+        const WHAT_CARRIES: [(&str, TransportType); 3] = [
+            ("handcart", TransportType::Handcart),
+            ("travois", TransportType::Travois),
+            ("basket", TransportType::Backpack),
+        ];
+
+        let best = WHAT_CARRIES
+            .iter()
+            .find(|(called, _)| self.how_many_i_have(called) > 0)
+            .map(|(_, kind)| *kind);
+
+        let already: Vec<_> = self
+            .transport
+            .get_active()
+            .iter()
+            .map(|t| (t.id, t.transport_type))
+            .collect();
+
+        if already.len() == 1 && Some(already[0].1) == best {
+            return;
+        }
+
+        for (id, _) in already {
+            self.unequip_transport(&id);
+        }
+        if let Some(kind) = best {
+            let carrier = Transport::new(kind);
+            let id = carrier.id;
+            self.add_transport(carrier);
+            self.equip_transport(&id);
+        } else {
+            // Nothing to carry with: the capacity still has to be recomputed,
+            // or an agent that loses its basket goes on carrying as though it
+            // had one.
+            self.update_inventory_capacity_from_transport();
+        }
+    }
+
+    /// What a pair of hands and a strong back hold with nothing to put things
+    /// in.
+    ///
+    /// This wants to be much smaller. "An agent can eat from a berry bush but
+    /// cannot carry additional berries unless they are carrying a pack or
+    /// container" asks for a figure around a dozen, so that a basket is the
+    /// difference between an armful and a load - and at twelve it is, and
+    /// forty tests across barter, larder, sprouting, theft, working and
+    /// portioning fall over, because every fixture in the suite was built when
+    /// a pair of bare hands held a hundredweight.
+    ///
+    /// That sweep is its own piece of work and its own commit; doing it inside
+    /// this one would make a change touching forty unrelated tests
+    /// unattributable. Filed as #216. What is here now is the *shape* -
+    /// carrying is hands plus containers, and containers are things you make -
+    /// on the old number.
+    pub const WHAT_TWO_HANDS_HOLD: f32 = 12.0;
+
+    /// Update inventory max_weight from what this one has to carry things in.
+    ///
+    /// Two things were wrong here. The base was a hundred - so a pair of hands
+    /// carried more than a handcart adds, and no container was worth having.
+    /// And it was scaled by `body.movement_speed_multiplier()`, with a comment
+    /// calling that a strength: it is the leg-health figure, so how much
+    /// somebody could carry was decided by how well they walked, and taking up
+    /// a cart recomputed it. See ISSUES #87.
+    ///
+    /// What carrying actually depends on is the body's own strength and what
+    /// there is to put things in.
     fn update_inventory_capacity_from_transport(&mut self) {
-        // Base capacity (100kg default)
-        let base_capacity = 100.0;
+        let how_strong = self.body.how_much_this_body_can_lift();
+        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong;
+        let in_something = self.transport.total_additional_capacity();
 
-        // Strength modifier from body functionality
-        // Stronger/healthier body can carry more
-        let strength_modifier = self.body.movement_speed_multiplier(); // 0.0 to 1.0
-
-        // Transport capacity
-        let transport_capacity = self.transport.total_additional_capacity();
-
-        // Total capacity
-        let total_capacity = (base_capacity * strength_modifier) + transport_capacity;
-
-        self.inventory.max_weight = total_capacity;
+        self.inventory.max_weight = in_hand + in_something;
     }
 
     /// Get movement speed including transport, fatigue, and pregnancy penalties
@@ -4486,12 +4974,23 @@ impl Agent {
     /// "I had a meal this morning".
     pub const FOOD_TO_RAISE_A_CHILD: u32 = 4;
 
-    /// How long hunger has to have been a non-issue before an agent treats
-    /// the future as settled.
+    /// How full a body's reserve has to be for feeding itself to count as
+    /// having been easy.
     ///
-    /// Twenty days of never once going short. Long enough that a good week
-    /// does not count, short enough that a settlement living well can grow.
-    pub const SETTLED_ENOUGH_TO_GROW: u32 = 240;
+    /// The reserve is three weeks of food, so this is a body that has lost
+    /// less than three days of it - one that has been eating enough to stay
+    /// topped up rather than scraping.
+    ///
+    /// This was `SETTLED_ENOUGH_TO_GROW`, twenty days of the Hunger drive
+    /// never once crossing its threshold. That was a fair reading when hunger
+    /// accumulated at a rate somebody chose. It is not one now: hunger is read
+    /// off the stomach, and a well-fed body crosses that threshold three times
+    /// a day because that is what three meals a day *is*. The counter reset
+    /// every few hours and could never reach twenty days for anybody, ever - so
+    /// this clause of the breeding gate failed 24,229 times out of 24,260
+    /// adult-turns, and a settlement could only breed on a full pack. See
+    /// ISSUES #76.
+    pub const WELL_FED: f32 = 0.85;
 
     /// How much of a stretch of going short counts against it.
     ///
@@ -4510,11 +5009,9 @@ impl Agent {
     }
 
     /// How long hunger has not had to ask at all
-    pub fn how_long_food_has_been_easy(&self) -> u32 {
-        self.drives
-            .get(DriveType::Hunger)
-            .map(|drive| drive.answered_ticks())
-            .unwrap_or(0)
+    pub fn food_has_been_easy(&self) -> bool {
+        self.state.physiology.reserve
+            >= self.state.physiology.reserve_capacity * Self::WELL_FED
     }
 
     /// What the agent is carrying that it or a child could eat.
@@ -4563,8 +5060,7 @@ impl Agent {
         // goes and carries nothing, and it is in a far better position to
         // raise a child than one with a full pack on ground that has stopped
         // giving.
-        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD
-            || self.how_long_food_has_been_easy() >= Self::SETTLED_ENOUGH_TO_GROW
+        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD || self.food_has_been_easy()
     }
 
     /// Check if agent should attempt reproduction given current survival state
@@ -5293,7 +5789,7 @@ impl Agent {
 
     fn random_direction(&self) -> (i32, i32, i32) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         (
             rng.gen_range(-1..=1),
             rng.gen_range(-1..=1),
@@ -5883,7 +6379,7 @@ impl Agent {
             self.inventory.remove_item(item_id, 1);
             self.food_i_ate = self.food_i_ate.saturating_add(1);
             let damage = 10.0;
-            self.state.health = (self.state.health - damage).max(0.0);
+            self.state.lose_health(damage, "a blow");
             return EatResult::MadeSick(damage);
         }
 
@@ -5905,7 +6401,7 @@ impl Agent {
         // reason to fetch wood for a fire you did not strictly need.
         {
             use rand::Rng;
-            let mut rng = rand::thread_rng();
+            let mut rng = crate::core::dice::roll();
 
             let raw_flesh = food_data.preparation
                 == crate::world::nutrition::PreparationState::Raw
@@ -5986,6 +6482,33 @@ impl Agent {
             .items
             .iter()
             .filter(|(item_id, _)| self.is_this_a_meal(item_id))
+            .map(|(_, item)| item.quantity)
+            .sum()
+    }
+
+    /// How much food about this person is still worth something to them.
+    ///
+    /// Not the same question as `how_many_meals_i_have`, and not the same as
+    /// how much food is in the pack. A whole fish nobody has taken a knife to
+    /// is not a meal, but it is a fish and it will be a meal shortly, so a man
+    /// carrying six of them has no business going back to the river. A fish
+    /// that has **gone over** is neither.
+    ///
+    /// Anything deciding whether somebody has enough about them to stop
+    /// getting more wants this. Asking `is_food` instead counts the rot, and
+    /// the effect of that is savage once food actually keeps an honest clock:
+    /// a settlement gathered **a third less** and ate **less than half as
+    /// much**, because men stood next to hedges declining to pick anything
+    /// with eight units of mould in the pack. See ISSUES_FOUND #65.
+    pub fn how_much_good_food_i_have(&self) -> u32 {
+        self.inventory
+            .items
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| match item.food_data {
+                Some(ref food) => !food.is_spoiled() && !food.is_harmful(),
+                None => false,
+            })
             .map(|(_, item)| item.quantity)
             .sum()
     }
@@ -6214,7 +6737,7 @@ impl Agent {
 
         // When energy is depleted, health starts decreasing
         if self.state.energy <= 0.0 {
-            self.state.health = (self.state.health - 0.05).max(0.0);
+            self.state.lose_health(0.05, "exhaustion");
         }
     }
 
@@ -6283,21 +6806,29 @@ impl Agent {
     }
 
     /// Update starvation counter (called each tick)
+    /// Another turn goes by with nothing eaten.
     pub fn update_starvation(&mut self) {
-        self.state.ticks_without_food += 1;
+        self.state
+            .physiology
+            .advance(physiology::MINUTES_PER_TURN, 5.0);
+        self.state.ticks_without_food += physiology::MINUTES_PER_TURN;
     }
 
     /// Apply damage from starvation
+    ///
+    /// The clock is the body's, not a counter of turns: what does the harm is
+    /// how far into the reserve this body has eaten, and an empty reserve is
+    /// death whatever the calendar says. See `agents::physiology`.
     pub fn apply_starvation_damage(&mut self) {
-        // Damage is already applied in age_tick, but this is for explicit calls
-        if self.state.is_starving() {
-            let days_starving = self.state.ticks_without_food / 1440;
-            let damage = (days_starving as f32) * 0.5;
-            self.state.health = (self.state.health - damage).max(0.0);
-
-            if self.state.health <= 0.0 {
-                self.state.is_alive = false;
-            }
+        if self.state.physiology.starved() {
+            self.state.lose_health(self.state.health, "starvation");
+            return;
+        }
+        if self.state.physiology.is_wasting() {
+            let days_into_the_reserve = (self.state.physiology.reserve_capacity
+                - self.state.physiology.reserve)
+                / physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY;
+            self.state.lose_health(days_into_the_reserve * 0.5, "starvation");
         }
     }
 
@@ -7844,7 +8375,7 @@ impl Agent {
 
                             // Simple probability check
                             use rand::Rng;
-                            let roll: f32 = rand::thread_rng().gen();
+                            let roll: f32 = crate::core::dice::roll().gen();
 
                             if roll < effective_chance || !is_correct {
                                 // We detected this information as incorrect
@@ -8060,6 +8591,13 @@ impl Agent {
     ///
     /// Hearsay is let go before first-hand knowledge of equal interest, on the
     /// principle that a man is surer of what he saw.
+    /// What counts as a place worth carrying about in your head, by how much
+    /// is standing on it.
+    ///
+    /// Anything at or above this is remembered as richly as anything else can
+    /// be; the scale only has to separate a seam from the last of one.
+    const A_PLACE_WORTH_REMEMBERING: u32 = 12;
+
     pub fn forget_what_does_not_matter(&mut self, current_tick: u32) {
         if self.exploration_knowledge.known_resources.len()
             <= Self::WHAT_A_MAN_CAN_HOLD_IN_MIND
@@ -8095,7 +8633,23 @@ impl Agent {
                     .who_told_me
                     .contains_key(where_it_is);
 
-                let keeping = wanted * 4.0 + freshness - if heard_not_seen { 0.5 } else { 0.0 };
+                // And how much was standing there, which decides between two
+                // things wanted equally and known equally well. A head only
+                // holds so many places; the last handful of a worked-out seam
+                // is the one to let go of, and a man who has been told it is
+                // the last handful can now know that about it.
+                let how_rich = self
+                    .exploration_knowledge
+                    .how_much_was_there_then(where_it_is)
+                    .map(|how_much| {
+                        (how_much as f32 / Self::A_PLACE_WORTH_REMEMBERING as f32).clamp(0.0, 1.0)
+                    })
+                    // Nothing said about it either way is not the same as
+                    // being told it is bare
+                    .unwrap_or(0.5);
+
+                let keeping = wanted * 4.0 + freshness + how_rich
+                    - if heard_not_seen { 0.5 } else { 0.0 };
                 (*where_it_is, keeping)
             })
             .collect();
@@ -8111,6 +8665,9 @@ impl Agent {
                 .remove(&where_it_is);
             self.exploration_knowledge
                 .last_seen_ticks
+                .remove(&where_it_is);
+            self.exploration_knowledge
+                .how_much_was_there
                 .remove(&where_it_is);
         }
     }
@@ -8623,7 +9180,7 @@ impl Agent {
         // abolished lying altogether, which is not what "take into account"
         // means.
         let extra_ears = (room.len() - 1) as f64;
-        rand::thread_rng().gen_bool((1.0 / (1.0 + 0.5 * extra_ears)).clamp(0.0, 1.0))
+        crate::core::dice::roll().gen_bool((1.0 / (1.0 + 0.5 * extra_ears)).clamp(0.0, 1.0))
     }
 
     /// Check if this agent would lie when sharing information
@@ -8665,7 +9222,7 @@ impl Agent {
             lie_chance -= 0.2;
         }
 
-        let roll: f32 = rand::thread_rng().gen();
+        let roll: f32 = crate::core::dice::roll().gen();
         roll < lie_chance.clamp(0.0, 0.8) // Max 80% chance to lie
     }
 
@@ -8716,3 +9273,76 @@ impl Agent {
         // This method just marks that we're spreading the word
     }
 }
+/// An errand: somewhere to be, something to do there, and the drive it answers.
+///
+/// "Once an agent plans an action, it would not change its mind unless its
+/// situation changed in some manner. The agent begins walking and for the next
+/// ten ticks no new decisions need be made. If during the walk the agent ran
+/// into a pack of wolves, it would need to recalculate."
+///
+/// Before this, every tile of every walk was a fresh decision made from
+/// scratch, and the whole decision - which drive, which patch, which route -
+/// was re-derived from a world that had moved one step. Measured, `Move` ran
+/// at a third of all turns and the trips it was made of mostly did not finish:
+/// a walk to a river twenty tiles off is twenty chances for whatever drive is
+/// loudest that minute to send the agent somewhere else, so agents ate
+/// whatever was underfoot when they gave up. That is why weighting food by
+/// what it is worth measured *worse* than picking the nearest thing - the
+/// better food was further off, and further off meant never arrived at.
+///
+/// What ends an errand is a change in what the agent needs, not the passing of
+/// a turn: arriving, a threat, a different drive taking the lead, or the walk
+/// going on so much longer than it should that the place is plainly not
+/// reachable.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Errand {
+    /// Where it is going
+    pub going_to: (i32, i32, i32),
+    /// Or what it is making, if the errand is a job rather than a journey.
+    ///
+    /// A tool is not one turn's work. Measured, the tool arithmetic diverted
+    /// four turns in a run and produced **nothing**: a diversion buys the next
+    /// step in a chain - a length of cordage, a knapped edge - and the turn
+    /// after that the whole decision was made again from scratch and went
+    /// somewhere else, so the settlement collected half-finished tools it
+    /// never picked up again. The same defect as the walk that was re-decided
+    /// at every tile, one layer up.
+    pub to_make: Option<String>,
+    /// Which drive it set out to answer
+    pub for_drive: DriveType,
+    /// How hard that drive was pressing when it set out, so that a drive going
+    /// quiet - because somebody handed this one a meal, say - ends the errand
+    pub pressed_this_hard: f32,
+    /// How many turns it has been walking
+    pub turns_on_it: u32,
+}
+
+impl Errand {
+    /// How much longer than the crow flies a walk is allowed to take.
+    ///
+    /// A step is a tile, so a place twenty tiles off is twenty turns of
+    /// walking at best. Ground is not flat and routes are not straight, so
+    /// three times that is generous; past it the place is not reachable and
+    /// going on is a way of starving politely.
+    pub const HOW_LONG_A_WALK_IS_WORTH: u32 = 3;
+
+    /// The fewest turns any errand is given, so that a short walk is not
+    /// abandoned on its first step.
+    pub const AT_LEAST_THIS_MANY_TURNS: u32 = 4;
+
+    /// How far off it was set out from
+    pub fn how_far_it_was(&self, from: (i32, i32, i32)) -> u32 {
+        (self.going_to.0 - from.0).abs().max((self.going_to.1 - from.1).abs()) as u32
+    }
+
+    /// Whether this one has got there.
+    pub fn arrived(&self, at: (i32, i32, i32)) -> bool {
+        self.going_to.0 == at.0 && self.going_to.1 == at.1
+    }
+
+    /// A job rather than a journey.
+    pub fn is_a_making(&self) -> bool {
+        self.to_make.is_some()
+    }
+}
+

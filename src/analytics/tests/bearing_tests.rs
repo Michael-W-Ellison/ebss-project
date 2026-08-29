@@ -57,14 +57,24 @@ fn berries_bear_in_autumn_only() {
 #[test]
 fn spring_gives_greens() {
     assert!(ResourceType::Greens.is_it_bearing(Season::Spring));
+    // And keeps giving them while the ground is growing: spring does not stop
+    // giving greens the day summer starts
+    assert!(ResourceType::Greens.is_it_bearing(Season::Summer));
     assert!(!ResourceType::Greens.is_it_bearing(Season::Fall));
 }
 
-/// Summer gives the first roots, which is not a harvest.
+/// Roots are a spring food as much as a summer one.
+///
+/// Cattail and dandelion are dug when the top growth is young and the root
+/// still holds last year's store, which is exactly what makes them worth
+/// digging before anything has ripened. What they ask for is legs: a root patch
+/// is dug out and does not come back this year.
 #[test]
-fn summer_gives_roots() {
+fn roots_come_up_through_the_growing_half() {
+    assert!(ResourceType::Roots.is_it_bearing(Season::Spring));
     assert!(ResourceType::Roots.is_it_bearing(Season::Summer));
-    assert!(!ResourceType::Roots.is_it_bearing(Season::Spring));
+    assert!(!ResourceType::Roots.is_it_bearing(Season::Fall));
+    assert!(!ResourceType::Roots.is_it_bearing(Season::Winter));
 }
 
 /// And winter gives nothing whatever.

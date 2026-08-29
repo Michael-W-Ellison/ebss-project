@@ -4,7 +4,8 @@
 use serde::{Deserialize, Serialize};
 
 /// Types of terrain
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Ordered, so that a set of terrains is iterated the same way twice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum TerrainType {
     Plains,   // Walkable, good for farming (grain, cotton) and building
     Forest,   // Walkable, source of wood, herbs, honey

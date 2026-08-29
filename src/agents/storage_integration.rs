@@ -254,7 +254,22 @@ pub fn count_in_agent_inventory(inventory: &Inventory, item_type: ItemType) -> u
 
 /// Count all food items in agent inventory
 pub fn count_food_in_inventory(inventory: &Inventory) -> u32 {
-    let food_types = vec![
+    // Anything with food data on it is food.
+    //
+    // This was a hand-written list of seven item ids - food, bread, cheese,
+    // meat, fish, honey, ale - and a forager's pack holds none of them. Greens,
+    // roots, grain and herbs go into packs under their own names and carry
+    // nutrition like anything else, and every one of them was invisible here:
+    // a settlement with twenty-six items of food in hand counted fourteen.
+    //
+    // `InventoryItem::is_food` is the same question `what_food_i_can_spare`
+    // asks, so the counting and the deciding now agree. Two vocabularies for
+    // one idea, drifting apart - see ISSUES_FOUND.md, this is the eighth.
+    // Either test will do. Food carries food data when it came off a plant or
+    // an animal in a live world, and a few things are food by their name alone
+    // - bread, cheese, ale - which are made rather than gathered and reach a
+    // pack without ever passing through the food database.
+    let by_name: Vec<String> = [
         ItemType::Food,
         ItemType::Bread,
         ItemType::Cheese,
@@ -262,10 +277,16 @@ pub fn count_food_in_inventory(inventory: &Inventory) -> u32 {
         ItemType::Fish,
         ItemType::Honey,
         ItemType::Ale,
-    ];
+    ]
+    .iter()
+    .map(|&kind| item_type_to_id(kind))
+    .collect();
 
-    food_types.iter()
-        .map(|&item_type| count_in_agent_inventory(inventory, item_type))
+    inventory
+        .get_all_items()
+        .iter()
+        .filter(|(name, item)| item.is_food() || by_name.contains(name))
+        .map(|(_, item)| item.quantity)
         .sum()
 }
 

@@ -93,7 +93,27 @@ impl DriveType {
     /// Get the base accumulation rate per tick
     pub fn base_accumulation_rate(&self) -> f32 {
         match self {
-            DriveType::Hunger => 0.01,
+            // Derived from the stomach rather than chosen.
+            //
+            // At 0.01 an ordinary body climbed to its threshold in about
+            // seventeen turns - a day and a half - so a settlement with the
+            // whole of spring standing round it sat down to 2.26 meals a day
+            // against the three its body burns, took in nine hundred and
+            // seventy units a day against fourteen hundred and forty, and
+            // starved over about a hundred days with full bushes and a full
+            // pit. Nothing was short of food; the body never asked for it.
+            //
+            // A meal holds for as long as the stomach takes to empty, which
+            // the gastric schedule already states, so that is how long the
+            // drive takes to climb from nothing to wanting food again - at the
+            // ordinary product of the three tables. A body behind on its
+            // reserve or empty in the gut climbs faster, which is the whole
+            // point of the tables.
+            DriveType::Hunger => {
+                self.default_threshold()
+                    / (crate::agents::physiology::TURNS_A_MEAL_HOLDS
+                        * crate::agents::physiology::AN_ORDINARY_APPETITE)
+            }
             DriveType::Thirst => 0.012,  // Slightly faster than hunger
             DriveType::Rest => 0.008,
             DriveType::Shelter => 0.005,
@@ -822,7 +842,7 @@ impl DriveState {
     /// Ensures survival drives (Hunger, Rest, Safety, Shelter) have higher minimum weights
     pub fn with_random_weights() -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         Self {
             drives: DriveType::all()

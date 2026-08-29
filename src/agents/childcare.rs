@@ -139,7 +139,7 @@ impl DevelopmentalNutrition {
         // The worse the nutrition, the higher the chance (up to 30% at quality 0)
         if overall_quality < 0.2 {
             use rand::Rng;
-            let mut rng = rand::thread_rng();
+            let mut rng = crate::core::dice::roll();
             let infertility_chance = (0.2 - overall_quality) * 1.5; // 0% at 0.2, 30% at 0
             if rng.gen_bool(infertility_chance as f64) {
                 return true; // Agent becomes infertile

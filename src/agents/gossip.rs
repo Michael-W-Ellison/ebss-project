@@ -990,7 +990,7 @@ pub fn attempt_opinion_transfer(
     intensity: f32,
 ) -> OpinionTransferResult {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
 
     let transfer_chance = calculate_opinion_transfer_chance(
         speaker_traits,

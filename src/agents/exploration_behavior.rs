@@ -131,7 +131,7 @@ impl Agent {
 /// Generate a random exploration direction
 pub fn random_exploration_direction() -> (i32, i32) {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
 
     let directions = [
         (1, 0),   // East

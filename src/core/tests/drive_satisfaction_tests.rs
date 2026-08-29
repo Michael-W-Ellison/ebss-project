@@ -12,6 +12,16 @@ use crate::core::drives::{Drive, DriveType, DriveState};
 // Floating-point comparison tolerance
 const EPSILON: f32 = 0.0001;
 
+/// What one tick of an unopposed drive adds.
+///
+/// Asked of the drive rather than written down here. Hunger's rate is derived
+/// from the stomach's emptying schedule now - see ISSUES #80 - so a test that
+/// spells `0.01` out is testing a number rather than the accumulator, and stops
+/// compiling with the body it is supposed to be about.
+fn a_tick_of(what: DriveType) -> f32 {
+    what.base_accumulation_rate()
+}
+
 #[test]
 fn test_drive_accumulation_over_time() {
     let mut drive = Drive::new(DriveType::Hunger);
@@ -19,16 +29,20 @@ fn test_drive_accumulation_over_time() {
     // Start at zero
     assert_eq!(drive.value, 0.0);
 
-    // Accumulate over time (Hunger has 0.01 base rate)
+    // One tick adds one tick's worth
+    let a_tick = a_tick_of(DriveType::Hunger);
     drive.tick();
-    assert!((drive.value - 0.01).abs() < EPSILON, "Expected ~0.01, got {}", drive.value);
+    assert!(
+        (drive.value - a_tick).abs() < EPSILON,
+        "Expected ~{a_tick}, got {}",
+        drive.value
+    );
 
-    // Continue accumulating
-    for _ in 0..99 {
+    // And it keeps adding, in a straight line, until it is full
+    let to_fill = (1.0 / a_tick).ceil() as u32;
+    for _ in 0..to_fill {
         drive.tick();
     }
-
-    // After 100 ticks, should be at 1.0
     assert!((drive.value - 1.0).abs() < EPSILON, "Expected ~1.0, got {}", drive.value);
 
     // Should not exceed 1.0
@@ -63,11 +77,18 @@ fn test_drive_satisfaction_resets_value() {
     let mut drive = Drive::new(DriveType::Hunger);
 
     // Accumulate some hunger
-    for _ in 0..50 {
+    let a_tick = a_tick_of(DriveType::Hunger);
+    for _ in 0..5 {
         drive.tick();
     }
 
-    assert!((drive.value - 0.5).abs() < EPSILON, "Expected ~0.5, got {}", drive.value);
+    let five_ticks = (a_tick * 5.0).min(1.0);
+    assert!(
+        (drive.value - five_ticks).abs() < EPSILON,
+        "Expected ~{five_ticks}, got {}",
+        drive.value
+    );
+    assert!(drive.value > 0.0, "and it is somewhere above nothing");
 
     // Satisfy the drive (eating food)
     drive.satisfy();
@@ -182,12 +203,16 @@ fn test_drive_state_update_all_drives() {
     // Tick all drives
     drive_state.tick();
 
-    // Each drive should have accumulated
-    let hunger = drive_state.get(DriveType::Hunger).unwrap();
-    assert!((hunger.value - 0.01).abs() < EPSILON, "Expected ~0.01, got {}", hunger.value);
-
-    let thirst = drive_state.get(DriveType::Thirst).unwrap();
-    assert!((thirst.value - 0.012).abs() < EPSILON, "Expected ~0.012, got {}", thirst.value);
+    // Each drive should have accumulated its own tick's worth
+    for what in [DriveType::Hunger, DriveType::Thirst, DriveType::Rest] {
+        let a_tick = a_tick_of(what);
+        let drive = drive_state.get(what).unwrap();
+        assert!(
+            (drive.value - a_tick).abs() < EPSILON,
+            "{what:?} expected ~{a_tick}, got {}",
+            drive.value
+        );
+    }
 }
 
 #[test]
@@ -243,21 +268,35 @@ fn test_drive_priority_with_weights() {
     assert!(hunger_priority > curiosity_priority);
 }
 
+/// An ordinary body wants its next meal when its stomach is empty.
+///
+/// This used to assert that thirst accumulated faster than hunger, on rates of
+/// 0.012 and 0.01 that were both picked by hand. Neither number is used by a
+/// live agent any more: Thirst is read straight off the body's hydration, and
+/// Hunger's climb is derived from the gastric schedule. What is worth asserting
+/// is the thing that derivation is *for* - that a body comes back to wanting
+/// food in about the time a meal holds it, rather than in a day and a half,
+/// which is what put settlements on 2.26 meals a day against the three they
+/// burn. See ISSUES #80.
 #[test]
-fn test_thirst_accumulates_faster_than_hunger() {
-    let mut hunger = Drive::new(DriveType::Hunger);
-    let mut thirst = Drive::new(DriveType::Thirst);
+fn hunger_climbs_its_threshold_in_the_time_a_meal_holds() {
+    use crate::agents::physiology;
 
-    // Same number of ticks
-    for _ in 0..50 {
-        hunger.tick();  // 0.01/tick
-        thirst.tick();  // 0.012/tick
+    let mut hunger = Drive::new(DriveType::Hunger);
+    let ordinary = physiology::AN_ORDINARY_APPETITE;
+
+    let mut turns = 0;
+    while hunger.value < hunger.threshold {
+        hunger.value = (hunger.value + a_tick_of(DriveType::Hunger) * ordinary).min(1.0);
+        turns += 1;
+        assert!(turns < 1000, "hunger never reached its threshold at all");
     }
 
-    // Thirst should be higher
-    assert!((hunger.value - 0.5).abs() < EPSILON, "Expected ~0.5, got {}", hunger.value);
-    assert!((thirst.value - 0.6).abs() < EPSILON, "Expected ~0.6, got {}", thirst.value);
-    assert!(thirst.value > hunger.value);
+    let a_meal = physiology::TURNS_A_MEAL_HOLDS;
+    assert!(
+        (turns as f32 - a_meal).abs() <= 1.0,
+        "an ordinary body should want its next meal after about {a_meal} turns, not {turns}"
+    );
 }
 
 #[test]

@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use rand::Rng;
 
 /// Types of skills agents can develop
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Ordered, so that a map keyed by it is iterated the same way twice - see
+/// `Skills::skills`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SkillType {
     /// Mining stone, ore, etc.
     Mining,
@@ -406,7 +408,7 @@ impl Skill {
 
     /// Perform skill check with optional tool quality
     pub fn perform_check(&self, tool_quality: Option<Quality>) -> SkillCheckResult {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let category = self.category();
 
         // Determine number of rolls based on tool quality
@@ -463,7 +465,7 @@ impl Skill {
 
     /// Determine quality based on skill level distribution
     fn determine_quality(&self) -> Quality {
-        let roll = rand::thread_rng().gen::<f32>() * 100.0;
+        let roll = crate::core::dice::roll().gen::<f32>() * 100.0;
 
         match self.level {
             -10 => Quality::Pathetic,
@@ -598,13 +600,17 @@ impl Skill {
 /// Collection of all agent skills
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skills {
-    skills: HashMap<SkillType, Skill>,
+    /// What this one can do, in a stable order.
+    ///
+    /// Iterated to find a best hand and to rust what is unused, so hash order
+    /// decided ties and made the same agent behave differently between runs.
+    skills: std::collections::BTreeMap<SkillType, Skill>,
 }
 
 impl Skills {
     pub fn new() -> Self {
         Self {
-            skills: HashMap::new(),
+            skills: std::collections::BTreeMap::new(),
         }
     }
 
@@ -719,7 +725,7 @@ impl Skills {
     }
 
     /// Get all skills
-    pub fn get_all_skills(&self) -> &HashMap<SkillType, Skill> {
+    pub fn get_all_skills(&self) -> &std::collections::BTreeMap<SkillType, Skill> {
         &self.skills
     }
 

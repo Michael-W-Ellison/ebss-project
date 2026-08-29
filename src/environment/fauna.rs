@@ -1710,7 +1710,7 @@ pub struct Animal {
 impl Animal {
     pub fn new(species_id: String, position: (i32, i32), species: &AnimalSpecies) -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         let mut product_timers = HashMap::new();
         for product in &species.living_products {
@@ -2112,7 +2112,7 @@ impl AnimalManager {
     /// Returns a list of (material_id, quantity) tuples representing the drops
     pub fn kill_animal(&mut self, animal_id: &Uuid) -> Vec<(String, u32)> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let mut drops = Vec::new();
 
         // Find the animal and get its species
@@ -2400,7 +2400,7 @@ impl AnimalManager {
     /// Process births for pregnant animals
     fn process_births(&mut self) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         let registry = match &self.registry {
             Some(r) => r,
@@ -2456,7 +2456,7 @@ impl AnimalManager {
     /// Process breeding attempts for eligible animals
     fn process_breeding(&mut self) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         let registry = match &self.registry {
             Some(r) => r,
@@ -2577,7 +2577,7 @@ impl AnimalManager {
     /// Process predator hunting - carnivores/omnivores hunt prey
     fn process_predation(&mut self) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         let registry = match &self.registry {
             Some(r) => r,
@@ -2767,7 +2767,7 @@ impl AnimalManager {
             return;
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         for species_id in depleted {
             if self.animals.len() >= self.max_population {
@@ -2996,7 +2996,7 @@ impl AnimalManager {
     /// - Mountain animals spawn in highlands
     pub fn spawn_naturalistic(&mut self, grid: &Grid, config: &AnimalSpawnConfig) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         let registry = match &self.registry {
             Some(r) => r.clone(),

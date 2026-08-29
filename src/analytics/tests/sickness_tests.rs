@@ -406,7 +406,7 @@ fn a_starving_person_eats_it_anyway() {
 
     assert!(agent.find_best_food_to_eat().is_none());
 
-    agent.state.ticks_without_food = 10_000;
+    agent.state.gone_without_food_for(10_000);
     assert!(agent.state.is_starving(), "and now they are desperate");
 
     assert_eq!(

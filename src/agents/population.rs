@@ -1,5 +1,5 @@
 // src/agents/population.rs
-use crate::agents::{Agent, AgentConfig, SharedKnowledge, Trait};
+use crate::agents::{Agent, AgentConfig, LifeStage, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, attempt_impregnation, give_birth, MateSelectionCriteria, PregnancyState};
 use crate::environment::technology::TechnologyRegistry;
 #[cfg(feature = "gui")]
@@ -88,6 +88,16 @@ pub struct PopulationStats {
     pub births_this_tick: u32,
     pub deaths_this_tick: u32,
     pub abandonments_this_tick: u32,
+    /// What killed people, by name, and where the breeding pass turned away.
+    ///
+    /// The same argument as `Simulation::actions_failed_because`, one level
+    /// out. Two capability changes measured in a row - a settlement three
+    /// times better equipped with 70% fewer wasted turns - moved no survival
+    /// column at all, and nothing in this model could say why, because the
+    /// causes of death were classified for a GUI timeline and then thrown
+    /// away. A count of the dead by cause, and of the living who could not
+    /// breed and why, is one hash lookup on paths that run rarely.
+    pub how_it_went: std::collections::HashMap<String, u64>,
 }
 
 /// Configuration for population behavior
@@ -224,6 +234,32 @@ impl Population {
     /// Spawn a new agent
     pub fn spawn_agent(&mut self, config: AgentConfig) {
         let mut agent = Agent::new(config);
+
+        // A founding party is grown people.
+        //
+        // Founders were spawned at age nought, and `LifeStage::from_age` calls
+        // anything under five hundred an infant, so every world began with
+        // twelve newborns and nobody to feed them. None of them reached
+        // `LifeStage::Adult` until tick 2,501, a quarter of the way through a
+        // ten-thousand-tick run, and until then each carried an infant's
+        // reserve - a quarter of a grown body's - while foraging for itself.
+        //
+        // Nothing showed it while nothing could starve. The moment the body
+        // was put on a real clock it killed every settlement in six days.
+        // Newborns come through `give_birth` and are unaffected by this; only
+        // the founders are spawned here. See ISSUES #74.
+        {
+            use rand::Rng;
+            let mut rng = crate::core::dice::roll();
+            // Grown people, between twenty and forty
+            let years = rng.gen_range(20..40);
+            agent.state.age = years * crate::environment::seasons::TICKS_PER_YEAR;
+            agent.state.life_stage = LifeStage::from_age(agent.state.age);
+            agent
+                .state
+                .physiology
+                .now_a_body_of(agent.state.what_i_eat_for_my_age());
+        }
 
         // Give the person a personality.
         //
@@ -653,7 +689,7 @@ impl Population {
         use crate::environment::technology::DiscoveryMethod;
         use crate::core::DriveType;
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         let current_tick = self.current_tick;
 
@@ -746,29 +782,53 @@ impl Population {
             .iter()
             .filter(|agent| !agent.state.is_alive)
             .map(|agent| {
-                // Determine cause of death from agent state
-                let (cause_str, cause_enum) = if agent.state.is_starving() {
-                    ("starvation".to_string(), DeathCause::Starvation)
-                } else if agent.state.is_dehydrated() {
-                    ("dehydration".to_string(), DeathCause::Dehydration)
-                } else if agent.state.age >= agent.state.max_age {
-                    ("old age".to_string(), DeathCause::OldAge)
-                } else if agent.state.health <= 0.0 {
-                    // Could be combat or other damage
-                    if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
-                        ("combat".to_string(), DeathCause::Combat { killer_id: Some(attacker_id) })
-                    } else {
-                        ("health depletion".to_string(), DeathCause::Unknown)
-                    }
-                } else if agent.state.energy <= 0.0 {
-                    ("exhaustion".to_string(), DeathCause::Exhaustion)
+                // What killed this one, read off what was written at the time
+                // rather than worked out from what is left.
+                //
+                // The cascade this replaced asked a corpse whether it was
+                // hungry, and by then the hunger has been eaten away and the
+                // cold has worn off, so the honest answer to every question
+                // was no: **70% of every death in this model came out as
+                // "unknown cause"**, and a settlement could not say what
+                // killed its people. See `AgentState::lose_health`.
+                // Old age first, because it is a fact about the man and not
+                // about the last scratch he took: an ill man who reaches his
+                // years dies of his years, and reading the record alone would
+                // book every one of them under whatever ailed him at the end.
+                let named = if agent.state.age >= agent.state.max_age {
+                    "old age".to_string()
                 } else {
-                    ("unknown cause".to_string(), DeathCause::Unknown)
+                    agent
+                        .state
+                        .what_last_took_health
+                        .clone()
+                        .unwrap_or_else(|| "unknown cause".to_string())
                 };
+
+                let cause_enum = match named.as_str() {
+                    "hunger" | "starvation" => DeathCause::Starvation,
+                    "thirst" | "dehydration" => DeathCause::Dehydration,
+                    "old age" => DeathCause::OldAge,
+                    "exhaustion" => DeathCause::Exhaustion,
+                    "a blow" => DeathCause::Combat {
+                        killer_id: agent.emotions.recent_attacker(self.current_tick),
+                    },
+                    _ => DeathCause::Unknown,
+                };
+
+                let (cause_str, cause_enum) = (named, cause_enum);
                 let pos = (agent.state.position.0, agent.state.position.1);
                 (agent.id, cause_str, pos, cause_enum)
             })
             .collect();
+
+        for (_, cause, _, _) in &dead_agents {
+            *self
+                .stats
+                .how_it_went
+                .entry(format!("died of {cause}"))
+                .or_insert(0) += 1;
+        }
 
         if dead_agents.is_empty() {
             return; // No deaths to process
@@ -898,7 +958,7 @@ impl Population {
     /// Agents who are severely unhappy for extended periods may leave the town
     pub fn process_abandonments(&mut self) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         // Track unhappiness and identify agents who should abandon (with position)
         let mut agents_to_remove: Vec<(Uuid, (i32, i32))> = Vec::new();
@@ -964,6 +1024,36 @@ impl Population {
     pub fn process_reproduction(&mut self) {
         let mut new_offspring = Vec::new();
 
+        // Where this pass turns people away, counted once a tick per living
+        // grown person. Two capability changes moved no survival column and
+        // nothing could say why - see `PopulationStats::how_it_went`.
+        {
+            let where_they_stood: Vec<&'static str> = self
+                .agents
+                .iter()
+                .filter(|a| a.state.is_alive)
+                .map(|agent| {
+                    if !agent.state.life_stage.can_reproduce() {
+                        "not of an age to breed"
+                    } else if agent.traits.has(crate::core::traits::Trait::Infertile) {
+                        "infertile"
+                    } else if agent.is_pregnant() {
+                        "already carrying"
+                    } else if !agent.expects_to_be_able_to_feed_a_child() {
+                        "could not feed a child"
+                    } else if self.is_on_cooldown(agent.id) {
+                        "too soon after the last"
+                    } else {
+                        "ready to breed"
+                    }
+                })
+                .collect();
+
+            for what in where_they_stood {
+                *self.stats.how_it_went.entry(what.to_string()).or_insert(0) += 1;
+            }
+        }
+
         // Find potential mating pairs
         // Use should_attempt_reproduction() which checks both capability AND survival state
         // Agents with active hunger/thirst drives are excluded - they must secure food first
@@ -1006,7 +1096,17 @@ impl Population {
                         let female = &self.agents[female_idx];
 
                         // Try to impregnate - this uses proper pregnancy system
-                        if let Some(pregnancy) = attempt_impregnation(male, female, self.current_tick) {
+                        let got = attempt_impregnation(male, female, self.current_tick);
+                        *self
+                            .stats
+                            .how_it_went
+                            .entry(
+                                if got.is_some() { "a pair conceived" } else { "a pair did not take" }
+                                    .to_string(),
+                            )
+                            .or_insert(0) += 1;
+
+                        if let Some(pregnancy) = got {
                             let mother_id = female.id;
                             let father_id = male.id;
                             let pos = (female.state.position.0, female.state.position.1);
@@ -1230,7 +1330,7 @@ impl Population {
         use crate::core::DriveType;
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let current_tick = self.current_tick;
 
         // Collect interaction pairs (to avoid borrowing issues)
@@ -1409,7 +1509,7 @@ impl Population {
 
         const GOSSIP_RANGE_SQUARED: f32 = 36.0; // 6 tiles - slightly further than social range
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let current_tick = self.current_tick;
 
         // Collect gossip pairs and what info to share
@@ -1666,7 +1766,7 @@ impl Population {
             // renewable ones are kept when they are emptied. Reading an empty
             // patch as a lie had agents concluding that four thousand honest
             // tips were falsehoods and half the settlement liars.
-            let really_here: std::collections::HashSet<crate::world::Position> = world
+            let really_here: std::collections::BTreeSet<crate::world::Position> = world
                 .resources
                 .iter()
                 .map(|resource| resource.position)
@@ -1694,9 +1794,20 @@ impl Population {
                         .who_told_me
                         .contains_key(where_it_is)
                 {
+                    // And how much of it was standing. A man who walks past a
+                    // seam knows whether it is a seam or the last of one, and
+                    // until now the only thing he took away was that it was
+                    // there at all.
+                    let how_much = world
+                        .resources
+                        .iter()
+                        .find(|resource| resource.position == *where_it_is)
+                        .map(|resource| resource.amount)
+                        .unwrap_or(0);
+
                     agent
                         .exploration_knowledge
-                        .saw_it_again(*where_it_is, current_tick);
+                        .saw_it_again(*where_it_is, how_much, current_tick);
                 }
             }
 
@@ -1708,6 +1819,10 @@ impl Population {
             if !found_out.is_empty() {
                 for (where_it_is, _, _) in found_out.iter() {
                     agent.exploration_knowledge.known_resources.remove(where_it_is);
+                    agent
+                        .exploration_knowledge
+                        .how_much_was_there
+                        .remove(where_it_is);
                     agent.exploration_knowledge.who_told_me.remove(where_it_is);
                 }
 
@@ -1736,6 +1851,39 @@ impl Population {
                     } else {
                         agent.found_out_they_were_out_of_date(said.who);
                     }
+                }
+            }
+
+            // And the other half of the same look: what he was told was here,
+            // and is. The sweep only ever asked whether a claim had *failed*,
+            // so being right was unrecordable in a running settlement -
+            // `correct_count` was zero across thirty-two worlds against 1,646
+            // wrong ones, and a man's standing could only ever fall.
+            let borne_out =
+                agent
+                    .exploration_knowledge
+                    .hearsay_borne_out(agent_pos, range, &really_here);
+
+            let me = agent.id;
+            for (where_it_is, said) in borne_out {
+                // He has walked to it and looked at it, so it stops being
+                // something he was told: he can pass it on as his own now, and
+                // whoever told him is credited once rather than every tick he
+                // stands there.
+                agent.exploration_knowledge.who_told_me.remove(&where_it_is);
+
+                let how_much = world
+                    .resources
+                    .iter()
+                    .find(|resource| resource.position == where_it_is)
+                    .map(|resource| resource.amount)
+                    .unwrap_or(0);
+                agent
+                    .exploration_knowledge
+                    .saw_it_again(where_it_is, how_much, current_tick);
+
+                if said.who != me {
+                    agent.found_out_they_were_right(said.who);
                 }
             }
 
@@ -1797,7 +1945,7 @@ impl Population {
             // exploration record, so without this an agent would have a patch
             // catalogued and still starve walking past it.
             let sight = vision_range as i32;
-            let in_view: Vec<(crate::world::Position, SpatialMemoryType)> = world
+            let in_view: Vec<(crate::world::Position, SpatialMemoryType, u32)> = world
                 .resources
                 .iter()
                 .filter(|resource| resource.amount > 0)
@@ -1814,14 +1962,18 @@ impl Population {
                     } else {
                         return None;
                     };
-                    Some((resource.position, memory_type))
+                    Some((resource.position, memory_type, resource.what_can_be_taken()))
                 })
                 .collect();
 
-            for (pos, memory_type) in in_view {
+            // How much of it, as well as where. A remembered place was worth
+            // exactly as much as any other remembered place, so a man who left
+            // camp for want of water walked to whichever waterhole was
+            // furthest off rather than to the one he remembered as a spring.
+            for (pos, memory_type, how_much) in in_view {
                 agent
                     .memory
-                    .remember_location(memory_type, (pos.x, pos.y, 0));
+                    .remember_how_much_is_there(memory_type, (pos.x, pos.y, 0), how_much);
             }
 
             // Learn skills from discovered buildings, on the tick of finding
@@ -1974,7 +2126,7 @@ impl Population {
         use rand::seq::SliceRandom;
         use rand::Rng;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
         let current_tick = self.current_tick;
 
         let standing: Vec<(uuid::Uuid, (i32, i32, i32), bool)> = self
@@ -2082,6 +2234,14 @@ impl Population {
     /// lets him find out he was lied to.
     const A_LIE_PUTS_IT_WRONG_BY: i32 = 9;
 
+    /// And how much he says is there.
+    ///
+    /// Enough to be worth the walk, because that is the entire point of the
+    /// lie. Above `Hearsay::THE_LAST_OF_IT` by a wide margin, so that the
+    /// excuse made for an honest man reporting a worked-out place can never be
+    /// claimed by somebody who invented a place.
+    pub const WHAT_A_LIAR_SAYS_IS_THERE: u32 = 20;
+
     /// One agent tells another where something is.
     ///
     /// The listener decides whether to take his word for it - see
@@ -2124,13 +2284,20 @@ impl Population {
             // was there this morning. An honest man says when he was actually
             // there, which may have been last season - and if the patch has
             // been picked since, that is the patch's fault and not his.
-            let (named, when_he_saw_it) = if a_lie {
+            let (named, when_he_saw_it, how_much_he_said) = if a_lie {
                 (
                     crate::world::Position::new(
                         where_it_is.x + Self::A_LIE_PUTS_IT_WRONG_BY,
                         where_it_is.y + Self::A_LIE_PUTS_IT_WRONG_BY,
                     ),
                     current_tick,
+                    // A liar claims a place worth walking to. That is what a
+                    // lie is *for* here - it buys him a hearing - and it is
+                    // also what keeps `he_did_say_it_was_nearly_gone` from
+                    // sheltering him: nobody invents a seam with nothing in
+                    // it. The lie in this model is about where, never about
+                    // how much.
+                    Some(Self::WHAT_A_LIAR_SAYS_IS_THERE),
                 )
             } else {
                 (
@@ -2142,6 +2309,13 @@ impl Population {
                         // claiming to have just passed it, and cannot be held
                         // to it as though he had
                         .unwrap_or(0),
+                    // And what he remembers standing there, which may be the
+                    // last handful of it. An honest report of a poor place is
+                    // still worth making, and the listener can now tell it
+                    // from a report of a good one.
+                    self.agents[speaker]
+                        .exploration_knowledge
+                        .how_much_was_there_then(where_it_is),
                 )
             };
 
@@ -2153,6 +2327,7 @@ impl Population {
                     *what_it_is,
                     speaker_id,
                     when_he_saw_it,
+                    how_much_he_said,
                     current_tick,
                 );
 
@@ -2222,7 +2397,7 @@ impl Population {
         // Agents share knowledge about buildings, resources, and terrain when in proximity
         use rand::seq::SliceRandom;
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::core::dice::roll();
 
         for i in 0..self.agents.len() {
             let (agent_i_id, pos_i, alive_i) = agent_positions[i];

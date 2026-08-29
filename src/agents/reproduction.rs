@@ -112,7 +112,7 @@ pub fn attempt_impregnation(
     female: &Agent,
     current_tick: u32,
 ) -> Option<PregnancyState> {
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
 
     // Check basic requirements
     if !male.can_impregnate() || !female.can_become_pregnant() {
@@ -237,8 +237,8 @@ fn give_birth_internal(
         parent2.state.position
     };
     offspring.state.position = (
-        mother_pos.0 + rand::thread_rng().gen_range(-1..=1),
-        mother_pos.1 + rand::thread_rng().gen_range(-1..=1),
+        mother_pos.0 + crate::core::dice::roll().gen_range(-1..=1),
+        mother_pos.1 + crate::core::dice::roll().gen_range(-1..=1),
         mother_pos.2,
     );
 
@@ -256,7 +256,7 @@ fn give_birth_internal(
 
 /// Inherit reproduction drive modifier from parents with mutation
 fn inherit_reproduction_modifier(parent1_mod: f32, parent2_mod: f32) -> f32 {
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
 
     // Average parent modifiers
     let base = (parent1_mod + parent2_mod) / 2.0;
@@ -268,7 +268,7 @@ fn inherit_reproduction_modifier(parent1_mod: f32, parent2_mod: f32) -> f32 {
 
 /// Inherit drives from two parents with genetic variation
 fn inherit_drives(drives1: &DriveState, drives2: &DriveState) -> DriveState {
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
     let mut new_drives = DriveState::new();
 
     for drive_type in DriveType::all().iter() {
@@ -292,7 +292,7 @@ fn inherit_drives(drives1: &DriveState, drives2: &DriveState) -> DriveState {
 
 /// Inherit behavior trees from two parents
 fn inherit_behavior_trees(trees1: &[BehaviorTree], trees2: &[BehaviorTree]) -> Vec<BehaviorTree> {
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
     let mut offspring_trees = Vec::new();
 
     // Take a mix of trees from both parents
@@ -318,7 +318,7 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
     use crate::agents::Trait;
     use rand::seq::SliceRandom;
     use rand::Rng;
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
 
     let mut offspring_traits = crate::agents::TraitSet::new();
 
@@ -387,7 +387,7 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
 
 /// Calculate offspring position (near parents)
 fn offspring_position(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> (i32, i32, i32) {
-    let mut rng = rand::thread_rng();
+    let mut rng = crate::core::dice::roll();
 
     // Average parent positions
     let avg_x = (pos1.0 + pos2.0) / 2;
