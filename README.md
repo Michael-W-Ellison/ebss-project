@@ -1074,6 +1074,42 @@ original specifications.
   the entire run and its people die of hunger, illness and weather. The draw
   sequence shifted and a world already on the line fell the other side of it. Left
   failing rather than weakened. See ISSUES_FOUND.md #101
+- ✅ The bearing year was written for a twenty-four-day season. `when_it_bears`
+  returned a *set of seasons*, so a thing came on for the first day of a season
+  and went over on the last — fine at twenty-four days, and at ninety a year of
+  four uniform blocks: three months of leaf, three more of leaf, three months of
+  harvest, three months of nothing. Its own doc comment already said what it
+  should have been doing — "it carries nothing at all for most of the year and
+  then, for a few weeks, everything at once" — and the code under it did the
+  opposite.
+
+  Two things needed no measurement to see: **`Food`, the fruit node and the
+  world's staple, bore in autumn and in no other season** — three months of high
+  summer with nothing ripe on any bush — and **greens and roots stopped dead on
+  the last day of summer**, so autumn had no leaf and no roots in it at all.
+
+  A `Bearing` is now a window written in the calendar's own vocabulary —
+  `from((Summer, Deep), (Fall, Late))`, two weeks at each end of a season and
+  eight in the middle — and `is_it_bearing` takes a day rather than a season,
+  which is what all three call sites already had to hand. Roots run longest and
+  end the year, which is what a root is for. Deep winter still gives nothing,
+  and that does not move.
+
+  Measured, three independent blocks of 32 worlds over a full year each: mean
+  last-alive **3028→3088, 2391→3607, 2841→3559**; person-days alive
+  **816→879, 717→995, 807→1005**; worlds standing empty at a year **60%→47%**.
+  Every figure improves in every block. Four failing tests cleared, 29 to 25.
+
+  **And it does not fix spring, which is what kills everybody**: 323 of 372
+  deaths in a year are in spring and 223 of those are hunger, against fifteen in
+  winter. Instrumented, the founders eat their reserve down over the first month
+  because the mean richness of what they eat starts at **14.9** — greens are
+  30.6% of every unit eaten and 10.7% of the energy. Nobody is short of *food*;
+  they are short of density, and the food is standing there. That is what a
+  world is seeded with (#208) and how a forager weighs a thin food underfoot
+  against a dense one across the meadow — filed there rather than fixed here,
+  because fixing it by moving numbers in this table would have been tuning
+  rather than a year. See ISSUES_FOUND.md #107
 - ✅ Nobody retaliates because nobody is wronged — and a settlement's whole
   social life was conducted at arbitrary range. The entry above left `Attack` at
   zero and asked whether that was right. Traced end to end, the answer is **yes

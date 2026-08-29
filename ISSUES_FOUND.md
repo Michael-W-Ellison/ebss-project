@@ -6056,6 +6056,116 @@ handles most.
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
+### 107. The bearing year was written for a twenty-four-day season
+
+`when_it_bears` returned a *set of seasons*, so a thing came on for the first
+day of a season and went over on the last. That was fine when a season was
+twenty-four days. On the real calendar a season is ninety, and the same table
+made a year of four uniform blocks: three months of leaf, three more of leaf,
+three months of harvest, three months of nothing. Its own doc comment already
+said what it should have been doing - "it carries nothing at all for most of
+the year and then, for a few weeks, everything at once" - and the code under
+it did the opposite.
+
+Two things in it were plainly wrong against a ninety-day year, and neither
+needed any measurement to see:
+
+- **`Food` - the fruit node, and the world's staple at energy twenty - bore
+  in autumn and in no other season.** Three months of high summer with nothing
+  ripe on any bush. Wild fruit in a temperate zone runs from midsummer.
+- **Greens and roots stopped dead on the last day of summer**, so autumn had
+  no leaf and no roots in it at all. Leaf runs to the frosts, and autumn is
+  when a root is worth digging.
+
+#### A window instead of a set
+
+The calendar already keeps the vocabulary this wants: `PartOfSeason`, two
+weeks at each end of a season and eight in the middle. A `Bearing` is now
+written in it - `from((Summer, Deep), (Fall, Late))` - and resolves to two
+days of the year. `is_it_bearing` takes a day rather than a season, which is
+what all three of its call sites already had to hand.
+
+| | opens | closes | days |
+|---|---|---|---|
+| Greens | early spring | deep autumn | 255 |
+| Roots | early spring | early winter | 285 |
+| Food | deep summer | late autumn | 165 |
+| Grain | late summer | deep autumn | 90 |
+| Honey | deep summer | early autumn | 90 |
+| Flax, cotton, herbs | deep spring | late summer | 165 |
+
+Roots run longest and end the year, which is what a root is *for*: last
+year's root in the hungry gap, this year's swollen root in autumn, and the
+winter dig out of hard ground. Deep winter still gives nothing whatever, and
+that does not move - it is the whole point of a store.
+
+#### Measured
+
+Three independent blocks of thirty-two worlds, a full year each:
+
+| seeds | mean last alive | person-days alive | alive at autumn | worlds emptied |
+|---|---|---|---|---|
+| 1000 before | 3028 | 816 | 0.75 | 18/32 |
+| 1000 **after** | **3088** | **879** | **1.12** | **15/32** |
+| 2000 before | 2391 | 717 | 0.50 | 22/32 |
+| 2000 **after** | **3607** | **995** | **1.88** | **17/32** |
+| 3000 before | 2841 | 807 | 0.66 | 18/32 |
+| 3000 **after** | **3559** | **1005** | **1.66** | **13/32** |
+
+Every figure improves in every block. Mean last-alive **2,753 to 3,418
+(+24%)**, person-days **780 to 960 (+23%)**, alive at autumn **0.64 to 1.55**,
+and the share of worlds standing empty at a year **60% to 47%**. Standing
+edible stock mid-summer went 2,097 to 3,372 and mid-autumn 3,007 to 4,455,
+which is where the gain comes from and is exactly where the table was wrong.
+
+Four failing tests cleared: a suspicious settlement feeding itself, agents not
+staying frozen over a long run, two thousand turns leaving a record of having
+been lived, and agents keeping themselves watered. 29 failures to 25.
+
+#### What it does *not* fix, and this is the more useful finding
+
+**Spring is untouched, and spring is what kills everybody.** Of 372 deaths in
+a full year, 323 are in spring and 223 of those are hunger; winter takes
+fifteen. A settlement goes from twelve alive to 5.6 between day thirty and day
+forty-five and never recovers. Measured with `examples/_debug_hungrygap.rs`,
+what happens in that window is:
+
+| day | alive | reserve | units/day | richness | energy/day | burn/day |
+|---|---|---|---|---|---|---|
+| 15 | 10.9 | 0.72 | 57 | 14.9 | 848 | 1264 |
+| 30 | 10.5 | 0.47 | 57 | 20.6 | 1183 | 1374 |
+| 45 | 5.4 | 0.47 | 61 | 22.6 | 1382 | 1427 |
+| 60 | 3.4 | 0.62 | 67 | 20.5 | 1373 | 1505 |
+| 75 | 2.8 | 0.74 | 70 | 23.6 | 1643 | 1518 |
+
+Nobody is short of food by day sixty - intake passes burn and the survivors'
+reserves climb back. The founders arrive with a full reserve and eat it down
+over the first month at about four hundred energy a day, because **the mean
+richness of what they eat starts at 14.9**. Greens are 30.6% of every unit
+eaten and 10.7% of the energy: a stomach of leaf displaces a stomach of
+something a body could live on. Half the settlement is dead before richness
+reaches the twenty-two the survivors then hold.
+
+That is not a bearing-year fault - the food is standing there, 3,549 units of
+it per world in mid-spring - and widening the table does not touch it. It is
+what a world is *seeded* with against what an early spring should hold, which
+is #208, and how a forager weighs a thin food underfoot against a dense one
+across the meadow. Filed there rather than fixed here, because fixing it by
+moving numbers in this table would have been tuning rather than a year.
+
+#### And one flaky test made honest
+
+`a_settlement_lives_through_a_winter` ran one world and did not seed it, in a
+model where about half of all settlements are empty by the end of a year. It
+had been passing on the draw it happened to get and it flipped on this change
+- while every count underneath it improved: settlements reaching winter with
+somebody alive 18/32 and 12/32 to 20/32 and 25/32, and alive a year on 14 and
+10 to 15 and 15. It now runs eight seeded worlds.
+
+It deliberately asserts no *rate*. The share that reach winter and come out of
+it measures 40%, 60% and 85% on three different blocks, so at eight worlds any
+bar for it would have been fitted to the block rather than to the model.
+
 ---
 
 ## Recently fixed

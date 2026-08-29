@@ -90,6 +90,61 @@ pub enum ResourceType {
     Jewelry,    // Iron/Gold → Goldsmith → Jewelry
 }
 
+/// The stretch of the year a thing carries something worth taking.
+///
+/// Days of the year rather than seasons, because a season is ninety days and
+/// a hedgerow is not in fruit for ninety days.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bearing {
+    /// Not a growing thing, so it has no season: a river does not stop being
+    /// a river in February, and nor does a rock stop being a rock.
+    NeverStops,
+
+    /// Carries from one day of the year to another, both included, and
+    /// nothing the rest of the year. A window that closes before it opens has
+    /// run round the turn of the year, which is legal and is why this is not
+    /// a range.
+    Between { opens: u32, closes: u32 },
+}
+
+impl Bearing {
+    /// A window written the way the calendar talks: from one part of a season
+    /// to another.
+    pub fn from(
+        opens: (crate::environment::seasons::Season, crate::environment::seasons::PartOfSeason),
+        closes: (crate::environment::seasons::Season, crate::environment::seasons::PartOfSeason),
+    ) -> Self {
+        use crate::environment::seasons::{first_day_of, last_day_of};
+        Bearing::Between {
+            opens: first_day_of(opens.0, opens.1),
+            closes: last_day_of(closes.0, closes.1),
+        }
+    }
+
+    /// Whether this day of the year falls inside the window.
+    pub fn covers(&self, day_of_year: u32) -> bool {
+        let day = day_of_year % crate::environment::seasons::DAYS_PER_YEAR;
+        match *self {
+            Bearing::NeverStops => true,
+            Bearing::Between { opens, closes } if opens <= closes => {
+                day >= opens && day <= closes
+            }
+            // Round the turn of the year
+            Bearing::Between { opens, closes } => day >= opens || day <= closes,
+        }
+    }
+
+    /// How many days of the year this window covers.
+    pub fn how_many_days(&self) -> u32 {
+        use crate::environment::seasons::DAYS_PER_YEAR;
+        match *self {
+            Bearing::NeverStops => DAYS_PER_YEAR,
+            Bearing::Between { opens, closes } if opens <= closes => closes - opens + 1,
+            Bearing::Between { opens, closes } => DAYS_PER_YEAR - opens + closes + 1,
+        }
+    }
+}
+
 impl ResourceType {
     /// How well this crop repays being sown rather than found.
     ///
@@ -162,64 +217,87 @@ impl ResourceType {
     /// nothing at all for most of the year and then, for a few weeks,
     /// everything at once.
     ///
+    /// That last sentence was written when a season was twenty-four days
+    /// long, and the code under it never said it: bearing was a set of
+    /// seasons, so a thing came on for the first day of a season and went
+    /// over on the last. At ninety days to a season that is a three-month
+    /// flat step, and it made a year of four long uniform blocks - three
+    /// months of leaf, three months of leaf, three months of harvest, three
+    /// months of nothing - which is not a year anybody has ever foraged in.
+    ///
+    /// A window is written in the vocabulary the calendar already keeps:
+    /// early, deep and late, two weeks at each end of a season and eight in
+    /// the middle. So a thing opens in late spring and closes in deep autumn
+    /// and those are real dates, and a season can hold the end of one food
+    /// and the beginning of another.
+    ///
     /// The year, as this world keeps it:
     ///
-    /// - **Spring** gives leaf and shoot, and almost no energy in any of it
-    /// - **Summer** gives the first roots and pods, which is not a harvest
-    /// - **Autumn** is when everything else comes on at once
-    /// - **Winter** gives nothing, and that is the whole point of a store
+    /// - **Greens** run the whole growing year, and are the thinnest thing
+    ///   in it. There is always leaf while anything grows.
+    /// - **Roots** open with the greens and run past them into early winter.
+    ///   Last year's root in the hungry gap, this year's swollen root in
+    ///   autumn, and the winter dig out of cold ground - which is what a
+    ///   root is *for*, and why it is the food that ends the year.
+    /// - **Fruit** comes on at midsummer, not in September. Three months of
+    ///   high summer with nothing ripe on any bush was the plainest thing
+    ///   wrong with the old table.
+    /// - **Grain** is a harvest: late summer into deep autumn, and weeks
+    ///   rather than a season.
+    /// - **Winter**, past its first fortnight, gives nothing whatever. That
+    ///   is the whole point of a store and it does not move.
     ///
-    /// Anything that is not a growing thing - stone, clay, water - bears all
-    /// year, because it is not bearing at all.
-    pub fn when_it_bears(&self) -> &'static [crate::environment::seasons::Season] {
-        use crate::environment::seasons::Season;
-
-        const SPRING: &[Season] = &[Season::Spring];
-        const SUMMER: &[Season] = &[Season::Summer];
-        const AUTUMN: &[Season] = &[Season::Fall];
-        const THE_GROWING_HALF: &[Season] = &[Season::Spring, Season::Summer];
-        const ALL_YEAR: &[Season] = &[
-            Season::Spring,
-            Season::Summer,
-            Season::Fall,
-            Season::Winter,
-        ];
+    /// Anything that is not a growing thing - stone, clay, water - never
+    /// bears, so it never stops.
+    pub fn bearing_window(&self) -> Bearing {
+        use crate::environment::seasons::PartOfSeason::{Deep, Early, Late};
+        use crate::environment::seasons::Season::{Fall, Spring, Summer, Winter};
 
         match self {
-            // Leaf and shoot come first and keep coming while the ground is
-            // growing. Spring does not stop giving greens the day summer
-            // starts.
-            ResourceType::Greens => THE_GROWING_HALF,
+            // Leaf and shoot come with the first warmth and go over with the
+            // frosts. The longest window in the year and the thinnest food in
+            // it: a body living on greens alone is eating four times the
+            // volume for the same energy.
+            ResourceType::Greens => Bearing::from((Spring, Early), (Fall, Deep)),
 
-            // Roots are a spring food as much as a summer one. Cattail and
-            // dandelion are dug when the top growth is young and the root
-            // still has last year's store in it - which is exactly what makes
-            // them worth digging in spring, before anything has ripened. What
-            // they ask for is legs: a root patch is dug out and does not come
-            // back this year, so a people living on them moves on.
-            ResourceType::Roots => THE_GROWING_HALF,
+            // Cattail and dandelion are dug when the top growth is young and
+            // the root still holds last year's store - which is exactly what
+            // makes them worth digging before anything has ripened - and they
+            // are dug again out of hard ground when there is nothing else.
+            // What they ask for is legs: a root patch is dug out and does not
+            // come back this year, so a people living on them moves on.
+            ResourceType::Roots => Bearing::from((Spring, Early), (Winter, Early)),
 
-            // What ripens, and when everybody knows it ripens
-            ResourceType::Food | ResourceType::Grain | ResourceType::Honey => AUTUMN,
+            // Wild fruit: strawberry and the first soft fruit at midsummer,
+            // then the autumn glut of bramble, elder, sloe and haw.
+            ResourceType::Food => Bearing::from((Summer, Deep), (Fall, Late)),
 
-            // Fibre and physic are cut green
-            ResourceType::Flax | ResourceType::Cotton | ResourceType::Herbs => THE_GROWING_HALF,
+            // A harvest, and everybody knows when it is
+            ResourceType::Grain => Bearing::from((Summer, Late), (Fall, Deep)),
+
+            // A colony has built something worth robbing by midsummer, and by
+            // late autumn it is defended and dwindling
+            ResourceType::Honey => Bearing::from((Summer, Deep), (Fall, Early)),
+
+            // Fibre and physic are cut green, before the stem goes woody
+            ResourceType::Flax | ResourceType::Cotton | ResourceType::Herbs => {
+                Bearing::from((Spring, Deep), (Summer, Late))
+            }
 
             // Nobody has any idea what these do, including when they bear
-            ResourceType::StrangePlant => AUTUMN,
+            ResourceType::StrangePlant => Bearing::from((Fall, Early), (Fall, Late)),
 
             // Everything that is not a growing thing. Wood off a standing
-            // tree, stone out of the ground, water in a river: none of it
-            // bears, so none of it stops.
-            _ => ALL_YEAR,
+            // tree, stone out of the ground, water in a river, fish coming up
+            // it: none of it bears, so none of it stops.
+            _ => Bearing::NeverStops,
         }
     }
 
-    /// Whether there is anything on it to take, this time of year.
-    pub fn is_it_bearing(&self, now: crate::environment::seasons::Season) -> bool {
-        self.when_it_bears().contains(&now)
+    /// Whether there is anything on it to take, on this day of the year.
+    pub fn is_it_bearing(&self, day_of_year: u32) -> bool {
+        self.bearing_window().covers(day_of_year)
     }
-
 
     /// Whether this is a thing that grows out of the ground, and so a thing
     /// the ground's condition has a say in.

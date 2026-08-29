@@ -75,7 +75,7 @@ pub mod soil;
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use soil::Soil;
-pub use resources::{Resource, ResourceType, ResourceNode};
+pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
 pub use inventory::{Inventory, Item, ItemType};
 pub use actions::{Action, ActionResult};
@@ -1904,6 +1904,7 @@ impl World {
 
     fn regenerate_resources(&mut self) {
         let current_season = self.climate.current_season();
+        let today = self.climate.calendar.day_of_year;
         let season_modifier = current_season.plant_growth_modifier();
         let precipitation = self.climate.weather.wetness_per_tick() * 100.0; // Scale to 0-1 range
 
@@ -1972,7 +1973,7 @@ impl World {
             // had no reason to put anything by, no lean season to be lean in,
             // and no use for a store. What is on the plant now falls off it
             // outside the weeks it bears, which is what fruit does.
-            if !resource.resource_type.is_it_bearing(current_season) {
+            if !resource.resource_type.is_it_bearing(today) {
                 resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK);
                 continue;
             }

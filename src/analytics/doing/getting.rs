@@ -17,6 +17,41 @@ use log::debug;
 use rand::Rng;
 
 impl Simulation {
+    /// What a trip to a food plant brings back.
+    ///
+    /// A forager strips a bush; they do not pick a single fruit and walk
+    /// home. Every edible thing used to come back one at a time - a trip to a
+    /// berry patch was one berry, where a trip for flax was already an armful
+    /// - so a settlement gathered its whole year one portion at a time and
+    /// never had a surplus to store. The Preparedness drive knew perfectly
+    /// well it wanted a winter store, `putting_food_by` knew how to bury one,
+    /// and there was never anything in a pack to bury.
+    ///
+    /// What actually limits a trip is what a person can carry, and
+    /// `Inventory::add_item` already refuses what will not fit, so this is a
+    /// ceiling on the picking and not on the carrying.
+    ///
+    /// A basket inside the window the thing bears in, and pickings outside
+    /// it: a day spent on a hedge in full fruit is not the same day's work as
+    /// one spent on a picked-over one.
+    ///
+    /// One function because it was two: the Gather branch was taught the
+    /// armful and the Eat branch was not, which cost a settlement every meal
+    /// it ever carried home - see the reasoning on `eating_food`. The same
+    /// lesson written down twice and applied once is this document's defect
+    /// number three, and the answer to it is to write it down once.
+    pub(in crate::analytics) fn what_a_trip_brings_back(
+        what: crate::world::ResourceType,
+        today: u32,
+        rng: &mut rand::rngs::StdRng,
+    ) -> u32 {
+        if what.is_it_bearing(today) {
+            rng.gen_range(8..=14)
+        } else {
+            rng.gen_range(1..=3)
+        }
+    }
+
     /// `Action::Gather`.
     pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
         use crate::world::{ResourceType, Position};
@@ -133,7 +168,7 @@ impl Simulation {
             };
 
             // What an ordinary pair of hands brings back in a trip
-            let picking_season = self.world.climate.current_season();
+            let today = self.world.climate.calendar.day_of_year;
             let ordinary = match resource_type_enum {
                 ResourceType::Wood => rng.gen_range(1..=3),
                 // An armful at a time, like wood: a garment's worth of
@@ -163,24 +198,18 @@ impl Simulation {
                 // what will not fit - so this is a ceiling on the
                 // picking, not on the carrying.
                 //
-                // And a basket rather than an armful in the season the
-                // thing actually bears. "Autumn is when everything else
-                // comes on at once" is what `when_it_bears` says, and a
-                // day spent on a hedge in full fruit is not the same
-                // day's work as one spent on a picked-over one. This is
-                // the whole margin a settlement has: at an armful a
-                // trip, a band spending three quarters of its turns on
-                // food could feed itself and never bank a winter.
+                // And a basket rather than an armful inside the window
+                // the thing actually bears in, which is what
+                // `what_a_trip_brings_back` weighs. This is the whole
+                // margin a settlement has: at an armful a trip, a band
+                // spending three quarters of its turns on food could
+                // feed itself and never bank a winter.
                 ResourceType::Food
                 | ResourceType::Greens
                 | ResourceType::Roots
                 | ResourceType::Grain
                 | ResourceType::Herbs => {
-                    if resource_type_enum.is_it_bearing(picking_season) {
-                        rng.gen_range(8..=14)
-                    } else {
-                        rng.gen_range(1..=3)
-                    }
+                    Self::what_a_trip_brings_back(resource_type_enum, today, rng)
                 }
 
                 _ => 1,

@@ -210,13 +210,9 @@ impl Simulation {
             // The Gather branch was taught this and this one was not -
             // the same lesson written down twice and applied once. See
             // the armful reasoning there.
-            let picking_season = self.world.climate.current_season();
+            let today = self.world.climate.calendar.day_of_year;
             let here = self.world.resources[food_index].resource_type;
-            let armful = if here.is_it_bearing(picking_season) {
-                rng.gen_range(8..=14)
-            } else {
-                rng.gen_range(1..=3)
-            };
+            let armful = Self::what_a_trip_brings_back(here, today, rng);
             let harvested = self.world.resources[food_index].harvest(armful);
 
             if harvested > 0 {
