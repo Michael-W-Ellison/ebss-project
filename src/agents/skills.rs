@@ -253,13 +253,6 @@ impl Quality {
         }
     }
 
-    /// Get bonus chance for Expert quality when using Expert materials
-    pub fn expert_output_bonus(&self) -> f32 {
-        match self {
-            Quality::Expert => 0.1,  // +10% bonus to Expert rolls
-            _ => 0.0,
-        }
-    }
 
     /// Limit quality to material's maximum
     pub fn limit_to_material(&self, material_quality: Quality) -> Quality {
@@ -561,14 +554,6 @@ impl Skill {
         }
     }
 
-    /// Get progress to next level (0.0 to 1.0)
-    pub fn progress_to_next_level(&self) -> f32 {
-        if self.level >= 10 {
-            1.0
-        } else {
-            self.experience as f32 / Self::experience_for_next_level(self.level) as f32
-        }
-    }
 
     /// Check if agent can repair an item of given quality
     pub fn can_repair(&self, item_quality: Quality) -> bool {

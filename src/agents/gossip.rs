@@ -241,37 +241,6 @@ impl Information {
         }
     }
 
-    /// Distort information based on trait with neighbor context
-    ///
-    /// This allows more realistic manipulative distortions that can
-    /// blame specific known individuals.
-    pub fn distort_by_trait_with_neighbors(
-        &self,
-        trait_type: Trait,
-        distorter: Uuid,
-        neighbors: &[Uuid],
-    ) -> Self {
-        let (new_info_type, distortion_type) = match trait_type {
-            Trait::Manipulative | Trait::Manipulator => {
-                self.apply_manipulative_distortion_with_neighbors(neighbors)
-            }
-            _ => return self.distort(trait_type, distorter),
-        };
-
-        Self {
-            id: Uuid::new_v4(),
-            info_type: new_info_type,
-            original_source: self.original_source,
-            reliability: self.reliability * 0.5, // Fabrications are very unreliable
-            ground_truth: false,
-            distortion: Some(InformationDistortion {
-                distortion_type,
-                distorter,
-                original_info: self.id,
-            }),
-            timestamp: self.timestamp,
-        }
-    }
 
     /// Apply gossip distortion (dramatization for entertainment)
     fn apply_gossip_distortion(&self) -> (InformationType, DistortionType) {

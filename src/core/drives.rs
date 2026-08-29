@@ -729,10 +729,6 @@ impl Drive {
         }
     }
 
-    /// Tick against a situation, without the security modifier
-    pub fn tick_in_context(&mut self, ctx: &DriveContext) {
-        self.tick_in(ctx, false);
-    }
 
     /// Move towards what the situation calls for.
     ///

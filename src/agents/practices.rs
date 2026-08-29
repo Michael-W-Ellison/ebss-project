@@ -318,21 +318,7 @@ impl Lessons {
     /// because the first few goes at anything are spent getting into position.
     const A_FAIR_GO: u32 = 12;
 
-    pub fn how_likely_to_try(&self, undertaking: Undertaking) -> f32 {
-        // The benefit of the doubt, until there is a record worth reading
-        if self.attempts(undertaking) < Self::ENOUGH_TO_JUDGE {
-            return Self::NEVER_QUITE_CERTAIN;
-        }
 
-        self.belief(undertaking)
-            .clamp(Self::NEVER_QUITE_GIVES_UP, Self::NEVER_QUITE_CERTAIN)
-    }
-
-    /// Whether this agent will try it this time.
-    pub fn will_try_again(&self, undertaking: Undertaking) -> bool {
-        use rand::Rng;
-        crate::core::dice::roll().gen_bool(self.how_likely_to_try(undertaking) as f64)
-    }
 
 
     /// What an agent has found out about one particular thing it does.

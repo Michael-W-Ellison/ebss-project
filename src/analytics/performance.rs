@@ -148,18 +148,6 @@ impl PerformanceMonitor {
         ops.into_iter().take(count).collect()
     }
 
-    /// Get most frequently called operations
-    pub fn most_frequent_operations(&self, count: usize) -> Vec<(&str, &OperationMetrics)> {
-        let mut ops: Vec<_> = self
-            .operations
-            .iter()
-            .map(|(name, metrics)| (name.as_str(), metrics))
-            .collect();
-
-        ops.sort_by(|a, b| b.1.total_calls.cmp(&a.1.total_calls));
-
-        ops.into_iter().take(count).collect()
-    }
 
     /// Get performance summary
     pub fn summary(&self) -> PerformanceSummary {

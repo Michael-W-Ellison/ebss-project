@@ -190,10 +190,6 @@ impl CraftingTemplate {
         self
     }
 
-    pub fn with_skill_requirement(mut self, skill: String, level: f32) -> Self {
-        self.required_skill = Some((skill, level));
-        self
-    }
 
     pub fn discoverable(mut self) -> Self {
         self.discoverable = true;
@@ -216,24 +212,7 @@ impl CraftingTemplate {
         })
     }
 
-    /// Calculate total material cost
-    pub fn total_material_cost(&self) -> HashMap<String, u32> {
-        let mut cost = HashMap::new();
-        for ingredient in &self.inputs {
-            if ingredient.consumed {
-                *cost.entry(ingredient.material_id.clone()).or_insert(0) += ingredient.quantity;
-            }
-        }
-        cost
-    }
 
-    /// Get expected outputs
-    pub fn expected_outputs(&self) -> Vec<(String, u32)> {
-        self.outputs
-            .iter()
-            .map(|output| (output.material_id.clone(), output.quantity))
-            .collect()
-    }
 }
 
 /// Recipe book for managing discovered recipes

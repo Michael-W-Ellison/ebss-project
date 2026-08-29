@@ -75,20 +75,12 @@ impl ActionRequirements {
         self
     }
 
-    pub fn with_min_energy(mut self, energy: f32) -> Self {
-        self.min_energy = energy;
-        self
-    }
 
     pub fn with_skill(mut self, skill: String, level: f32) -> Self {
         self.required_skills.insert(skill, level);
         self
     }
 
-    pub fn with_proximity(mut self, position: Position, max_distance: f32) -> Self {
-        self.required_proximity = Some((position, max_distance));
-        self
-    }
 }
 
 /// Effects of an action on agent drives

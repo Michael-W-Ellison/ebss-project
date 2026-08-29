@@ -165,10 +165,6 @@ impl PersonalKnowledge {
         }
     }
 
-    /// Forget about a resource (depleted or proven false)
-    pub fn forget_resource(&mut self, position: &Position) {
-        self.resources.remove(position);
-    }
 
     /// Get all known resources of a specific type
     pub fn get_known_resources(&self, resource_type: ResourceType) -> Vec<&ResourceKnowledge> {
@@ -201,32 +197,12 @@ impl PersonalKnowledge {
             .unwrap_or(false)
     }
 
-    /// Get information to share with another agent (if we know about it)
-    /// Returns: (position, resource_type, amount, learned_tick)
-    pub fn get_shareable_info(
-        &self,
-        resource_type: ResourceType,
-    ) -> Option<(Position, ResourceType, u32, u32)> {
-        // Share most reliable knowledge about this resource type
-        self.get_known_resources(resource_type)
-            .into_iter()
-            .max_by(|a, b| {
-                a.reliability(self.current_tick)
-                    .partial_cmp(&b.reliability(self.current_tick))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|k| (k.position, k.resource_type, k.estimated_amount, k.learned_tick))
-    }
 
     /// Clean up old unreliable knowledge
     pub fn cleanup_stale(&mut self) {
         self.resources.retain(|_, k| k.is_reliable(self.current_tick));
     }
 
-    /// Get knowledge about a specific resource position (for verification)
-    pub fn get_resource_knowledge(&self, position: &Position) -> Option<&ResourceKnowledge> {
-        self.resources.get(position)
-    }
 }
 
 impl Default for PersonalKnowledge {

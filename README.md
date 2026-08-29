@@ -797,6 +797,48 @@ original specifications.
   climbing. One thing is deliberately unfinished: a bare hand should hold about a
   dozen so a basket is the whole difference, and at twelve forty fixtures fall
   over. That sweep is its own commit. See ISSUES_FOUND.md #88, #89, #90, #91
+- ✅ No run of this model was ever repeatable, and the threat tree was deciding
+  on a coin. Eighty `thread_rng()` calls across twenty-six files, each its own
+  unseedable stream, so the same world run twice gave different answers and a
+  regression could not be told from noise. There is one randomness vocabulary
+  now, `core::dice`: a thread-local stream, seeded from entropy in a live run
+  and from a fixed constant under `cfg(test)`.
+
+  Seeding it left five tests still coming and going, which named the other half
+  of the problem: `HashMap` iteration order, which Rust seeds *per process*.
+  `worst_threat` and `worst_creature` take a `max_by` over the emotion tables,
+  so **when two things frightened an agent equally, which one it feared — and
+  so whether it ran, stood or froze — was decided by the process's hash seed**.
+  Five collections in the decision path are ordered now.
+
+  Flaky tests **fifteen to seven**, over three runs. Not finished: a settlement
+  is still not reproducible, because there are eighty-three choose-operations
+  in `analytics/mod.rs` alone and every one is a place an unordered collection
+  can decide something. See ISSUES_FOUND.md #92
+- ✅ Fourteen per cent of the public surface had no caller. A sweep for `pub fn`
+  definitions whose name appears **nowhere else** in the tree — not "no call
+  site", no mention at all — found 326. Cutting them exposed a second wave of
+  24 that only the first wave had called, and a third of private helpers,
+  statics and one struct behind those. Three passes to a fixpoint: **357 items,
+  3,838 lines**, and the sweep now reports zero. One false positive in the whole
+  set, named by the compiler.
+
+  Some of it was clutter — accessors, `with_*` builders, trend getters for an
+  analytics UI that reads its numbers another way. Some of it was the recurring
+  defect: a whole **equipment durability model** (`tick_all_equipment`,
+  `apply_tool_wear`, `unequip_broken` and nine more) that nothing ticked, beside
+  a working tool-wear system on a different vocabulary; **twenty-one item
+  constructors** for a materials ladder the world does not run on; a
+  **precipitation accumulator** of snow depth, standing water and ground
+  wetness, ticked by weather type and read by three consumers, whose field
+  nothing read — snow has never lain in this world; a **second gossip pipeline**
+  beside the live one; the **global plugin registry**; and the age capability
+  curve, written and never hung on anything.
+
+  Deleting an uncalled function cannot change what a program does, and in
+  aggregate the suite agreed: 25 deterministic failures and 7 flaky before, 24
+  and 7 after, with the five names that moved between the lists each flipping
+  on their own between runs of the same tree. See ISSUES_FOUND.md #93
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

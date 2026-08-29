@@ -5,7 +5,6 @@
 //! Each biome has its own temperature range, precipitation, and environmental hazards.
 
 use serde::{Deserialize, Serialize};
-use crate::world::terrain::TerrainType;
 use crate::agents::temperature::{Temperature, Climate};
 
 /// Biome types representing distinct ecological zones
@@ -88,21 +87,6 @@ impl BiomeType {
         }
     }
 
-    /// Get typical terrain for this biome
-    pub fn typical_terrain(&self) -> TerrainType {
-        match self {
-            BiomeType::Tundra => TerrainType::Plains,
-            BiomeType::Taiga => TerrainType::Forest,
-            BiomeType::TemperateForest => TerrainType::Forest,
-            BiomeType::Grassland => TerrainType::Plains,
-            BiomeType::Desert => TerrainType::Plains,
-            BiomeType::Tropical => TerrainType::Forest,
-            BiomeType::Savanna => TerrainType::Plains,
-            BiomeType::Alpine => TerrainType::Mountain,
-            BiomeType::Wetland => TerrainType::Water,
-            BiomeType::Coast => TerrainType::Plains,
-        }
-    }
 
     /// Generate a climate appropriate for this biome
     pub fn generate_climate(&self, variation: f32) -> Climate {

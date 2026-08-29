@@ -91,14 +91,6 @@ impl HttpResponse {
         }
     }
 
-    pub fn internal_error(message: &str) -> Self {
-        Self {
-            status: 500,
-            status_text: "Internal Server Error".to_string(),
-            headers: HashMap::new(),
-            body: message.to_string(),
-        }
-    }
 
     pub fn with_cors(mut self) -> Self {
         self.headers.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
@@ -396,14 +388,6 @@ impl ApiServer {
         Ok(())
     }
 
-    /// Start the server in a background thread
-    pub fn start_background(self) -> std::thread::JoinHandle<()> {
-        thread::spawn(move || {
-            if let Err(e) = self.start() {
-                eprintln!("API server error: {}", e);
-            }
-        })
-    }
 
     /// Stop the server
     pub fn stop(&self) {

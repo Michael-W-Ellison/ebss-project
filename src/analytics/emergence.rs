@@ -908,13 +908,6 @@ impl EmergenceDetector {
             .collect()
     }
 
-    /// Get patterns of a specific type
-    pub fn patterns_by_type(&self, pattern_discriminant: std::mem::Discriminant<PatternType>) -> Vec<&EmergentPattern> {
-        self.detected_patterns
-            .iter()
-            .filter(|p| std::mem::discriminant(&p.pattern_type) == pattern_discriminant)
-            .collect()
-    }
 
     /// Get most severe patterns
     pub fn most_severe_patterns(&self, count: usize) -> Vec<&EmergentPattern> {

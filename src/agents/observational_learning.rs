@@ -327,13 +327,6 @@ impl ObservationalLearning {
             .collect()
     }
 
-    /// Get recent observations from a specific performer
-    pub fn get_recent_from_performer(&self, performer: &Uuid) -> Vec<&ObservedAction> {
-        self.recent_observations
-            .iter()
-            .filter(|obs| obs.performer == *performer)
-            .collect()
-    }
 
     /// Get all performers being learned from
     pub fn get_all_teachers(&self) -> Vec<Uuid> {
@@ -345,14 +338,6 @@ impl ObservationalLearning {
             .collect()
     }
 
-    /// Check if an action type was recently observed (for Copycat trait)
-    /// Returns true if this action type was observed within the last few ticks
-    pub fn was_action_type_recently_observed(&self, action_type: ActionType, tick_window: u32, current_tick: u32) -> bool {
-        self.recent_observations.iter().any(|obs| {
-            obs.action_type == action_type &&
-            current_tick.saturating_sub(obs.timestamp as u32) <= tick_window
-        })
-    }
 
     /// Get count of recent observations of a specific action type
     pub fn count_recent_observations_of_type(&self, action_type: ActionType, tick_window: u32, current_tick: u32) -> usize {

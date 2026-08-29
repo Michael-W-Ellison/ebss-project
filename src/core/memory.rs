@@ -180,29 +180,7 @@ impl Default for MemoryConfig {
 }
 
 impl MemoryConfig {
-    /// Create a config optimized for large populations
-    pub fn for_large_population() -> Self {
-        Self {
-            max_memories: Some(500),  // Lower limit per agent
-            decay_rate: 0.002,        // Slightly faster decay
-            auto_forget: true,
-            forget_threshold: 0.15,   // Forget weaker memories sooner
-            prune_interval: 50,       // Prune more frequently
-            batch_decay: true,
-        }
-    }
 
-    /// Create a config for small populations with detailed memory
-    pub fn for_small_population() -> Self {
-        Self {
-            max_memories: Some(2000), // Higher limit
-            decay_rate: 0.0005,       // Slower decay
-            auto_forget: true,
-            forget_threshold: 0.05,   // Keep weaker memories longer
-            prune_interval: 200,      // Prune less frequently
-            batch_decay: false,       // Can afford per-tick decay
-        }
-    }
 }
 
 /// Types of spatial memory
@@ -386,11 +364,6 @@ impl Memory {
         }
     }
 
-    /// Force immediate pruning (useful when memory pressure is high)
-    pub fn force_prune(&mut self) {
-        self.batch_decay_and_prune();
-        self.ticks_since_prune = 0;
-    }
 
     /// Get memory statistics
     pub fn stats(&self) -> MemoryStats {
@@ -436,14 +409,6 @@ impl Memory {
         }
     }
 
-    /// Check if memory is under pressure (near capacity)
-    pub fn is_under_pressure(&self) -> bool {
-        if let Some(max) = self.config.max_memories {
-            self.spatial_memories.len() + self.knowledge.len() > (max * 9 / 10)
-        } else {
-            false
-        }
-    }
 
     /// Add or update spatial memory
     pub fn remember_location(&mut self, memory_type: SpatialMemoryType, position: (i32, i32, i32)) {

@@ -110,15 +110,6 @@ impl FurnaceState {
         }
     }
 
-    /// Insert an item for smelting
-    pub fn insert_item(&mut self, item: &str) -> bool {
-        if self.input_item.is_some() || Self::get_smelt_output(item).is_none() {
-            return false;
-        }
-        self.input_item = Some(item.to_string());
-        self.smelt_progress = 0;
-        true
-    }
 
     /// Tick the furnace simulation
     pub fn tick(&mut self) {
@@ -155,15 +146,7 @@ impl FurnaceState {
         }
     }
 
-    /// Collect the output item
-    pub fn collect_output(&mut self) -> Option<String> {
-        self.output_item.take()
-    }
 
-    /// Check if furnace is ready (has fuel and is hot)
-    pub fn is_ready(&self) -> bool {
-        self.fuel_remaining > 0 && self.temperature > 100.0
-    }
 
     /// Get current smelting efficiency (0.0-1.0)
     pub fn efficiency(&self) -> f32 {

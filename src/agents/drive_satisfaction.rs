@@ -171,10 +171,6 @@ impl SatisfactionTracker {
         removed
     }
 
-    /// Get tracker for a specific drive
-    pub fn get_tracker(&self, drive_type: DriveType) -> Option<&DriveSatisfactionTracker> {
-        self.trackers.get(&drive_type)
-    }
 }
 
 impl Default for SatisfactionTracker {

@@ -85,10 +85,6 @@ impl SmeltingRecipe {
         self
     }
 
-    /// Check if this recipe requires a secondary input
-    pub fn requires_secondary(&self) -> bool {
-        self.secondary_input.is_some()
-    }
 }
 
 /// Smelting recipe registry

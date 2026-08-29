@@ -374,10 +374,6 @@ impl StorehouseInventory {
             .unwrap_or(0)
     }
 
-    /// Get all items
-    pub fn list_items(&self) -> Vec<(&ItemType, &Item)> {
-        self.items.iter().collect()
-    }
 }
 
 impl Default for Inventory {

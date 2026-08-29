@@ -34,45 +34,12 @@ impl Vision {
         }
     }
 
-    /// Check if an agent can see a position given their position and facing direction
-    pub fn can_see_position(
-        &self,
-        observer_pos: (i32, i32, i32),
-        target_pos: (i32, i32, i32),
-        facing_direction: f32, // Angle in degrees
-    ) -> bool {
-        if self.impaired || self.acuity == 0.0 {
-            return false;
-        }
-
-        // Calculate distance
-        let dx = (target_pos.0 - observer_pos.0) as f32;
-        let dy = (target_pos.1 - observer_pos.1) as f32;
-        let dz = (target_pos.2 - observer_pos.2) as f32;
-        let distance = (dx * dx + dy * dy + dz * dz).sqrt();
-
-        // Check range
-        if distance > self.detection_range {
-            return false;
-        }
-
-        // Calculate angle to target
-        let angle_to_target = dz.atan2(dx).to_degrees();
-        let angle_diff = ((angle_to_target - facing_direction + 180.0) % 360.0 - 180.0).abs();
-
-        // Check if within field of view
-        angle_diff <= self.field_of_view / 2.0
-    }
 
     /// Update list of visible agents
     pub fn update_visible_agents(&mut self, agents: Vec<Uuid>) {
         self.visible_agents = agents.into_iter().collect();
     }
 
-    /// Update list of visible positions
-    pub fn update_visible_positions(&mut self, positions: Vec<(i32, i32, i32)>) {
-        self.visible_positions = positions.into_iter().collect();
-    }
 
     /// Impair vision (temporary blindness, darkness, etc.)
     pub fn set_impaired(&mut self, impaired: bool) {
@@ -83,10 +50,6 @@ impl Vision {
         }
     }
 
-    /// Modify acuity (injury, enhancement, etc.)
-    pub fn modify_acuity(&mut self, delta: f32) {
-        self.acuity = (self.acuity + delta).clamp(0.0, 1.0);
-    }
 
     /// Get effective detection range considering acuity
     pub fn effective_range(&self) -> f32 {
@@ -188,13 +151,6 @@ impl Hearing {
         self.heard_sounds.retain(|s| s.age < 100);
     }
 
-    /// Get sounds of a specific type
-    pub fn get_sounds_by_type(&self, sound_type: SoundType) -> Vec<&Sound> {
-        self.heard_sounds
-            .iter()
-            .filter(|s| s.sound_type == sound_type)
-            .collect()
-    }
 
     /// Set impairment (deafness, loud noise, etc.)
     pub fn set_impaired(&mut self, impaired: bool) {
@@ -285,15 +241,7 @@ impl Speech {
         self.known_languages.insert(language);
     }
 
-    /// Check if agent knows a language
-    pub fn knows_language(&self, language: &str) -> bool {
-        self.known_languages.contains(language)
-    }
 
-    /// Set volume (0.0 to 1.0)
-    pub fn set_volume(&mut self, volume: f32) {
-        self.volume = volume.clamp(0.0, 1.0);
-    }
 
     /// Set speech impairment
     pub fn set_impaired(&mut self, impaired: bool) {
@@ -534,10 +482,6 @@ impl Attention {
         self.focus.is_some()
     }
 
-    /// Check if focused on specific agent
-    pub fn is_focused_on_agent(&self, agent_id: Uuid) -> bool {
-        matches!(&self.focus, Some(Focus::Agent(id)) if *id == agent_id)
-    }
 
     /// Get remaining attention time
     pub fn remaining_attention(&self) -> u32 {
@@ -642,14 +586,6 @@ impl SensoryMemory {
         self.seen_positions.retain(|(_, _, age)| *age < 1000);
     }
 
-    /// Get all recently seen agents (within N ticks)
-    pub fn get_recent_agents(&self, max_age: u32) -> Vec<(Uuid, (i32, i32, i32))> {
-        self.seen_agents
-            .iter()
-            .filter(|(_, _, age)| *age <= max_age)
-            .map(|(id, pos, _)| (*id, *pos))
-            .collect()
-    }
 }
 
 impl Default for SensoryMemory {
@@ -754,23 +690,6 @@ impl Senses {
         None
     }
 
-    /// Find other agents using all senses
-    pub fn find_nearby_agents(&self) -> Vec<Uuid> {
-        let mut agents = Vec::new();
-
-        // From vision
-        agents.extend(self.vision.visible_agents.iter());
-
-        // From recent memory
-        let recent = self.memory.get_recent_agents(50);
-        for (id, _pos) in recent {
-            if !agents.contains(&id) {
-                agents.push(id);
-            }
-        }
-
-        agents
-    }
 
     /// Check if can sense danger
     pub fn senses_danger(&self) -> bool {

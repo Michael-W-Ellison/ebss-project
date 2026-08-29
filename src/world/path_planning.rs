@@ -37,15 +37,6 @@ impl RoadType {
         }
     }
 
-    /// Get construction cost multiplier
-    pub fn cost_multiplier(&self) -> f32 {
-        match self {
-            RoadType::DirtPath => 1.0,
-            RoadType::GravelRoad => 2.0,
-            RoadType::StoneRoad => 4.0,
-            RoadType::PavedRoad => 8.0,
-        }
-    }
 }
 
 /// A node in a path

@@ -9,7 +9,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::BufReader;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
@@ -205,22 +205,8 @@ impl SessionRecorder {
         self.snapshots.push_back(snapshot);
     }
 
-    /// Get all recorded snapshots
-    pub fn get_snapshots(&self) -> &VecDeque<StateSnapshot> {
-        &self.snapshots
-    }
 
-    /// Get snapshot at specific index
-    pub fn get_snapshot(&self, index: usize) -> Option<&StateSnapshot> {
-        self.snapshots.get(index)
-    }
 
-    /// Get snapshot closest to a specific tick
-    pub fn get_snapshot_at_tick(&self, tick: u64) -> Option<&StateSnapshot> {
-        self.snapshots
-            .iter()
-            .min_by_key(|s| (s.tick as i64 - tick as i64).abs() as u64)
-    }
 
     /// Get number of recorded snapshots
     pub fn snapshot_count(&self) -> usize {
@@ -239,30 +225,6 @@ impl SessionRecorder {
         }
     }
 
-    /// Save session to file
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
-        let session = RecordedSession {
-            id: self.session_id,
-            name: self.session_name.clone(),
-            start_tick: self.start_tick,
-            config: self.config.clone(),
-            snapshots: self.snapshots.iter().cloned().collect(),
-        };
-
-        let file = File::create(path)?;
-        let writer = BufWriter::new(file);
-
-        if self.config.compress {
-            // Use MessagePack for compressed format
-            rmp_serde::encode::write(&mut std::io::BufWriter::new(writer), &session)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        } else {
-            // Use JSON for readable format
-            serde_json::to_writer_pretty(writer, &session)?;
-        }
-
-        Ok(())
-    }
 
     /// Load session from file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
@@ -396,10 +358,6 @@ impl SessionPlayer {
         self.playback_speed = speed.clamp(0.1, 10.0);
     }
 
-    /// Enable/disable loop playback
-    pub fn set_loop(&mut self, loop_playback: bool) {
-        self.loop_playback = loop_playback;
-    }
 
     /// Advance to next frame (returns snapshot if available)
     pub fn next_frame(&mut self) -> Option<&StateSnapshot> {
@@ -437,21 +395,6 @@ impl SessionPlayer {
         None
     }
 
-    /// Jump to specific tick (finds closest snapshot)
-    pub fn goto_tick(&mut self, tick: u64) -> Option<&StateSnapshot> {
-        if let Some(session) = &self.session {
-            if let Some((index, _)) = session
-                .snapshots
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, s)| (s.tick as i64 - tick as i64).abs() as u64)
-            {
-                self.current_index = index;
-                return session.snapshots.get(self.current_index);
-            }
-        }
-        None
-    }
 
     /// Get current snapshot without advancing
     pub fn current_snapshot(&self) -> Option<&StateSnapshot> {
@@ -460,10 +403,6 @@ impl SessionPlayer {
             .and_then(|s| s.snapshots.get(self.current_index))
     }
 
-    /// Get current frame index
-    pub fn current_frame(&self) -> usize {
-        self.current_index
-    }
 
     /// Get total number of frames
     pub fn total_frames(&self) -> usize {
@@ -545,15 +484,7 @@ impl AgentSnapshot {
         self
     }
 
-    pub fn with_relationships(mut self, count: usize) -> Self {
-        self.relationship_count = count;
-        self
-    }
 
-    pub fn with_action(mut self, action: String) -> Self {
-        self.current_action = Some(action);
-        self
-    }
 }
 
 /// Helper to create state snapshot
@@ -576,10 +507,6 @@ impl StateSnapshot {
         self
     }
 
-    pub fn with_world(mut self, world: WorldSnapshot) -> Self {
-        self.world_state = world;
-        self
-    }
 
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());

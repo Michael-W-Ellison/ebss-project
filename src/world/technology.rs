@@ -313,13 +313,6 @@ impl TechnologyTree {
             .collect()
     }
 
-    /// Get all discoverable technologies (prerequisites met but not yet known)
-    pub fn get_discoverable(&self, known_techs: &HashSet<&'static str>) -> Vec<&Technology> {
-        self.technologies
-            .values()
-            .filter(|t| !known_techs.contains(t.id) && t.can_discover(known_techs))
-            .collect()
-    }
 
     /// Get all technologies
     pub fn all(&self) -> Vec<&Technology> {
@@ -391,10 +384,6 @@ impl KnownTechnologies {
         }
     }
 
-    /// Get known tech IDs (as a HashSet for compatibility)
-    pub fn get_known(&self) -> HashSet<&str> {
-        self.known.iter().map(|s| s.as_str()).collect()
-    }
 
     /// Get experimentation progress for a tech
     pub fn get_progress(&self, tech_id: &str) -> u8 {

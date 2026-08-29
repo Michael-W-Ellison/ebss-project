@@ -59,10 +59,6 @@ impl NutritionalContent {
         }
     }
 
-    /// Check if this provides meaningful nutrition
-    pub fn is_nutritious(&self) -> bool {
-        self.total() > 5.0
-    }
 }
 
 /// What a fire does to a particular kind of food
@@ -831,15 +827,6 @@ impl NutritionalState {
         penalty
     }
 
-    /// Get overall nutritional status (0.0 = critical, 1.0 = excellent)
-    pub fn overall_status(&self) -> f32 {
-        let energy_factor = self.energy_reserves / 100.0;
-        let protein_factor = self.protein_stores / 100.0;
-        let micro_factor = self.micronutrient_level / 100.0;
-
-        // Weighted average - energy is most important short-term
-        energy_factor * 0.5 + protein_factor * 0.3 + micro_factor * 0.2
-    }
 
     /// Check if agent is starving (critical energy)
     pub fn is_starving(&self) -> bool {
@@ -858,24 +845,6 @@ impl NutritionalState {
         }
     }
 
-    /// Get status string for debugging/display
-    pub fn status_string(&self) -> String {
-        let mut status = format!(
-            "E:{:.0} P:{:.0} V:{:.0}",
-            self.energy_reserves,
-            self.protein_stores,
-            self.micronutrient_level
-        );
-
-        if self.has_protein_deficiency() {
-            status.push_str(" [WASTING]");
-        }
-        if self.has_micronutrient_deficiency() {
-            status.push_str(" [SCURVY]");
-        }
-
-        status
-    }
 }
 
 /// Result of eating food

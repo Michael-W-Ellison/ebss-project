@@ -5400,7 +5400,72 @@ to hold that property once. A sixteen-thousand-line file cannot.
 
 ## Housekeeping
 
-### 93. The other thirteen drive rates were never derived either
+### 93. Fourteen per cent of the public surface had no caller
+
+A sweep for `pub fn` definitions whose identifier appears nowhere else in
+`src`, `plugins`, `examples`, `benches` or `tests` - not "no call site", *no
+mention at all* - turned up **326 of them**. Cutting those exposed a second
+wave of 24 that only the first wave had called, and a third of private
+helpers, statics and one struct that only those had used. Three fixpoint
+passes, **357 items and 3,838 lines gone**, and the sweep now reports zero.
+
+The compiler named exactly one false positive in the whole set,
+`Action::primary_drive`, used from `tests/environment_plugin_tests.rs` - a
+directory the first scan had not been pointed at. Nothing else broke: the four
+configurations (default, `gui`, `bevy_gui`, `--workspace --all-targets`) build
+clean, and the warning set is byte-identical to what it was before, 55 either
+way.
+
+Deleting an uncalled function cannot change what a program does, so the test
+suite should have been untouched, and in aggregate it was: 25 deterministic
+failures and 7 flaky before, 24 and 7 after. The five names that moved between
+the two lists - the winter, thirst, clothing, distrust and survival-pressure
+settlements - each flip on their own between runs of the *same* tree
+(FAILED/FAILED/ok/FAILED, FAILED/ok/FAILED/ok, and so on). They are #92's
+unfinished business, not casualties of this.
+
+#### What was actually in there
+
+Not all of it was clutter, and that is the finding. Some of it was recurring
+defect #1 again - a subsystem built, tested, and wired to nothing:
+
+- **Equipment wear.** `tick_all_equipment`, `apply_tool_wear`,
+  `apply_combat_wear`, `unequip_broken`, `can_be_repaired`,
+  `get_broken_equipment`, `condition_description`, `sharpness_retention`,
+  `flexibility`, `mining_speed_with_traits`, `harvesting_speed_with_traits`.
+  A complete durability model that nothing ticked. Tools do wear in this
+  simulation - through `environment::making`, on a different vocabulary.
+  Defect #3 as well as #1.
+- **Twenty-one item constructors** in the same file: `iron_dagger`,
+  `steel_axe`, `bronze_sickle`, `yew_bow`, `obsidian_dagger` and the rest. A
+  second, richer materials ladder than the one the world actually runs on.
+- **Precipitation accumulation.** `world/climate.rs` carried a
+  `HashMap<(i32,i32), PrecipitationAccumulation>` of snow depth, standing
+  water and ground wetness, ticked by weather type, read by `is_flooded`,
+  `movement_penalty` and `shelter_quality`. Nothing read the field, so nothing
+  ever called any of them. Snow has never lain in this world.
+- **Information verification.** `verify_information_from`,
+  `receive_information_with_verification`, `prepare_information_to_share`,
+  `spread_liar_reputation`, `react_to_trait_info`,
+  `process_information_verification`. A second gossip pipeline beside the live
+  one from #93-#101.
+- **The global plugin registry.** `global_registry`, `has_plugin`,
+  `plugin_ids` and the `static mut GLOBAL_REGISTRY` behind them.
+- **`physiology::pass_waste`**, which drained a `waste` accumulator nothing
+  drained, and `agent::what_a_body_this_age_can_do`, the age capability curve
+  that was written and never hung on anything.
+
+The code is in git history where it can be read; what is gone is the
+impression that any of it was running. The rest was accessors, `with_*`
+builders, and trend-series getters for an analytics UI that reads its numbers
+another way.
+
+Two of these are worth wiring rather than rewriting: the age capability curve,
+which already has an open task against it, and the equipment durability model,
+which should either replace the `making` vocabulary or come out of the design
+as well as out of the code.
+
+### 94. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5409,16 +5474,12 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 94. The clock is spelled out in the interface too
+### 95. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
-
-### 95. Committed backup file
-
-`src/analytics/mod.rs.backup` is checked into the repository.
 
 ### 96. Build warnings
 

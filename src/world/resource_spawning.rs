@@ -573,43 +573,9 @@ impl AnimalResourceMapper {
 pub struct TerrainGenerator;
 
 impl TerrainGenerator {
-    /// Generate adjacent terrain types around water to create natural transitions
-    pub fn generate_water_adjacent_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Beach, 0.3),      // Beaches along coasts
-            (TerrainType::Riverbank, 0.4),  // Riverbanks along rivers
-            (TerrainType::Wetland, 0.2),    // Wetlands in low areas
-            (TerrainType::Plains, 0.1),     // Some plains
-        ]
-    }
 
-    /// Generate terrain types around mountains
-    pub fn generate_mountain_adjacent_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Hills, 0.5),      // Hills are common around mountains
-            (TerrainType::Forest, 0.3),     // Forests on lower slopes
-            (TerrainType::Plains, 0.2),     // Valleys
-        ]
-    }
 
-    /// Generate terrain types for arid regions
-    pub fn generate_arid_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Desert, 0.6),
-            (TerrainType::Plains, 0.3),
-            (TerrainType::Hills, 0.1),
-        ]
-    }
 
-    /// Generate terrain types for temperate regions
-    pub fn generate_temperate_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Plains, 0.3),
-            (TerrainType::Forest, 0.3),
-            (TerrainType::Meadow, 0.25),
-            (TerrainType::Hills, 0.15),
-        ]
-    }
 }
 
 #[cfg(test)]

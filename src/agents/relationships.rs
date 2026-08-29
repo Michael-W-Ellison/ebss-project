@@ -175,12 +175,6 @@ impl TrustLevel {
         }
     }
 
-    /// Get belief weight (0.0 to 1.0) for information from this source
-    pub fn belief_weight(&self) -> f32 {
-        // Map -12 to +12 onto 0.0 to 1.0 scale
-        // Negative trust = lower belief, positive trust = higher belief
-        (self.value() as f32 + 12.0) / 24.0
-    }
 }
 
 /// Complete relationship state between two agents
@@ -276,17 +270,6 @@ impl Relationship {
         self.total_interactions += 1;
     }
 
-    /// Decay relationship towards neutral if no recent interaction
-    pub fn decay_if_no_interaction(&mut self, current_tick: u32, decay_rate: f32) {
-        let ticks_since_interaction = current_tick.saturating_sub(self.last_interaction_tick);
-
-        // Start decaying after 500 ticks of no interaction
-        if ticks_since_interaction > 500 {
-            // Faster decay for longer periods
-            let decay_multiplier = (ticks_since_interaction / 500) as f32;
-            self.relationship_level.decay_towards_neutral(decay_rate * decay_multiplier);
-        }
-    }
 }
 
 /// Agent's social network - all relationships with other agents
@@ -323,25 +306,8 @@ impl SocialNetwork {
         self.relationships.get_mut(&other_agent_id)
     }
 
-    /// Add parent-child relationship
-    pub fn add_parent_relationship(&mut self, parent_id: Uuid, current_tick: u32) {
-        self.relationships
-            .insert(parent_id, Relationship::parent_child(parent_id, current_tick));
-    }
 
-    /// Decay all relationships towards neutral over time
-    pub fn decay_all_relationships(&mut self, current_tick: u32, base_decay_rate: f32) {
-        for relationship in self.relationships.values_mut() {
-            relationship.decay_if_no_interaction(current_tick, base_decay_rate);
-        }
-    }
 
-    /// Get belief weight for information from a specific agent
-    pub fn belief_weight_for(&self, agent_id: Uuid) -> f32 {
-        self.get_relationship(agent_id)
-            .map(|r| r.trust_level.belief_weight())
-            .unwrap_or(0.5) // Default neutral trust
-    }
 
     /// Get all relationships
     pub fn all_relationships(&self) -> Vec<&Relationship> {

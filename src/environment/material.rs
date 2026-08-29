@@ -183,20 +183,7 @@ impl Material {
         }
     }
 
-    /// Set quality level
-    pub fn with_quality(mut self, quality: Quality) -> Self {
-        self.quality = quality;
-        self
-    }
 
-    /// Get effective durability based on quality
-    pub fn effective_durability(&self) -> u32 {
-        if self.durability == 0 {
-            0  // Infinite durability
-        } else {
-            ((self.durability as f32) * self.quality.tool_durability_modifier()) as u32
-        }
-    }
 
     /// Builder pattern methods
     pub fn with_description(mut self, desc: String) -> Self {
@@ -267,10 +254,6 @@ impl Material {
         self
     }
 
-    pub fn with_light_level(mut self, level: u8) -> Self {
-        self.light_level = level.min(15);
-        self
-    }
 
     // Metallurgy builder methods
     pub fn with_melting_point(mut self, temp: f32) -> Self {

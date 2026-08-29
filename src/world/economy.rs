@@ -43,10 +43,6 @@ impl TradeOffer {
         current_tick >= self.expires_tick
     }
 
-    /// Check if an agent can afford this offer
-    pub fn can_afford(&self, buyer_wealth: u32) -> bool {
-        buyer_wealth >= self.price
-    }
 }
 
 /// Supply and demand tracker for marketplace
@@ -127,15 +123,6 @@ impl MarketData {
         self.volume_traded += quantity;
     }
 
-    /// Get average price over history
-    pub fn average_price(&self) -> u32 {
-        if self.price_history.is_empty() {
-            self.base_price
-        } else {
-            let sum: u32 = self.price_history.iter().sum();
-            sum / self.price_history.len() as u32
-        }
-    }
 
     /// Get price trend (-1 = falling, 0 = stable, 1 = rising)
     pub fn price_trend(&self) -> i8 {
@@ -364,20 +351,7 @@ impl Marketplace {
         initial_count - self.offers.len()
     }
 
-    /// Update all market prices based on current supply/demand
-    pub fn update_prices(&mut self) {
-        for data in self.market_data.values_mut() {
-            data.update_price();
-        }
-    }
 
-    /// Get current price for an item
-    pub fn get_price(&self, item: ItemType) -> u32 {
-        self.market_data
-            .get(&item)
-            .map(|d| d.current_price)
-            .unwrap_or(Self::get_base_price(item))
-    }
 
     /// Find offers selling a specific item
     pub fn find_offers_selling(&self, item: ItemType) -> Vec<&TradeOffer> {
@@ -395,16 +369,6 @@ impl Marketplace {
             .collect()
     }
 
-    /// Get market statistics
-    pub fn get_statistics(&self) -> MarketStatistics {
-        MarketStatistics {
-            total_offers: self.offers.len(),
-            total_trades: self.completed_trades.len(),
-            active_items: self.market_data.iter()
-                .filter(|(_, d)| d.supply > 0 || d.demand > 0)
-                .count(),
-        }
-    }
 }
 
 impl Default for Marketplace {

@@ -75,10 +75,6 @@ impl SimulationError {
         self
     }
 
-    pub fn with_timestamp(mut self, timestamp: f64) -> Self {
-        self.timestamp = timestamp;
-        self
-    }
 }
 
 /// Resource storing simulation errors for display in GUI
@@ -133,10 +129,6 @@ impl SimulationErrors {
         self.unacknowledged_count = 0;
     }
 
-    /// Get errors filtered by severity
-    pub fn errors_by_severity(&self, severity: ErrorSeverity) -> impl Iterator<Item = &SimulationError> {
-        self.errors.iter().filter(move |e| e.severity == severity)
-    }
 
     /// Get the most recent error
     pub fn latest(&self) -> Option<&SimulationError> {

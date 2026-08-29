@@ -414,10 +414,6 @@ impl BehaviorTree {
         self.root.learned_count()
     }
 
-    /// Sort all nodes by weight for optimal execution order
-    pub fn optimize_weights(&mut self) {
-        self.root.sort_children_by_weight();
-    }
 
     /// Reinforce a specific action (increase its weight)
     pub fn reinforce_action(&mut self, action_name: &str, amount: f32) {

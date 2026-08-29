@@ -95,10 +95,6 @@ impl PregnancyState {
         1.0 + (progress * (PREGNANCY_ENERGY_MULTIPLIER - 1.0))
     }
 
-    /// Get ticks remaining until birth
-    pub fn ticks_remaining(&self, current_tick: u32) -> u32 {
-        self.due_tick.saturating_sub(current_tick)
-    }
 }
 
 #[cfg(test)]

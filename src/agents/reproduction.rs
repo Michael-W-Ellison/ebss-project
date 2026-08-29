@@ -87,23 +87,7 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
     true
 }
 
-/// Get the female agent from a mating pair (returns None if no valid pair)
-pub fn get_female<'a>(agent1: &'a Agent, agent2: &'a Agent) -> Option<&'a Agent> {
-    match (agent1.gender, agent2.gender) {
-        (Gender::Female, Gender::Male) => Some(agent1),
-        (Gender::Male, Gender::Female) => Some(agent2),
-        _ => None,
-    }
-}
 
-/// Get the male agent from a mating pair (returns None if no valid pair)
-pub fn get_male<'a>(agent1: &'a Agent, agent2: &'a Agent) -> Option<&'a Agent> {
-    match (agent1.gender, agent2.gender) {
-        (Gender::Male, Gender::Female) => Some(agent1),
-        (Gender::Female, Gender::Male) => Some(agent2),
-        _ => None,
-    }
-}
 
 /// Attempt to impregnate the female agent
 /// Returns the pregnancy state if successful

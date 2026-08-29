@@ -94,12 +94,6 @@ impl SpatialGrid {
         nearby
     }
 
-    /// Get all entities in the same cell and adjacent cells (excluding self)
-    pub fn get_nearby_excluding(&self, x: i32, y: i32, exclude: &Uuid) -> Vec<Uuid> {
-        let mut nearby = self.get_nearby(x, y);
-        nearby.retain(|id| id != exclude);
-        nearby
-    }
 
     /// Get number of entities in the grid
     pub fn len(&self) -> usize {

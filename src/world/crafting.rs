@@ -627,20 +627,7 @@ impl CraftingManager {
         self.active_jobs.retain(|job| job.progress < job.total_time);
     }
 
-    /// Collect completed crafts for a specific agent
-    /// Returns and removes all pending completions for this crafter
-    pub fn collect_completed(&mut self, crafter_id: &Uuid) -> Vec<CompletedCraft> {
-        let (for_crafter, remaining): (Vec<_>, Vec<_>) = self.pending_completions
-            .drain(..)
-            .partition(|c| c.crafter_id == *crafter_id);
-        self.pending_completions = remaining;
-        for_crafter
-    }
 
-    /// Check if there are any pending completions for an agent
-    pub fn has_pending_completions(&self, crafter_id: &Uuid) -> bool {
-        self.pending_completions.iter().any(|c| c.crafter_id == *crafter_id)
-    }
 
     /// Get active jobs for a crafter
     pub fn get_crafter_jobs(&self, crafter_id: &Uuid) -> Vec<&CraftingJob> {
@@ -650,13 +637,4 @@ impl CraftingManager {
             .collect()
     }
 
-    /// Cancel a crafting job
-    pub fn cancel_job(&mut self, job_id: &Uuid) -> bool {
-        if let Some(pos) = self.active_jobs.iter().position(|j| j.id == *job_id) {
-            self.active_jobs.remove(pos);
-            true
-        } else {
-            false
-        }
-    }
 }

@@ -102,12 +102,6 @@ impl Zone {
         distance <= self.radius as f32
     }
 
-    /// Get the distance from the center of this zone
-    pub fn distance_from_center(&self, position: (i32, i32, i32)) -> f32 {
-        let dx = (position.0 - self.center.0) as f32;
-        let dy = (position.1 - self.center.1) as f32;
-        (dx * dx + dy * dy).sqrt()
-    }
 }
 
 /// Manages all zones in the world
@@ -128,10 +122,6 @@ impl ZoneManager {
         self.zones.push(Zone::new(zone_type, center, radius));
     }
 
-    /// Remove all zones
-    pub fn clear_zones(&mut self) {
-        self.zones.clear();
-    }
 
     /// Get all zones
     pub fn get_zones(&self) -> &[Zone] {
@@ -146,11 +136,6 @@ impl ZoneManager {
             .collect()
     }
 
-    /// Check if a position is within any zone of a specific type
-    pub fn is_in_zone_type(&self, position: (i32, i32, i32), zone_type: ZoneType) -> bool {
-        self.zones.iter()
-            .any(|zone| zone.zone_type == zone_type && zone.contains(position))
-    }
 
     /// Get the total zone bonus for placing a building at a position
     /// Considers all zones at that position
@@ -169,16 +154,6 @@ impl ZoneManager {
             .unwrap_or(0.0)
     }
 
-    /// Find the nearest zone of a specific type to a position
-    pub fn find_nearest_zone(&self, position: (i32, i32, i32), zone_type: ZoneType) -> Option<&Zone> {
-        self.zones.iter()
-            .filter(|zone| zone.zone_type == zone_type)
-            .min_by(|a, b| {
-                let dist_a = a.distance_from_center(position);
-                let dist_b = b.distance_from_center(position);
-                dist_a.partial_cmp(&dist_b).unwrap()
-            })
-    }
 }
 
 #[cfg(test)]

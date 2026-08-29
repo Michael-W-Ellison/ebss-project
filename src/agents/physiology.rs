@@ -554,10 +554,6 @@ impl Physiology {
         self.minute = now;
     }
 
-    /// Leave what there is to leave, and report how much.
-    pub fn pass_waste(&mut self) -> f32 {
-        std::mem::take(&mut self.waste)
-    }
 
     /// What share of itself this body can bring to anything, for want of water.
     ///

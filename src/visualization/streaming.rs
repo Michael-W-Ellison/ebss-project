@@ -324,11 +324,6 @@ impl StreamingVisualizer {
         self
     }
 
-    /// Set tick interval for rate limiting
-    pub fn with_interval(mut self, interval: u64) -> Self {
-        self.tick_interval = interval;
-        self
-    }
 
     /// Emit an event
     pub fn emit(&mut self, event: StreamEvent) -> std::io::Result<()> {
@@ -528,9 +523,6 @@ impl WidgetDashboard {
         }
     }
 
-    pub fn add_widget<W: DisplayWidget + 'static>(&mut self, widget: W) {
-        self.widgets.push(Box::new(widget));
-    }
 
     pub fn render(&self, data: &WidgetData) -> String {
         let mut output = String::new();

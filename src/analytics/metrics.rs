@@ -104,20 +104,7 @@ impl SimulationMetrics {
         }
     }
 
-    /// Create metrics with specific world size
-    pub fn with_world_size(sampling_interval: u32, max_snapshots: usize, world_size: (usize, usize)) -> Self {
-        Self {
-            snapshots: Vec::new(),
-            sampling_interval,
-            max_snapshots,
-            world_size,
-        }
-    }
 
-    /// Set the world size for exploration calculations
-    pub fn set_world_size(&mut self, width: usize, height: usize) {
-        self.world_size = (width, height);
-    }
 
     /// Record a snapshot if it's time to sample
     pub fn record_if_time(&mut self, tick: u32, population: &Population) {
@@ -462,70 +449,12 @@ impl SimulationMetrics {
             .collect()
     }
 
-    /// Get trend for a specific drive over time
-    pub fn drive_trend(&self, drive_type: DriveType) -> Vec<(u32, f32)> {
-        self.snapshots
-            .iter()
-            .filter_map(|s| {
-                s.drives.get(&drive_type).map(|d| (s.tick, d.average_value))
-            })
-            .collect()
-    }
 
-    /// Get trend for a specific emotion over time
-    pub fn emotion_trend(&self, emotion_type: EmotionType) -> Vec<(u32, f32)> {
-        self.snapshots
-            .iter()
-            .filter_map(|s| {
-                s.emotions
-                    .get(&emotion_type)
-                    .map(|e| (s.tick, e.average_value))
-            })
-            .collect()
-    }
 
-    /// Get trend for trait prevalence over time
-    pub fn trait_trend(&self, trait_item: Trait) -> Vec<(u32, u32)> {
-        self.snapshots
-            .iter()
-            .map(|s| {
-                let count = s.traits.get(&trait_item).copied().unwrap_or(0);
-                (s.tick, count)
-            })
-            .collect()
-    }
 
-    /// Get trend for total discoveries over time
-    pub fn discoveries_trend(&self) -> Vec<(u32, usize)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.total_discoveries))
-            .collect()
-    }
 
-    /// Get trend for curiosity-driven explorations over time
-    pub fn curiosity_explorations_trend(&self) -> Vec<(u32, u32)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.total_curiosity_driven_explorations))
-            .collect()
-    }
 
-    /// Get trend for exploration efficiency over time
-    pub fn exploration_efficiency_trend(&self) -> Vec<(u32, f32)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.average_exploration_efficiency))
-            .collect()
-    }
 
-    /// Get trend for agents with high curiosity over time
-    pub fn high_curiosity_agents_trend(&self) -> Vec<(u32, usize)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.agents_with_high_curiosity))
-            .collect()
-    }
 
     /// Get summary statistics for the entire simulation
     pub fn summary(&self) -> SimulationSummary {

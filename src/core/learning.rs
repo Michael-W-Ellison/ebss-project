@@ -160,14 +160,6 @@ impl LearningExposure {
         }
     }
 
-    /// Create with a specific default threshold
-    pub fn with_default_threshold(threshold: f32) -> Self {
-        Self {
-            exposures: HashMap::new(),
-            default_threshold: threshold,
-            custom_thresholds: HashMap::new(),
-        }
-    }
 
     /// Get the threshold for a specific knowledge item
     fn get_threshold(&self, knowledge: &str) -> f32 {
@@ -180,15 +172,7 @@ impl LearningExposure {
         KnowledgeComplexity::from_knowledge_name(knowledge).threshold()
     }
 
-    /// Set a custom threshold for specific knowledge
-    pub fn set_threshold(&mut self, knowledge: &str, threshold: f32) {
-        self.custom_thresholds.insert(knowledge.to_string(), threshold);
-    }
 
-    /// Set threshold based on complexity level
-    pub fn set_complexity(&mut self, knowledge: &str, complexity: KnowledgeComplexity) {
-        self.custom_thresholds.insert(knowledge.to_string(), complexity.threshold());
-    }
 
     /// Add exposure to a knowledge item, returns true if threshold reached
     pub fn add_exposure(&mut self, knowledge: &str, amount: f32) -> bool {
@@ -198,26 +182,12 @@ impl LearningExposure {
         *current >= threshold
     }
 
-    /// Add exposure with explicit complexity level
-    pub fn add_exposure_with_complexity(
-        &mut self,
-        knowledge: &str,
-        amount: f32,
-        complexity: KnowledgeComplexity,
-    ) -> bool {
-        self.set_complexity(knowledge, complexity);
-        self.add_exposure(knowledge, amount)
-    }
 
     /// Get current exposure level (0.0 to threshold)
     pub fn get_exposure(&self, knowledge: &str) -> f32 {
         self.exposures.get(knowledge).copied().unwrap_or(0.0)
     }
 
-    /// Check if ready to learn (exposure >= threshold)
-    pub fn ready_to_learn(&self, knowledge: &str) -> bool {
-        self.get_exposure(knowledge) >= self.get_threshold(knowledge)
-    }
 
     /// Reset exposure after learning
     pub fn reset_exposure(&mut self, knowledge: &str) {
@@ -233,39 +203,7 @@ impl LearningExposure {
         (self.get_exposure(knowledge) / threshold).min(1.0)
     }
 
-    /// Get the complexity level for a knowledge item
-    pub fn get_complexity(&self, knowledge: &str) -> KnowledgeComplexity {
-        if let Some(&threshold) = self.custom_thresholds.get(knowledge) {
-            // Map threshold back to complexity
-            if threshold <= 0.3 {
-                KnowledgeComplexity::Trivial
-            } else if threshold <= 0.5 {
-                KnowledgeComplexity::Simple
-            } else if threshold <= 1.0 {
-                KnowledgeComplexity::Normal
-            } else if threshold <= 1.5 {
-                KnowledgeComplexity::Complex
-            } else if threshold <= 2.0 {
-                KnowledgeComplexity::Advanced
-            } else {
-                KnowledgeComplexity::Master
-            }
-        } else {
-            KnowledgeComplexity::from_knowledge_name(knowledge)
-        }
-    }
 
-    /// Get all knowledge items and their progress
-    pub fn all_progress(&self) -> Vec<(&str, f32, KnowledgeComplexity)> {
-        self.exposures
-            .iter()
-            .map(|(k, &exp)| {
-                let complexity = self.get_complexity(k);
-                let progress = exp / self.get_threshold(k);
-                (k.as_str(), progress, complexity)
-            })
-            .collect()
-    }
 
     /// Legacy compatibility: get the default threshold
     /// (maps to `default_threshold` for backwards compatibility)
@@ -707,7 +645,6 @@ fn learn_behavior(
 // Agent has learned: gathering food is most effective!
 // ```
 
-use crate::core::behavior_tree::BehaviorTree;
 
 /// Learning system that manages behavior tree evolution
 pub struct LearningSystem {
@@ -725,20 +662,12 @@ impl LearningSystem {
         }
     }
 
-    /// Create offspring behavior tree with learned weights
-    pub fn create_offspring(&self, parent_tree: &BehaviorTree) -> BehaviorTree {
-        parent_tree.clone_with_pruning(self.pruning_threshold)
-    }
 
     /// Adjust learning parameters
     pub fn set_learning_rate(&mut self, rate: f32) {
         self.learning_rate = rate.clamp(0.1, 2.0);
     }
 
-    /// Set genetic pruning threshold
-    pub fn set_pruning_threshold(&mut self, threshold: f32) {
-        self.pruning_threshold = threshold.clamp(0.1, 2.0);
-    }
 }
 
 /// Process observational learning for all young agents in a population

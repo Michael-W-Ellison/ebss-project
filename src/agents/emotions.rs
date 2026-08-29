@@ -81,10 +81,6 @@ impl EmotionState {
         None
     }
 
-    /// Clear attack memory (e.g., after successful retaliation or reconciliation)
-    pub fn clear_attacker(&mut self) {
-        self.last_attacker = None;
-    }
 
     /// Add anger toward a source
     pub fn add_anger(&mut self, source: EmotionSource, amount: f32) {
@@ -161,15 +157,6 @@ impl EmotionState {
         self.update_totals();
     }
 
-    /// Set curiosity level for a source (replaces existing value)
-    pub fn set_curiosity(&mut self, source: EmotionSource, amount: f32) {
-        if amount > 0.0 {
-            self.curiosity_sources.insert(source, amount.min(1.0));
-        } else {
-            self.curiosity_sources.remove(&source);
-        }
-        self.update_totals();
-    }
 
     /// The creature this agent is most afraid of, and how much.
     ///
@@ -223,24 +210,6 @@ impl EmotionState {
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
     }
 
-    /// How much of this agent's anger comes from each kind of source.
-    ///
-    /// Reported so that "a fifth of the settlement would fight" can be broken
-    /// into what it would fight, which is the difference between a model that
-    /// does something and one that only looks like it might.
-    pub fn anger_by_kind(&self) -> (f32, f32, f32) {
-        let mut at_people = 0.0;
-        let mut at_creatures = 0.0;
-        let mut at_everything_else = 0.0;
-        for (source, amount) in self.anger_sources.iter() {
-            match source {
-                EmotionSource::Agent(_) => at_people += amount,
-                EmotionSource::Creature(_) => at_creatures += amount,
-                _ => at_everything_else += amount,
-            }
-        }
-        (at_people, at_creatures, at_everything_else)
-    }
 
     fn worst_creature(sources: &BTreeMap<EmotionSource, f32>) -> Option<(&str, f32)> {
         sources
@@ -967,10 +936,6 @@ impl RelationshipMap {
             .collect()
     }
 
-    /// Remove a relationship
-    pub fn remove_relationship(&mut self, agent_id: &Uuid) {
-        self.relationships.remove(agent_id);
-    }
 
     /// Get all relationships
     pub fn get_all(&self) -> &HashMap<Uuid, Relationship> {
@@ -1008,13 +973,6 @@ impl RelationshipMap {
             .collect()
     }
 
-    /// Get relationships by quality
-    pub fn get_by_quality(&self, min_bond: f32) -> Vec<&Relationship> {
-        self.relationships
-            .values()
-            .filter(|r| r.bond_strength >= min_bond)
-            .collect()
-    }
 
     /// Count incompatible trait conflicts with another agent
     pub fn count_trait_conflicts(

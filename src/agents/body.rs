@@ -97,10 +97,6 @@ impl Injury {
         (self.healing_progress - max_heal).abs() < 0.01 || self.healing_progress >= max_heal
     }
 
-    /// Get permanent damage from this injury
-    pub fn permanent_damage(&self) -> f32 {
-        self.damage_taken - self.max_recoverable_damage()
-    }
 }
 
 /// Body part types
@@ -158,15 +154,7 @@ impl BodyPartType {
         }
     }
 
-    /// Check if this is an arm
-    pub fn is_arm(&self) -> bool {
-        matches!(self, BodyPartType::LeftArm | BodyPartType::RightArm)
-    }
 
-    /// Check if this is a leg
-    pub fn is_leg(&self) -> bool {
-        matches!(self, BodyPartType::LeftLeg | BodyPartType::RightLeg)
-    }
 }
 
 /// Status of a body part
@@ -515,49 +503,7 @@ impl Body {
                 .unwrap_or(false)
     }
 
-    /// Get number of functional arms
-    pub fn functional_arms(&self) -> u8 {
-        let mut count = 0;
-        if self
-            .parts
-            .get(&BodyPartType::LeftArm)
-            .map(|p| p.is_functional())
-            .unwrap_or(false)
-        {
-            count += 1;
-        }
-        if self
-            .parts
-            .get(&BodyPartType::RightArm)
-            .map(|p| p.is_functional())
-            .unwrap_or(false)
-        {
-            count += 1;
-        }
-        count
-    }
 
-    /// Get number of functional legs
-    pub fn functional_legs(&self) -> u8 {
-        let mut count = 0;
-        if self
-            .parts
-            .get(&BodyPartType::LeftLeg)
-            .map(|p| p.is_functional())
-            .unwrap_or(false)
-        {
-            count += 1;
-        }
-        if self
-            .parts
-            .get(&BodyPartType::RightLeg)
-            .map(|p| p.is_functional())
-            .unwrap_or(false)
-        {
-            count += 1;
-        }
-        count
-    }
 
     /// Get movement speed multiplier based on leg health
     pub fn movement_speed_multiplier(&self) -> f32 {
@@ -620,22 +566,7 @@ impl Body {
         }
     }
 
-    /// Unequip from a body part
-    pub fn unequip_from_part(&mut self, part_type: BodyPartType) -> Option<String> {
-        self.parts.get_mut(&part_type).and_then(|p| p.unequip())
-    }
 
-    /// Get all equipped items
-    pub fn get_equipped_items(&self) -> Vec<(BodyPartType, String)> {
-        self.parts
-            .iter()
-            .filter_map(|(part_type, part)| {
-                part.equipped_item
-                    .as_ref()
-                    .map(|item| (*part_type, item.clone()))
-            })
-            .collect()
-    }
 
     /// Equip an item of clothing/armor
     pub fn equip(&mut self, item: Equipment) {

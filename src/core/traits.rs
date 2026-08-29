@@ -553,13 +553,6 @@ impl TraitSet {
         self.traits.contains(trait_check)
     }
 
-    /// Get all emotion modifiers from all traits
-    pub fn get_combined_emotion_modifiers(&self) -> Vec<(crate::core::EmotionType, f32, f32)> {
-        self.traits
-            .iter()
-            .flat_map(|t| t.emotion_modifiers())
-            .collect()
-    }
 
     /// Get all traits as a slice
     pub fn get_traits(&self) -> &[Trait] {

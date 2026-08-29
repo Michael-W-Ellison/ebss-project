@@ -155,11 +155,6 @@ impl Episode {
         self
     }
 
-    /// Add tags for retrieval
-    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
-        self.tags = tags;
-        self
-    }
 
     /// Recall this memory (reinforces it)
     pub fn recall(&mut self, current_time: u64) {
@@ -365,12 +360,6 @@ impl EpisodicMemory {
             .collect()
     }
 
-    /// Get strongest memories
-    pub fn strongest_memories(&self, limit: usize) -> Vec<&Episode> {
-        let mut episodes: Vec<&Episode> = self.episodes.iter().collect();
-        episodes.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap());
-        episodes.into_iter().take(limit).collect()
-    }
 
     /// Consolidate memories (move important ones to long-term)
     pub fn consolidate_memories(&mut self) {

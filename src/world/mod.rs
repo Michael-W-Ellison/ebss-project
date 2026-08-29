@@ -1635,10 +1635,6 @@ impl World {
         self.animals.get_in_radius(center, radius)
     }
 
-    /// Get animals at a specific position
-    pub fn get_animals_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Animal> {
-        self.animals.get_at_position(position)
-    }
 
     /// Tame an animal (increase tame level)
     pub fn tame_animal(&mut self, animal_id: &uuid::Uuid, amount: f32) -> Result<(), String> {
@@ -1761,10 +1757,6 @@ impl World {
         self.plants.get_in_radius(center, radius)
     }
 
-    /// Get plants at a specific position
-    pub fn get_plants_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Plant> {
-        self.plants.get_at_position(position)
-    }
 
     /// Get all plants of a specific species
     pub fn get_plants_by_species(&self, species_id: &str) -> Vec<&crate::environment::Plant> {
@@ -1784,187 +1776,9 @@ impl World {
 
     // ===== Combat System =====
 
-    /// Attack an animal (agent vs animal combat)
-    pub fn agent_attack_animal(
-        &mut self,
-        agent_id: uuid::Uuid,
-        agent_weapon_damage: f32,
-        agent_mounted_bonus: f32,
-        animal_id: &uuid::Uuid,
-    ) -> Result<combat::CombatResult, String> {
-        // Get animal stats
-        let animal = self.animals.get(animal_id)
-            .ok_or_else(|| "Animal not found".to_string())?;
 
-        let animal_uuid = animal.id;
-        // Use stamina-based defense approximation (higher stamina = better defense)
-        let animal_armor = (animal.stamina / animal.max_stamina) * 0.2; // 0-20% defense
 
-        // Create attacker stats (agent)
-        let attacker_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: agent_weapon_damage,
-            mounted_bonus: agent_mounted_bonus,
-            ..Default::default()
-        };
 
-        // Create defender stats (animal)
-        let defender_stats = combat::CombatStats {
-            base_damage: 0.0, // Not attacking
-            armor_rating: animal_armor, // Natural armor
-            ..Default::default()
-        };
-
-        // Execute combat
-        let mut result = self.combat_manager.execute_combat(
-            agent_id,
-            animal_uuid,
-            &attacker_stats,
-            &defender_stats,
-            Some("weapon".to_string()),
-        );
-
-        // Apply damage to animal
-        let is_dead = self.damage_animal(&animal_uuid, result.damage_dealt)?;
-        result.defender_killed = is_dead;
-
-        Ok(result)
-    }
-
-    /// Animal attacks agent
-    pub fn animal_attack_agent(
-        &mut self,
-        animal_id: &uuid::Uuid,
-        agent_id: uuid::Uuid,
-        agent_armor: f32,
-    ) -> Result<combat::CombatResult, String> {
-        // Get animal stats
-        let animal = self.animals.get(animal_id)
-            .ok_or_else(|| "Animal not found".to_string())?;
-
-        // Base attack based on animal max health (larger animals hit harder)
-        let animal_damage = (animal.max_health / 20.0).min(20.0); // 5-20 damage range
-        let animal_uuid = animal.id;
-        let species_name = animal.species_id.clone();
-
-        // Create attacker stats (animal)
-        let attacker_stats = combat::CombatStats {
-            base_damage: animal_damage,
-            weapon_damage: 0.0,
-            ..Default::default()
-        };
-
-        // Create defender stats (agent)
-        let defender_stats = combat::CombatStats {
-            base_damage: 0.0,
-            armor_rating: agent_armor,
-            ..Default::default()
-        };
-
-        // Execute combat
-        let result = self.combat_manager.execute_combat(
-            animal_uuid,
-            agent_id,
-            &attacker_stats,
-            &defender_stats,
-            Some(format!("{} attack", species_name)),
-        );
-
-        // Note: Damage to agent must be applied by caller
-        Ok(result)
-    }
-
-    /// Agent vs agent combat
-    pub fn agent_attack_agent(
-        &mut self,
-        attacker_id: uuid::Uuid,
-        defender_id: uuid::Uuid,
-        attacker_weapon_damage: f32,
-        attacker_armor: f32,
-        attacker_mounted_bonus: f32,
-        defender_weapon_damage: f32,
-        defender_armor: f32,
-        defender_mounted_bonus: f32,
-    ) -> Result<combat::CombatResult, String> {
-        // Create attacker stats
-        let attacker_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: attacker_weapon_damage,
-            armor_rating: attacker_armor,
-            mounted_bonus: attacker_mounted_bonus,
-            ..Default::default()
-        };
-
-        // Create defender stats
-        let defender_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: defender_weapon_damage,
-            armor_rating: defender_armor,
-            mounted_bonus: defender_mounted_bonus,
-            ..Default::default()
-        };
-
-        // Execute combat
-        let result = self.combat_manager.execute_combat(
-            attacker_id,
-            defender_id,
-            &attacker_stats,
-            &defender_stats,
-            Some("weapon".to_string()),
-        );
-
-        // Note: Damage must be applied by caller to both agents
-        Ok(result)
-    }
-
-    /// Animal vs animal combat
-    pub fn animal_attack_animal(
-        &mut self,
-        attacker_id: &uuid::Uuid,
-        defender_id: &uuid::Uuid,
-    ) -> Result<combat::CombatResult, String> {
-        // Get both animals
-        let attacker = self.animals.get(attacker_id)
-            .ok_or_else(|| "Attacker animal not found".to_string())?;
-        let defender = self.animals.get(defender_id)
-            .ok_or_else(|| "Defender animal not found".to_string())?;
-
-        let attacker_uuid = attacker.id;
-        let attacker_damage = (attacker.max_health / 20.0).min(20.0); // Based on size
-        let attacker_defense = (attacker.stamina / attacker.max_stamina) * 0.2;
-
-        let defender_uuid = defender.id;
-        let defender_damage = (defender.max_health / 20.0).min(20.0);
-        let defender_defense = (defender.stamina / defender.max_stamina) * 0.2;
-
-        // Create stats
-        let attacker_stats = combat::CombatStats {
-            base_damage: attacker_damage,
-            armor_rating: attacker_defense,
-            ..Default::default()
-        };
-
-        let defender_stats = combat::CombatStats {
-            base_damage: defender_damage,
-            armor_rating: defender_defense,
-            ..Default::default()
-        };
-
-        // Execute combat
-        let mut result = self.combat_manager.execute_combat(
-            attacker_uuid,
-            defender_uuid,
-            &attacker_stats,
-            &defender_stats,
-            None,
-        );
-
-        // Apply damage to defender
-        let is_dead = self.damage_animal(&defender_uuid, result.damage_dealt)?;
-        result.defender_killed = is_dead;
-
-        Ok(result)
-    }
 
     /// Get combat statistics for an entity
     pub fn get_combat_stats(&self, entity_id: &uuid::Uuid) -> combat::CombatStatistics {
@@ -1988,88 +1802,14 @@ impl World {
         self.crafting_manager.get_recipes_by_category(category)
     }
 
-    /// Get all available recipes
-    pub fn get_all_recipes(&self) -> Vec<&crafting::CraftingRecipe> {
-        self.crafting_manager.all_recipes()
-    }
 
-    /// Attempt to craft an item (checks materials, skills, tools)
-    pub fn attempt_craft(
-        &mut self,
-        recipe_id: &str,
-        crafter_id: uuid::Uuid,
-        inventory: &mut super::agents::agent::Inventory,
-        skills: &HashMap<String, u32>,
-        available_tools: &[crafting::ToolRequirement],
-    ) -> crafting::CraftingResult {
-        // Get inventory materials as HashMap
-        let mut inventory_materials = HashMap::new();
-        for (item_id, item) in inventory.get_all_items() {
-            inventory_materials.insert(item_id.clone(), item.quantity);
-        }
 
-        // Check if can craft
-        let check_result = self.crafting_manager.can_craft(
-            recipe_id,
-            &inventory_materials,
-            skills,
-            available_tools,
-        );
-
-        match check_result {
-            crafting::CraftingResult::Success { item_id, quantity } => {
-                // Get the recipe to consume materials
-                if let Some(recipe) = self.crafting_manager.get_recipe(recipe_id) {
-                    // Consume materials from inventory
-                    for material in &recipe.materials {
-                        inventory.remove_item(&material.material_id, material.quantity);
-                    }
-
-                    // Start crafting job
-                    if let Some(_job_id) = self.crafting_manager.start_crafting(recipe_id.to_string(), crafter_id) {
-                        crafting::CraftingResult::Success { item_id, quantity }
-                    } else {
-                        crafting::CraftingResult::RecipeNotFound
-                    }
-                } else {
-                    crafting::CraftingResult::RecipeNotFound
-                }
-            }
-            other => other,
-        }
-    }
-
-    /// Check if an agent can craft a recipe (without consuming materials)
-    pub fn can_craft_recipe(
-        &self,
-        recipe_id: &str,
-        inventory: &super::agents::agent::Inventory,
-        skills: &HashMap<String, u32>,
-        available_tools: &[crafting::ToolRequirement],
-    ) -> crafting::CraftingResult {
-        // Get inventory materials as HashMap
-        let mut inventory_materials = HashMap::new();
-        for (item_id, item) in inventory.get_all_items() {
-            inventory_materials.insert(item_id.clone(), item.quantity);
-        }
-
-        self.crafting_manager.can_craft(
-            recipe_id,
-            &inventory_materials,
-            skills,
-            available_tools,
-        )
-    }
 
     /// Get active crafting jobs for a crafter
     pub fn get_crafter_jobs(&self, crafter_id: &uuid::Uuid) -> Vec<&crafting::CraftingJob> {
         self.crafting_manager.get_crafter_jobs(crafter_id)
     }
 
-    /// Cancel a crafting job
-    pub fn cancel_crafting_job(&mut self, job_id: &uuid::Uuid) -> bool {
-        self.crafting_manager.cancel_job(job_id)
-    }
 
     // ===== Smelting System =====
 
@@ -2083,24 +1823,6 @@ impl World {
         self.heat_sources.can_smelt_material(material_id)
     }
 
-    /// Get detailed status of smelting in a heat source
-    pub fn get_smelting_status(&self, heat_source_id: &uuid::Uuid) -> Option<HeatSourceStatus> {
-        if let Some(heat_source) = self.heat_sources.get(heat_source_id) {
-            Some(HeatSourceStatus {
-                is_lit: heat_source.is_lit,
-                current_temperature: heat_source.current_temperature,
-                fuel_remaining: heat_source.fuel.iter().map(|f| f.amount).sum(),
-                contents: heat_source.contents.iter().map(|c| (
-                    c.material_id.clone(),
-                    c.quantity,
-                    c.heating_time,
-                    c.current_temp,
-                )).collect(),
-            })
-        } else {
-            None
-        }
-    }
 
     pub fn tick(&mut self) {
         self.tick += 1;
@@ -2487,24 +2209,6 @@ impl World {
 
     // ===== Building Production and Maintenance =====
 
-    /// Collect all pending production from buildings and return as a map of position -> resources
-    /// This allows agents to pick up resources from production buildings
-    pub fn collect_all_building_production(&mut self) -> HashMap<Position, Vec<resources::Resource>> {
-        let mut production_by_position = HashMap::new();
-
-        for building in &mut self.buildings {
-            if !building.is_completed() {
-                continue;
-            }
-
-            let resources = building.collect_production();
-            if !resources.is_empty() {
-                production_by_position.insert(building.position, resources);
-            }
-        }
-
-        production_by_position
-    }
 
     /// Collect production from a specific building at a position
     /// Returns the resources collected, or empty vec if no building or no production
@@ -2537,17 +2241,6 @@ impl World {
             .collect()
     }
 
-    /// Perform maintenance on a building at a specific position
-    /// Returns true if maintenance was performed
-    pub fn maintain_building_at(&mut self, position: Position, repair_amount: f32) -> bool {
-        for building in &mut self.buildings {
-            if building.position == position {
-                building.maintain(repair_amount);
-                return true;
-            }
-        }
-        false
-    }
 
     /// Get pending production info for display (without collecting)
     /// Returns map of position -> (building_type, resource_count)

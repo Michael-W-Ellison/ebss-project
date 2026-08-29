@@ -108,17 +108,7 @@ impl EventData {
         self
     }
 
-    /// Builder: set secondary agent
-    pub fn with_secondary_agent(mut self, agent_id: Uuid) -> Self {
-        self.secondary_agent_id = Some(agent_id);
-        self
-    }
 
-    /// Builder: set position
-    pub fn with_position(mut self, pos: (i32, i32, i32)) -> Self {
-        self.position = Some(pos);
-        self
-    }
 
     /// Builder: set severity
     pub fn with_severity(mut self, severity: f32) -> Self {
@@ -144,11 +134,6 @@ impl EventData {
         self
     }
 
-    /// Builder: add boolean data
-    pub fn with_bool(mut self, key: &str, value: bool) -> Self {
-        self.data.insert(key.to_string(), EventValue::Boolean(value));
-        self
-    }
 
     /// Get string value from data
     pub fn get_string(&self, key: &str) -> Option<&str> {
@@ -158,21 +143,7 @@ impl EventData {
         }
     }
 
-    /// Get integer value from data
-    pub fn get_int(&self, key: &str) -> Option<i64> {
-        match self.data.get(key) {
-            Some(EventValue::Integer(i)) => Some(*i),
-            _ => None,
-        }
-    }
 
-    /// Get float value from data
-    pub fn get_float(&self, key: &str) -> Option<f64> {
-        match self.data.get(key) {
-            Some(EventValue::Float(f)) => Some(*f),
-            _ => None,
-        }
-    }
 }
 
 /// Callback function type
@@ -213,13 +184,6 @@ impl EventFilter {
         }
     }
 
-    /// Create filter for specific agent
-    pub fn for_agent(agent_id: Uuid) -> Self {
-        Self {
-            agent_ids: vec![agent_id],
-            ..Default::default()
-        }
-    }
 
     /// Create filter for high-severity events
     pub fn high_severity() -> Self {
@@ -353,10 +317,6 @@ impl EventBus {
         }
     }
 
-    /// Get event history
-    pub fn get_history(&self) -> Vec<EventData> {
-        self.history.read().unwrap().clone()
-    }
 
     /// Get events of specific type from history
     pub fn get_events_by_type(&self, event_type: &EventType) -> Vec<EventData> {
@@ -369,18 +329,6 @@ impl EventBus {
             .collect()
     }
 
-    /// Get events for specific agent from history
-    pub fn get_events_for_agent(&self, agent_id: Uuid) -> Vec<EventData> {
-        self.history
-            .read()
-            .unwrap()
-            .iter()
-            .filter(|e| {
-                e.agent_id == Some(agent_id) || e.secondary_agent_id == Some(agent_id)
-            })
-            .cloned()
-            .collect()
-    }
 
     /// Get events in tick range from history
     pub fn get_events_in_range(&self, start_tick: u64, end_tick: u64) -> Vec<EventData> {
@@ -393,15 +341,7 @@ impl EventBus {
             .collect()
     }
 
-    /// Clear event history
-    pub fn clear_history(&self) {
-        self.history.write().unwrap().clear();
-    }
 
-    /// Get number of active subscriptions
-    pub fn subscription_count(&self) -> usize {
-        self.subscriptions.read().unwrap().len()
-    }
 
     /// Get history size
     pub fn history_size(&self) -> usize {

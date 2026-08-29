@@ -910,10 +910,6 @@ pub fn how_to_work(verb: &str, to: &str) -> Option<&'static Working> {
         .find(|working| working.verb == verb && working.to == to)
 }
 
-/// Everything that can be done to a named thing.
-pub fn what_can_be_done_to(what: &str) -> impl Iterator<Item = &'static Working> + '_ {
-    EVERY_WORKING.iter().filter(move |working| working.to == what)
-}
 
 /// The workings nobody arrives knowing.
 pub fn every_working_to_find_out() -> impl Iterator<Item = &'static Working> {
@@ -1585,14 +1581,6 @@ pub fn how_long_this_one_lasts(tool: &Tool, hand: f32) -> f32 {
     (tool.how_long_it_lasts * hand.clamp(0.4, 2.0)).max(1.0)
 }
 
-/// Every found thing a chain is short of, in the order the steps ask for them.
-///
-/// `what_is_wanting` names one. This names all of them, because a lashing can
-/// be had from flax or from cotton and a man standing in a meadow of the
-/// second should not spend his life walking after the first.
-pub fn everything_wanting(what: &str, holding: &impl Fn(&str) -> u32) -> Vec<&'static str> {
-    everything_wanting_knowing(what, holding, &|step: &Making| step.obvious)
-}
 
 /// The same, for somebody who knows more than he was born knowing.
 pub fn everything_wanting_knowing(

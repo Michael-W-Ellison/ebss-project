@@ -384,72 +384,6 @@ impl ResourceType {
         }
     }
 
-    /// Get gather time per unit (in ticks)
-    /// For raw materials: time to harvest/gather
-    /// For processed/finished: time to craft (base time, modified by skill)
-    pub fn gather_time(&self) -> u32 {
-        match self {
-            ResourceType::StrangePlant => 25,
-            // Picking leaves is quicker than anything else anybody does
-            ResourceType::Greens => 8,
-            ResourceType::Roots => 18,
-            // Scraping a crust off a flat, or breaking it out of a seam
-            ResourceType::Salt => 25,
-
-            // Basic - gathering
-            ResourceType::Wood => 20,
-            ResourceType::Stone => 30,
-            ResourceType::Iron => 40,
-            ResourceType::Food => 15,
-            ResourceType::Water => 5, // Very quick to drink/fill containers
-
-            // Agricultural - farming/harvesting
-            ResourceType::Grain => 25,
-            ResourceType::Flax => 25,
-            ResourceType::Herbs => 15,
-            ResourceType::Cotton => 25,
-
-            // Animal - from animals/butchering
-            ResourceType::Hides => 30,
-            ResourceType::Wool => 20,
-            ResourceType::Meat => 25,
-            ResourceType::Milk => 10,
-            ResourceType::Fish => 30,
-            ResourceType::Honey => 20,
-
-            // Mineral - mining/gathering
-            ResourceType::Clay => 20,
-            ResourceType::Sand => 15,
-            ResourceType::Coal => 35,
-
-            // Processed - crafting time
-            ResourceType::Flour => 10,      // Milling
-            ResourceType::Leather => 40,    // Tanning (slow process)
-            ResourceType::Cloth => 30,      // Weaving
-            ResourceType::Linen => 30,      // Weaving
-            ResourceType::Glass => 50,      // Glassblowing (difficult)
-            ResourceType::Bricks => 25,     // Brick making
-            ResourceType::Charcoal => 35,   // Charcoal burning
-            ResourceType::Rope => 20,       // Rope making
-            ResourceType::Paper => 30,      // Paper making
-            ResourceType::Dye => 15,        // Dye making
-
-            // Finished Food - preparation time
-            ResourceType::Bread => 20,      // Baking
-            ResourceType::Ale => 30,        // Brewing
-            ResourceType::Cheese => 25,     // Cheese making
-
-            // Finished Items - crafting time
-            ResourceType::Clothing => 40,   // Tailoring
-            ResourceType::Shoes => 35,      // Cobbling
-            ResourceType::Tools => 45,      // Tool making
-            ResourceType::Weapons => 60,    // Weapon crafting
-            ResourceType::Armor => 70,      // Armor crafting
-            ResourceType::Pottery => 30,    // Pottery making
-            ResourceType::Furniture => 50,  // Furniture making
-            ResourceType::Jewelry => 55,    // Jewelry crafting
-        }
-    }
 
     /// Check if this is a raw/harvestable resource (found in world)
     pub fn is_harvestable(&self) -> bool {
@@ -478,34 +412,8 @@ impl ResourceType {
         matches!(self, ResourceType::Fish)
     }
 
-    /// Check if this is an animal product (requires animals)
-    pub fn is_animal_product(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk
-        )
-    }
 
-    /// Check if this is a processed material (requires crafting)
-    pub fn is_processed(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Flour | ResourceType::Leather | ResourceType::Cloth |
-            ResourceType::Linen | ResourceType::Glass | ResourceType::Bricks |
-            ResourceType::Charcoal | ResourceType::Rope | ResourceType::Paper | ResourceType::Dye
-        )
-    }
 
-    /// Check if this is a finished good (final product)
-    pub fn is_finished_good(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Bread | ResourceType::Ale | ResourceType::Cheese |
-            ResourceType::Clothing | ResourceType::Shoes | ResourceType::Tools |
-            ResourceType::Weapons | ResourceType::Armor | ResourceType::Pottery |
-            ResourceType::Furniture | ResourceType::Jewelry
-        )
-    }
 
     /// Check if this is food/consumable
     pub fn is_consumable(&self) -> bool {

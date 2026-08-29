@@ -105,10 +105,6 @@ impl WorkingTask {
         self.status = TaskStatus::Completed;
     }
 
-    /// Cancel this task
-    pub fn cancel(&mut self) {
-        self.status = TaskStatus::Cancelled;
-    }
 
     /// Pause this task
     pub fn pause(&mut self) {
@@ -120,10 +116,6 @@ impl WorkingTask {
         self.status = TaskStatus::Active;
     }
 
-    /// Get elapsed time (if started)
-    pub fn elapsed_time(&self, current_time: u64) -> Option<u64> {
-        self.started.map(|start| current_time.saturating_sub(start))
-    }
 
     /// Is this task overdue?
     pub fn is_overdue(&self, current_time: u64) -> bool {

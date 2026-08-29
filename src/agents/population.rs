@@ -1297,25 +1297,7 @@ impl Population {
         self.agents.iter().find(|a| a.id == id)
     }
 
-    /// Get mutable agent by ID
-    pub fn get_agent_mut(&mut self, id: Uuid) -> Option<&mut Agent> {
-        self.agents.iter_mut().find(|a| a.id == id)
-    }
 
-    /// Get all agents within a certain distance of a position
-    pub fn agents_near(&self, position: (i32, i32, i32), radius: f32) -> Vec<&Agent> {
-        self.agents
-            .iter()
-            .filter(|a| a.state.is_alive)
-            .filter(|a| {
-                let dx = (a.state.position.0 - position.0) as f32;
-                let dy = (a.state.position.1 - position.1) as f32;
-                let dz = (a.state.position.2 - position.2) as f32;
-                let distance = (dx * dx + dy * dy + dz * dz).sqrt();
-                distance <= radius
-            })
-            .collect()
-    }
 
     /// Process social interactions between nearby agents
     ///
@@ -2927,10 +2909,6 @@ impl Population {
         std::mem::take(&mut self.pending_events)
     }
 
-    /// Get pending events without draining (for read-only access)
-    pub fn get_pending_events(&self) -> &[SimulationEvent] {
-        &self.pending_events
-    }
 }
 
 /// Statistics about observational learning in the population
@@ -2981,10 +2959,6 @@ fn calculate_social_range_squared(traits: &[Trait]) -> f32 {
     range * range
 }
 
-/// Get the base social range for a set of traits (in tiles, not squared)
-pub fn get_social_range(traits: &[Trait]) -> f32 {
-    calculate_social_range_squared(traits).sqrt()
-}
 
 impl Default for Population {
     fn default() -> Self {

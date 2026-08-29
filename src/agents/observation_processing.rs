@@ -309,10 +309,6 @@ impl BehaviorContext {
         self
     }
 
-    pub fn with_activity(mut self, activity: String) -> Self {
-        self.current_activity = Some(activity);
-        self
-    }
 }
 
 /// Check if an action type is relevant to the current context

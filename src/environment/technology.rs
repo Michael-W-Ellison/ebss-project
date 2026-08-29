@@ -216,15 +216,7 @@ impl Technology {
         self
     }
 
-    pub fn with_recipe(mut self, recipe_id: String) -> Self {
-        self.recipe_id = Some(recipe_id);
-        self
-    }
 
-    pub fn with_skill_type(mut self, skill_type: String) -> Self {
-        self.skill_type = Some(skill_type);
-        self
-    }
 
     /// Check if agent meets prerequisites
     pub fn can_discover(&self, known_techs: &HashMap<String, DiscoveryRecord>) -> bool {
@@ -332,17 +324,6 @@ impl TechnologyKnowledge {
         }
     }
 
-    /// Get all known technologies at a minimum state
-    pub fn get_technologies_at_state(&self, min_state: TechnologyState, skill_level: i32) -> Vec<String> {
-        self.known_technologies
-            .iter()
-            .filter(|(_, record)| {
-                let state = record.get_state(skill_level);
-                state as u8 >= min_state as u8
-            })
-            .map(|(id, _)| id.clone())
-            .collect()
-    }
 
     /// Get statistics
     pub fn stats(&self) -> TechnologyStats {
@@ -421,10 +402,6 @@ impl TechnologyRegistry {
         self.first_discoverers.contains_key(tech_id)
     }
 
-    /// Get all technologies
-    pub fn all_technologies(&self) -> Vec<&Technology> {
-        self.technologies.values().collect()
-    }
 
     /// Get technologies that can be discovered with given prerequisites
     pub fn available_for_discovery(&self, known_techs: &HashMap<String, DiscoveryRecord>) -> Vec<&Technology> {

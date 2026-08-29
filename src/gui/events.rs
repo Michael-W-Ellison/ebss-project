@@ -388,10 +388,6 @@ impl EventLog {
         filtered
     }
 
-    /// Get the most recent event tick
-    pub fn latest_tick(&self) -> Option<u32> {
-        self.events.back().map(|e| e.tick)
-    }
 }
 
 /// State for the timeline panel

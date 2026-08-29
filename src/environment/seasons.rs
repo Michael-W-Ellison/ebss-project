@@ -288,10 +288,6 @@ impl SeasonalCalendar {
         self.ticks_per_day
     }
 
-    /// How many ticks a year lasts on this calendar.
-    pub fn ticks_per_year(&self) -> u32 {
-        self.ticks_per_day * DAYS_PER_YEAR
-    }
 
     /// How many whole days have passed since the world began.
     pub fn days_elapsed(&self) -> u32 {

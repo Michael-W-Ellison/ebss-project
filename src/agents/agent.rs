@@ -256,13 +256,6 @@ impl InventoryItem {
         }
     }
 
-    /// Check if item can be repaired (not broken, has durability < max)
-    pub fn can_be_repaired(&self) -> bool {
-        match (self.current_durability, self.max_durability) {
-            (Some(current), Some(max)) => current > 0.0 && current < max,
-            _ => false,
-        }
-    }
 
     /// Repair item to full durability
     pub fn repair(&mut self) {
@@ -587,10 +580,6 @@ impl Inventory {
         }
     }
 
-    /// Increase max weight capacity (from backpack, etc.)
-    pub fn add_capacity(&mut self, additional_weight: f32) {
-        self.max_weight += additional_weight;
-    }
 }
 
 impl Default for Inventory {
@@ -636,32 +625,6 @@ pub fn what_a_body_this_age_eats(years: u32) -> f32 {
     }
 }
 
-/// What a body of this many years can bring to moving, carrying and working.
-///
-/// The specification's table, as a share of a grown adult's ten: one at two
-/// years, climbing to ten at sixteen, holding until forty and falling away
-/// after. At seventy it is over.
-pub fn what_a_body_this_age_can_do(years: u32) -> f32 {
-    let out_of_ten = match years {
-        0..=1 => 0,
-        2..=3 => 1,
-        4..=5 => 2,
-        6..=7 => 3,
-        8..=9 => 4,
-        10..=11 => 5,
-        12 => 6,
-        13 => 7,
-        14 => 8,
-        15 => 9,
-        16..=39 => 10,
-        40..=49 => 9,
-        50..=54 => 8,
-        55..=59 => 7,
-        60..=64 => 6,
-        _ => 5,
-    };
-    out_of_ten as f32 / 10.0
-}
 
 /// Life stages of an agent, in years.
 ///
@@ -2299,13 +2262,6 @@ impl Agent {
             .insert(Self::what_i_call_that_plant(kind, good));
     }
 
-    /// How many of the strange plants this agent has an opinion about
-    pub fn how_many_plants_i_know(&self) -> usize {
-        self.found_out
-            .iter()
-            .filter(|what| what.starts_with("plant:"))
-            .count()
-    }
 
     /// The work a pair of hands wants to be equipped for, in the order it
     /// wants them.
@@ -3453,91 +3409,9 @@ impl Agent {
         self.cached_defense_bonus = defense_multiplier;
     }
 
-    /// Get the current healing multiplier from nearby buildings
-    pub fn get_healing_bonus(&self) -> f32 {
-        self.cached_healing_bonus
-    }
 
-    /// Get the current defense multiplier from nearby buildings
-    pub fn get_defense_bonus(&self) -> f32 {
-        self.cached_defense_bonus
-    }
 
-    /// Get the productivity bonus for crafting/working based on nearby buildings
-    /// This considers the agent's current position and the buildings they're at
-    /// Returns the best productivity bonus from buildings within working distance (3 tiles)
-    pub fn get_productivity_bonus(&self) -> f32 {
-        const WORKING_DISTANCE_SQ: f32 = 9.0; // 3 tiles
 
-        let pos = self.state.position;
-        let mut best_bonus: f32 = 1.0;
-
-        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
-            let dx = (pos.0 - building_pos.x) as f32;
-            let dy = (pos.1 - building_pos.y) as f32;
-            let dist_sq = dx * dx + dy * dy;
-
-            // Only consider buildings within working distance
-            if dist_sq <= WORKING_DISTANCE_SQ {
-                let bonus = building_type.productivity_bonus();
-                if bonus > best_bonus {
-                    best_bonus = bonus;
-                }
-            }
-        }
-
-        best_bonus
-    }
-
-    /// Get the productivity bonus for a specific skill type based on nearby buildings
-    /// Different buildings give bonuses for different types of work
-    pub fn get_productivity_bonus_for_skill(&self, skill_type: super::SkillType) -> f32 {
-        use crate::world::BuildingType;
-        use super::SkillType;
-
-        const WORKING_DISTANCE_SQ: f32 = 9.0;
-
-        let pos = self.state.position;
-        let mut best_bonus: f32 = 1.0;
-
-        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
-            let dx = (pos.0 - building_pos.x) as f32;
-            let dy = (pos.1 - building_pos.y) as f32;
-            let dist_sq = dx * dx + dy * dy;
-
-            if dist_sq <= WORKING_DISTANCE_SQ {
-                // Check if this building provides bonus for this skill type
-                let provides_bonus = match (building_type, skill_type) {
-                    // Metalworking buildings
-                    (BuildingType::Smithy, SkillType::Metalworking | SkillType::Smelting) => true,
-                    (BuildingType::Forge, SkillType::Smelting) => true,
-                    // Crafting buildings
-                    (BuildingType::Workshop, SkillType::Crafting | SkillType::Carpentry) => true,
-                    // Cooking buildings
-                    (BuildingType::Bakery | BuildingType::Mill | BuildingType::Butchery |
-                     BuildingType::Brewery | BuildingType::Dairy, SkillType::Cooking) => true,
-                    // Textile buildings
-                    (BuildingType::WeaverHut | BuildingType::TailorShop, SkillType::Crafting) => true,
-                    // Leather buildings
-                    (BuildingType::Tannery | BuildingType::CobblerShop, SkillType::Leatherworking) => true,
-                    // Masonry buildings
-                    (BuildingType::PotteryKiln | BuildingType::Brickyard, SkillType::Masonry) => true,
-                    // Farming buildings
-                    (BuildingType::Farm | BuildingType::AnimalPen, SkillType::Farming) => true,
-                    _ => false,
-                };
-
-                if provides_bonus {
-                    let bonus = building_type.productivity_bonus();
-                    if bonus > best_bonus {
-                        best_bonus = bonus;
-                    }
-                }
-            }
-        }
-
-        best_bonus
-    }
 
     /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
@@ -3948,13 +3822,6 @@ impl Agent {
         }
     }
 
-    /// Update body temperature based on environmental conditions
-    ///
-    /// # Arguments
-    /// * `climate` - Environmental climate conditions
-    pub fn update_temperature(&mut self, climate: &super::Climate) {
-        self.update_temperature_with_shelter(climate, false);
-    }
 
     /// Update body temperature, accounting for whether the agent is under cover
     ///
@@ -4016,16 +3883,6 @@ impl Agent {
         !self.exposure_status.active_exposures.is_empty()
     }
 
-    /// Get recommended shelter-seeking priority (0.0 to 1.0)
-    pub fn shelter_priority(&self) -> f32 {
-        if self.exposure_status.is_critical() {
-            1.0 // Critical - seek shelter immediately
-        } else if !self.exposure_status.active_exposures.is_empty() {
-            0.5 + (self.exposure_status.total_severity() * 0.5) // Moderate priority
-        } else {
-            0.0 // No exposure risk
-        }
-    }
 
     /// Respond emotionally to a threat
     ///
@@ -4279,38 +4136,6 @@ impl Agent {
         emotion_type
     }
 
-    /// Respond emotionally to harm to a loved one
-    ///
-    /// # Arguments
-    /// * `loved_one_id` - UUID of the loved one
-    /// * `harm_severity` - How severe the harm was (0.0 to 1.0)
-    /// * `source` - Source of the harm
-    pub fn respond_to_loved_one_harm(&mut self, loved_one_id: &Uuid, harm_severity: f32, source: super::EmotionSource) {
-        // Check if this is actually a loved one
-        if let Some(relationship) = self.relationships.get_relationship(loved_one_id) {
-            if relationship.is_loved_one() {
-                // Sadness scales with bond strength and harm severity
-                let sadness_amount = relationship.bond_strength * harm_severity * 0.8;
-                self.emotions.add_sadness_with_traits(source.clone(), sadness_amount, &self.traits);
-
-                // Also potentially add fear or anger based on agent's ability to protect
-                // Parents protecting children might feel anger if they can fight back
-                if relationship.relationship_type == super::RelationshipType::Child {
-                    // Calculate if agent is strong enough to retaliate
-                    let agent_strength = self.state.health / 100.0;
-
-                    // Assume medium threat strength for the source
-                    let assessment = super::ThreatAssessment::assess(agent_strength, 0.7, source.clone());
-
-                    if assessment.can_overcome {
-                        self.emotions.add_anger_with_traits(source, 0.5, &self.traits);
-                    } else {
-                        self.emotions.add_fear_with_traits(source, 0.3, &self.traits);
-                    }
-                }
-            }
-        }
-    }
 
     /// Respond emotionally to death of a loved one
     ///
@@ -4330,60 +4155,20 @@ impl Agent {
         }
     }
 
-    /// Check if agent would flee from current emotional state
-    pub fn would_flee(&self) -> bool {
-        self.emotions.should_flee()
-    }
 
-    /// Check if agent would attack from current emotional state
-    pub fn would_attack(&self) -> bool {
-        self.emotions.should_attack()
-    }
 
     /// Get agent's dominant emotion
     pub fn dominant_emotion(&self) -> Option<super::EmotionType> {
         self.emotions.dominant_emotion()
     }
 
-    /// Share information with another agent
-    ///
-    /// # Arguments
-    /// * `info` - The information to share
-    /// * `recipient` - The agent receiving the information
-    /// * `timestamp` - Current simulation time
-    pub fn share_information(&self, mut info: super::Information, recipient: &mut Agent, timestamp: u64) {
-        // Check if this agent would distort the information
-        if let Some(distortion_trait) = self.traits.would_distort_info() {
-            // Apply distortion based on trait
-            info = info.distort(distortion_trait, self.id);
 
-            // Gain happiness from distortion
-            // This would integrate with a happiness/mood system
-        }
-
-        // Recipient receives information
-        recipient.knowledge.receive_information(info, self.id, recipient.id, &recipient.traits, timestamp);
-    }
-
-    /// Learn information directly (observed firsthand)
-    ///
-    /// # Arguments
-    /// * `info` - The information learned
-    /// * `timestamp` - Current simulation time
-    pub fn learn_information(&mut self, info: super::Information, timestamp: u64) {
-        // When learning firsthand, source is self
-        self.knowledge.receive_information(info, self.id, self.id, &self.traits, timestamp);
-    }
 
     /// Check if agent believes specific information
     pub fn believes(&self, info_id: &Uuid) -> bool {
         self.knowledge.believes(info_id)
     }
 
-    /// Get trust level for another agent
-    pub fn get_trust_in(&self, other_agent: &Uuid) -> f32 {
-        self.knowledge.get_trust(other_agent)
-    }
 
     /// Observe a resource at a position
     /// Note: Resource knowledge is tracked separately from gossip knowledge
@@ -4397,50 +4182,8 @@ impl Agent {
         // This method exists for API compatibility
     }
 
-    /// Record that information from another agent was verified as correct
-    pub fn verify_information_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
-        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
-            rel.positive_interaction(2, current_tick);
-        }
-    }
 
-    /// Record that information from another agent was incorrect
-    pub fn information_was_wrong_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
-        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
-            rel.negative_interaction(3, current_tick);
-        }
-    }
 
-    /// React to learning about another agent's trait
-    ///
-    /// # Arguments
-    /// * `other_agent` - The other agent's UUID
-    /// * `other_trait` - The trait learned about
-    ///
-    /// Example: Believer learns Atheist has Atheist trait → relationship weakens
-    pub fn react_to_trait_info(&mut self, other_agent: &Uuid, other_trait: super::Trait) {
-        // Check for trait conflicts
-        if self.traits.has_trait(&super::Trait::Believer) && other_trait == super::Trait::Atheist {
-            // Believer dislikes Atheist
-            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
-                relationship.weaken(0.2);
-            } else {
-                // Create negative relationship
-                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
-                new_rel.bond_strength = -0.2;
-                self.relationships.add_relationship(new_rel);
-            }
-        } else if self.traits.has_trait(&super::Trait::Atheist) && other_trait == super::Trait::Believer {
-            // Atheist may dislike Believer
-            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
-                relationship.weaken(0.1);
-            } else {
-                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
-                new_rel.bond_strength = -0.1;
-                self.relationships.add_relationship(new_rel);
-            }
-        }
-    }
 
     /// Regenerate preferences based on current traits
     ///
@@ -4760,20 +4503,8 @@ impl Agent {
         self.observational_learning.learning_rate() * self.fatigue.learning_modifier()
     }
 
-    /// Get effective skill modifier (affected by fatigue)
-    pub fn skill_effectiveness(&self) -> f32 {
-        self.fatigue.skill_modifier()
-    }
 
-    /// Get decision quality modifier (affected by fatigue)
-    pub fn decision_quality(&self) -> f32 {
-        self.fatigue.decision_modifier()
-    }
 
-    /// Get injury chance modifier (affected by fatigue)
-    pub fn injury_risk_modifier(&self) -> f32 {
-        self.fatigue.injury_chance_modifier()
-    }
 
     /// Equip a transport (activate it)
     /// Updates inventory capacity automatically
@@ -5124,13 +4855,6 @@ impl Agent {
         fertility.clamp(0.0, 1.0)
     }
 
-    /// Get effective reproduction drive (base drive * personal modifier)
-    pub fn effective_reproduction_drive(&self) -> f32 {
-        let base_drive = self.drives.get(DriveType::Reproduction)
-            .map(|d| d.value)
-            .unwrap_or(0.0);
-        (base_drive * self.reproduction_drive_modifier).clamp(0.0, 1.0)
-    }
 
     /// Create a default behavior tree for a specific drive
     fn create_default_tree_for_drive(drive_type: DriveType) -> BehaviorTree {
@@ -5240,28 +4964,6 @@ impl Agent {
             .find(|tree| tree.name.starts_with(&format!("{:?}", most_urgent_drive.drive_type)))
     }
 
-    /// Convert a behavior tree action into an actual environment action
-    pub fn action_from_tree_result(&self, action_name: &str) -> Action {
-        match action_name {
-            "eat_stored_food" | "gather_food" | "hunt" => Action::Eat { food_type: "generic".to_string() },
-            "sleep" => Action::Sleep { duration: 10 },
-            "find_shelter" | "seek_shelter" => Action::Move { target: self.find_nearest_shelter() },
-            "build_shelter" | "build_structure" => Action::Build {
-                structure_type: "shelter".to_string(),
-                position: self.state.position
-            },
-            "mine_resources" | "gather_resources" => Action::Gather { resource_type: "generic".to_string() },
-            "process_materials" => Action::Craft { item_type: "processed_material".to_string() },
-            "explore" | "experiment" => Action::Explore { direction: self.random_direction() },
-            "find_agents" | "socialize" => Action::Socialize { target_agent_id: Uuid::nil() },
-            "craft_tools" | "craft_weapon" => Action::Craft { item_type: "tool".to_string() },
-            "store_resources" => Action::Store { item_type: "resource".to_string(), amount: 1 },
-            "plant_crops" | "harvest" => Action::Gather { resource_type: "food".to_string() },
-            "reproduce" => Action::Wait, // Special handling needed
-            "seek_luxury" | "decorate" => Action::Gather { resource_type: "luxury".to_string() },
-            _ => Action::Wait,
-        }
-    }
 
     /// Note how an attempt turned out, so the agent can stop doing what does
     /// not work and do more of what does.
@@ -5787,15 +5489,6 @@ impl Agent {
         nearest_shelter.unwrap_or(current_pos)
     }
 
-    fn random_direction(&self) -> (i32, i32, i32) {
-        use rand::Rng;
-        let mut rng = crate::core::dice::roll();
-        (
-            rng.gen_range(-1..=1),
-            rng.gen_range(-1..=1),
-            0
-        )
-    }
 
     // ===== Sensory Processing Integration =====
 
@@ -5872,237 +5565,9 @@ impl Agent {
 
     // ===== Equipment Management =====
 
-    /// Equip an item from inventory into a specific slot
-    pub fn equip_from_inventory(&mut self, item_id: &str, slot: super::equipment::EquipmentSlot) -> Result<(), String> {
-        // Check if item exists in inventory
-        if !self.inventory.has_item(item_id, 1) {
-            return Err(format!("Item '{}' not found in inventory", item_id));
-        }
 
-        // Item registry: maps item_id to (equipment_type, material, quality)
-        let (equipment_type, material, quality) = Self::lookup_item_properties(item_id, slot);
 
-        let equipment_item = super::equipment::EquipmentItem::new(
-            item_id.to_string(),
-            equipment_type,
-            slot,
-            material,
-            quality,
-        );
 
-        // Equip the item (this returns the previously equipped item if any)
-        match self.equipment.equip(equipment_item) {
-            Ok(old_item) => {
-                // Remove from inventory
-                self.inventory.remove_item(item_id, 1);
-
-                // If there was an old item, add it back to inventory
-                if let Some(old) = old_item {
-                    self.inventory.add_item(InventoryItem::new(old.name, 1));
-                }
-
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Lookup equipment properties from item registry
-    /// Returns (equipment_type, material, quality) for the given item
-    fn lookup_item_properties(
-        item_id: &str,
-        slot: super::equipment::EquipmentSlot,
-    ) -> (super::equipment::EquipmentType, super::equipment::EquipmentMaterial, super::skills::Quality) {
-        use super::equipment::{EquipmentType, EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial};
-        use super::skills::Quality;
-
-        // Normalize item_id for matching
-        let item_lower = item_id.to_lowercase();
-
-        // Match based on item name patterns
-        // Tools
-        if item_lower.contains("pickaxe") || item_lower.contains("pick") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Pickaxe, mat, qual);
-        }
-        if item_lower.contains("axe") && !item_lower.contains("pick") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Hatchet, mat, qual);
-        }
-        if item_lower.contains("shovel") || item_lower.contains("spade") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Shovel, mat, qual);
-        }
-        if item_lower.contains("hammer") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Hammer, mat, qual);
-        }
-        if item_lower.contains("sickle") || item_lower.contains("scythe") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Sickle, mat, qual);
-        }
-        if item_lower.contains("fishing") || item_lower.contains("rod") {
-            return (EquipmentType::FishingRod, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
-        }
-
-        // Weapons
-        if item_lower.contains("sword") || item_lower.contains("blade") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Sword, mat, qual);
-        }
-        if item_lower.contains("spear") || item_lower.contains("lance") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Spear, mat, qual);
-        }
-        if item_lower.contains("mace") || item_lower.contains("club") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Mace, mat, qual);
-        }
-        if item_lower.contains("dagger") || item_lower.contains("knife") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Dagger, mat, qual);
-        }
-        if item_lower.contains("bow") && !item_lower.contains("cross") {
-            return (EquipmentType::Bow, EquipmentMaterial::Wood(WoodMaterial::Yew), Quality::Basic);
-        }
-        if item_lower.contains("crossbow") {
-            return (EquipmentType::Crossbow, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
-        }
-        if item_lower.contains("shield") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Shield, mat, qual);
-        }
-
-        // Armor
-        if item_lower.contains("plate") || item_lower.contains("heavy armor") {
-            return (EquipmentType::HeavyArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
-        }
-        if item_lower.contains("chain") || item_lower.contains("mail") {
-            return (EquipmentType::MediumArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
-        }
-        if item_lower.contains("leather armor") || item_lower.contains("hide armor") {
-            return (EquipmentType::LightArmor, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
-        }
-
-        // Clothing
-        if item_lower.contains("fur") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Fur), Quality::Basic);
-        }
-        if item_lower.contains("wool") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Wool), Quality::Basic);
-        }
-        if item_lower.contains("leather") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
-        }
-        if item_lower.contains("linen") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic);
-        }
-        if item_lower.contains("cotton") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Cotton), Quality::Basic);
-        }
-
-        // Utility
-        if item_lower.contains("torch") {
-            return (EquipmentType::Torch, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
-        }
-        if item_lower.contains("lantern") || item_lower.contains("lamp") {
-            return (EquipmentType::Lantern, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
-        }
-
-        // Default based on slot type
-        match slot {
-            super::equipment::EquipmentSlot::MainHand | super::equipment::EquipmentSlot::OffHand => {
-                (EquipmentType::Pickaxe, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic)
-            }
-            _ => (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic)
-        }
-    }
-
-    /// Parse material and quality from item name
-    fn parse_material_quality(item_name: &str, is_tool_or_weapon: bool) -> (super::equipment::EquipmentMaterial, super::skills::Quality) {
-        use super::equipment::{EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial, StoneMaterial};
-        use super::skills::Quality;
-
-        // Parse quality (using Quality enum variants: Pathetic, Crude, Basic, Moderate, Advanced, Expert)
-        let quality = if item_name.contains("masterwork") || item_name.contains("master") || item_name.contains("expert") {
-            Quality::Expert
-        } else if item_name.contains("excellent") || item_name.contains("fine") || item_name.contains("advanced") {
-            Quality::Advanced
-        } else if item_name.contains("good") || item_name.contains("quality") || item_name.contains("moderate") {
-            Quality::Moderate
-        } else if item_name.contains("poor") || item_name.contains("crude") {
-            Quality::Crude
-        } else if item_name.contains("pathetic") || item_name.contains("terrible") {
-            Quality::Pathetic
-        } else {
-            Quality::Basic
-        };
-
-        // Parse material
-        let material = if is_tool_or_weapon {
-            // Tools and weapons use metal or wood
-            if item_name.contains("steel") {
-                EquipmentMaterial::Metal(MetalMaterial::Steel)
-            } else if item_name.contains("iron") {
-                EquipmentMaterial::Metal(MetalMaterial::Iron)
-            } else if item_name.contains("bronze") {
-                EquipmentMaterial::Metal(MetalMaterial::Bronze)
-            } else if item_name.contains("copper") {
-                EquipmentMaterial::Metal(MetalMaterial::Copper)
-            } else if item_name.contains("stone") {
-                EquipmentMaterial::Stone(StoneMaterial::Flint)
-            } else if item_name.contains("oak") {
-                EquipmentMaterial::Wood(WoodMaterial::Oak)
-            } else if item_name.contains("birch") {
-                EquipmentMaterial::Wood(WoodMaterial::Birch)
-            } else if item_name.contains("pine") {
-                EquipmentMaterial::Wood(WoodMaterial::Pine)
-            } else if item_name.contains("yew") {
-                EquipmentMaterial::Wood(WoodMaterial::Yew)
-            } else if item_name.contains("wood") {
-                EquipmentMaterial::Wood(WoodMaterial::Oak)
-            } else {
-                // Default to wood for basic tools
-                EquipmentMaterial::Wood(WoodMaterial::Oak)
-            }
-        } else {
-            // Armor and clothing
-            if item_name.contains("leather") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Leather)
-            } else if item_name.contains("fur") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Fur)
-            } else if item_name.contains("wool") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Wool)
-            } else if item_name.contains("linen") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
-            } else if item_name.contains("cotton") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Cotton)
-            } else if item_name.contains("hide") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Hide)
-            } else {
-                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
-            }
-        };
-
-        (material, quality)
-    }
-
-    /// Unequip an item from a slot and put it in inventory
-    pub fn unequip_to_inventory(&mut self, slot: super::equipment::EquipmentSlot) -> Result<(), String> {
-        match self.equipment.unequip(slot) {
-            Some(item) => {
-                // Add to inventory
-                if self.inventory.add_item(InventoryItem::new(item.name.clone(), 1)) {
-                    Ok(())
-                } else {
-                    // Inventory full, re-equip the item
-                    self.equipment.equip(item).ok();
-                    Err("Inventory full, cannot unequip".to_string())
-                }
-            }
-            None => Err(format!("No item equipped in slot {:?}", slot)),
-        }
-    }
 
     /// Get reference to currently equipped item in a slot
     pub fn get_equipped(&self, slot: super::equipment::EquipmentSlot) -> Option<&super::equipment::EquipmentItem> {
@@ -6114,25 +5579,9 @@ impl Agent {
         self.equipment.get_equipped(slot).is_some()
     }
 
-    /// Get total armor rating from all equipped armor
-    pub fn get_total_armor(&self) -> f32 {
-        self.equipment.total_armor()
-    }
 
-    /// Get total cold insulation from all equipped clothing
-    pub fn get_total_cold_insulation(&self) -> f32 {
-        self.equipment.total_cold_insulation()
-    }
 
-    /// Get total heat resistance from all equipped clothing
-    pub fn get_total_heat_resistance(&self) -> f32 {
-        self.equipment.total_heat_resistance()
-    }
 
-    /// Get attack damage bonus from equipped weapons
-    pub fn get_weapon_damage(&self) -> f32 {
-        self.equipment.weapon_damage()
-    }
 
     /// Get tool efficiency bonus from equipped tools
     pub fn get_tool_efficiency(&self, tool_type: &str) -> f32 {
@@ -6178,25 +5627,13 @@ impl Agent {
         self.equipment.is_encumbered()
     }
 
-    /// Get encumbrance penalty (0.0 = no penalty, 1.0 = fully encumbered)
-    pub fn get_encumbrance_penalty(&self) -> f32 {
-        self.equipment.encumbrance_penalty()
-    }
 
-    /// Get movement speed multiplier based on equipment weight
-    pub fn get_movement_speed_multiplier(&self) -> f32 {
-        self.equipment.movement_speed_multiplier()
-    }
 
     /// Get all equipped items
     pub fn get_all_equipped(&self) -> Vec<&super::equipment::EquipmentItem> {
         self.equipment.get_all_equipped()
     }
 
-    /// Get mining speed bonus from equipped tools
-    pub fn get_mining_speed_bonus(&self) -> f32 {
-        self.equipment.mining_speed_bonus()
-    }
 
     /// Get harvesting speed bonus from equipped tools
     pub fn get_harvesting_speed_bonus(&self) -> f32 {
@@ -6625,10 +6062,6 @@ impl Agent {
         best_item.map(|(id, _)| id)
     }
 
-    /// Get summary of nutritional status
-    pub fn nutrition_status(&self) -> String {
-        self.nutrition.status_string()
-    }
 
     /// Drink water from inventory and satisfy thirst drive
     /// Returns true if water was consumed
@@ -6721,15 +6154,7 @@ impl Agent {
         self.fatigue.should_collapse()
     }
 
-    /// Get current fatigue level (0.0 to 1.0)
-    pub fn fatigue_level(&self) -> f32 {
-        self.fatigue.level
-    }
 
-    /// Get fatigue severity description
-    pub fn fatigue_description(&self) -> &'static str {
-        self.fatigue.description()
-    }
 
     /// Consume energy from activity
     pub fn consume_energy(&mut self, amount: f32) {
@@ -6889,27 +6314,6 @@ impl Agent {
         }
     }
 
-    /// Refresh storage knowledge (called when agent inspects/accesses storage)
-    /// Satisfies curiosity and grants happiness to Curious trait holders
-    pub fn refresh_storage_knowledge(&mut self, storage_position: (i32, i32, i32), _current_tick: u32) {
-        use super::EmotionSource;
-        use crate::core::memory::SpatialMemoryType;
-
-        // Update the memory
-        self.memory.remember_location(SpatialMemoryType::Storage, storage_position);
-
-        // Satisfy curiosity about this location
-        self.emotions.set_curiosity(EmotionSource::Location(storage_position), 0.0);
-
-        // Curious trait holders gain happiness from learning/discovering
-        if self.traits.has(crate::core::Trait::Curious) {
-            self.emotions.add_happiness_with_traits(
-                EmotionSource::Event("satisfied curiosity".to_string()),
-                0.15, // Moderate happiness boost
-                &self.traits
-            );
-        }
-    }
 
     /// Update emotions based on current drive states
     /// High unsatisfied drives trigger appropriate negative emotions
@@ -7381,20 +6785,6 @@ impl Agent {
         self.convert_plan_step_to_action(step, &[])
     }
 
-    /// Get the next action from the current plan, resolving social targets
-    ///
-    /// Like get_plan_action but resolves nil UUIDs in social actions to actual
-    /// nearby agents. The nearby_agents list should contain (id, position) pairs
-    /// for all agents that could be interacted with.
-    pub fn get_plan_action_with_nearby(
-        &self,
-        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
-    ) -> Option<Action> {
-        let plan = self.current_plan.as_ref()?;
-        let step = plan.current_step()?;
-
-        self.convert_plan_step_to_action(step, nearby_agents)
-    }
 
     /// Find the nearest agent from a list of candidates
     fn find_nearest_agent(&self, candidates: &[(uuid::Uuid, (i32, i32, i32))]) -> Option<uuid::Uuid> {
@@ -8450,120 +7840,8 @@ impl Agent {
         }
     }
 
-    /// Handle receiving information from another agent with lie detection
-    /// This wraps the knowledge base receive and adds immediate verification
-    pub fn receive_information_with_verification(
-        &mut self,
-        info: super::gossip::Information,
-        source: uuid::Uuid,
-        current_tick: u32,
-    ) {
-        use super::gossip::InformationType;
 
-        let info_id = info.id;
-        let info_type = info.info_type.clone();
-        let _ground_truth = info.ground_truth;
 
-        // Receive the information normally
-        self.knowledge.receive_information(
-            info,
-            source,
-            self.id,
-            &self.traits,
-            current_tick as u64,
-        );
-
-        // Immediate verification attempt for resource claims
-        if let InformationType::ResourceLocation { resource, location } = &info_type {
-            if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
-                // We can immediately verify this claim
-                let _detection_bonus = self.get_lie_detection_bonus();
-
-                if !is_correct {
-                    // They lied about a resource location we know about!
-                    self.on_lie_detected(source, &info_id, current_tick);
-                } else {
-                    // Verified correct
-                    self.on_truth_verified(source, &info_id, current_tick);
-                }
-            } else if self.traits.has(crate::core::traits::Trait::Suspicious) {
-                // Suspicious agents are wary of unverifiable claims
-                // Slightly reduce confidence in the belief
-                if let Some(belief) = self.knowledge.beliefs.iter_mut().find(|b| b.info_id == info_id) {
-                    belief.confidence *= 0.9;
-                }
-            }
-        }
-    }
-
-    /// Called when a lie is detected from a source
-    fn on_lie_detected(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
-        use super::EmotionSource;
-
-        // Update knowledge trust
-        self.knowledge.verify_information(info_id, false);
-
-        // Get relationship and apply penalty
-        let rel = self.relationships.get_or_create_relationship(source, current_tick);
-
-        // Calculate penalty based on relationship
-        let base_penalty = 0.15;
-        let penalty = if rel.bond_strength > 0.5 {
-            // Betrayal by a friend hurts more
-            base_penalty * 1.5
-        } else if rel.bond_strength < -0.3 {
-            // Expected from an enemy - less emotional impact
-            base_penalty * 0.7
-        } else {
-            base_penalty
-        };
-
-        rel.weaken(penalty);
-        rel.total_interactions += 1;
-        rel.last_interaction_tick = current_tick;
-
-        // Emotional response
-        self.emotions.add_anger(
-            EmotionSource::Agent(source),
-            0.15
-        );
-
-        // Paranoid agents become extra suspicious
-        if self.traits.has(crate::core::traits::Trait::Paranoid) {
-            self.emotions.add_fear(
-                EmotionSource::Agent(source),
-                0.1 // Fear of further deception
-            );
-        }
-
-        // Trusting agents feel hurt/sad when lied to
-        if self.traits.has(crate::core::traits::Trait::Trusting) {
-            self.emotions.add_sadness(
-                EmotionSource::Agent(source),
-                0.1
-            );
-        }
-    }
-
-    /// Called when truth is verified from a source
-    fn on_truth_verified(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
-        use super::EmotionSource;
-
-        // Update knowledge trust
-        self.knowledge.verify_information(info_id, true);
-
-        // Strengthen relationship slightly
-        let rel = self.relationships.get_or_create_relationship(source, current_tick);
-        rel.strengthen(0.03);
-        rel.total_interactions += 1;
-        rel.last_interaction_tick = current_tick;
-
-        // Small happiness from accurate information
-        self.emotions.add_happiness(
-            EmotionSource::Agent(source),
-            0.01
-        );
-    }
 
 
 
@@ -9226,52 +8504,7 @@ impl Agent {
         roll < lie_chance.clamp(0.0, 0.8) // Max 80% chance to lie
     }
 
-    /// Create information to share, potentially distorting based on traits
-    /// Returns the information (possibly distorted) and whether it's a lie
-    pub fn prepare_information_to_share(
-        &self,
-        info: super::gossip::Information,
-        target_id: uuid::Uuid,
-        current_tick: u32,
-    ) -> (super::gossip::Information, bool) {
-        // Check if we would lie to this target
-        if self.would_lie_to(target_id, current_tick) {
-            // Apply distortion based on traits
-            if let Some(distortion_trait) = self.traits.would_distort_info() {
-                let distorted = info.distort(distortion_trait, self.id);
-                return (distorted, true);
-            }
-        }
 
-        // No lying - share truthfully
-        (info, false)
-    }
-
-    /// Spread reputation damage when caught lying (gossip about the liar)
-    /// Other agents who witnessed or heard about the lie will also lose trust
-    pub fn spread_liar_reputation(
-        &mut self,
-        liar_id: uuid::Uuid,
-        _witness_ids: &[uuid::Uuid],
-        current_tick: u32,
-    ) {
-        // Create gossip information about the lie
-        let gossip_info = super::gossip::Information::new(
-            super::gossip::InformationType::AgentTrait {
-                agent: liar_id,
-                trait_name: "dishonest".to_string(),
-            },
-            self.id,
-            true, // This is true - they did lie
-            current_tick as u64,
-        );
-
-        // Store this information in our knowledge
-        self.knowledge.known_information.insert(gossip_info.id, gossip_info);
-
-        // Witnesses also get reputation update (handled by population system)
-        // This method just marks that we're spreading the word
-    }
 }
 /// An errand: somewhere to be, something to do there, and the drive it answers.
 ///
@@ -9340,9 +8573,5 @@ impl Errand {
         self.going_to.0 == at.0 && self.going_to.1 == at.1
     }
 
-    /// A job rather than a journey.
-    pub fn is_a_making(&self) -> bool {
-        self.to_make.is_some()
-    }
 }
 

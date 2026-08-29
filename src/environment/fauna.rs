@@ -2084,132 +2084,16 @@ impl AnimalManager {
             .collect()
     }
 
-    /// Get animals of a specific species
-    pub fn get_by_species(&self, species_id: &str) -> Vec<&Animal> {
-        self.animals.iter()
-            .filter(|a| a.species_id == species_id && a.is_alive())
-            .collect()
-    }
 
-    /// Get domesticated animals owned by an agent
-    pub fn get_owned_by(&self, owner_id: &Uuid) -> Vec<&Animal> {
-        self.animals.iter()
-            .filter(|a| a.owner_id == Some(*owner_id) && a.is_alive())
-            .collect()
-    }
 
     /// Get species from registry
     pub fn get_species(&self, species_id: &str) -> Option<&AnimalSpecies> {
         self.registry.as_ref()?.get(species_id)
     }
 
-    /// Remove dead animals
-    pub fn remove_dead(&mut self) {
-        self.animals.retain(|a| a.is_alive());
-    }
 
-    /// Kill an animal and generate drops based on its species
-    /// Returns a list of (material_id, quantity) tuples representing the drops
-    pub fn kill_animal(&mut self, animal_id: &Uuid) -> Vec<(String, u32)> {
-        use rand::Rng;
-        let mut rng = crate::core::dice::roll();
-        let mut drops = Vec::new();
 
-        // Find the animal and get its species
-        let species_id = {
-            if let Some(animal) = self.animals.iter_mut().find(|a| a.id == *animal_id) {
-                if !animal.is_alive() {
-                    return drops; // Already dead
-                }
-                animal.state = AnimalState::Dead;
-                animal.current_health = 0.0;
-                animal.species_id.clone()
-            } else {
-                return drops;
-            }
-        };
 
-        // Get the species drops
-        if let Some(registry) = &self.registry {
-            if let Some(species) = registry.get(&species_id) {
-                for drop in &species.drops {
-                    // Check drop chance
-                    if rng.gen::<f32>() <= drop.drop_chance {
-                        let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                        drops.push((drop.material_id.clone(), quantity));
-                    }
-                }
-            }
-        }
-
-        drops
-    }
-
-    /// Get the drops that would result from hunting a specific animal
-    /// Does not actually kill the animal, just calculates expected drops
-    pub fn get_potential_drops(&self, animal_id: &Uuid) -> Vec<(String, u32, u32)> {
-        let mut potential_drops = Vec::new();
-
-        if let Some(animal) = self.animals.iter().find(|a| a.id == *animal_id) {
-            if let Some(registry) = &self.registry {
-                if let Some(species) = registry.get(&animal.species_id) {
-                    for drop in &species.drops {
-                        potential_drops.push((
-                            drop.material_id.clone(),
-                            drop.min_quantity,
-                            drop.max_quantity,
-                        ));
-                    }
-                }
-            }
-        }
-
-        potential_drops
-    }
-
-    /// Harvest living products from domesticated animals
-    /// Returns a map of animal_id -> list of (material_id, quantity) produced
-    pub fn harvest_living_products(&mut self) -> HashMap<Uuid, Vec<(String, u32)>> {
-        let mut products = HashMap::new();
-
-        let registry = match &self.registry {
-            Some(r) => r,
-            None => return products,
-        };
-
-        for animal in &mut self.animals {
-            if !animal.is_alive() || !animal.is_mature() {
-                continue;
-            }
-
-            // Only domesticated animals produce regular products
-            if !animal.is_domesticated {
-                continue;
-            }
-
-            if let Some(species) = registry.get(&animal.species_id) {
-                let produced = animal.tick_products();
-
-                // Match product names with species living_products to get correct quantities
-                let mut animal_products = Vec::new();
-                for (material_id, _) in produced {
-                    if let Some(product_info) = species.living_products.iter()
-                        .find(|p| p.material_id == material_id)
-                    {
-                        animal_products.push((material_id, product_info.quantity));
-                    } else {
-                        animal_products.push((material_id, 1)); // Default quantity
-                    }
-                }
-
-                if !animal_products.is_empty() {
-                    products.insert(animal.id, animal_products);
-                }
-            }
-        }
-
-        products
-    }
 
     /// Tick all animals (age, products, natural healing, AI behaviors, lifecycle)
     pub fn tick(&mut self) {
@@ -3138,66 +3022,7 @@ impl AnimalManager {
         summary
     }
 
-    /// Process seasonal migration for migratory species
-    ///
-    /// Called when the season changes. Migratory animals will move in their
-    /// migration direction, simulating seasonal movement patterns like
-    /// birds flying south or herds following food sources.
-    pub fn process_migration(&mut self, season: crate::environment::Season, world_size: (usize, usize)) {
-        use crate::environment::Season;
 
-        let registry = match &self.registry {
-            Some(r) => r.clone(),
-            None => return,
-        };
-
-        // Only migrate at season changes - check which direction to go
-        let migration_multiplier = match season {
-            Season::Fall | Season::Winter => 1.0,   // Move in migration direction
-            Season::Spring | Season::Summer => -1.0, // Return migration
-        };
-
-        for animal in &mut self.animals {
-            if !animal.is_alive() {
-                continue;
-            }
-
-            // Get species to check if migratory
-            let species = match registry.get(&animal.species_id) {
-                Some(s) => s,
-                None => continue,
-            };
-
-            if !species.is_migratory {
-                continue;
-            }
-
-            // Calculate new position based on migration direction
-            let (dx, dy) = species.migration_direction;
-            let new_x = animal.position.0 + (dx as f32 * migration_multiplier) as i32;
-            let new_y = animal.position.1 + (dy as f32 * migration_multiplier) as i32;
-
-            // Clamp to world bounds
-            let new_x = new_x.clamp(0, world_size.0 as i32 - 1);
-            let new_y = new_y.clamp(0, world_size.1 as i32 - 1);
-
-            animal.position = (new_x, new_y);
-        }
-    }
-
-    /// Check if any species are currently migrating
-    pub fn get_migrating_species(&self) -> Vec<String> {
-        let registry = match &self.registry {
-            Some(r) => r,
-            None => return vec![],
-        };
-
-        registry.all_species()
-            .into_iter()
-            .filter(|s| s.is_migratory)
-            .map(|s| s.id.clone())
-            .collect()
-    }
 }
 
 impl Default for AnimalManager {

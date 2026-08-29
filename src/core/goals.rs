@@ -303,13 +303,6 @@ impl GoalManager {
             .max_by(|a, b| a.priority.partial_cmp(&b.priority).unwrap())
     }
 
-    /// Get all active goals of a specific type
-    pub fn get_goals_by_type(&self, goal_type: GoalType) -> Vec<&Goal> {
-        self.goals
-            .iter()
-            .filter(|g| !g.completed && g.goal_type == goal_type)
-            .collect()
-    }
 
     /// Update progress for a specific goal by ID
     pub fn update_goal_progress(&mut self, goal_id: uuid::Uuid, amount: f32) {

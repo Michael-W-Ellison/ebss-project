@@ -361,14 +361,6 @@ impl Inspector {
         self.agent_data_cache.get(&id)
     }
 
-    /// Update cached data for all agents
-    pub fn update_cache(&mut self, agents: &[Agent]) {
-        self.agent_data_cache.clear();
-        for agent in agents {
-            let data = AgentInspectorData::from_agent(agent);
-            self.agent_data_cache.insert(agent.id, data);
-        }
-    }
 }
 
 impl Default for Inspector {

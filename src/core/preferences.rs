@@ -74,25 +74,13 @@ impl Preferences {
         self.favorite_job = Some(job);
     }
 
-    /// Set favorite animal
-    pub fn set_favorite_animal(&mut self, animal: String) {
-        self.favorite_animal = Some(animal);
-    }
 
     /// Set favorite person
     pub fn set_favorite_person(&mut self, person_id: Uuid) {
         self.favorite_person = Some(person_id);
     }
 
-    /// Set favorite tool
-    pub fn set_favorite_tool(&mut self, tool: String) {
-        self.favorite_tool = Some(tool);
-    }
 
-    /// Set favorite target (for bullying)
-    pub fn set_favorite_target(&mut self, target_id: Uuid) {
-        self.favorite_target = Some(target_id);
-    }
 
     /// Set obsession
     pub fn set_obsession(&mut self, obsession: Obsession) {
@@ -109,25 +97,13 @@ impl Preferences {
         self.favorite_job.as_ref().map_or(false, |j| j == job)
     }
 
-    /// Check if near favorite animal
-    pub fn is_favorite_animal(&self, animal: &str) -> bool {
-        self.favorite_animal.as_ref().map_or(false, |a| a == animal)
-    }
 
-    /// Check if using favorite tool
-    pub fn is_favorite_tool(&self, tool: &str) -> bool {
-        self.favorite_tool.as_ref().map_or(false, |t| t == tool)
-    }
 
     /// Check if near favorite person
     pub fn is_near_favorite_person(&self, person_id: Uuid) -> bool {
         self.favorite_person == Some(person_id)
     }
 
-    /// Check if targeting favorite bullying target
-    pub fn is_favorite_target(&self, target_id: Uuid) -> bool {
-        self.favorite_target == Some(target_id)
-    }
 
     /// Check if near obsession
     pub fn is_near_obsession(&self, check_type: &ObsessionType, check_id: Option<Uuid>, check_name: Option<&str>) -> bool {

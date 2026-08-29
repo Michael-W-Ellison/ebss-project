@@ -1528,10 +1528,6 @@ impl PlantManager {
         }
     }
 
-    pub fn with_registry(mut self, registry: FloraRegistry) -> Self {
-        self.registry = Some(registry);
-        self
-    }
 
     /// Spawn a plant at a position
     pub fn spawn_plant(&mut self, species_id: String, position: (i32, i32)) -> Option<Uuid> {

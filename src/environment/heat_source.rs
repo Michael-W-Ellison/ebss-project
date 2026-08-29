@@ -398,14 +398,6 @@ impl HeatSourceRegistry {
             .and_then(|id| self.heat_sources.get(id))
     }
 
-    /// Get mutable heat source at position
-    pub fn get_at_position_mut(&mut self, pos: (i32, i32, i32)) -> Option<&mut HeatSource> {
-        if let Some(id) = self.position_index.get(&pos).copied() {
-            self.heat_sources.get_mut(&id)
-        } else {
-            None
-        }
-    }
 
     /// Remove a heat source
     pub fn remove(&mut self, id: &Uuid) -> Option<HeatSource> {

@@ -37,7 +37,7 @@
 //! 3. Use learned data via `get_average_time()` and `get_success_rate()`
 
 use serde::{Deserialize, Serialize};
-use crate::core::{Trait, ExternalGoal};
+use crate::core::Trait;
 
 /// A single step in an action plan
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -217,18 +217,6 @@ impl ActionPlan {
         max_steps.clamp(2, 25) as usize
     }
 
-    /// Get a descriptive complexity level for the agent's max steps
-    pub fn complexity_description(traits: &[Trait]) -> &'static str {
-        let max = Self::calculate_max_steps(traits);
-        match max {
-            0..=4 => "very simple",
-            5..=8 => "simple",
-            9..=12 => "moderate",
-            13..=17 => "complex",
-            18..=22 => "very complex",
-            _ => "extremely complex",
-        }
-    }
 }
 
 /// Planning engine for generating and comparing action plans
@@ -272,76 +260,9 @@ impl PlanningContext {
         }
     }
 
-    /// Create a planning context from exploration knowledge
-    ///
-    /// This converts the agent's exploration knowledge into a format
-    /// usable by the planning system.
-    pub fn from_exploration_knowledge(
-        known_resources: &std::collections::HashMap<crate::world::Position, crate::world::ResourceType>,
-        known_buildings: &std::collections::HashMap<crate::world::Position, crate::world::BuildingType>,
-    ) -> Self {
-        use crate::world::BuildingType;
 
-        // Convert resources to planning format
-        let resources: Vec<((i32, i32, i32), String)> = known_resources
-            .iter()
-            .map(|(pos, res_type)| ((pos.x, pos.y, 0), format!("{:?}", res_type).to_lowercase()))
-            .collect();
 
-        // Find storage buildings (Storehouse, TownStorage)
-        let storage: Vec<(i32, i32, i32)> = known_buildings
-            .iter()
-            .filter(|(_, building_type)| {
-                matches!(building_type, BuildingType::Storehouse | BuildingType::TownStorage)
-            })
-            .map(|(pos, _)| (pos.x, pos.y, 0))
-            .collect();
 
-        Self {
-            known_resources: resources,
-            known_storage: storage,
-        }
-    }
-
-    /// Find the nearest resource location of a given type from a position.
-    ///
-    /// Returns None if no resource of that type is known.
-    pub fn find_nearest_resource(
-        &self,
-        from: (i32, i32, i32),
-        resource_type: &str,
-    ) -> Option<(i32, i32, i32)> {
-        let resource_lower = resource_type.to_lowercase();
-
-        self.known_resources
-            .iter()
-            .filter(|(_, res_type)| res_type.contains(&resource_lower))
-            .min_by_key(|(pos, _)| {
-                let dx = (pos.0 - from.0).abs();
-                let dy = (pos.1 - from.1).abs();
-                dx + dy // Manhattan distance for simplicity
-            })
-            .map(|(pos, _)| *pos)
-    }
-
-    /// Find the nearest storage location from a position.
-    ///
-    /// Returns None if no storage is known.
-    pub fn find_nearest_storage(&self, from: (i32, i32, i32)) -> Option<(i32, i32, i32)> {
-        self.known_storage
-            .iter()
-            .min_by_key(|pos| {
-                let dx = (pos.0 - from.0).abs();
-                let dy = (pos.1 - from.1).abs();
-                dx + dy
-            })
-            .copied()
-    }
-
-    /// Check if context has any useful location information
-    pub fn has_locations(&self) -> bool {
-        !self.known_resources.is_empty() || !self.known_storage.is_empty()
-    }
 }
 
 impl Planner {
@@ -540,70 +461,6 @@ impl Planner {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 
-    /// Generate multiple plan alternatives and choose the best one.
-    ///
-    /// Uses the provided `PlanningContext` to find actual resource and storage
-    /// locations based on the agent's exploration knowledge. If no suitable
-    /// locations are known, returns None.
-    ///
-    /// # Arguments
-    /// * `goal` - The external goal to plan for
-    /// * `current_position` - Agent's current position
-    /// * `context` - Planning context with known locations from exploration
-    /// * `_available_tools` - Tools available to the agent
-    /// * `traits` - Agent traits that affect plan complexity limits
-    pub fn generate_best_plan(
-        &self,
-        goal: &ExternalGoal,
-        current_position: (i32, i32, i32),
-        context: &PlanningContext,
-        _available_tools: &[String],
-        traits: &[Trait],
-    ) -> Option<ActionPlan> {
-        let mut plans = Vec::new();
-
-        match goal {
-            ExternalGoal::GatherResource(resource, amount) => {
-                // Find resource location from context using the resource type
-                let resource_location = context.find_nearest_resource(current_position, resource)?;
-
-                // Find storage location from context
-                // If no storage is known, use a position near the agent as fallback
-                let storehouse = context
-                    .find_nearest_storage(current_position)
-                    .unwrap_or(current_position);
-
-                // Generate plans with different tools
-                for tool_option in &["iron_axe", "stone_axe", "wooden_axe", "none"] {
-                    let tools = if *tool_option == "none" {
-                        vec![]
-                    } else {
-                        vec![tool_option.to_string()]
-                    };
-
-                    let plan = self.plan_gather_wood(
-                        current_position,
-                        resource_location,
-                        storehouse,
-                        &tools,
-                        *amount,
-                    );
-
-                    // Check if plan exceeds complexity limit
-                    if !plan.exceeds_complexity_limit(traits) {
-                        plans.push(plan);
-                    }
-                }
-            }
-            _ => {
-                // Other goal types would have their own plan generators
-                return None;
-            }
-        }
-
-        // Choose the plan with lowest estimated time
-        plans.into_iter().min_by_key(|p| p.total_estimated_ticks)
-    }
 }
 
 impl Default for Planner {

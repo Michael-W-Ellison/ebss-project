@@ -16471,11 +16471,6 @@ impl Simulation {
         Ok(())
     }
 
-    /// Disable auto-save
-    pub fn disable_autosave(&mut self) {
-        self.autosave_config = None;
-        info!("Auto-save disabled");
-    }
 
     /// Execute a building action for an agent, using spatial planning to determine optimal location
     ///

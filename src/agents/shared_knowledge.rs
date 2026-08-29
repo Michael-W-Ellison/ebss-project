@@ -96,10 +96,6 @@ impl SharedKnowledge {
             .min_by_key(|r| from.distance_to(&r.position))
     }
 
-    /// Get all discovered resources (for debugging/visualization)
-    pub fn all_resources(&self) -> Vec<&DiscoveredResource> {
-        self.discovered_resources.values().collect()
-    }
 
     /// Check if a resource at a position is known
     pub fn has_resource_at(&self, position: &Position) -> bool {
@@ -129,17 +125,6 @@ impl SharedKnowledge {
             .collect()
     }
 
-    /// Find closest resource known by a specific agent
-    pub fn find_closest_known_to_agent(
-        &self,
-        agent_id: uuid::Uuid,
-        from: &Position,
-        resource_type: ResourceType,
-    ) -> Option<&DiscoveredResource> {
-        self.get_agent_knowledge(agent_id, resource_type)
-            .into_iter()
-            .min_by_key(|r| from.distance_to(&r.position))
-    }
 
     /// Clean up old/stale resource knowledge
     /// Removes resources that haven't been verified in a long time
