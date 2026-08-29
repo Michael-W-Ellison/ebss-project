@@ -285,14 +285,7 @@ impl Simulation {
     }
 
     /// `Action::Fight`.
-    ///
-    /// `_weapon` is not a mistake in the signature: **nothing in here reads
-    /// it**. A man standing his ground against a wolf fights it the same with
-    /// a flint spear in his hand as with nothing, which is not what the tool
-    /// ladder says and not what `hunting` does two modules away. Left as it
-    /// was, because this split is behaviour-neutral by contract; see
-    /// ISSUES_FOUND.md #95.
-    pub(in crate::analytics) fn fighting_a_beast(&mut self, animal_id: &uuid::Uuid, _weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn fighting_a_beast(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
         // Standing your ground. The agent is not after this thing's
         // skin - it is here because the thing is close enough to be a
         // problem and the agent reckons it can be driven off.
@@ -326,10 +319,40 @@ impl Simulation {
             ));
         }
 
+        // A spear in the hand, which is the whole of stone-age fighting.
+        //
+        // Read the way `hunting` reads it two modules away, because standing
+        // your ground is that problem from the other side. What was here
+        // before asked only `own_strength`, which prices a weapon out of the
+        // `equipment` vocabulary - and nothing in this model has ever put a
+        // weapon into `equipment`, so **a man with a flint spear in his pack
+        // fought a wolf exactly as he would have fought it empty-handed**.
+        // Measured before the fix: of eight fights across sixteen worlds, two
+        // were fought by somebody holding a spear worth 1.87, and it counted
+        // for nothing in either.
+        //
+        // No size gate, unlike hunting. Refusing to hunt an ox bare-handed
+        // sends somebody home hungry; refusing to fight a wolf that is already
+        // on you sends them home dead. Whether to be here at all is the threat
+        // tree's question, and it has already answered it.
+        let (mine, what_the_point_is_worth) = {
+            let agent = &self.population.agents[agent_index];
+            let spear =
+                agent.how_much_my_tools_help(crate::agents::skills::SkillType::Hunting);
+            // `weapon` is the older flag and still counts; what is in the pack
+            // counts for more, and counts for less as it wears.
+            let named: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
+            let steadier = named.max((spear - 1.0) * 0.25);
+            // Floored at one, so bare hands are exactly what they were. Above
+            // that it is the tool's own worth rather than a quarter of it,
+            // because this is the half of the specification that is about how
+            // many blows it takes rather than whether one lands.
+            (agent.own_strength() + steadier, spear.max(1.0))
+        };
+
         // Whether the blow lands is what the agent is worth against
         // what the creature is worth, on the same scale the appraisal
         // used to decide to be here at all.
-        let mine = self.population.agents[agent_index].own_strength();
         let condition = {
             let animal = self.world.animals.get(animal_id);
             animal
@@ -350,7 +373,13 @@ impl Simulation {
         );
 
         if landed {
-            let hurt = 25.0 + mine * 25.0;
+            // "A wooden spear is enough, but should take several attacks to
+            // kill the animal... A flint spear should reduce the number of
+            // attacks." A better point is fewer blows, so the spear tells here
+            // as well as in whether the blow lands at all - and this is where
+            // it tells most, because halving the blows is what the
+            // specification actually asks for.
+            let hurt = (25.0 + mine * 25.0) * what_the_point_is_worth;
             let killed = {
                 let Some(animal) = self.world.animals.get_mut(animal_id) else {
                     return ActionResult::failure("Nothing there to fight".to_string());

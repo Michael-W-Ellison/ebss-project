@@ -1013,6 +1013,34 @@ original specifications.
   check would have meant holding two places four thousand lines apart in your
   head, and took ten seconds once they were forty lines apart.
   See ISSUES_FOUND.md #99
+- ✅ A man with a spear fought a wolf exactly as he would have fought it
+  empty-handed. The finding the `execute_action` split turned up, and worse than
+  it looked: not one oversight but **three places reading a vocabulary the model
+  does not stock**. The action's `weapon` field came from
+  `agent.equipment.get_weapon()`; `own_strength`, which decides the odds, adds
+  0.3 for the same thing; and the fight read neither. **Nothing in this model
+  has ever called `equipment.equip`** — the only `equip` calls in `src/` are
+  clothing — so the field was `None` in every fight ever run and the strength
+  bonus has never once fired. Instrumented over sixteen worlds: eight fights, no
+  weapon flag set in any of them, and *two of the eight fought by somebody
+  carrying a spear worth 1.87*.
+
+  Fixed by reading the spear the way `hunting` reads it two modules away, so it
+  tells twice, as the specification asks in two separate sentences: on **whether
+  the blow lands** (the same term `hunting` uses) and on **how many blows it
+  takes** (the tool's own worth, floored at one). Measured: **2.17 blows to put
+  a wolf down bare-handed, 1.73 with a spear.** Bare hands are arithmetically
+  unchanged, and there is deliberately no size gate — refusing to hunt an ox
+  empty-handed sends you home hungry, refusing to fight a wolf already on you
+  sends you home dead.
+
+  **And the honest part: it changes nothing a settlement can feel.** Survival is
+  unmoved to the tick — 32 worlds, mean last-alive 2,418 before and after. It
+  could not be otherwise: eight fights in sixteen worlds is a path that fires
+  about once per four thousand agent-ticks. The reason is already on the list as
+  **#188** — anger at an animal can never pass the gate that lets an agent turn
+  on it. The ladder now works on a branch almost nobody reaches; opening the
+  gate is what will show in a number. See ISSUES_FOUND.md #100
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

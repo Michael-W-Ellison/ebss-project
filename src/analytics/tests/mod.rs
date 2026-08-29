@@ -78,3 +78,4 @@ pub mod preparation_tests;
 pub mod table_order_tests;
 pub mod knife_chain_tests;
 pub mod repeatable_tests;
+pub mod armed_tests;

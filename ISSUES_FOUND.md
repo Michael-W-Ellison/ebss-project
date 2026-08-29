@@ -5819,7 +5819,67 @@ one. That is defect #3 in miniature, and it survived precisely because a reader
 who wanted to check would have had to hold two places four thousand lines apart
 in their head. It took ten seconds once they were forty lines apart.
 
-### 100. The other thirteen drive rates were never derived either
+### 100. A man with a spear fought a wolf exactly as he would have fought it empty-handed
+
+`Action::Fight` carried a `weapon` and never read it. That was the finding the
+`execute_action` split turned up (#95), and it was worse than it looked: not one
+oversight but **three places reading a vocabulary the model does not stock**.
+
+- The action's own field was filled from `agent.equipment.get_weapon()`.
+- `Agent::own_strength`, which decides the odds, adds `0.3` if
+  `equipment.get_weapon().is_some()`.
+- The fight itself read neither.
+
+Nothing in this model has ever called `equipment.equip`. The only `equip` calls
+in `src/` are `body.equip`, which is clothing. So the field was `None` in every
+fight this model has ever run, and `own_strength`'s weapon bonus has never once
+fired. This is the same dead vocabulary #93 deleted the rest of and #219 is
+about; the live one is `environment::making`, reached through
+`how_much_my_tools_help`.
+
+Measured before the fix, instrumenting every fight over sixteen worlds of two
+thousand ticks: **eight fights, none with the action's weapon flag set, none
+with an equipped weapon - and two of the eight fought by somebody carrying a
+spear worth 1.87.** It counted for nothing in both.
+
+#### The fix
+
+Read the spear the way `hunting` reads it two modules away, because standing
+your ground is that problem from the other side. It tells twice, which is what
+the specification asks for in two separate sentences:
+
+- **whether the blow lands** - `(spear - 1.0) * 0.25` onto the agent's side of
+  the odds, exactly the term `hunting` uses;
+- **how many blows it takes** - the tool's own worth as a multiplier on the
+  damage, floored at one. *"A wooden spear is enough, but should take several
+  attacks to kill the animal... A flint spear should reduce the number of
+  attacks."*
+
+Measured over forty fights a side: **2.17 blows to put a wolf down bare-handed,
+1.73 with a spear.** Bare hands are arithmetically unchanged - the floor sees to
+that - because refusing to hunt an ox empty-handed sends somebody home hungry,
+while refusing to fight a wolf that is already on you sends them home dead.
+There is deliberately no size gate of the kind `hunting` has: whether to be here
+at all is the threat tree's question and it has already answered it.
+
+The two construction sites now fill the field from the live vocabulary too, so
+the action carries the truth about what is in the hand.
+
+#### And the honest part: it changes nothing a settlement can feel
+
+**Survival is unmoved to the tick** - 32 worlds, 4,000 ticks, mean last-alive
+2,418 before and 2,418 after. It could not be otherwise: eight fights in
+sixteen worlds of two thousand ticks is a path that fires roughly once per four
+thousand agent-ticks.
+
+So this is a correctness fix with no measurable consequence, and the reason is
+already on the list. **#188 - anger at one animal can never pass the gate that
+lets an agent turn on it.** The tool ladder now works properly on a branch
+almost nobody reaches. That is the right order to do the two in - a gate opened
+onto a broken fight would have been worse - but the second half is what will
+show in a number.
+
+### 101. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5828,19 +5888,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 101. The clock is spelled out in the interface too
+### 102. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 102. Build warnings
+### 103. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 103. Placeholder package metadata
+### 104. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

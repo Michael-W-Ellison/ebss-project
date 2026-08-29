@@ -233,6 +233,20 @@ impl Simulation {
         self.what_this_threat_comes_to(agent, agent_position).1
     }
 
+    /// What this one has to hand for a fight, by name.
+    ///
+    /// From `environment::making`, which is the vocabulary the model actually
+    /// stocks. It used to come from `agent.equipment`, which nothing has ever
+    /// put a weapon into, so the field was `None` in every fight this model
+    /// has ever run - see ISSUES_FOUND.md #100.
+    pub(in crate::analytics) fn what_is_in_hand_for_this(
+        agent: &crate::agents::Agent,
+    ) -> Option<String> {
+        agent
+            .what_i_have_to_work_with(crate::agents::skills::SkillType::Hunting)
+            .map(|tool| tool.called.to_string())
+    }
+
     /// The same tree, and the name of the branch it came out of.
     ///
     /// Every way of declining used to look like `None` from outside, which is
@@ -300,7 +314,7 @@ impl Simulation {
                 Some(if paces <= Self::HUNT_REACH {
                     Action::Fight {
                         animal_id: which,
-                        weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+                        weapon: Self::what_is_in_hand_for_this(agent),
                     }
                 } else {
                     Action::Move {
@@ -321,7 +335,7 @@ impl Simulation {
             if paces <= Self::HUNT_REACH {
                 Action::Fight {
                     animal_id: which,
-                    weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+                    weapon: Self::what_is_in_hand_for_this(agent),
                 }
             } else {
                 // Close the last pace or two, and no further
