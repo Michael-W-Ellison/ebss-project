@@ -316,12 +316,69 @@ impl EmotionState {
 
     /// Check if agent should flee (high fear)
     pub fn should_flee(&self) -> bool {
-        self.fear > 0.6
+        self.worst_thing_frightening_me() > Self::AFRAID_ENOUGH_TO_ACT
     }
 
-    /// Check if agent should attack (high anger, low fear)
+    /// Angry enough at one thing to turn on it, and not too frightened to.
     pub fn should_attack(&self) -> bool {
-        self.anger > 0.5 && self.fear < 0.3
+        self.worst_thing_angering_me() > Self::ANGRY_ENOUGH_TO_ACT
+            && self.fear < Self::TOO_FRIGHTENED_TO_STAND
+    }
+
+    /// How much of what one thing can make you feel is enough to act on it.
+    ///
+    /// Six sevenths, and not chosen: it is what the fear gate already demanded.
+    /// Fleeing wanted `0.6` against a ceiling of `0.7`, so the same fraction
+    /// applied to anger's ceiling of `0.5` gives `0.4286` - and the fear gate
+    /// comes out at exactly the number it had before, which is the point. The
+    /// fear half of the threat tree was never the defect; it is quiet because
+    /// predators leave, not because it cannot be reached.
+    const WHAT_IT_TAKES_TO_ACT: f32 = 6.0 / 7.0;
+
+    /// Angry enough at one thing to turn on it: `0.4286`.
+    ///
+    /// It used to be `anger > 0.5` read off the *sum* of every source, against
+    /// a single-source ceiling of `0.5`. So a man at the very worst rage one
+    /// animal can produce sat exactly on the gate and did not pass it, and the
+    /// branch fired only when two separate grudges added past a half - an agent
+    /// turning on the wolf in front of it partly because it also resented a
+    /// boar. Measured before the change: **28.7% of every turn was "a creature
+    /// on the mind, under the gate"**, against 0.12% that got through.
+    const ANGRY_ENOUGH_TO_ACT: f32 =
+        ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU * Self::WHAT_IT_TAKES_TO_ACT;
+
+    /// Frightened enough of one thing to run from it: `0.6`, as before.
+    const AFRAID_ENOUGH_TO_ACT: f32 =
+        ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU * Self::WHAT_IT_TAKES_TO_ACT;
+
+    /// Too frightened overall to stand and fight anything.
+    ///
+    /// This one stays on the *sum* on purpose. The other two ask about the
+    /// thing in front of you; this asks whether you are in any state to face
+    /// it, and being afraid of three things at once is exactly the state it is
+    /// about.
+    const TOO_FRIGHTENED_TO_STAND: f32 = 0.3;
+
+    /// The worst single thing angering this one, whatever kind of thing it is.
+    ///
+    /// The gates read this rather than the total because it is what the
+    /// branches behind them act on - `what_angers_me_most` for a creature,
+    /// `who_angers_me_most` for a person. A gate that asks a different question
+    /// from the branch it guards is a gate set against nothing.
+    pub fn worst_thing_angering_me(&self) -> f32 {
+        Self::worst_of(&self.anger_sources)
+    }
+
+    /// The same, for fear.
+    pub fn worst_thing_frightening_me(&self) -> f32 {
+        Self::worst_of(&self.fear_sources)
+    }
+
+    fn worst_of(sources: &BTreeMap<EmotionSource, f32>) -> f32 {
+        sources
+            .values()
+            .copied()
+            .fold(0.0_f32, f32::max)
     }
 
     /// Check if agent is emotionally distressed
@@ -1118,14 +1175,26 @@ impl ThreatAssessment {
         }
     }
 
+    /// The most one thing can make somebody angry.
+    ///
+    /// Anger and fear are not on the same scale and never were: a threat you
+    /// reckon you can beat makes you angry up to a half, one you reckon you
+    /// cannot makes you afraid up to seven tenths. Any gate that reads either
+    /// has to be set against these, or it is set against nothing - which is
+    /// exactly how `EmotionState::should_attack` came to want *strictly more*
+    /// than a half out of a quantity that stops at a half. See
+    /// ISSUES_FOUND.md #101.
+    pub const AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU: f32 = 0.5;
+
+    /// And the most one thing can frighten somebody.
+    pub const AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU: f32 = 0.7;
+
     /// Get emotion amount (0.0 to 1.0)
     pub fn emotion_amount(&self) -> f32 {
         if self.can_overcome {
-            // Anger scales with threat level
-            self.threat_level * 0.5
+            self.threat_level * Self::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU
         } else {
-            // Fear scales with overwhelming odds
-            self.threat_level * 0.7
+            self.threat_level * Self::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU
         }
     }
 }
@@ -1174,6 +1243,115 @@ mod tests {
         emotions.add_fear(EmotionSource::Creature("bear".to_string()), 0.7);
 
         assert_eq!(emotions.dominant_emotion(), Some(EmotionType::Fear));
+    }
+
+    /// The gate a creature can actually reach.
+    ///
+    /// `ThreatAssessment` caps anger at one thing at
+    /// `AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU`, and the gate used to want
+    /// strictly more than that same number off the *total*. So a man at the
+    /// very worst rage one animal can produce sat exactly on the gate and did
+    /// not pass it, and the branch fired only when two separate grudges added
+    /// past a half. See ISSUES_FOUND.md #101.
+    #[test]
+    fn the_worst_one_animal_can_do_is_enough_to_turn_on_it() {
+        let mut emotions = EmotionState::new();
+        emotions.add_anger(
+            EmotionSource::Creature("wolf".to_string()),
+            ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+
+        assert!(
+            emotions.should_attack(),
+            "a man at the worst rage one animal can produce should be able to \
+             turn on it"
+        );
+    }
+
+    /// And two mild grudges are not, which is the false positive the old gate
+    /// let through: an agent turning on the wolf in front of it partly because
+    /// it also resented a boar.
+    #[test]
+    fn two_small_grudges_do_not_add_up_to_a_fight() {
+        let mut emotions = EmotionState::new();
+        emotions.add_anger(EmotionSource::Creature("wolf".to_string()), 0.3);
+        emotions.add_anger(EmotionSource::Creature("boar".to_string()), 0.3);
+
+        assert!(
+            emotions.anger > 0.5,
+            "the total is what the old gate read, and it passes a half"
+        );
+        assert!(
+            !emotions.should_attack(),
+            "but neither thing on its own is worth turning on, and the branch \
+             behind the gate acts on one thing"
+        );
+    }
+
+    /// The gates are tied to the ceilings they read, so neither can drift away
+    /// from the other again.
+    ///
+    /// This is the test that would have caught the original defect: it fails
+    /// the moment a gate wants more than the quantity behind it can produce.
+    #[test]
+    fn neither_gate_asks_for_more_than_one_thing_can_give() {
+        let mut angry = EmotionState::new();
+        angry.add_anger(
+            EmotionSource::Creature("aurochs".to_string()),
+            ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(angry.should_attack(), "the anger ceiling must clear its gate");
+
+        let mut afraid = EmotionState::new();
+        afraid.add_fear(
+            EmotionSource::Creature("bear".to_string()),
+            ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(afraid.should_flee(), "the fear ceiling must clear its gate");
+    }
+
+    /// Fleeing asks for exactly what it always asked for.
+    ///
+    /// The fear half of the threat tree was never the defect - it is quiet
+    /// because predators leave, not because it cannot be reached - so the
+    /// number did not move. Six sevenths of `0.7` is `0.6`, which is what the
+    /// gate read before. What changed is the *quantity*: the strongest single
+    /// thing rather than the sum of everything.
+    #[test]
+    fn the_flight_gate_is_the_number_it_always_was() {
+        assert!((EmotionState::AFRAID_ENOUGH_TO_ACT - 0.6).abs() < 1e-6);
+    }
+
+    /// And a man frightened of two things at once no longer runs from the
+    /// larger one on the strength of the smaller.
+    #[test]
+    fn two_small_frights_do_not_add_up_to_a_flight() {
+        let mut emotions = EmotionState::new();
+        emotions.add_fear(EmotionSource::Creature("wolf".to_string()), 0.4);
+        emotions.add_fear(EmotionSource::Creature("boar".to_string()), 0.4);
+
+        assert!(emotions.fear > 0.6, "the total is what the old gate read");
+        assert!(!emotions.should_flee());
+    }
+
+    /// Too frightened to stand still reads the total, on purpose: the other
+    /// two gates ask about the thing in front of you, this asks whether you
+    /// are in any state to face it.
+    #[test]
+    fn general_terror_still_stops_somebody_standing_their_ground() {
+        let mut emotions = EmotionState::new();
+        emotions.add_anger(
+            EmotionSource::Creature("wolf".to_string()),
+            ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(emotions.should_attack());
+
+        emotions.add_fear(EmotionSource::Creature("bear".to_string()), 0.2);
+        emotions.add_fear(EmotionSource::Event("the dark".to_string()), 0.2);
+        assert!(
+            !emotions.should_attack(),
+            "afraid of enough things at once, nobody turns on anything"
+        );
     }
 
     #[test]

@@ -5879,7 +5879,86 @@ almost nobody reaches. That is the right order to do the two in - a gate opened
 onto a broken fight would have been worse - but the second half is what will
 show in a number.
 
-### 101. The other thirteen drive rates were never derived either
+### 101. The gate asked for more than the feeling behind it could give
+
+`EmotionState::should_attack` was `anger > 0.5 && fear < 0.3`.
+`ThreatAssessment::emotion_amount` returns `threat_level * 0.5` for anger, and
+`threat_level` is bounded at one. **A man at the very worst rage one animal can
+produce sat exactly on the gate and did not pass it.**
+
+And the gate read the *sum* of every source while the branch behind it acts on
+the strongest single one - `what_angers_me_most` for a creature,
+`who_angers_me_most` for a person. So the branch fired only when two separate
+grudges added past a half: an agent turned on the wolf in front of it partly
+because it also resented a boar.
+
+Measured before the change, 32 worlds of 4,000 ticks:
+
+| | |
+|---|---|
+| a creature on the mind, resented | **29.7%** of every turn |
+| on the mind, but under the gate | **28.7%** |
+| felt: angry enough to act | **0.12%** |
+
+#### The threshold, taken from the data rather than chosen
+
+Bucketing the worst single thing angering anybody, over twelve worlds: anger
+stops dead at `0.50`, with **6.1% of angry moments sitting exactly on the
+ceiling** - every one of them excluded by a gate wanting strictly more.
+
+The fear gate was `0.6` against a ceiling of `0.7`: **six sevenths**. Applying
+that same fraction to anger's ceiling of `0.5` gives `0.4286`, and gives the
+fear gate back exactly the number it already had. So the two gates are now one
+demand expressed on two scales, and neither can drift from its ceiling again -
+there is a test that fails the moment one does.
+
+Both gates now read the strongest single source, because that is what the
+branches behind them act on. `TOO_FRIGHTENED_TO_STAND` stays on the total on
+purpose: the other two ask about the thing in front of you, this asks whether
+you are in any state to face it.
+
+#### What it did
+
+Mechanism, 32 worlds: **"angry enough to act" 0.12% to 1.52%**, twelve times as
+often. "Stands its ground" 0.030% to 0.090%. `Fight` 18 to 27.
+
+Survival, paired on the same seeds, three separate blocks of 32 worlds:
+
+| seeds | before | after | |
+|---|---|---|---|
+| 1000 | 2,418 | 2,662 | +244 |
+| 2000 | 2,306 | 2,399 | +93 |
+| 3000 | 2,505 | 2,506 | +1 |
+
+**Positive in all three, mean +113 turns (+4.7%) over 96 worlds** - and the
+spread between blocks is larger than the effect, so +244 is not the headline and
+the mean is. Splitting the change in half: the anger gate alone gives 2,593 on
+the first block, so roughly three quarters of the gain is the half this issue
+was actually about.
+
+#### Two things worth stating rather than burying
+
+**`Attack` went from 37 to 0.** Agent-to-agent retaliation stopped entirely, and
+that is a *removed false positive*, not a lost behaviour: anger at a person
+never exceeded `0.35` in twelve worlds, so those 37 attacks were being enabled by
+summing in anger at an *animal*. A man was hitting his neighbour partly because a
+wolf had annoyed him. Person-anger has no ceiling of its own - it accumulates
+from lies and theft and can in principle reach one - so the branch is reachable
+by somebody robbed repeatedly, just not by somebody robbed once. That it now
+reads zero over 32 worlds is worth its own look, and is not this issue.
+
+**One test flipped from pass to fail**: `thirst_tests::agents_keep_themselves_watered`,
+which asserts a six-person settlement is still standing after 3,000 ticks in one
+seeded world. Traced before writing it down: that world has **zero fights and
+zero flights** in the whole run, and its people die of hunger (5), illness (1)
+and weather (1). Nothing about combat touched it. What changed is the draw
+sequence - a gate answering differently on one turn shifts every roll after it -
+and this world fell the other side of a line it was already sitting on. It is
+left failing rather than weakened, because the assertion it makes is the standing
+problem #206 is about, and rewriting a test to suit a change is how a suite stops
+meaning anything.
+
+### 102. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5888,19 +5967,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 102. The clock is spelled out in the interface too
+### 103. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 103. Build warnings
+### 104. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 104. Placeholder package metadata
+### 105. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

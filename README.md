@@ -1041,6 +1041,39 @@ original specifications.
   **#188** — anger at an animal can never pass the gate that lets an agent turn
   on it. The ladder now works on a branch almost nobody reaches; opening the
   gate is what will show in a number. See ISSUES_FOUND.md #100
+- ✅ The gate asked for more than the feeling behind it could give — and opening
+  it is the first thing in a long while to move the survival number.
+  `should_attack` was `anger > 0.5`, and anger at one thing is capped at exactly
+  `0.5`, so **a man at the very worst rage one animal can produce sat on the gate
+  and did not pass it**. Worse, the gate read the *sum* of every source while the
+  branch behind it acts on the strongest one — so it fired only when two grudges
+  added past a half: an agent turning on the wolf in front of it partly because
+  it also resented a boar. Before: **29.7% of every turn had a creature on the
+  mind, 28.7% went under the gate, 0.12% got through.**
+
+  **The threshold was taken from the data, not chosen.** Bucketing what anger
+  actually reaches: it stops dead at 0.50, with 6.1% of angry moments sitting
+  exactly on the ceiling the gate excluded. The *fear* gate was 0.6 against a
+  ceiling of 0.7 — six sevenths — so applying that fraction to anger's ceiling
+  gives 0.4286 and hands the fear gate back the number it already had. The two
+  gates are now one demand on two scales, with a test that fails the moment
+  either drifts from its ceiling.
+
+  Mechanism: **"angry enough to act" 0.12% → 1.52%**, twelve times as often.
+  Survival, paired on the same seeds across three blocks of 32 worlds:
+  **2,418→2,662, 2,306→2,399, 2,505→2,506** — positive in all three, **mean +113
+  turns (+4.7%)**. The spread between blocks is larger than the effect, so the
+  mean is the headline and +244 is not.
+
+  Two things worth stating rather than burying. **`Attack` went 37 → 0**: that is
+  a removed false positive, not a lost behaviour — anger at a *person* never
+  exceeded 0.35, so those 37 were being enabled by summing in anger at an animal,
+  a man hitting his neighbour partly because a wolf had annoyed him. And **one
+  test flipped to failing**, `thirst_tests::agents_keep_themselves_watered`;
+  traced before writing it down, that world has zero fights and zero flights in
+  the entire run and its people die of hunger, illness and weather. The draw
+  sequence shifted and a world already on the line fell the other side of it. Left
+  failing rather than weakened. See ISSUES_FOUND.md #101
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past
