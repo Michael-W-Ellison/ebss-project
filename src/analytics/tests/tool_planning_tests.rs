@@ -223,3 +223,185 @@ fn a_handcart_is_taken_up_and_carries_more() {
         "the cart went and the pulling did not"
     );
 }
+
+
+// --------------------------------------------------------------------------
+// What bare hands manage, and what needs a tool at all
+// --------------------------------------------------------------------------
+
+/// "Many actions can be completed by the agent, but without tools, these
+/// actions are not very efficient."
+#[test]
+fn bare_hands_are_worse_than_tools_at_the_jobs_tools_are_for() {
+    use crate::agents::{Agent, SkillType};
+
+    // Fishing "can be accomplished by hand but is highly inefficient"
+    assert!(
+        Agent::what_bare_hands_manage(SkillType::Fishing) < 0.5,
+        "grabbing at fish in a river should be poor work"
+    );
+
+    // "Killing any animal without at least a stone hand axe makes it nearly
+    // impossible to eat the dead animal"
+    assert!(
+        Agent::what_bare_hands_manage(SkillType::Leatherworking) < 0.25,
+        "tearing at a carcass with bare hands is nearly impossible"
+    );
+
+    // "Digging a hole, while it can be completed manually, doing so without
+    // any tools should take a significant amount of time"
+    assert!(Agent::what_bare_hands_manage(SkillType::Mining) < 0.5);
+
+    // And picking is the exception: hands are what picking is for
+    assert!(
+        Agent::what_bare_hands_manage(SkillType::Herbalism) > 0.75,
+        "a berry does not want a tool"
+    );
+}
+
+/// Every one of those floors is below the tool that answers it.
+#[test]
+fn every_ladder_starts_above_the_bare_hand() {
+    use crate::agents::{Agent, SkillType};
+    use crate::environment::making::what_helps_with;
+
+    for trade in [
+        SkillType::Fishing,
+        SkillType::Hunting,
+        SkillType::Mining,
+        SkillType::Woodcutting,
+        SkillType::Leatherworking,
+        SkillType::Herbalism,
+    ] {
+        let hands = Agent::what_bare_hands_manage(trade);
+        let worst_tool = what_helps_with(trade)
+            .map(|tool| tool.how_much_better)
+            .fold(f32::MAX, f32::min);
+        assert!(
+            worst_tool > hands,
+            "{trade:?}: the poorest tool ({worst_tool}) is no better than bare \
+             hands ({hands})"
+        );
+    }
+}
+
+/// The handaxe does crude cutting as well as digging and chopping.
+///
+/// "The most basic tool should be a stone hand axe. This tool allows for crude
+/// cutting, digging, and chopping." It did digging and chopping and not
+/// cutting, so a people with an axe and no knife could fell a tree and could
+/// not butcher what it killed.
+#[test]
+fn the_handaxe_does_all_three_of_the_things_it_is_for() {
+    use crate::agents::SkillType;
+    use crate::environment::making::what_helps_with;
+
+    for (trade, what) in [
+        (SkillType::Woodcutting, "chopping"),
+        (SkillType::Mining, "digging"),
+        (SkillType::Leatherworking, "crude cutting"),
+    ] {
+        assert!(
+            what_helps_with(trade).any(|tool| tool.called == "handaxe"),
+            "a handaxe should be good for {what}"
+        );
+    }
+
+    // And crudely: the flake made for the job beats it
+    let axe = what_helps_with(SkillType::Leatherworking)
+        .find(|t| t.called == "handaxe")
+        .unwrap();
+    let knife = what_helps_with(SkillType::Leatherworking)
+        .find(|t| t.called == "stoneknife")
+        .unwrap();
+    assert!(knife.how_much_better > axe.how_much_better);
+}
+
+// --------------------------------------------------------------------------
+// The travois, and the cart as something advanced
+// --------------------------------------------------------------------------
+
+/// "A cart should be a rather advanced piece of technology. An initial method
+/// of moving things would likely be more of a travois."
+#[test]
+fn the_travois_comes_before_the_cart() {
+    use crate::environment::making::{EVERY_STEP, HANDCART, TRAVOIS, WHEEL};
+
+    assert!(TRAVOIS.obvious, "two poles and a hide is not an invention");
+    assert!(!WHEEL.obvious, "a wheel is");
+    assert!(!HANDCART.obvious);
+
+    // And the cart is built on the invention
+    assert!(
+        HANDCART.needs.iter().any(|(what, _)| *what == "wheel"),
+        "a cart with no wheels in it is a travois"
+    );
+    assert!(EVERY_STEP.iter().any(|s| s.makes == "travois"));
+
+    // The travois is the cheaper of the two, in effort and in makings
+    assert!(TRAVOIS.effort < HANDCART.effort);
+}
+
+/// A pair of hands holds very little, and everything past that wants something
+/// to put it in.
+///
+/// "An agent can eat from a berry bush but cannot carry additional berries
+/// unless they are carrying a pack or container."
+#[test]
+fn carrying_comes_from_containers_rather_than_from_legs() {
+    use crate::agents::{Agent, AgentConfig, InventoryItem};
+
+    let mut bare = Agent::new(AgentConfig::default());
+    // Founders arrive with a basket - take it away to see what hands alone do
+    bare.inventory.remove_item("basket", 99);
+    bare.take_up_the_cart();
+    let hands_alone = bare.inventory.max_weight;
+
+    assert!(
+        hands_alone <= Agent::WHAT_TWO_HANDS_HOLD,
+        "two bare hands should hold an armful, not a backpack: {hands_alone}"
+    );
+
+    let mut with_more = |what: &str| {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.inventory.remove_item("basket", 99);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(what.to_string(), 1, 1.0));
+        agent.take_up_the_cart();
+        agent.inventory.max_weight
+    };
+
+    let basket = with_more("basket");
+    let travois = with_more("travois");
+    let cart = with_more("handcart");
+
+    assert!(
+        hands_alone < basket && basket < travois && travois < cart,
+        "each should carry more than the last: hands {hands_alone}, \
+         basket {basket}, travois {travois}, cart {cart}"
+    );
+}
+
+/// And a founder arrives with something to carry things in.
+#[test]
+fn founders_walk_in_with_a_basket() {
+    use crate::agents::{AgentConfig, Population};
+
+    // Through the population, because the stone-age start is what a founder
+    // gets on being spawned into a world rather than what an Agent is
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let founder = &population.agents[0];
+
+    assert!(
+        founder.how_many_i_have("basket") > 0,
+        "a people that walked in carrying two days of food carried it in \
+         something"
+    );
+    assert!(
+        founder.inventory.max_weight > crate::agents::Agent::WHAT_TWO_HANDS_HOLD,
+        "and the basket is on their back, carrying more than two hands alone: {}",
+        founder.inventory.max_weight
+    );
+}

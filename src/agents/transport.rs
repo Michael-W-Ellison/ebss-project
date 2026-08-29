@@ -18,6 +18,8 @@ pub enum TransportType {
     LargeBackpack,
 
     // Vehicles (pushed/pulled)
+    /// Two poles and a hide, dragged
+    Travois,
     /// Small handcart
     Handcart,
     /// Larger cart
@@ -69,7 +71,8 @@ impl TransportType {
             TransportType::LargeBackpack => 50.0,
 
             // Vehicles
-            TransportType::Handcart => 75.0,
+            TransportType::Travois => 70.0,
+            TransportType::Handcart => 140.0,
             TransportType::Cart => 150.0,
             TransportType::Wagon => 500.0,
             TransportType::Sled => 100.0,
@@ -103,6 +106,7 @@ impl TransportType {
             TransportType::LargeBackpack => 3.5,
 
             // Vehicles
+            TransportType::Travois => 6.0,
             TransportType::Handcart => 15.0,
             TransportType::Cart => 50.0,
             TransportType::Wagon => 200.0,
@@ -140,6 +144,7 @@ impl TransportType {
     /// Check if this is a vehicle (cart, wagon, etc.)
     pub fn is_vehicle(&self) -> bool {
         matches!(self,
+            TransportType::Travois |
             TransportType::Handcart |
             TransportType::Cart |
             TransportType::Wagon |
@@ -182,6 +187,10 @@ impl TransportType {
             TransportType::LargeBackpack => 0.85,
 
             // Vehicles (significant slowdown)
+            // A travois is dragged rather than rolled, so it costs more of the
+            // walking than a cart does and carries less. That is the whole
+            // difference between them and the reason one comes first.
+            TransportType::Travois => 0.80,
             TransportType::Handcart => 0.70,
             TransportType::Cart => 0.60,
             TransportType::Wagon => 0.50,
@@ -221,6 +230,7 @@ impl TransportType {
             TransportType::LargeBackpack => 2500,
 
             // Vehicles
+            TransportType::Travois => 1200,
             TransportType::Handcart => 5000,
             TransportType::Cart => 10000,
             TransportType::Wagon => 20000,
@@ -252,6 +262,7 @@ impl TransportType {
             TransportType::Satchel => "Shoulder bag for moderate loads",
             TransportType::Backpack => "Standard backpack for extended journeys",
             TransportType::LargeBackpack => "Large hiking pack for heavy expeditions",
+            TransportType::Travois => "Two poles and a hide, dragged behind",
             TransportType::Handcart => "Small handcart for moving goods",
             TransportType::Cart => "Wheeled cart for transporting materials",
             TransportType::Wagon => "Large wagon for bulk transport",

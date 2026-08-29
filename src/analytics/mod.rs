@@ -5272,6 +5272,13 @@ impl Simulation {
     /// Everything else - the hand, the shaft, being up on a horse - is added
     /// to this. It was six in ten, which made hunting a matter of finding an
     /// animal rather than of killing one.
+    /// The biggest thing a thrown stone brings down.
+    ///
+    /// Rabbits, birds and the like sit at ten to fifteen health in the fauna
+    /// tables; a deer is thirty and upwards. So the line falls between them,
+    /// and above it "hunting any larger animal requires at least a spear".
+    const AS_BIG_AS_A_STONE_WILL_KILL: f32 = 20.0;
+
     const A_THROW_THAT_TELLS: f32 = 0.3;
 
     /// What a throw that tells takes out of an animal.
@@ -11794,6 +11801,27 @@ impl Simulation {
                     // what is in the pack counts for more, and counts for
                     // less as it wears.
                     let spear = agent.how_much_my_tools_help(crate::agents::skills::SkillType::Hunting);
+
+                    // Something in the hand, for anything bigger than a hare.
+                    //
+                    // "Hunting any larger animal requires at least a spear...
+                    // Stones can be used to kill small animals, but slings
+                    // make stones more efficient." So there is a size below
+                    // which bare hands and a thrown stone will do, and above
+                    // which they will not, and it was not being asked at all:
+                    // an agent with nothing in its hands could bring down an
+                    // ox by walking up to it.
+                    if species.health > Self::AS_BIG_AS_A_STONE_WILL_KILL
+                        && agent.what_i_have_to_work_with(
+                            crate::agents::skills::SkillType::Hunting,
+                        ).is_none()
+                    {
+                        return ActionResult::failure(format!(
+                            "Nothing in hand to bring down a {}",
+                            species.name
+                        ))
+                        .with_energy_cost(2.0);
+                    }
                     let carried_flag: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
                     let weapon_bonus = carried_flag.max((spear - 1.0) * 0.25);
 
@@ -15118,13 +15146,15 @@ impl Simulation {
                     .get_skill_if_exists(crate::agents::SkillType::Fishing)
                     .map(|skill| skill.level)
                     .unwrap_or(-10) as f32;
-                let rod = self.population.agents[agent_index]
-                    .inventory
-                    .get_all_items()
-                    .values()
-                    .any(|item| {
-                        item.quantity > 0 && item.item_id.to_lowercase().contains("rod")
-                    });
+                // A rod used to be looked for here by name, and given a fifth
+                // of a chance of its own. That was written when nothing in the
+                // making chain produced one, so the branch had never fired;
+                // now that a fishing rod is a tool like any other it is
+                // counted twice, and counting it twice put the rod *above* the
+                // net - "net fishing is even better" - which is the
+                // duplicated-vocabulary defect inverting a ladder. The tool
+                // table is the one place that says what fishing tackle is
+                // worth.
 
                 let standing = self
                     .world
@@ -15152,9 +15182,7 @@ impl Simulation {
                 let spear = self.population.agents[agent_index]
                     .how_much_my_tools_help(crate::agents::SkillType::Fishing);
 
-                let hand = (skill / 10.0).clamp(0.0, 0.5)
-                    + if rod { 0.2 } else { 0.0 }
-                    + (spear - 1.0) * 0.3;
+                let hand = (skill / 10.0).clamp(0.0, 0.5) + (spear - 1.0) * 0.3;
                 let odds = (Self::A_THRUST_THAT_TELLS + 0.4 * thickness + hand).clamp(0.0, 0.9);
 
                 if spear > 1.0 {
@@ -15167,9 +15195,14 @@ impl Simulation {
                         .with_energy_cost(Self::WHAT_A_THRUST_COSTS);
                 }
 
-                let caught = Self::FISH_PER_CAST
-                    + u32::from(rod)
-                    + u32::from(spear > 1.3);
+                // And how many come out of the water when one does.
+                //
+                // In proportion to the tackle, rather than in two steps. The
+                // odds of a cast are capped at nine tenths, so past a certain
+                // point better tackle cannot land more *often* - and "net
+                // fishing is even better" than a pole has to mean something.
+                // What a net does that a line cannot is take several at once.
+                let caught = ((Self::FISH_PER_CAST as f32 * spear).round() as u32).max(1);
 
                 let taken = {
                     let resource = self

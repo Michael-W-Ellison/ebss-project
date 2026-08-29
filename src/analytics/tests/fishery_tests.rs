@@ -177,9 +177,78 @@ fn what_a_fish_leaves_reaches_the_ground() {
     );
 }
 
-/// An agent standing at the water takes fish out of it.
+/// An agent standing at the water takes fish out of it - and takes far more
+/// out of it with something in its hands.
+///
+/// "Fishing can be accomplished by hand but is highly inefficient. Spear
+/// fishing is more efficient, pole fishing is better than spear fishing, and
+/// net fishing is even better." So the count is not the thing to assert; the
+/// ladder is. Bare hands landed ten casts in forty here, which is what "highly
+/// inefficient" comes to.
 #[test]
 fn an_agent_at_the_water_catches_something() {
+    // Counted in fish rather than in casts: good tackle lands more often *and*
+    // takes more at a time, and the odds of a cast are capped, so casts alone
+    // understate what a net is for.
+    let fish_taken = |with: Option<&str>| {
+        let mut world = a_world_with_a_river();
+        world.resources.retain(|r| r.resource_type != ResourceType::Fish);
+        world
+            .resources
+            .push(ResourceNode::new(ResourceType::Fish, Position::new(2, 0), 400));
+
+        let mut population = Population::new();
+        population.spawn_agent(AgentConfig::default());
+        population.agents[0].state.position = (2, 1, 0);
+        if let Some(what) = with {
+            let tool = population.agents[0].a_tool_fresh_from_these_hands(what, 1, 1.0);
+            population.agents[0].inventory.add_item(tool);
+        }
+
+        let mut simulation = Simulation::new(world, population);
+        let before = simulation.world.resources.iter()
+            .filter(|r| r.resource_type == ResourceType::Fish)
+            .map(|r| r.amount)
+            .sum::<u32>();
+        for _ in 0..60 {
+            simulation.population.agents[0].state.position = (2, 1, 0);
+            simulation.execute_action(&Action::Fish, 0);
+        }
+        let after = simulation.world.resources.iter()
+            .filter(|r| r.resource_type == ResourceType::Fish)
+            .map(|r| r.amount)
+            .sum::<u32>();
+        before.saturating_sub(after)
+    };
+
+    let by_hand = fish_taken(None);
+    let with_a_spear = fish_taken(Some("spear"));
+    let with_a_rod = fish_taken(Some("fishingrod"));
+    let with_a_net = fish_taken(Some("fishingnet"));
+
+    assert!(
+        by_hand > 0,
+        "fishing by hand is poor work, not impossible: {by_hand}"
+    );
+    assert!(
+        with_a_spear > by_hand,
+        "a spear should beat bare hands: {with_a_spear} against {by_hand}"
+    );
+    assert!(
+        with_a_net >= with_a_rod && with_a_rod >= with_a_spear,
+        "the ladder should climb: hands {by_hand}, spear {with_a_spear}, \
+         rod {with_a_rod}, net {with_a_net}"
+    );
+    assert!(
+        with_a_net > by_hand * 2,
+        "a net should be worth several times a pair of hands: \
+         {with_a_net} against {by_hand}"
+    );
+}
+
+/// And what is caught goes into the pack.
+#[test]
+fn what_is_caught_goes_into_the_pack() {
     let mut world = a_world_with_a_river();
     world.resources.retain(|r| r.resource_type != ResourceType::Fish);
     world
@@ -191,21 +260,10 @@ fn an_agent_at_the_water_catches_something() {
     population.agents[0].state.position = (2, 1, 0);
 
     let mut simulation = Simulation::new(world, population);
-
-    // Cast until something takes: a river is a sure thing over a few tries,
-    // which is the point of it, but no single cast is certain
-    let mut caught = 0;
     for _ in 0..40 {
         simulation.population.agents[0].state.position = (2, 1, 0);
-        if simulation.execute_action(&Action::Fish, 0).success {
-            caught += 1;
-        }
+        simulation.execute_action(&Action::Fish, 0);
     }
-
-    assert!(
-        caught > 10,
-        "forty casts into a full reach should land a good many; {caught} did"
-    );
 
     let carried = simulation.population.agents[0]
         .inventory

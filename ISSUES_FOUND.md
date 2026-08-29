@@ -5228,9 +5228,126 @@ walks, and taking up a cart recomputes it - a hale agent gets 175 and a
 lame one 107. Filed rather than fixed, because carrying capacity wants its own
 measurement and this commit has had enough of them.
 
+### 88. The bottom of the ladder: bare hands were a fully competent workman
+
+"Many actions can be completed by the agent, but without tools, these actions
+are not very efficient."
+
+`how_much_my_tools_help` returned **one** for every trade with nothing in the
+hand, so a man with no tools was as good as a man with the right one and every
+tool in the model was a bonus on top of competence. That is why the ladder in
+#87 measured null when it was built: there was nothing wrong with the bottom of
+it.
+
+Each trade has a bare-hands figure now, and each is the specification's own
+reading of the job. Fishing "can be accomplished by hand but is highly
+inefficient" - a quarter. Butchering, where "killing any animal without at least
+a stone hand axe makes it nearly impossible to eat the dead animal" - fifteen
+hundredths. Digging, which "without any tools should take a significant amount
+of time" - three tenths. Picking is the exception at 0.85, because hands are
+what picking is *for*; what a digging stick adds is roots, not berries.
+
+Every trade with no tool in the world behind it is left at one, or this would
+quietly tax half the model for no stated reason.
+
+#### The handaxe does the third thing it was always said to do
+
+"The most basic tool should be a stone hand axe. This tool allows for crude
+cutting, digging, and chopping." It was in the tool table for digging and
+chopping and not for cutting, so a people with an axe and no flake could fell a
+tree and could not butcher what it killed.
+
+#### Nothing in hand, nothing to bring down
+
+"Hunting any larger animal requires at least a spear... Stones can be used to
+kill small animals, but slings make stones more efficient." There was no such
+line: an agent with empty hands could walk up to an ox. Above twenty health -
+which is where the fauna tables put the gap between a hare and a deer - the hunt
+now refuses without something in the hand.
+
+Two rungs of spear, as asked: a `sharpenedstick`, which is one length of wood
+and an evening at the fire, and the flint-tipped `spear` above it. No arrows for
+the bow, which is still the honest gap - a bow that spends ammunition wants a
+whole model of ammunition behind it and there is none.
+
+#### The fishing ladder, and a rod that was counted twice
+
+"Fishing can be accomplished by hand but is highly inefficient. Spear fishing is
+more efficient, pole fishing is better than spear fishing, and net fishing is
+even better." Measured, hands landed 40 fish in sixty casts, a spear 52, a rod
+94 - and a net **91**. The ladder inverted at the top.
+
+Two reasons, both duplicated vocabulary. `Action::Fish` had looked for something
+with "rod" in its name since the fishery was built and given it a fifth of a
+chance of its own; that was written when nothing in the chain made one, so the
+branch had never fired, and the moment a fishing rod became a real tool it was
+counted twice. And the odds of a cast are capped at nine tenths, so past a point
+better tackle cannot land more *often* - which is exactly what a net is for. It
+takes several at once, so the catch is in proportion to the tackle now rather
+than in two hand-written steps.
+
+### 89. A cart is not the first thing a people builds, and the wheel is the hard part
+
+"A cart should be a rather advanced piece of technology. An initial method of
+moving things would likely be more of a travois."
+
+Which is right, and the cart from #87 was standing in the travois's place: four
+lengths of wood and a lashing that founders could turn out on their first
+afternoon, which put the wheel in the same bracket as a digging stick.
+
+The advanced part is not the cart. A cart is a box on poles and anybody can see
+how to build one; what nobody can see how to build is a disc that turns true on
+an axle. So `WHEEL` is its own step and is found out, `HANDCART` wants two of
+them, and the same wood and lashing without them makes a `TRAVOIS` - dragged
+rather than rolled, so it carries less and costs more of the walking. That is
+the whole difference between them and the reason one comes first.
+
+A `BASKET` sits below both, at two lashings, and founders arrive wearing one.
+
+### 90. Carrying capacity came from the legs, and the container sweep it wants
+
+`update_inventory_capacity_from_transport` scaled the base by
+`body.movement_speed_multiplier()` under a comment calling it a strength. It is
+the leg-health figure, so how much somebody could carry was decided by how well
+they walked. It reads arms and torso now - `how_much_this_body_can_lift` - which
+is what carrying actually is. That was #87's parting find and is fixed here.
+
+The other half is not. "An agent can eat from a berry bush but cannot carry
+additional berries unless they are carrying a pack or container. This means that
+the act of walking to and from the berry patch each time the agent is hungry
+will take additional time, making it less efficient."
+
+That wants a bare-handed figure around a dozen, so a basket is the difference
+between an armful and a load. At twelve, **forty tests fall over** - barter,
+larder, sprouting, theft, working, portioning, fluids - because every fixture in
+the suite was written when a pair of bare hands held a hundredweight, and a
+fixture that gives somebody forty stones is testing who wants what rather than
+what anybody can lift.
+
+Measured at twelve with a small basket, the settlement measured *better*: 1724,
+1625, 1661 against 1613, 1522, 1616. The constraint is worth having and it is
+the constraint doing the work, not the tool floors. What is here is a compromise
+that keeps the shape and most of the effect - hands at twelve, a basket at
+thirty, a travois at seventy, a cart at a hundred and forty - which cost four
+fixtures rather than forty. The remaining question is whether a bare hand should
+hold twelve or thirty, and it is #216, because answering it properly is a sweep
+of the whole suite and would make this commit unattributable.
+
+### 91. What the whole batch measured
+
+Thirty-two worlds, five runs: mean last-alive **1698, 1492, 1729, 1661, 1645**
+against **1613, 1522, 1616** for the commit before. Better, and the low outlier
+is inside the spread this harness has always had.
+
+Worth recording what did *not* move it. Measured stage by stage: the carrying
+change was worth about sixty-five turns, the bare-hands floors about twenty, the
+hunting and butchering gates about fifty-five. The floors are the piece that
+matters least to survival and most to the model - they are what makes every rung
+of #87's ladder worth climbing, and without them the ladder was decoration.
+
 ## Housekeeping
 
-### 88. The other thirteen drive rates were never derived either
+### 92. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5239,23 +5356,23 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 89. The clock is spelled out in the interface too
+### 93. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 90. Committed backup file
+### 94. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 91. Build warnings
+### 95. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 92. Placeholder package metadata
+### 96. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

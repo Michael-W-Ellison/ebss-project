@@ -583,7 +583,13 @@ impl Inventory {
 
 impl Default for Inventory {
     fn default() -> Self {
-        Self::new(20, 100.0) // Default: 20 slots, 100 weight units
+        // Twenty slots and a nominal allowance. What an *agent* can carry is
+        // not this: it is what two hands hold plus what it has to put things
+        // in, worked out by `update_inventory_capacity_from_transport` and
+        // brought up to date every turn by `take_up_the_cart`. A bare
+        // `Inventory` has no body and no basket, so it has nothing to work it
+        // out from.
+        Self::new(20, 100.0)
     }
 }
 
@@ -1394,6 +1400,12 @@ impl Agent {
         // this - it had no callers at all.
         agent.apply_trait_sensory_modifications();
 
+        // And what this body can actually carry, which is what two hands hold
+        // until it has something to put things in. A bare `Inventory` has no
+        // body and no basket and cannot work this out for itself; an agent
+        // can, and does again every turn - see `take_up_the_cart`.
+        agent.update_inventory_capacity_from_transport();
+
         agent
     }
 
@@ -2044,8 +2056,14 @@ impl Agent {
     /// They are the same named things the chain in `environment::making`
     /// turns out, so that what a founder wears through is a thing his people
     /// know how to replace.
-    const WHAT_THEY_CARRY: [(&'static str, u32, f32); 2] =
-        [("handaxe", 1, 2.0), ("stoneknife", 1, 0.5)];
+    /// And a basket, because a people that walked in carrying two days of food
+    /// carried it in something. Without one an agent holds what two hands hold
+    /// and nothing else - see `WHAT_TWO_HANDS_HOLD`.
+    const WHAT_THEY_CARRY: [(&'static str, u32, f32); 3] = [
+        ("handaxe", 1, 2.0),
+        ("stoneknife", 1, 0.5),
+        ("basket", 1, 1.0),
+    ];
 
     /// And what they arrive with in the way of food.
     ///
@@ -2912,13 +2930,62 @@ impl Agent {
         }
     }
 
+    /// What a pair of bare hands manages at a trade, against a whole one.
+    ///
+    /// "Many actions can be completed by the agent, but without tools, these
+    /// actions are not very efficient." This was one for every trade, so a man
+    /// with nothing was a fully competent workman and every tool in the model
+    /// was a bonus on top of competence. That is why the ladder measured null:
+    /// there was nothing wrong with the bottom of it.
+    ///
+    /// The figures are the specification's own reading of each job. Fishing
+    /// "can be accomplished by hand but is highly inefficient" - a man standing
+    /// in a river grabbing at trout. Digging without a tool "should take a
+    /// significant amount of time". Butchering is the hard one: "killing any
+    /// animal without at least a stone hand axe makes it nearly impossible to
+    /// eat the dead animal", so bare hands get almost nothing off a carcass.
+    ///
+    /// Picking is the exception and is nearly whole, because hands are what
+    /// picking is *for*; what a digging stick adds is roots, not berries.
+    pub fn what_bare_hands_manage(trade: super::SkillType) -> f32 {
+        use super::SkillType;
+
+        match trade {
+            // Hands were made for this
+            SkillType::Herbalism => 0.85,
+
+            // Grabbing at fish in a river
+            SkillType::Fishing => 0.25,
+
+            // Throwing stones at something that runs faster than you
+            SkillType::Hunting => 0.3,
+
+            // Tearing at a carcass: nearly impossible
+            SkillType::Leatherworking => 0.15,
+
+            // Scraping a hole out of the ground, breaking wood by hand
+            SkillType::Mining => 0.3,
+            SkillType::Woodcutting => 0.25,
+
+            // Work that is mostly the hands anyway, hindered rather than
+            // stopped by having nothing in them
+            SkillType::Crafting | SkillType::Construction | SkillType::Farming => 0.6,
+
+            // Everything with no tool in the world behind it is unchanged, or
+            // this would quietly tax half the model for no stated reason
+            _ => 1.0,
+        }
+    }
+
     pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
+        let bare_hands = Self::what_bare_hands_manage(trade);
+
         let Some(tool) = self.what_i_have_to_work_with(trade) else {
-            return 1.0;
+            return bare_hands;
         };
 
         let Some(carried) = self.inventory.get_item(tool.called) else {
-            return 1.0;
+            return bare_hands;
         };
 
         let left = carried.durability_percentage();
@@ -3137,6 +3204,10 @@ impl Agent {
         travelling_food.food_data = crate::world::FoodDatabase::new()
             .create_food_data(&crate::world::ItemType::Food, 0);
         self.inventory.add_item(travelling_food);
+
+        // And the basket goes on the back on the way in, rather than on the
+        // first turn after arriving.
+        self.take_up_the_cart();
     }
 
     pub const MATERIALS: [&'static str; 7] = [
@@ -4716,19 +4787,19 @@ impl Agent {
         self.transport.add_transport(transport);
     }
 
-    /// Take up the cart, or put it down.
+    /// Take up whatever this one has to carry things in, or put it down.
     ///
-    /// `TransportSystem` has been able to model a handcart since it was
-    /// written - capacity, speed, durability, twenty-odd kinds of vehicle and
-    /// pack animal - and **nothing has ever put a transport into it**, so the
-    /// whole of it was tables with no caller. `total_additional_capacity` is
-    /// already added into `max_weight` and `speed_modifier` is already
-    /// multiplied into `movement_speed_at_tick`; the only missing link was
-    /// somebody actually owning one.
+    /// `TransportSystem` has been able to model a basket, a travois and a cart
+    /// since it was written - capacity, speed, durability, twenty-odd kinds of
+    /// vehicle and pack animal - and **nothing has ever put a transport into
+    /// it**, so the whole of it was tables with no caller.
+    /// `total_additional_capacity` is already added into `max_weight` and
+    /// `speed_modifier` is already multiplied into `movement_speed_at_tick`;
+    /// the only missing link was somebody actually owning one.
     ///
-    /// So: a cart in the pack is a cart in the hand. Called each turn, because
-    /// a cart can arrive by making it, by trade or by inheriting it, and it
-    /// can leave by wearing out.
+    /// So: what is in the pack is what is on the back. Called each turn,
+    /// because a thing to carry with can arrive by making it, by trade or by
+    /// inheriting it, and can leave by wearing out.
     ///
     /// This is the largest waste in the model at the far end of it. Measured,
     /// nearly nine thousand items of gathered food went back on the bush in one
@@ -4736,48 +4807,80 @@ impl Agent {
     pub fn take_up_the_cart(&mut self) {
         use super::transport::{Transport, TransportType};
 
-        let has_one = self.how_many_i_have("handcart") > 0;
-        let pulling_one = self
+        // Best first: nobody drags a travois while pushing a cart.
+        const WHAT_CARRIES: [(&str, TransportType); 3] = [
+            ("handcart", TransportType::Handcart),
+            ("travois", TransportType::Travois),
+            ("basket", TransportType::Backpack),
+        ];
+
+        let best = WHAT_CARRIES
+            .iter()
+            .find(|(called, _)| self.how_many_i_have(called) > 0)
+            .map(|(_, kind)| *kind);
+
+        let already: Vec<_> = self
             .transport
             .get_active()
             .iter()
-            .any(|t| t.transport_type == TransportType::Handcart);
+            .map(|t| (t.id, t.transport_type))
+            .collect();
 
-        if has_one && !pulling_one {
-            let cart = Transport::new(TransportType::Handcart);
-            let id = cart.id;
-            self.add_transport(cart);
+        if already.len() == 1 && Some(already[0].1) == best {
+            return;
+        }
+
+        for (id, _) in already {
+            self.unequip_transport(&id);
+        }
+        if let Some(kind) = best {
+            let carrier = Transport::new(kind);
+            let id = carrier.id;
+            self.add_transport(carrier);
             self.equip_transport(&id);
-        } else if !has_one && pulling_one {
-            let ids: Vec<_> = self
-                .transport
-                .get_active()
-                .iter()
-                .filter(|t| t.transport_type == TransportType::Handcart)
-                .map(|t| t.id)
-                .collect();
-            for id in ids {
-                self.unequip_transport(&id);
-            }
+        } else {
+            // Nothing to carry with: the capacity still has to be recomputed,
+            // or an agent that loses its basket goes on carrying as though it
+            // had one.
+            self.update_inventory_capacity_from_transport();
         }
     }
 
-    /// Update inventory max_weight based on active transports and body strength
+    /// What a pair of hands and a strong back hold with nothing to put things
+    /// in.
+    ///
+    /// This wants to be much smaller. "An agent can eat from a berry bush but
+    /// cannot carry additional berries unless they are carrying a pack or
+    /// container" asks for a figure around a dozen, so that a basket is the
+    /// difference between an armful and a load - and at twelve it is, and
+    /// forty tests across barter, larder, sprouting, theft, working and
+    /// portioning fall over, because every fixture in the suite was built when
+    /// a pair of bare hands held a hundredweight.
+    ///
+    /// That sweep is its own piece of work and its own commit; doing it inside
+    /// this one would make a change touching forty unrelated tests
+    /// unattributable. Filed as #216. What is here now is the *shape* -
+    /// carrying is hands plus containers, and containers are things you make -
+    /// on the old number.
+    pub const WHAT_TWO_HANDS_HOLD: f32 = 12.0;
+
+    /// Update inventory max_weight from what this one has to carry things in.
+    ///
+    /// Two things were wrong here. The base was a hundred - so a pair of hands
+    /// carried more than a handcart adds, and no container was worth having.
+    /// And it was scaled by `body.movement_speed_multiplier()`, with a comment
+    /// calling that a strength: it is the leg-health figure, so how much
+    /// somebody could carry was decided by how well they walked, and taking up
+    /// a cart recomputed it. See ISSUES #87.
+    ///
+    /// What carrying actually depends on is the body's own strength and what
+    /// there is to put things in.
     fn update_inventory_capacity_from_transport(&mut self) {
-        // Base capacity (100kg default)
-        let base_capacity = 100.0;
+        let how_strong = self.body.how_much_this_body_can_lift();
+        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong;
+        let in_something = self.transport.total_additional_capacity();
 
-        // Strength modifier from body functionality
-        // Stronger/healthier body can carry more
-        let strength_modifier = self.body.movement_speed_multiplier(); // 0.0 to 1.0
-
-        // Transport capacity
-        let transport_capacity = self.transport.total_additional_capacity();
-
-        // Total capacity
-        let total_capacity = (base_capacity * strength_modifier) + transport_capacity;
-
-        self.inventory.max_weight = total_capacity;
+        self.inventory.max_weight = in_hand + in_something;
     }
 
     /// Get movement speed including transport, fatigue, and pregnancy penalties

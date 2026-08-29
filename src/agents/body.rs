@@ -572,6 +572,34 @@ impl Body {
         (left_leg + right_leg) / 2.0
     }
 
+    /// How much this body can lift and carry, against a whole one.
+    ///
+    /// Arms and torso, which is what carrying actually is. Carrying capacity
+    /// was scaled by `movement_speed_multiplier` under a comment calling it a
+    /// strength - that is the leg-health figure, so how much somebody could
+    /// carry was decided by how well they walked. See ISSUES #87.
+    ///
+    /// A body with one arm carries less than one with two and more than one
+    /// with none, so the two arms average rather than taking the better; the
+    /// torso is the back the load sits on and counts for as much as both arms
+    /// together.
+    pub fn how_much_this_body_can_lift(&self) -> f32 {
+        let arm = |which| {
+            self.parts
+                .get(&which)
+                .map(|p| p.effectiveness())
+                .unwrap_or(0.0)
+        };
+        let arms = (arm(BodyPartType::LeftArm) + arm(BodyPartType::RightArm)) / 2.0;
+        let back = self
+            .parts
+            .get(&BodyPartType::Torso)
+            .map(|p| p.effectiveness())
+            .unwrap_or(1.0);
+
+        (arms + back) / 2.0
+    }
+
     /// Get tool use efficiency based on arm health
     pub fn tool_efficiency_multiplier(&self) -> f32 {
         let left_arm = self.parts.get(&BodyPartType::LeftArm)

@@ -146,10 +146,11 @@ fn a_tool_in_the_pack_makes_the_work_go_better() {
     let agent = &mut population.agents[0];
     agent.inventory.remove_item("handaxe", 1);
 
+    // Bare hands are bare hands, and bare hands are poor at felling trees:
+    // "without tools, these actions are not very efficient". See ISSUES #88.
     assert_eq!(
         agent.how_much_my_tools_help(SkillType::Woodcutting),
-        1.0,
-        "bare hands are bare hands"
+        Agent::what_bare_hands_manage(SkillType::Woodcutting),
     );
 
     let axe = agent.a_tool_fresh_from_these_hands("handaxe", 1, 2.0);
@@ -224,7 +225,7 @@ fn enough_work_wears_a_tool_out() {
     );
     assert_eq!(
         agent.how_much_my_tools_help(SkillType::Woodcutting),
-        1.0,
+        Agent::what_bare_hands_manage(SkillType::Woodcutting),
         "and a worn-through axe is no axe"
     );
 }
@@ -349,8 +350,8 @@ fn a_spear_makes_a_hunter_of_somebody() {
 
     assert_eq!(
         agent.how_much_my_tools_help(SkillType::Hunting),
-        1.0,
-        "a founder arrives without a spear"
+        Agent::what_bare_hands_manage(SkillType::Hunting),
+        "a founder arrives without a spear, and throwing stones is poor work"
     );
 
     let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);

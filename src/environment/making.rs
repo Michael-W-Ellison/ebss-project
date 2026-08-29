@@ -273,29 +273,105 @@ pub const SHOVEL: Making = Making {
     wants_in_hand: Some("stoneknife"),
 };
 
-/// The wheel, as the only thing a wheel is actually for.
+/// Woven cordage: what a berry goes into when it is not going into a mouth.
 ///
-/// Not a tool - nothing it does is a multiplier on a trade. What it does is
-/// carry, and `TransportSystem` has been able to model exactly that since it
-/// was written: `total_additional_capacity` is already added into
-/// `Inventory::max_weight` and `speed_modifier` is already multiplied into
-/// `movement_speed_at_tick`. **Nothing ever put a transport into the system**,
-/// so the whole of it has been dead code with a full set of tables behind it.
+/// "An agent can eat from a berry bush but cannot carry additional berries
+/// unless they are carrying a pack or container. This means that the act of
+/// walking to and from the berry patch each time the agent is hungry will take
+/// additional time, making it less efficient."
 ///
-/// Which matters, because a full pack is the largest measured waste in this
-/// model: nearly nine thousand items of gathered food went back on the bush in
-/// a run because there was nowhere to put them. A cart is seventy-five more
-/// pounds and three tenths off the walking pace, which is the trade a cart has
-/// always been.
+/// So carrying is a thing you need a thing for. A pair of hands holds what a
+/// pair of hands holds, and everything past that wants a basket - which is why
+/// this is the cheapest making in the chain and the one founders arrive with.
+/// A people that knows how to twist cordage knows how to weave it.
+pub const BASKET: Making = Making {
+    makes: "basket",
+    how_many: 1,
+    needs: &[("lashing", 2)],
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// Two poles and a hide, dragged.
+///
+/// "A cart should be a rather advanced piece of technology. An initial method
+/// of moving things would likely be more of a travois." Which is right, and
+/// the cart was standing in the travois's place: a stone-age people had one
+/// rung between a basket and a wagon, and it had wheels on it.
+///
+/// A travois is two poles, a lashing and something to lie across them. No
+/// wheel, no axle, no bearing - the load drags, so it costs more of the
+/// walking than a cart does and carries less. That is the whole difference
+/// between them, and it is why one comes first.
+pub const TRAVOIS: Making = Making {
+    makes: "travois",
+    how_many: 1,
+    needs: &[("wood", 2), ("lashing", 1), ("hides", 1)],
+    hands: SkillType::Crafting,
+    effort: 9.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("handaxe"),
+};
+
+/// The wheel itself, which is the advanced part.
+///
+/// Not the cart: the cart is a box on poles and anybody can see how to build
+/// one. What nobody can see how to build is a disc that turns true on an axle,
+/// and that is the thing that has to be found out. Two of them and a bed makes
+/// a cart; without them the same wood and lashing makes a travois.
+pub const WHEEL: Making = Making {
+    makes: "wheel",
+    how_many: 1,
+    needs: &[("wood", 2), ("lashing", 1)],
+    hands: SkillType::Carpentry,
+    effort: 16.0,
+    obvious: false,
+    over_a_fire: false,
+    wants_in_hand: Some("handaxe"),
+};
+
+/// A bed on two wheels, which is what the wheels were for.
+///
+/// Advanced, now, in the only way that means anything: it wants two wheels and
+/// nobody is born knowing how to make one. It was four lengths of wood and a
+/// lashing that founders could turn out on their first afternoon, which put
+/// the wheel in the same bracket as a digging stick.
+///
+/// What it does is carry, and `TransportSystem` has been able to model exactly
+/// that since it was written - capacity already summed into
+/// `Inventory::max_weight`, speed already multiplied into
+/// `movement_speed_at_tick`. Nothing had ever put a transport into it.
 pub const HANDCART: Making = Making {
     makes: "handcart",
     how_many: 1,
-    needs: &[("wood", 4), ("lashing", 2)],
+    needs: &[("wheel", 2), ("wood", 3), ("lashing", 2)],
     hands: SkillType::Carpentry,
     effort: 20.0,
     obvious: false,
     over_a_fire: false,
     wants_in_hand: Some("handaxe"),
+};
+
+/// A stick with a point burnt into it.
+///
+/// "Hunting any larger animal requires at least a spear. A wooden spear is
+/// enough, but should take several attacks to kill the animal, depending on
+/// the size of the animal. A flint spear should reduce the number of attacks."
+/// So there are two spears, and this is the first: no tip, no lashing, one
+/// length of wood and an evening at the fire.
+pub const SHARPENED_STICK: Making = Making {
+    makes: "sharpenedstick",
+    how_many: 1,
+    needs: &[("wood", 1)],
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("stoneknife"),
 };
 
 /// Stick, tip, lashing.
@@ -966,6 +1042,10 @@ pub const EVERY_STEP: &[Making] = &[
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
     DIGGING_STICK,
+    BASKET,
+    TRAVOIS,
+    WHEEL,
+    SHARPENED_STICK,
     SLING,
     BOW,
     FISHING_ROD,
@@ -1255,6 +1335,20 @@ pub const AXE_FOR_WOOD: Tool = Tool {
     how_long_it_lasts: 40.0,
 };
 
+/// Crude cutting: the handaxe taking a carcass apart.
+///
+/// "The most basic tool should be a stone hand axe. This tool allows for crude
+/// cutting, digging, and chopping." It did digging and chopping - Mining and
+/// Woodcutting - and not cutting, so a people with an axe and no knife could
+/// fell a tree and could not butcher what it killed. Crude, and well below the
+/// flake that is made for the job, but not nothing.
+pub const AXE_FOR_BUTCHERING: Tool = Tool {
+    called: "handaxe",
+    helps: SkillType::Leatherworking,
+    how_much_better: 1.25,
+    how_long_it_lasts: 40.0,
+};
+
 /// What a root is dug with, and what a patch of ground is turned with.
 ///
 /// Modest and cheap, which is what a digging stick is. Its whole importance is
@@ -1274,6 +1368,14 @@ pub const STICK_FOR_FARMING: Tool = Tool {
     helps: SkillType::Farming,
     how_much_better: 1.4,
     how_long_it_lasts: 30.0,
+};
+
+/// A point burnt into a stick: enough to bring a deer down, several throws in.
+pub const STICK_FOR_HUNTING: Tool = Tool {
+    called: "sharpenedstick",
+    helps: SkillType::Hunting,
+    how_much_better: 1.4,
+    how_long_it_lasts: 15.0,
 };
 
 /// What a people hunts with when it has nothing better.
@@ -1433,8 +1535,10 @@ pub const METAL_SPEAR_FOR_FISHING: Tool = Tool {
 pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_WOOD,
     AXE_FOR_STONE,
+    AXE_FOR_BUTCHERING,
     STICK_FOR_DIGGING,
     STICK_FOR_FARMING,
+    STICK_FOR_HUNTING,
     SLING_FOR_HUNTING,
     BOW_FOR_HUNTING,
     ROD_FOR_FISHING,
