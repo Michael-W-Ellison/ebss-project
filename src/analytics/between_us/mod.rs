@@ -24,3 +24,29 @@ pub mod asking;
 pub mod exchange;
 pub mod seeing;
 pub mod threat;
+
+use super::Simulation;
+
+impl Simulation {
+    /// How far a voice carries.
+    ///
+    /// The same reach as seeing somebody do something - if you can see a man
+    /// pick a thing up, you can call across to him. It had no value at all
+    /// before: `find_nearest_social_target` returned the nearest person *on the
+    /// map*, and neither `socialising` nor `sharing_information` looked at where
+    /// that person was, so a settlement's whole social life was conducted at
+    /// arbitrary range. Two men twelve tiles apart, each alone in a different
+    /// wood, greeted one another, exchanged news and gave one another presents.
+    ///
+    /// See ISSUES_FOUND.md #102.
+    pub(in crate::analytics) const WITHIN_TALKING_DISTANCE: i32 =
+        Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP;
+
+    /// Whether these two are near enough to say anything to each other.
+    pub(in crate::analytics) fn near_enough_to_talk(
+        here: (i32, i32, i32),
+        there: (i32, i32, i32),
+    ) -> bool {
+        (here.0 - there.0).abs().max((here.1 - there.1).abs()) <= Self::WITHIN_TALKING_DISTANCE
+    }
+}

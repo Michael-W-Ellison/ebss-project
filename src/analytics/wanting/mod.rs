@@ -132,6 +132,10 @@ impl Simulation {
         agents
             .iter()
             .filter(|(id, _)| *id != agent_id) // Exclude self
+            // Near enough to say it to. Without this the nearest person *on
+            // the map* was the answer, however far off that was - see
+            // `Simulation::WITHIN_TALKING_DISTANCE`.
+            .filter(|(_, pos)| Self::near_enough_to_talk(position, *pos))
             .min_by_key(|(_, pos)| {
                 let dx = (pos.0 - position.0).abs();
                 let dy = (pos.1 - position.1).abs();

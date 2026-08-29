@@ -1074,6 +1074,41 @@ original specifications.
   the entire run and its people die of hunger, illness and weather. The draw
   sequence shifted and a world already on the line fell the other side of it. Left
   failing rather than weakened. See ISSUES_FOUND.md #101
+- ✅ Nobody retaliates because nobody is wronged — and a settlement's whole
+  social life was conducted at arbitrary range. The entry above left `Attack` at
+  zero and asked whether that was right. Traced end to end, the answer is **yes
+  for now, and the retaliation gate is not the thing to change**: retaliation
+  needs anger at a person, that comes from being lied to or robbed, and over 32
+  worlds `TakeFrom` is chosen **0** times, `Trade` **0** times, and 29 things
+  are told in total. Lowering the gate would put the false positive back — a man
+  hitting his neighbour over a grudge he does not have.
+
+  **Why nobody steals**, instrumented rather than guessed: the theft branch sits
+  at the tail of an `or_else` chain and is reached 142 times in 120,000
+  agent-turns; on those 142 occasions somebody was within arm's reach **3**
+  times; and none of the 3 had anything worth taking. The surprise is that
+  people are *not* spread out — the nearest other person is on the **same tile
+  31.6% of the time** and within reach 64% of it. The branch is reached almost
+  only on the turns when somebody is off alone, which is exactly the turn on
+  which every other option has run out. So the defect is the branch's *position*,
+  not its threshold, and moving it is its own job — the comment above it records
+  that the last attempt to move a refusable branch up cost a settlement half its
+  winter store.
+
+  **What the tracing did find:** `find_nearest_social_target` returned the
+  nearest person **on the map**, with no distance limit at all, and neither
+  `socialising` nor `sharing_information` looked at where that person was. Two
+  men twelve tiles apart, each alone in a different wood, greeted one another,
+  exchanged news and gave one another presents. Fixed with one named reach,
+  `WITHIN_TALKING_DISTANCE`, tied to the reach at which you can see somebody
+  pick a thing up.
+
+  Measured, paired: **2,662→2,881, 2,399→2,285, 2,506→2,691** — mean +97 turns
+  but **one block of 32 worlds goes the other way**, so this is landed as a
+  correctness fix with the survival effect recorded as inconclusive, not claimed
+  as a win. `TakeFrom` and `Attack` are both still 0; #225 is *answered* rather
+  than fixed, and making theft reachable is filed on its own.
+  See ISSUES_FOUND.md #102
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

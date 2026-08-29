@@ -5958,7 +5958,80 @@ left failing rather than weakened, because the assertion it makes is the standin
 problem #206 is about, and rewriting a test to suit a change is how a suite stops
 meaning anything.
 
-### 102. The other thirteen drive rates were never derived either
+### 102. Nobody retaliates because nobody is wronged - and a settlement's whole social life was conducted at arbitrary range
+
+#101 left `Action::Attack` at zero and asked whether that was right. The answer,
+traced end to end, is **yes for now, and the retaliation gate is not the thing to
+change.** Retaliation needs anger at a person; anger at a person comes from being
+lied to or robbed; and neither happens.
+
+| | over 32 worlds of 4,000 ticks |
+|---|---|
+| `TakeFrom` chosen | **0** |
+| `Trade` chosen | **0** |
+| things anybody was told | **29** (over 8 worlds) |
+
+Lowering the gate would have put the false positive #101 removed straight back:
+a man hitting his neighbour over a grudge he does not have.
+
+#### Why nobody steals
+
+Instrumented rather than guessed. `somebody_to_take_from` sits at the tail of an
+`or_else` chain, and:
+
+- the branch is **reached 142 times in 120,000 agent-turns** - 0.12% - because
+  everything ahead of it has to decline first;
+- on those 142 occasions there was somebody within arm's reach **3 times**;
+- and on all 3 that person had nothing the thief wanted.
+
+The 3-in-142 is the surprise, because people are not spread out at all: the
+nearest other person is on the **same tile 31.6% of the time** and within the
+three-tile reach **64%** of it. So the branch is not blocked by distance in
+general - it is reached almost only on the turns when somebody is off alone,
+which is exactly the turn on which every other option has run out. The defect is
+the branch's *position*, not its threshold, and moving it is its own piece of
+work: the comment above it records that an earlier attempt to put a refusable
+branch ahead of unrefusable ones cost a settlement half its winter store.
+
+#### What the tracing did find
+
+`find_nearest_social_target` returned the nearest person **on the map**, with no
+distance limit at all - and neither `socialising` nor `sharing_information`
+looked at where that person was. So two men twelve tiles apart, each alone in a
+different wood, greeted one another, exchanged news and gave one another
+presents. A settlement of a dozen people conducted its entire social life at
+arbitrary range, and the Social drive was answerable without anybody ever being
+in the same place.
+
+Fixed: one named reach, `WITHIN_TALKING_DISTANCE`, tied to
+`CLOSE_ENOUGH_TO_SEE_IT_COME_UP` - if you can see a man pick a thing up, you can
+call across to him. The choosing no longer names somebody out of earshot, and
+both verbs refuse if asked anyway.
+
+Measured, paired on the same seeds against #101:
+
+| seeds | before | after | |
+|---|---|---|---|
+| 1000 | 2,662 | 2,881 | +219 |
+| 2000 | 2,399 | 2,285 | **-114** |
+| 3000 | 2,506 | 2,691 | +185 |
+
+**Mean +97 turns, but one block of thirty-two worlds goes the other way**, so
+this is weaker evidence than #101's and is not being claimed as a survival win.
+It is landed as a correctness fix - people should not befriend across a valley -
+with the survival effect recorded as inconclusive. Socialising did not become
+rarer (1,051 to 1,093): three quarters of it was already within earshot, and the
+limit mostly removed the long-range quarter.
+
+#### What is still true
+
+`TakeFrom` is still 0 and `Attack` is still 0. The reach fix did not open that
+path and was not expected to. **#225 is answered rather than fixed**: zero is
+correct while nobody is wronged, and the work that would change it is making
+theft reachable - filed separately, because it is a change to the decision ladder
+and wants its own measured cycle rather than a ride on this one.
+
+### 103. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5967,19 +6040,19 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 103. The clock is spelled out in the interface too
+### 104. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 104. Build warnings
+### 105. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 105. Placeholder package metadata
+### 106. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

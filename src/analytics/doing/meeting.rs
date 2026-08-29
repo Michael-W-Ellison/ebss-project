@@ -37,6 +37,18 @@ impl Simulation {
             return ActionResult::failure("Cannot socialize with self".to_string());
         }
 
+        // Near enough to say it to. The target is resolved before this, and
+        // could be anybody in the settlement; whether they are actually within
+        // earshot is this verb's own business - see
+        // `Simulation::WITHIN_TALKING_DISTANCE`.
+        if !Self::near_enough_to_talk(
+            self.population.agents[agent_index].state.position,
+            self.population.agents[target_index].state.position,
+        ) {
+            return ActionResult::failure("Too far off to say anything".to_string());
+        }
+
+
         // Get relationship data (clone to avoid borrow issues)
         let initiator_traits: Vec<Trait> = self.population.agents[agent_index]
             .traits.get_traits().iter().copied().collect();
@@ -309,6 +321,14 @@ impl Simulation {
         // Don't share with self
         if target_index == agent_index {
             return ActionResult::failure("Cannot share information with self".to_string());
+        }
+
+        // Near enough to say it to - see `Simulation::WITHIN_TALKING_DISTANCE`.
+        if !Self::near_enough_to_talk(
+            self.population.agents[agent_index].state.position,
+            self.population.agents[target_index].state.position,
+        ) {
+            return ActionResult::failure("Too far off to say anything".to_string());
         }
 
         let current_tick = self.current_tick;
