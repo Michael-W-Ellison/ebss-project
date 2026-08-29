@@ -1074,6 +1074,51 @@ original specifications.
   the entire run and its people die of hunger, illness and weather. The draw
   sequence shifted and a world already on the line fell the other side of it. Left
   failing rather than weakened. See ISSUES_FOUND.md #101
+- ✅ Seven items for a winter, and a larder anybody could open in July. Two
+  faults, and the second is the one the entry is named after.
+
+  **The target was 165× too small.** `WHAT_ONE_MOUTH_WANTS_PUT_BY` — what one
+  person wants put by for the whole lean season — was **seven items**, which is
+  half a day's food, and behind it sat every branch of the store: burying,
+  walking to a pit, digging another, and going out to gather for the store at
+  all. Twelve people wanted eighty-four items, a settlement reached that in its
+  first autumn, and the chain shut down for the rest of the year. It had been
+  reasoned carefully from a figure true of the body this model had *before* the
+  starvation clock was corrected in #203. The right arithmetic was already
+  written down in the right place — `UNITS_IN_ONE_STORED_ITEM` carries the
+  comment "Eleven and a half of them is a day" — and nothing joined it up.
+
+  Measured, sixteen worlds over a year: the pits never held more than **14
+  items** at any point, which is 0.9 person-days, while **7,794 food items were
+  dropped back on the bush for want of pack room** against 1,472 carried home.
+  Five thrown away for every one kept.
+
+  Derived now from what a body eats in a day (11.52 items, measured 15.4) and
+  how many days the land gives it nothing — read off the bearing year of #107
+  rather than named, so retuning the year retunes the store. Seventy-five days,
+  so **864 items a mouth**. Two coupled constants moved with it, and the test
+  suite is what said so.
+
+  **And nothing ever asked what month it was.** `something_out_of_the_store`
+  had no season condition: a pit within reach was simply the nearest food, so a
+  settlement drew on its winter store in July. That is what "laid down and eaten
+  at the same rate" means. A store is opened when the land gives nothing now,
+  and a starving man still opens it in any month.
+
+  The store has a winter's shape it did not have: pits at end of autumn
+  **12 → 33**, then eaten down through the winter. Measured over five blocks of
+  32 worlds: **mean last-alive 3,397 → 3,601, up 6% in four blocks of five;
+  person-days alive flat.** Settlements last longer and hold the same people,
+  which is what a winter store does and is not what a food supply does.
+
+  **What is now binding, and was not before:** a pit takes 300 and a mouth's
+  winter is 864, so twelve people want **thirty-five holes** and dig under
+  three. Room in the ground was never the binding question while the target was
+  seven; it is now. Filed, with a test that says it rather than a comment that
+  will drift. Nor does any of this touch the spring die-off — sixteen worlds
+  average **1.6 people** through the autumn the store is filled in, and a
+  larder for a settlement that no longer exists is still the right larder.
+  See ISSUES_FOUND.md #109
 - ✅ Every bush in full fruit, whatever the date. A world was made with
   everything standing at what its ground would carry and never asked what day
   of the year it was. The year opens in spring, so every settlement ever run in

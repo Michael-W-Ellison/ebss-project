@@ -67,20 +67,90 @@ impl Simulation {
             .is_some()
     }
 
+    /// How many days running the hedgerows give nothing at all.
+    ///
+    /// Read off the bearing year rather than named, so that retuning the year
+    /// retunes the store with it: this is the longest run of days on which not
+    /// one growing thing a person can eat is carrying anything. Fish and meat
+    /// are left out on purpose - they never stop, and sizing a winter store on
+    /// the assumption that everybody will be fishing is the optimism that
+    /// produced the number this replaces. As the year stands it is the
+    /// seventy-five days from the last root out of the cold ground to the
+    /// first leaf.
+    pub(in crate::analytics) fn how_long_the_hedgerows_give_nothing() -> u32 {
+        use crate::environment::seasons::DAYS_PER_YEAR;
+        static ANSWER: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+        *ANSWER.get_or_init(|| {
+            // Round the turn of the year, so a run that straddles new year is
+            // one run and not two. Twice through the year, and only count the
+            // second lap.
+            let mut longest = 0;
+            let mut running = 0;
+            for day in 0..(DAYS_PER_YEAR * 2) {
+                running = if Self::are_the_hedgerows_bearing_on(day % DAYS_PER_YEAR) {
+                    0
+                } else {
+                    running + 1
+                };
+                if day >= DAYS_PER_YEAR {
+                    longest = longest.max(running.min(DAYS_PER_YEAR));
+                }
+            }
+            longest
+        })
+    }
+
+    /// Whether anything a person can eat is growing anywhere on this day.
+    ///
+    /// The hedgerows only. Fish and meat never stop, and a store sized or
+    /// opened on the assumption that everybody will be fishing is the optimism
+    /// this whole entry is about - `Fish` is refused ninety-three times in a
+    /// hundred.
+    pub(in crate::analytics) fn are_the_hedgerows_bearing_on(day_of_year: u32) -> bool {
+        Self::edible_resources()
+            .into_iter()
+            .map(|(what, _)| what)
+            .filter(|what| what.is_it_grown())
+            .any(|what| what.is_it_bearing(day_of_year))
+    }
+
+    /// The same question about today.
+    pub(in crate::analytics) fn are_the_hedgerows_bearing(&self) -> bool {
+        Self::are_the_hedgerows_bearing_on(self.world.climate.calendar.day_of_year)
+    }
+
     /// How much one mouth wants put by to see it through the lean season.
     ///
-    /// The store exists to cover the months the hedgerows give nothing. Past
+    /// The store exists to cover the stretch the hedgerows give nothing. Past
     /// that it is not a store, it is a hole that food is lost in: measured at
-    /// thirty-two worlds, a settlement kept **479 units** in the ground and
-    /// **rotted 520 more**, and what was in there was almost all dried food
-    /// in lined pits - the very best the model can do. It was not the wrong
-    /// food. It was four years of it.
+    /// thirty-two worlds, a settlement once kept **479 units** in the ground
+    /// and **rotted 520 more**, and what was in there was almost all dried
+    /// food in lined pits - the very best the model can do. It was not the
+    /// wrong food. It was four years of it.
     ///
-    /// Sized off what a settlement actually eats. A person gets through about
-    /// a hundred units in ten thousand ticks, which is a shade under three
-    /// over a season; this is a little over two seasons' worth apiece, which
-    /// leaves a margin for a bad year without laying down a decade.
-    pub(in crate::analytics) const WHAT_ONE_MOUTH_WANTS_PUT_BY: u32 = 7;
+    /// That entry is why this was a small number, and the small number was
+    /// then sized off "a person gets through about a hundred units in ten
+    /// thousand ticks" - a figure from the body this model had before the
+    /// starvation clock was corrected, and out by something over two orders of
+    /// magnitude against the body it has now. It came to **seven items a mouth
+    /// for a winter**, which is half a day's food. Twelve people wanted
+    /// eighty-four items put by, a settlement reached that in its first
+    /// autumn, and every branch behind this gate - burying, walking to a pit,
+    /// digging another, and going out to gather for the store at all - shut
+    /// down for the rest of the year. Measured over sixteen worlds: the pits
+    /// never held more than **fourteen items** at any point in a year, and
+    /// **7,794 items were dropped back on the bush for want of room in a
+    /// pack**, against 1,472 that were carried home. Five thrown away for
+    /// every one kept.
+    ///
+    /// Derived now, from the two things it is actually about: what a body eats
+    /// in a day, and how many days the land gives it nothing.
+    pub(in crate::analytics) fn what_one_mouth_wants_put_by() -> u32 {
+        (crate::agents::provision::WHAT_A_BODY_EATS_IN_A_DAY
+            * Self::how_long_the_hedgerows_give_nothing() as f32)
+            .ceil() as u32
+    }
 
     /// Whether the larder round here still wants filling.
     ///
@@ -98,7 +168,7 @@ impl Simulation {
             .world
             .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE);
 
-        put_by < mouths * Self::WHAT_ONE_MOUTH_WANTS_PUT_BY
+        put_by < mouths * Self::what_one_mouth_wants_put_by()
     }
 
     /// How many living people this store has to see through the winter.
@@ -124,7 +194,21 @@ impl Simulation {
     /// Sized well above what anybody needs for a day and well below what a
     /// pack holds, so it bites on somebody standing at a full river and not on
     /// somebody with supper about them.
-    pub(in crate::analytics) const WHAT_A_PERSON_GETS_THROUGH: u32 = 8;
+    /// Three days, and it was **eight items** - two thirds of a day, which is
+    /// not "well above what anybody needs for a day", it is under it. The
+    /// number was right for the body this model had before the starvation
+    /// clock was corrected, and has since been an anti-hoarding cap that fires
+    /// on a man with supper in his bag.
+    ///
+    /// Built off the store gate rather than beside it, so that the ordering
+    /// the two have to keep - somebody who would not open the store must not
+    /// also be barred from foraging - holds by construction rather than being
+    /// a relation between two picked numbers that has to be tested for. It was
+    /// tested for, and that test is what caught this.
+    pub(in crate::analytics) fn what_a_person_gets_through() -> u32 {
+        Self::enough_not_to_open_the_store()
+            + crate::agents::provision::WHAT_A_BODY_EATS_IN_A_DAY.ceil() as u32
+    }
 
     /// Whether there is already more food about this person than they will eat
     /// before it spoils.
@@ -144,7 +228,7 @@ impl Simulation {
     /// by the smell it gives off. What it is not is supper, and going back to
     /// the river for more of it is the mistake this stops.
     pub(in crate::analytics) fn more_food_than_he_will_get_through(agent: &crate::agents::Agent) -> bool {
-        agent.how_much_good_food_i_have() >= Self::WHAT_A_PERSON_GETS_THROUGH
+        agent.how_much_good_food_i_have() >= Self::what_a_person_gets_through()
     }
 
     /// Whether this agent is carrying a load worth taking to the store.
@@ -459,7 +543,28 @@ impl Simulation {
         // supper. Counting those shuts the store on exactly the people who
         // most need it open: a man carrying a rotten carcass reads as
         // provisioned.
-        if agent.how_many_meals_i_have() >= Self::ENOUGH_NOT_TO_OPEN_THE_STORE {
+        if agent.how_many_meals_i_have() >= Self::enough_not_to_open_the_store() {
+            return None;
+        }
+
+        // And a store is for the stretch when the land gives nothing.
+        //
+        // Nothing asked this, so a pit within reach was simply the nearest
+        // food and a settlement drew on its winter store in July. That is this
+        // entry's title: laid down and eaten at the same rate, so it is never
+        // a winter store. Measured over a year, the pits held between seven
+        // and fourteen items from one end of it to the other and never
+        // accumulated - a settlement's whole larder was under one person-day
+        // of food, in a model where a body eats fifteen items a day.
+        //
+        // Somebody genuinely in trouble still opens it, in any month. A man
+        // three days into his reserve does not keep larder discipline, and a
+        // rule that let him starve beside a full pit would be a worse fault
+        // than the one it fixed.
+        if self.are_the_hedgerows_bearing()
+            && !agent.state.is_starving()
+            && !agent.nutrition.is_starving()
+        {
             return None;
         }
 
@@ -479,13 +584,22 @@ impl Simulation {
         })
     }
 
-    /// How many meals in the pack are enough that a person leaves the store
+    /// How much food in the pack is enough that a person leaves the store
     /// shut.
     ///
-    /// Two days' worth. It has to be more than `WHAT_A_PERSON_KEEPS_ON_THEM`,
-    /// or somebody who has just filled a pit is locked out of it by the one
-    /// meal burying handed them back.
-    pub(in crate::analytics) const ENOUGH_NOT_TO_OPEN_THE_STORE: u32 = 4;
+    /// Two days' worth, which is what it always said it was and is now what it
+    /// is: at four items it was under a third of a day, so anybody with a
+    /// morning's food about them still opened the pit, and the store was eaten
+    /// at very nearly the rate it was laid down. That is the other half of
+    /// this entry's title.
+    ///
+    /// It has to be more than `WHAT_A_PERSON_KEEPS_ON_THEM`, or somebody who
+    /// has just filled a pit is locked out of it by the one meal burying
+    /// handed them back - which is still true, by a wide margin, now that it
+    /// is counted in days.
+    pub(in crate::analytics) fn enough_not_to_open_the_store() -> u32 {
+        (crate::agents::provision::WHAT_A_BODY_EATS_IN_A_DAY * 2.0).ceil() as u32
+    }
 
     /// Whether a hole will go in here.
     ///

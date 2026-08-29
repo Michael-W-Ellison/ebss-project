@@ -51,6 +51,25 @@ pub const DAYS_IN_A_MONTH: u32 = DAYS_PER_SEASON / 2;
 pub const UNITS_IN_ONE_STORED_ITEM: f32 =
     physiology::UNITS_IN_ONE_ITEM * physiology::ENERGY_OF_ORDINARY_FOOD;
 
+/// What one grown body gets through in a day, in the items a store is counted
+/// in.
+///
+/// The paragraph above already says eleven and a half. This is that sentence
+/// written as a number, so that anything sizing a store against a stretch of
+/// days has one place to get it from and cannot pick its own.
+///
+/// It is worth saying plainly what having to write this down cost. The store
+/// wanted **seven items put by per mouth for a whole winter** - a figure
+/// picked, with a doc comment reasoning carefully from "a person gets through
+/// about a hundred units in ten thousand ticks", which was true of the body
+/// this model had before the starvation clock was corrected and is out by
+/// something over two orders of magnitude against the body it has now. Seven
+/// items is half a day. Measured, a person eats **15.4 items a day**, which is
+/// this figure and a bit, the bit being that a settlement lives on food
+/// thinner than ordinary forage.
+pub const WHAT_A_BODY_EATS_IN_A_DAY: f32 =
+    physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY / UNITS_IN_ONE_STORED_ITEM;
+
 /// How far ahead an agent can see food, and what failing each horizon costs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HowLongTheFoodLasts {

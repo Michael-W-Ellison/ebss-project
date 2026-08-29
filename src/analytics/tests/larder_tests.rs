@@ -38,6 +38,28 @@ fn supper(how_many: u32, made_at: u32) -> InventoryItem {
 }
 
 /// One person standing on ground that can be dug.
+/// The same, in the stretch of the year the store exists for.
+///
+/// A store is opened when the land gives nothing. Every test below that is
+/// about the *mechanics* of opening one - walking to it, the meal `Cover`
+/// hands back, a carcass not counting as supper - has to be run in that
+/// stretch, or the season gate quite correctly refuses before the mechanics
+/// are ever reached. They used to run at day nought, in spring, which is when
+/// there is leaf on every hedge.
+fn a_digger_in_the_lean_season() -> Simulation {
+    let mut simulation = a_digger();
+    let midwinter = crate::environment::seasons::first_day_of(
+        crate::environment::seasons::Season::Winter,
+        crate::environment::seasons::PartOfSeason::Deep,
+    );
+    simulation.world.climate.calendar.day_of_year = midwinter;
+    assert!(
+        !simulation.are_the_hedgerows_bearing(),
+        "midwinter is supposed to be the bare stretch"
+    );
+    simulation
+}
+
 fn a_digger() -> Simulation {
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
@@ -367,7 +389,7 @@ fn nobody_raids_the_store_with_a_full_pack() {
 /// And a store a long way off is walked to rather than reached into.
 #[test]
 fn a_store_across_the_camp_is_walked_to() {
-    let mut simulation = a_digger();
+    let mut simulation = a_digger_in_the_lean_season();
     simulation.world.pits.push(Pit {
         where_it_is: Position::new(31, 25),
         holds: vec![supper(40, 0)],
@@ -788,11 +810,11 @@ fn putting_by_waits_on_hunger_and_thirst_and_nothing_else() {
 #[test]
 fn what_burying_leaves_behind_does_not_shut_the_store() {
     assert!(
-        Simulation::WHAT_A_PERSON_KEEPS_ON_THEM < Simulation::ENOUGH_NOT_TO_OPEN_THE_STORE,
+        Simulation::WHAT_A_PERSON_KEEPS_ON_THEM < Simulation::enough_not_to_open_the_store(),
         "burying leaves {} and the store shuts at {}: a man who has just \
          filled a pit is locked out of it",
         Simulation::WHAT_A_PERSON_KEEPS_ON_THEM,
-        Simulation::ENOUGH_NOT_TO_OPEN_THE_STORE,
+        Simulation::enough_not_to_open_the_store(),
     );
 }
 
@@ -800,7 +822,7 @@ fn what_burying_leaves_behind_does_not_shut_the_store() {
 /// back is not a reason to leave the rest of it in the ground.
 #[test]
 fn one_meal_in_the_pack_does_not_shut_the_store() {
-    let mut simulation = a_digger();
+    let mut simulation = a_digger_in_the_lean_season();
     simulation.world.pits.push(Pit {
         where_it_is: Position::new(25, 25),
         holds: vec![supper(40, 0)],
@@ -834,7 +856,7 @@ fn a_pack_with_two_days_in_it_leaves_the_store_shut() {
         dug: 0,
     });
     let _ = simulation.population.agents[0].inventory.add_item(supper(
-        Simulation::ENOUGH_NOT_TO_OPEN_THE_STORE,
+        Simulation::enough_not_to_open_the_store(),
         0,
     ));
 
@@ -971,7 +993,7 @@ fn a_pack_full_of_carcass_is_a_pack_with_no_meals_in_it() {
     let mut haunch = InventoryItem::new_with_weight("meat".to_string(), 20, 0.1);
     haunch.food_data = database.create_food_data(&ItemType::Meat, 0);
 
-    let mut simulation = a_digger();
+    let mut simulation = a_digger_in_the_lean_season();
     let _ = simulation.population.agents[0].inventory.add_item(haunch);
 
     assert_eq!(
@@ -1044,7 +1066,7 @@ fn a_store_with_a_winter_in_it_does_not_want_filling() {
     let mouths = 1;
     simulation.world.pits.push(Pit {
         where_it_is: Position::new(25, 25),
-        holds: vec![supper(mouths * Simulation::WHAT_ONE_MOUTH_WANTS_PUT_BY, 0)],
+        holds: vec![supper(mouths * Simulation::what_one_mouth_wants_put_by(), 0)],
         covered: true,
         dug: 0,
     });
@@ -1060,7 +1082,7 @@ fn a_store_with_a_winter_in_it_does_not_want_filling() {
 #[test]
 fn it_is_the_whole_larder_that_is_counted_not_one_hole() {
     let mut simulation = a_digger();
-    let enough = Simulation::WHAT_ONE_MOUTH_WANTS_PUT_BY;
+    let enough = Simulation::what_one_mouth_wants_put_by();
 
     // Two pits a few paces apart, each holding rather less than a season
     for (n, at) in [(25, 25), (28, 25)].iter().enumerate() {
@@ -1106,7 +1128,7 @@ fn more_mouths_want_more_put_by() {
     let here = Position::new(25, 25);
     simulation.world.pits.push(Pit {
         where_it_is: here,
-        holds: vec![supper(Simulation::WHAT_ONE_MOUTH_WANTS_PUT_BY * 3, 0)],
+        holds: vec![supper(Simulation::what_one_mouth_wants_put_by() * 3, 0)],
         covered: true,
         dug: 0,
     });
@@ -1134,27 +1156,192 @@ fn more_mouths_want_more_put_by() {
 
 /// Which is the point of the whole thing: a full store stops somebody burying
 /// what they are carrying.
+///
+/// It used to be enough to put half a pit in the ground, because a whole
+/// winter for one mouth was seven items. A winter is what a body eats in a
+/// day times the days the land gives nothing, and one hole does not hold it -
+/// which is the second half of what this entry turned up, and is recorded in
+/// `a_pit_does_not_hold_one_persons_winter` below.
 #[test]
 fn nobody_buries_into_a_store_that_is_already_a_winter_deep() {
-    let mut simulation = a_digger();
+    let mut simulation = a_digger_in_the_lean_season();
     let here = Position::new(25, 25);
-    simulation.world.pits.push(Pit {
-        where_it_is: here,
-        holds: vec![supper(Pit::WHAT_A_PIT_TAKES / 2, 0)],
-        covered: true,
-        dug: 0,
-    });
+
+    let a_winter = Simulation::what_one_mouth_wants_put_by();
+    let mut buried = 0;
+    let mut where_it_is = here.clone();
+    while buried < a_winter {
+        let this_one = (a_winter - buried).min(Pit::WHAT_A_PIT_TAKES);
+        simulation.world.pits.push(Pit {
+            where_it_is: where_it_is.clone(),
+            holds: vec![supper(this_one, 0)],
+            covered: true,
+            dug: 0,
+        });
+        buried += this_one;
+        where_it_is = Position::new(where_it_is.x + 1, where_it_is.y);
+    }
+
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(supper(30, 0));
 
-    // Room in the hole, and a load in the pack, and still nothing doing
+    // Room in the ground, and a load in the pack, and still nothing doing
     assert!(
-        simulation.world.pits[0].has_room(),
-        "the hole is only half full - room was never the binding question"
+        simulation.world.pits.last().is_some_and(|pit| pit.has_room())
+            || simulation.world.pits.len() > 1,
+        "there is somewhere left to put it - room was never the binding question"
     );
     assert!(
         !simulation.does_the_store_still_want_filling(here),
         "but there is already more in the ground than anybody here will eat"
+    );
+}
+
+/// And one hole does not hold one person's winter.
+///
+/// A pit takes three hundred; a mouth wants what it eats in a day for every
+/// day the land gives it nothing, which is eight hundred and sixty-four. So a
+/// settlement of twelve wants some thirty-five holes and digs, measured, under
+/// three. Room in the ground was never the binding question while the target
+/// was seven items a mouth; it is the binding question now, and that is filed
+/// rather than fixed here - digging thirty-five holes is a different piece of
+/// work from knowing how many you need.
+#[test]
+fn a_pit_does_not_hold_one_persons_winter() {
+    let a_winter = Simulation::what_one_mouth_wants_put_by();
+
+    assert!(
+        a_winter > Pit::WHAT_A_PIT_TAKES,
+        "a winter for one mouth is {a_winter} items and a hole takes {}",
+        Pit::WHAT_A_PIT_TAKES
+    );
+}
+
+// --------------------------------------------------------------------------
+// A store is for the stretch when the land gives nothing
+// --------------------------------------------------------------------------
+
+/// The bare stretch is read off the bearing year rather than named, so
+/// retuning the year retunes the store with it.
+#[test]
+fn the_bare_stretch_is_read_off_the_bearing_year() {
+    use crate::environment::seasons::{first_day_of, PartOfSeason, Season, DAYS_PER_YEAR};
+
+    let bare = Simulation::how_long_the_hedgerows_give_nothing();
+
+    assert!(bare > 0, "some part of the year has to be bare, or a store is pointless");
+    assert!(
+        bare < DAYS_PER_YEAR,
+        "and some part of it has to bear, or nothing could ever be put by: {bare}"
+    );
+
+    // Every day it says is bare should actually be bare, and the run should be
+    // the longest one there is
+    let mut longest = 0;
+    let mut running = 0;
+    for day in 0..(DAYS_PER_YEAR * 2) {
+        running = if Simulation::are_the_hedgerows_bearing_on(day % DAYS_PER_YEAR) {
+            0
+        } else {
+            running + 1
+        };
+        if day >= DAYS_PER_YEAR {
+            longest = longest.max(running.min(DAYS_PER_YEAR));
+        }
+    }
+    assert_eq!(bare, longest);
+
+    // As the year stands: deep winter is bare and the growing half is not
+    assert!(!Simulation::are_the_hedgerows_bearing_on(first_day_of(
+        Season::Winter,
+        PartOfSeason::Deep
+    )));
+    for bearing in [
+        (Season::Spring, PartOfSeason::Early),
+        (Season::Summer, PartOfSeason::Deep),
+        (Season::Fall, PartOfSeason::Deep),
+    ] {
+        assert!(
+            Simulation::are_the_hedgerows_bearing_on(first_day_of(bearing.0, bearing.1)),
+            "{bearing:?} should have something on the hedges"
+        );
+    }
+}
+
+/// A winter store is what a body eats for as many days as the land gives it
+/// nothing - and it was seven items, which is half a day.
+#[test]
+fn a_winter_store_is_a_winter_of_eating() {
+    let a_day = crate::agents::provision::WHAT_A_BODY_EATS_IN_A_DAY;
+    let bare = Simulation::how_long_the_hedgerows_give_nothing();
+    let want = Simulation::what_one_mouth_wants_put_by();
+
+    assert_eq!(want, (a_day * bare as f32).ceil() as u32);
+
+    assert!(
+        want as f32 > a_day * 30.0,
+        "a winter store that is under a month of food is not a winter store: \
+         {want} items against {:.0} for a month",
+        a_day * 30.0
+    );
+}
+
+/// Nobody opens the winter store in July.
+///
+/// This is the entry's title. Nothing asked the season, so a pit within reach
+/// was simply the nearest food: a settlement drew on its store all year and
+/// the pits held between seven and fourteen items from one end of a year to
+/// the other, never accumulating.
+#[test]
+fn the_store_is_not_opened_while_the_hedges_are_bearing() {
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(40, 0)],
+        covered: true,
+        dug: 0,
+    });
+
+    assert!(
+        simulation.are_the_hedgerows_bearing(),
+        "the year opens in spring, when there is leaf on every hedge"
+    );
+
+    let here = simulation.population.agents[0].state.position;
+    assert!(
+        simulation
+            .something_out_of_the_store(&simulation.population.agents[0], here)
+            .is_none(),
+        "there is food growing; the store is for when there is not"
+    );
+}
+
+/// But a man who is actually starving opens it in any month.
+///
+/// A rule that let somebody starve beside a full pit would be a worse fault
+/// than the one it fixed.
+#[test]
+fn a_starving_man_opens_the_store_whatever_the_month() {
+    let mut simulation = a_digger();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(40, 0)],
+        covered: true,
+        dug: 0,
+    });
+
+    assert!(simulation.are_the_hedgerows_bearing(), "still spring");
+
+    let agent = &mut simulation.population.agents[0];
+    agent.state.physiology.reserve = 0.0;
+    assert!(agent.state.is_starving(), "and this one is three days in");
+
+    let here = simulation.population.agents[0].state.position;
+    assert!(
+        simulation
+            .something_out_of_the_store(&simulation.population.agents[0], here)
+            .is_some(),
+        "he does not keep larder discipline on an empty reserve"
     );
 }

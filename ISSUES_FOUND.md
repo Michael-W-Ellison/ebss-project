@@ -6251,6 +6251,134 @@ saying in as many words that one person alone often does not get through the
 year, directly above the line that assumed he had. All three now ask whether
 he is there before asking how he is.
 
+### 109. Seven items for a winter, and a larder anybody could open in July
+
+Two things, and the second is the one in the title.
+
+#### The target was a hundred and sixty-five times too small
+
+`WHAT_ONE_MOUTH_WANTS_PUT_BY` was **seven items** - what one person wants put
+by to see them through the whole lean season - and behind it sat every branch
+of the store: burying what is in the pack, walking to a pit, digging another,
+and going out to gather for the store at all. Twelve people wanted eighty-four
+items. A settlement reached that in its first autumn and the entire chain shut
+down for the rest of the year.
+
+Seven items is **half a day's food**. It was reasoned carefully from "a person
+gets through about a hundred units in ten thousand ticks", which was true of
+the body this model had before the starvation clock was corrected in #203 -
+the entry that found that clock a hundred and twenty times too slow. The store
+was sized against the slow body and never resized.
+
+The arithmetic was already written down, in the right place, with the right
+answer. `provision::UNITS_IN_ONE_STORED_ITEM` carries the comment **"Eleven and
+a half of them is a day"**. Nothing joined it up.
+
+Measured over sixteen worlds and a full year, before:
+
+| | |
+|---|---|
+| most the pits ever held, at any point in the year | **14 items** |
+| which in days of food for one person is | **0.9** |
+| food items carried home over the year | 1,472 |
+| food items dropped back on the bush, packs full | **7,794** |
+
+Five items thrown away for every one kept, and a settlement's entire larder
+under one person-day.
+
+Derived now, from the two things it is actually about:
+
+- `provision::WHAT_A_BODY_EATS_IN_A_DAY` = `UNITS_BURNED_IN_AN_ORDINARY_DAY /
+  UNITS_IN_ONE_STORED_ITEM` = **11.52 items**, and measured at 15.4 because a
+  settlement lives on food thinner than ordinary forage.
+- `how_long_the_hedgerows_give_nothing()`, read off the bearing year of #107
+  rather than named, so retuning the year retunes the store with it: the
+  longest run of days on which no growing thing a person can eat is carrying
+  anything. **Seventy-five days**, from the last root out of the cold ground to
+  the first leaf. Fish and meat are deliberately left out - they never stop,
+  and sizing a winter store on the assumption that everybody will be fishing is
+  the optimism this entry is about, with `Fish` refused ninety-three times in a
+  hundred.
+
+Which is **864 items a mouth** where it was seven.
+
+Two more constants in the same cluster had to move with it, and the test suite
+is what said so: `the_cap_is_a_load_rather_than_a_meal_or_a_cartload` asserts
+that somebody who would not open the store must not also be barred from
+foraging, and that ordering broke the moment the store gate was corrected.
+`ENOUGH_NOT_TO_OPEN_THE_STORE` said "two days' worth" and was four items, which
+is a third of a day. `WHAT_A_PERSON_GETS_THROUGH` said "well above what anybody
+needs for a day" and was eight, which is under it - an anti-hoarding cap that
+fired on a man with supper in his bag. Both are counted in days now, and the
+second is built off the first so the ordering holds by construction rather than
+being a relation between two picked numbers that has to be tested for.
+
+#### And nothing ever asked what month it was
+
+The larger fault, and the one the title names. `something_out_of_the_store` had
+no season condition at all: a pit within reach was simply the nearest food, so
+a settlement drew on its winter store in July. That is what "laid down and
+eaten at the same rate" means - the pits held between seven and fourteen items
+from one end of a year to the other and never accumulated, because everything
+put in came straight back out.
+
+A store is opened when the land gives nothing now, and the same
+`are_the_hedgerows_bearing` that sizes it answers that. Somebody genuinely
+starving still opens it in any month: a rule that let a man starve beside a
+full pit would be a worse fault than the one it fixed, and there is a test for
+each half.
+
+The store now has a winter's shape, which it did not have at all:
+
+| pits hold, mean of 16 worlds | before | after |
+|---|---|---|
+| midsummer | 7 | 24 |
+| deep autumn | 14 | 27 |
+| end of autumn | 12 | **33** |
+| a fortnight into winter | 11 | 9 |
+| deep winter | 4 | 4 |
+
+It fills through the autumn and is eaten through the winter. Before, it was
+flat.
+
+#### Measured: settlements last six per cent longer and hold the same people
+
+Five independent blocks of thirty-two worlds, a full year each:
+
+| seeds | mean last alive | person-days alive | worlds emptied |
+|---|---|---|---|
+| 1000 | 3617 → **3804** | 899 → **969** | 11 → **7** |
+| 2000 | 3227 → **3380** | 909 → 903 | 16 → 18 |
+| 3000 | 3281 → 3250 | 960 → 887 | 12 → 16 |
+| 4000 | 3679 → **3737** | 1010 → 947 | 12 → **11** |
+| 5000 | 3179 → **3833** | 948 → **1035** | 22 → **17** |
+
+**Mean last-alive 3,397 to 3,601, up six per cent and up in four blocks of
+five. Person-days alive flat** (945 to 948), worlds standing empty at a year
+46% to 43%.
+
+Settlements last longer and hold the same number of people, which is exactly
+what a winter store does and is not what a food supply does: it carries the
+survivors across the lean stretch rather than feeding more of them. Two
+long-run population tests flipped back to failing on it, which is inside the
+noise those two have shown all session.
+
+#### What is now the binding constraint, and it was not before
+
+`Pit::WHAT_A_PIT_TAKES` is three hundred. A winter for one mouth is 864, so a
+settlement of twelve wants **thirty-five holes** and digs, measured, under
+three. Room in the ground was never once the binding question while the target
+was seven items a mouth - the doc comment on
+`does_the_store_still_want_filling` says so in as many words - and it is the
+binding question now. There is a test that says it out loud rather than a
+comment that will drift. Digging thirty-five holes is a different piece of work
+from knowing how many you need, and it is filed rather than done here.
+
+Nor does this touch the spring die-off, which remains what kills everybody: a
+store fills in autumn and nobody is alive by then. Sixteen worlds average
+**1.6 people** through the autumn the store is filled in. A larder for a
+settlement that no longer exists is still the right larder.
+
 ---
 
 ## Recently fixed
