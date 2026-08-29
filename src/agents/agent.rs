@@ -3479,6 +3479,9 @@ impl Agent {
         // Check for stale storage knowledge and trigger curiosity
         self.update_storage_curiosity(current_tick);
 
+        // A cart in the pack is a cart in the hand. See `take_up_the_cart`.
+        self.take_up_the_cart();
+
         // Update emotions based on drive states (every tick)
         self.update_emotions_from_drives();
         // Drives rise differently depending on whether the agent has anything
@@ -4711,6 +4714,52 @@ impl Agent {
     /// Add a new transport to agent's possession
     pub fn add_transport(&mut self, transport: super::Transport) {
         self.transport.add_transport(transport);
+    }
+
+    /// Take up the cart, or put it down.
+    ///
+    /// `TransportSystem` has been able to model a handcart since it was
+    /// written - capacity, speed, durability, twenty-odd kinds of vehicle and
+    /// pack animal - and **nothing has ever put a transport into it**, so the
+    /// whole of it was tables with no caller. `total_additional_capacity` is
+    /// already added into `max_weight` and `speed_modifier` is already
+    /// multiplied into `movement_speed_at_tick`; the only missing link was
+    /// somebody actually owning one.
+    ///
+    /// So: a cart in the pack is a cart in the hand. Called each turn, because
+    /// a cart can arrive by making it, by trade or by inheriting it, and it
+    /// can leave by wearing out.
+    ///
+    /// This is the largest waste in the model at the far end of it. Measured,
+    /// nearly nine thousand items of gathered food went back on the bush in one
+    /// run because packs were full.
+    pub fn take_up_the_cart(&mut self) {
+        use super::transport::{Transport, TransportType};
+
+        let has_one = self.how_many_i_have("handcart") > 0;
+        let pulling_one = self
+            .transport
+            .get_active()
+            .iter()
+            .any(|t| t.transport_type == TransportType::Handcart);
+
+        if has_one && !pulling_one {
+            let cart = Transport::new(TransportType::Handcart);
+            let id = cart.id;
+            self.add_transport(cart);
+            self.equip_transport(&id);
+        } else if !has_one && pulling_one {
+            let ids: Vec<_> = self
+                .transport
+                .get_active()
+                .iter()
+                .filter(|t| t.transport_type == TransportType::Handcart)
+                .map(|t| t.id)
+                .collect();
+            for id in ids {
+                self.unequip_transport(&id);
+            }
+        }
     }
 
     /// Update inventory max_weight based on active transports and body strength
@@ -9134,6 +9183,16 @@ impl Agent {
 pub struct Errand {
     /// Where it is going
     pub going_to: (i32, i32, i32),
+    /// Or what it is making, if the errand is a job rather than a journey.
+    ///
+    /// A tool is not one turn's work. Measured, the tool arithmetic diverted
+    /// four turns in a run and produced **nothing**: a diversion buys the next
+    /// step in a chain - a length of cordage, a knapped edge - and the turn
+    /// after that the whole decision was made again from scratch and went
+    /// somewhere else, so the settlement collected half-finished tools it
+    /// never picked up again. The same defect as the walk that was re-decided
+    /// at every tile, one layer up.
+    pub to_make: Option<String>,
     /// Which drive it set out to answer
     pub for_drive: DriveType,
     /// How hard that drive was pressing when it set out, so that a drive going
@@ -9164,6 +9223,11 @@ impl Errand {
     /// Whether this one has got there.
     pub fn arrived(&self, at: (i32, i32, i32)) -> bool {
         self.going_to.0 == at.0 && self.going_to.1 == at.1
+    }
+
+    /// A job rather than a journey.
+    pub fn is_a_making(&self) -> bool {
+        self.to_make.is_some()
     }
 }
 

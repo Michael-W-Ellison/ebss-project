@@ -84,6 +84,7 @@ fn an_errand_ends_when_the_need_changes_and_not_before() {
 fn even_the_shortest_errand_gets_a_few_turns() {
     let errand = Errand {
         going_to: (0, 0, 0),
+        to_make: None,
         for_drive: crate::core::DriveType::Thirst,
         pressed_this_hard: 1.0,
         turns_on_it: 0,
@@ -112,6 +113,7 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
     // Twenty paces off, one turn in: almost all of the trip is still ahead
     let just_set_out = Errand {
         going_to: (20, 0, 0),
+        to_make: None,
         for_drive: crate::core::DriveType::Hunger,
         pressed_this_hard: 1.0,
         turns_on_it: 1,
@@ -119,6 +121,7 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
     // The same errand, nineteen turns later and one pace short of the patch
     let nearly_there = Errand {
         going_to: (20, 0, 0),
+        to_make: None,
         for_drive: crate::core::DriveType::Hunger,
         pressed_this_hard: 1.0,
         turns_on_it: 19,

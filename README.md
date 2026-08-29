@@ -719,6 +719,43 @@ original specifications.
   cannot move a settlement's life. What this buys is the mechanism, wired and
   measured to fire; what it waits on is the rest of the tool ladder, because a
   ladder with one rung is a step. See ISSUES_FOUND.md #85, #86
+- ✅ The rest of the tool ladder — sling, bow, rod, net, shovel and the wheel —
+  and the three things that were stopping anybody climbing it. The split between
+  what a people arrives knowing and what it must find out is drawn at
+  **invention**, not usefulness: a sling, a line and a hafted blade are the same
+  ideas as the handaxe founders carry, so they're known; a bow, a net and a
+  wheel each had to be thought of. Built found-out first, and measured that way
+  **nobody ever climbed a rung**: two digging sticks in a run and nothing else,
+  because settlements die at ~100 days and discovery is slower. A ladder whose
+  first rung is above the ceiling is not a ladder.
+
+  **The wheel is not a tool** — nothing it does multiplies a trade; what it does
+  is carry. `TransportSystem` could model that from the day it was written
+  (capacity already summed into `max_weight`, speed already multiplied into
+  `movement_speed_at_tick`, twenty-odd vehicles and pack animals) and **nothing
+  had ever put a transport into it**. The whole subsystem was tables with no
+  caller — defect #1 for the tenth time. A cart in the pack is a cart in the
+  hand now, and it goes straight at the largest measured waste in the model:
+  ~9,000 items of gathered food put back on the bush in a run for want of
+  anywhere to put them.
+
+  Three things stopped anybody making anything. The shovel had nothing to bite
+  on — a pit was a flat 22 energy whether dug with a shovel or with fingers. **A
+  tool is not one turn's work**: the arithmetic diverted turns and produced
+  *nothing*, because a diversion buys one step of a chain and the next turn
+  re-decided from scratch, so settlements collected half-finished tools they
+  never picked up again — the walking defect one layer up, so `Errand` carries a
+  `to_make` now. And the commonest ending was standing still for want of a
+  stick: 103 turns a run where the sum said yes and the chain wanted something
+  *found*, which `fetch_what_the_making_of_it_wants` exists for and the tool path
+  wasn't calling. With all three: **14 tools finished a run against nought**,
+  and a settlement carrying rods, shovels and handcarts by day 33.
+
+  It cost turns — 1,630 / 1,494 / 1,387 against 1,612 / 1,552 / 1,633 — because
+  ~190 turns a run went on tools in settlements that needed them for supper. The
+  guard is the specification's own rule: a body on the larder's bottom rung
+  works with what it has. With it, **1,613 / 1,522 / 1,616** — a wash, with the
+  ladder in and being climbed. See ISSUES_FOUND.md #87
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

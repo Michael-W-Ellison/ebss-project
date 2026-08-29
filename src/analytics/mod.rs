@@ -8904,6 +8904,49 @@ impl Simulation {
                 * crate::agents::Errand::HOW_LONG_A_WALK_IS_WORTH;
             let given_up = errand.turns_on_it > a_long_walk;
 
+            // A making errand is finished when the thing is in the pack, and
+            // is carried on with by taking the next step towards it. This is
+            // the whole reason the tool ladder is climbable: a bow is four or
+            // five turns of chain, and nobody ever took the second one.
+            if let Some(wanted) = errand.to_make.clone() {
+                let done = self.population.agents[agent_index].how_many_i_have(&wanted) > 0;
+                if done || !still_wants_it || given_up {
+                    let why = if done {
+                        "errand: made it"
+                    } else if given_up {
+                        "errand: gave up on the making"
+                    } else {
+                        "errand: something else came first"
+                    };
+                    *self.what_a_threat_came_to.entry(why.to_string()).or_insert(0) += 1;
+                    self.population.agents[agent_index].errand = None;
+                    return action;
+                }
+
+                match self.next_step_towards_making(&wanted, agent_index) {
+                    Some(step) => {
+                        if let Some(errand) = self.population.agents[agent_index].errand.as_mut() {
+                            errand.turns_on_it += 1;
+                        }
+                        *self
+                            .what_a_threat_came_to
+                            .entry("errand: another turn on the making".to_string())
+                            .or_insert(0) += 1;
+                        return step;
+                    }
+                    None => {
+                        // The chain is short of something that has to be
+                        // found, and finding it is not this errand
+                        *self
+                            .what_a_threat_came_to
+                            .entry("errand: the making is stuck".to_string())
+                            .or_insert(0) += 1;
+                        self.population.agents[agent_index].errand = None;
+                        return action;
+                    }
+                }
+            }
+
             if errand.arrived(here) || !still_wants_it || given_up {
                 let why = if errand.arrived(here) {
                     "errand: got there"
@@ -8937,6 +8980,7 @@ impl Simulation {
                     self.population.agents[agent_index].how_hard_it_presses(for_drive);
                 self.population.agents[agent_index].errand = Some(crate::agents::Errand {
                     going_to: target,
+                    to_make: None,
                     for_drive,
                     pressed_this_hard,
                     turns_on_it: 1,
@@ -9381,6 +9425,34 @@ impl Simulation {
             return action;
         }
 
+        // And so does a settlement that has nothing in for tonight.
+        //
+        // "Once basic survival needs can be satisfied over the long term,
+        // other concerns start coming into play." A better axe is one of the
+        // other concerns: it pays back over forty jobs, and forty jobs is no
+        // use to somebody who will not see the week. `is_starving` alone is
+        // too late a test - it wants three days into the reserve, and a people
+        // permanently a third short of food is hungry long before that and
+        // never technically starving. The larder's own bottom rung is the
+        // right question and it is already being asked every turn.
+        //
+        // Measured without this: 1630, 1494 and 1387 mean last-alive against
+        // 1612, 1552 and 1633 before the ladder, because a hundred and ninety
+        // turns a run went on tools in settlements that needed the turns for
+        // supper.
+        if agent
+            .state
+            .what_the_larder_says
+            .as_ref()
+            .is_some_and(|larder| larder.rung == crate::agents::provision::HowLongTheFoodLasts::NotTheDay)
+        {
+            *self
+                .what_a_threat_came_to
+                .entry("tool: nothing in for tonight, so no".to_string())
+                .or_insert(0) += 1;
+            return action;
+        }
+
         let Some(better) = agent.what_i_would_rather_have(trade) else {
             return action;
         };
@@ -9413,7 +9485,10 @@ impl Simulation {
             return action;
         }
 
-        // It pays. Take the turn on the next step towards it.
+        // It pays. Take it on as an errand, so that the chain is finished
+        // rather than started over and over - see `Errand::to_make`.
+        //
+        // Take the turn on the next step towards it.
         //
         // Walked here rather than handed to `make_what_this_wants`, which
         // refuses a `Craft` on sight - it exists to rescue a job that *cannot*
@@ -9425,22 +9500,27 @@ impl Simulation {
         let a_fire_is_to_hand = self
             .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
             .is_some();
-        let Some(step) = crate::environment::making::what_to_do_first_that_can_be_done(
+        let step = crate::environment::making::what_to_do_first_that_can_be_done(
             better.called,
             &holding,
             &knows,
             &in_hand,
             a_fire_is_to_hand,
-        ) else {
-            // Short of something that has to be found. Worth fetching, but
-            // that is the errand `fetch_what_the_making_of_it_wants` runs and
-            // it is not this turn's job to start it - a job that can be done
-            // now beats a shopping trip.
+        );
+
+        let Some(step) = step else {
+            // Short of something that has to be *found* rather than made, so
+            // going and getting it is the job in hand. This was a dead end and
+            // it was the commonest one by a distance - a hundred and three
+            // turns in a run where the arithmetic said the tool was worth
+            // having and the agent stood there for want of a length of flax.
+            // `fetch_what_the_making_of_it_wants` is the same errand
+            // `make_what_this_wants` runs one case over.
             *self
                 .what_a_threat_came_to
-                .entry("tool: worth making, nothing to be done towards it".to_string())
+                .entry("tool: gone to fetch what the making wants".to_string())
                 .or_insert(0) += 1;
-            return action;
+            return self.fetch_what_the_making_of_it_wants(action, agent_index, better.called);
         };
 
         let instead = Action::Craft {
@@ -9464,7 +9544,54 @@ impl Simulation {
             .what_a_threat_came_to
             .entry("tool: stopped to make a better one".to_string())
             .or_insert(0) += 1;
+
+        if let Some(for_drive) = self.population.agents[agent_index].what_presses_hardest() {
+            let pressed_this_hard =
+                self.population.agents[agent_index].how_hard_it_presses(for_drive);
+            let here = self.population.agents[agent_index].state.position;
+            self.population.agents[agent_index].errand = Some(crate::agents::Errand {
+                going_to: here,
+                to_make: Some(better.called.to_string()),
+                for_drive,
+                pressed_this_hard,
+                turns_on_it: 1,
+            });
+        }
+
         instead
+    }
+
+    /// The next thing to do towards making a named thing, if anything can be.
+    ///
+    /// The same walk `would_a_better_tool_pay` makes, pulled out so that an
+    /// errand can go on making it turn after turn.
+    fn next_step_towards_making(&self, wanted: &str, agent_index: usize) -> Option<Action> {
+        let agent = &self.population.agents[agent_index];
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+        let in_hand = |what: &str| agent.how_many_i_have(what) > 0;
+        let a_fire_is_to_hand = self
+            .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
+            .is_some();
+
+        let step = crate::environment::making::what_to_do_first_that_can_be_done(
+            wanted,
+            &holding,
+            &knows,
+            &in_hand,
+            a_fire_is_to_hand,
+        )?;
+
+        let instead = Action::Craft {
+            item_type: step.makes.to_string(),
+        };
+        if self
+            .what_this_wants_that_is_missing(&instead, agent_index)
+            .is_some()
+        {
+            return None;
+        }
+        Some(instead)
     }
 
     fn make_what_this_wants(&self, action: Action, agent_index: usize) -> Action {
@@ -13981,9 +14108,21 @@ impl Simulation {
 
                 debug!("Agent {} dug a pit at {here:?}", agent.id);
 
+                // And what it cost, which depends on what was in the hand.
+                //
+                // A flat twenty-two whether the agent dug with a shovel or with
+                // its fingers - which is most of a turn's work either way, and
+                // a settlement that cannot dig cheaply cannot keep a larder.
+                let shovel = self.population.agents[agent_index]
+                    .how_much_my_tools_help(crate::agents::SkillType::Mining);
+                if shovel > 1.0 {
+                    self.population.agents[agent_index]
+                        .wear_what_i_worked_with(crate::agents::SkillType::Mining);
+                }
+
                 ActionResult::success()
                     .with_drive_change(DriveType::Preparedness, -0.3)
-                    .with_energy_cost(Self::WHAT_DIGGING_A_PIT_COSTS)
+                    .with_energy_cost(Self::WHAT_DIGGING_A_PIT_COSTS / shovel.max(0.1))
                     .with_message("Dug a pit".to_string())
             },
 

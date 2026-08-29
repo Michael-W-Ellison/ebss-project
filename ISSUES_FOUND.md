@@ -5142,9 +5142,95 @@ threshold at an awkward moment.
 Measured null on survival as well, within the same ±40 band. Both of these are
 correctness rather than performance, and the run that shows it is the same run.
 
+### 87. The rest of the tool ladder, and the three things that were stopping anybody climbing it
+
+Sling, bow, rod, net, shovel and the wheel, as the specification asks for them.
+Six new steps in the chain, six new tools, and one thing that is not a tool at
+all.
+
+The split between what a people arrives knowing and what it has to find out is
+drawn at **invention**, not at usefulness. A sling, a line and a hafted blade
+are the same three ideas as the handaxe founders already carry, put to other
+ends, so they are `obvious`. A bow, a net and a wheel are each a thing somebody
+had to think of, so they are not. The whole ladder was found-out at first, and
+measured that way **nobody ever climbed a rung of it**: two digging sticks in a
+run and nothing else, because a settlement dies at about a hundred days and
+discovery is slower than that. A ladder whose first rung is above the ceiling is
+not a ladder.
+
+#### The wheel, which is not a tool
+
+Nothing a cart does is a multiplier on a trade. What it does is carry, and
+`TransportSystem` has been able to model exactly that since the day it was
+written - capacity, speed, durability, twenty-odd kinds of vehicle and pack
+animal. `total_additional_capacity` is already summed into `Inventory::max_weight`
+and `speed_modifier` is already multiplied into `movement_speed_at_tick`.
+
+**Nothing has ever put a transport into it.** The whole subsystem was tables
+with no caller, which is defect #1 in this document's list for the tenth time.
+`Agent::take_up_the_cart` is the missing link: a cart in the pack is a cart in
+the hand, asked every turn because a cart can arrive by making, by trade or by
+inheritance and can leave by wearing out. Seventy-five pounds more and three
+tenths off the walking pace, which is the trade a cart has always been - and it
+goes at the largest measured waste in the model, which is nearly nine thousand
+items of gathered food put back on the bush in a run for want of anywhere to
+put them.
+
+#### Three things were stopping anybody making anything
+
+**The shovel had nothing to bite on.** Digging a pit was a flat twenty-two
+energy whether the agent dug with a shovel or with its fingers. It divides by
+the tool now, and wears the tool out, like every other job.
+
+**A tool is not one turn's work.** With the ladder in and reachable, the
+arithmetic diverted turns and produced *nothing*: a diversion buys the next step
+in a chain - a length of cordage, a knapped edge - and the turn after that the
+whole decision was made again from scratch and went somewhere else, so
+settlements collected half-finished tools they never picked up again. Exactly
+the defect #83 found in walking, one layer up. `Errand` carries a `to_make` now,
+so a making is an errand like a journey: finished when the thing is in the pack,
+ended by the same four things that end a walk.
+
+**And the commonest ending was standing still for want of a stick.** A hundred
+and three turns in a run where the sum said the tool was worth having and the
+chain was short of something that has to be *found*. That is what
+`fetch_what_the_making_of_it_wants` is for and the tool path was not calling it.
+
+With all three: fourteen tools finished in a 1,200-turn world against nought, a
+settlement carrying rods, shovels, digging sticks and handcarts by day
+thirty-three, and an agent actually pulling a cart.
+
+#### It cost turns, and the larder says when that is allowed
+
+Measured with the ladder and no guard: **1630, 1494, 1387** mean last-alive over
+thirty-two worlds against **1612, 1552, 1633** before it. About a hundred and
+ninety turns a run were going on tools in settlements that needed the turns for
+supper.
+
+The guard is the specification's own rule - "once basic survival needs can be
+satisfied over the long term, other concerns start coming into play" - and the
+question was already being asked every turn. A body on the larder's bottom rung,
+`NotTheDay`, works with what it has. `is_starving` alone is too late a test: it
+wants three days into the reserve, and a people permanently a third short of
+food is hungry long before that and never technically starving.
+
+With the guard: **1613, 1522, 1616**, against 1599 for the commit before - a
+wash, with the ladder in and being climbed. Sixty-three turns a run declined on
+the grounds that there was nothing in for tonight, which is the rule doing its
+job rather than the mechanism failing.
+
+#### One thing found and not fixed
+
+`update_inventory_capacity_from_transport` computes the base as `100.0 *
+body.movement_speed_multiplier()`, and calls that multiplier a strength. It is
+the leg-health figure. So an agent's carrying capacity is decided by how well it
+walks, and taking up a cart recomputes it - a hale agent gets 175 and a
+lame one 107. Filed rather than fixed, because carrying capacity wants its own
+measurement and this commit has had enough of them.
+
 ## Housekeeping
 
-### 87. The other thirteen drive rates were never derived either
+### 88. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5153,23 +5239,23 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 88. The clock is spelled out in the interface too
+### 89. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 89. Committed backup file
+### 90. Committed backup file
 
 `src/analytics/mod.rs.backup` is checked into the repository.
 
-### 90. Build warnings
+### 91. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 91. Placeholder package metadata
+### 92. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.

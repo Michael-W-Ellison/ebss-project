@@ -93,3 +93,133 @@ fn a_tool_is_worth_making_when_it_buys_back_more_than_it_costs() {
          {wears_out_at_once}"
     );
 }
+
+
+// --------------------------------------------------------------------------
+// The ladder itself
+// --------------------------------------------------------------------------
+
+/// Every tool is a thing somebody can actually make.
+///
+/// A `Tool` entry with no `Making` behind it is a multiplier nobody can ever
+/// hold: `what_i_would_rather_have` would propose it for ever and
+/// `how_many_turns_to_make` would return `None` for ever.
+#[test]
+fn every_tool_has_a_chain_behind_it() {
+    use crate::environment::making::{EVERY_STEP, EVERY_TOOL};
+
+    for tool in EVERY_TOOL {
+        assert!(
+            EVERY_STEP.iter().any(|step| step.makes == tool.called),
+            "nothing in the chain makes a {}",
+            tool.called
+        );
+    }
+}
+
+/// And every trade an agent spends its days on has something to reach for.
+///
+/// Herbalism had nothing at all until the digging stick, which is why the tool
+/// arithmetic reached its sum twenty-one times in fourteen thousand
+/// agent-turns. See ISSUES #85.
+#[test]
+fn the_trades_that_fill_a_day_all_have_a_ladder() {
+    use crate::agents::SkillType;
+    use crate::environment::making::what_helps_with;
+
+    for trade in [
+        SkillType::Herbalism,
+        SkillType::Fishing,
+        SkillType::Hunting,
+        SkillType::Woodcutting,
+        SkillType::Mining,
+        SkillType::Farming,
+        SkillType::Construction,
+        SkillType::Crafting,
+    ] {
+        assert!(
+            what_helps_with(trade).next().is_some(),
+            "{trade:?} is a trade with no tool in the world"
+        );
+    }
+}
+
+/// A ladder has rungs: something to start on, and something to climb to.
+#[test]
+fn hunting_and_fishing_both_have_more_than_one_rung() {
+    use crate::agents::SkillType;
+    use crate::environment::making::what_helps_with;
+
+    for trade in [SkillType::Hunting, SkillType::Fishing] {
+        let mut rungs: Vec<f32> = what_helps_with(trade)
+            .map(|tool| tool.how_much_better)
+            .collect();
+        rungs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert!(
+            rungs.len() >= 3,
+            "{trade:?} has {} rungs: {rungs:?}",
+            rungs.len()
+        );
+        assert!(
+            rungs.last().unwrap() > rungs.first().unwrap(),
+            "{trade:?} has rungs that do not climb: {rungs:?}"
+        );
+    }
+}
+
+/// The fishing rod is called a rod, because the fishery looks for one by name.
+///
+/// `Action::Fish` has given a fifth of a chance to anything with "rod" in its
+/// name since the fishery was built, and until now nothing in the chain made
+/// one, so the branch had never fired.
+#[test]
+fn the_rod_is_named_so_the_fishery_finds_it() {
+    use crate::environment::making::ROD_FOR_FISHING;
+
+    assert!(
+        ROD_FOR_FISHING.called.to_lowercase().contains("rod"),
+        "the fishery matches on the name, so the name matters: {}",
+        ROD_FOR_FISHING.called
+    );
+}
+
+/// A cart in the pack is a cart in the hand, and a cart carries.
+///
+/// `TransportSystem` could model all of this from the day it was written and
+/// nothing ever put a transport into it. See `Agent::take_up_the_cart`.
+#[test]
+fn a_handcart_is_taken_up_and_carries_more() {
+    use crate::agents::{Agent, AgentConfig, InventoryItem};
+
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.take_up_the_cart();
+    assert!(
+        agent.transport.get_active().is_empty(),
+        "nobody is pulling a cart they have not got"
+    );
+    let bare_hands = agent.inventory.max_weight;
+
+    agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("handcart".to_string(), 1, 8.0));
+    agent.take_up_the_cart();
+
+    assert_eq!(
+        agent.transport.get_active().len(),
+        1,
+        "a cart in the pack is a cart in the hand"
+    );
+    assert!(
+        agent.inventory.max_weight > bare_hands,
+        "a cart should carry something: {} against {bare_hands}",
+        agent.inventory.max_weight
+    );
+
+    // And putting it down puts it down
+    agent.inventory.remove_item("handcart", 1);
+    agent.take_up_the_cart();
+    assert!(
+        agent.transport.get_active().is_empty(),
+        "the cart went and the pulling did not"
+    );
+}
