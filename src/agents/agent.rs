@@ -545,32 +545,27 @@ impl Inventory {
     /// A person carries what their arms hold. A person with a basket carries
     /// what their arms hold and what the basket holds, which is most of the
     /// reason anybody ever wove one - see `making::WEAVE_A_BASKET`.
+    /// What a basket holds is counted once, in `max_weight`.
+    ///
+    /// This used to add baskets and leather bags *again*, on top of what
+    /// `Agent::take_up_the_cart` had already put into `max_weight` through the
+    /// transport system - which maps a basket to `TransportType::Backpack` at
+    /// thirty. So one basket was worth thirty as a thing on your back and
+    /// another twenty as a thing in your pack: fifty from one basket, and two
+    /// owners for the question "what does a container add".
+    ///
+    /// Measured across six worlds, agents carried 43.5 kg against a stated
+    /// capacity of 34.7 - permanently over their own limit - because
+    /// `add_item` gated on this figure while `weight_percentage` and every
+    /// report read `max_weight`. Two answers, and the looser one held the
+    /// door.
+    ///
+    /// `Transport` owns it now: it has the whole table - capacity, speed,
+    /// durability, twenty-odd kinds of carrier - and `take_up_the_cart` puts
+    /// what is in the pack onto the back each turn.
     pub fn effective_max_weight(&self) -> f32 {
-        // And a leather bag holds a good deal more than a flax basket, which
-        // is what being a leatherworker is worth: carrying capacity is the
-        // thing this people is shortest of - see `making::SEW_A_BAG`.
-        let bags = self
-            .items
-            .get("leatherbag")
-            .map(|item| item.quantity)
-            .unwrap_or(0);
-
-        let baskets = self
-            .items
-            .get("basket")
-            .map(|item| item.quantity)
-            .unwrap_or(0);
-
         self.max_weight
-            + baskets as f32 * Self::WHAT_A_BASKET_HOLDS
-            + bags as f32 * Self::WHAT_A_LEATHER_BAG_HOLDS
     }
-
-    /// What one basket adds, in the units a pack is weighed in.
-    pub const WHAT_A_BASKET_HOLDS: f32 = 20.0;
-
-    /// And what a leather bag adds, which is rather more.
-    pub const WHAT_A_LEATHER_BAG_HOLDS: f32 = 35.0;
 
     /// Get weight capacity remaining
     pub fn weight_capacity_remaining(&self) -> f32 {
@@ -4681,9 +4676,15 @@ impl Agent {
         use super::transport::{Transport, TransportType};
 
         // Best first: nobody drags a travois while pushing a cart.
-        const WHAT_CARRIES: [(&str, TransportType); 3] = [
+        const WHAT_CARRIES: [(&str, TransportType); 4] = [
             ("handcart", TransportType::Handcart),
             ("travois", TransportType::Travois),
+            // A leather bag holds a good deal more than a flax basket, which
+            // is what being a leatherworker is worth - see `making::SEW_A_BAG`.
+            // It reached carrying capacity through `effective_max_weight` and
+            // not through here, so it was a second way of holding things that
+            // the transport system knew nothing about.
+            ("leatherbag", TransportType::LargeBackpack),
             ("basket", TransportType::Backpack),
         ];
 

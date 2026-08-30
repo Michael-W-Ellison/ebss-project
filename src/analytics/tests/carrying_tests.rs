@@ -209,6 +209,11 @@ fn somebody_with_a_bag_carries_more_of_it_home() {
             simulation.population.agents[0].inventory.add_item(
                 InventoryItem::new_with_weight("leatherbag".to_string(), 1, 0.5),
             );
+            // On the back, not merely in the pack. A carrier raises what you
+            // can hold once it is taken up, and nowhere else - see
+            // `Inventory::effective_max_weight`. Without this the bag was
+            // half a kilo of dead weight and the agent carried *less*.
+            simulation.population.agents[0].take_up_the_cart();
         }
 
         simulation.into_the_pack_or_on_the_ground(
@@ -236,10 +241,14 @@ fn somebody_with_a_bag_carries_more_of_it_home() {
 /// scraping of a hide.
 #[test]
 fn a_leather_bag_holds_more_than_a_basket() {
-    use crate::agents::Inventory;
+    use crate::agents::transport::TransportType;
 
+    // Asked of the transport table, which owns what a carrier holds. It used
+    // to be asked of two constants on `Inventory` that added their capacity a
+    // second time on top of this one - see `Inventory::effective_max_weight`.
     assert!(
-        Inventory::WHAT_A_LEATHER_BAG_HOLDS > Inventory::WHAT_A_BASKET_HOLDS,
+        TransportType::LargeBackpack.weight_capacity()
+            > TransportType::Backpack.weight_capacity(),
         "otherwise nobody would ever kill anything for one"
     );
 
@@ -263,14 +272,30 @@ fn a_leather_bag_holds_more_than_a_basket() {
 /// And both of them actually raise what a person can carry.
 #[test]
 fn a_bag_raises_what_a_person_can_carry() {
-    let mut simulation = one_person();
-    let agent = &mut simulation.population.agents[0];
+    // Built here rather than taken from `one_person`, whose founder arrives
+    // with a stone-age start that already includes a basket - so "bare" was
+    // forty-two and the test was comparing a basket with a basket.
+    let mut agent = crate::agents::Agent::new(crate::agents::AgentConfig::default());
+    agent.state.now_this_many_years_old(30);
+    let agent = &mut agent;
 
     let bare = agent.inventory.effective_max_weight();
 
+    // A basket in the pack does nothing until it is on the back. It used to
+    // raise capacity the moment it entered the inventory *and* again when
+    // `take_up_the_cart` equipped it, which is where the double count came
+    // from - see `Inventory::effective_max_weight`. Taking it up is a thing
+    // that happens, and it happens every turn.
     agent
         .inventory
         .add_item(InventoryItem::new_with_weight("basket".to_string(), 1, 0.5));
+    let carried_but_not_taken_up = agent.inventory.effective_max_weight();
+    assert_eq!(
+        carried_but_not_taken_up, bare,
+        "a basket you have not put on your back is a thing you are carrying"
+    );
+
+    agent.take_up_the_cart();
     let with_a_basket = agent.inventory.effective_max_weight();
 
     agent.inventory.add_item(InventoryItem::new_with_weight(
@@ -278,10 +303,15 @@ fn a_bag_raises_what_a_person_can_carry() {
         1,
         0.5,
     ));
+    agent.take_up_the_cart();
     let with_both = agent.inventory.effective_max_weight();
 
-    assert!(with_a_basket > bare);
-    assert!(with_both > with_a_basket);
+    assert!(with_a_basket > bare, "{with_a_basket} against {bare}");
+    assert!(
+        with_both > with_a_basket,
+        "a leather bag beats a basket, so it is what gets taken up: \
+         {with_both} against {with_a_basket}"
+    );
 }
 
 // --------------------------------------------------------------------------
@@ -319,4 +349,74 @@ fn a_kill_too_big_to_carry_leaves_meat_in_the_field() {
         .sum();
 
     assert_eq!(on_the_ground, 12, "he could not take a single joint of it");
+}
+
+
+/// A basket is worth what a basket is worth, once.
+///
+/// `take_up_the_cart` puts a basket on the back as `TransportType::Backpack`
+/// and `total_additional_capacity` adds that to `max_weight`;
+/// `effective_max_weight` then counted the same basket a second time off the
+/// inventory. Thirty as a thing on your back and twenty as a thing in your
+/// pack: fifty from one basket. See ISSUES #116.
+#[test]
+fn a_basket_is_counted_once() {
+    use crate::agents::transport::TransportType;
+    use crate::agents::{Agent, AgentConfig};
+
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.now_this_many_years_old(30);
+    let bare = agent.inventory.max_weight;
+
+    agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("basket".to_string(), 1, 0.5));
+    agent.take_up_the_cart();
+
+    assert_eq!(
+        agent.inventory.max_weight,
+        bare + TransportType::Backpack.weight_capacity(),
+        "a basket adds exactly what the transport table says it adds"
+    );
+
+    // And the two answers to "how much can this person hold" are one answer.
+    assert_eq!(
+        agent.inventory.effective_max_weight(),
+        agent.inventory.max_weight,
+        "`add_item` gates on the first and every report reads the second; \
+         while they differed, agents loaded against the loose figure and were \
+         measured against the tight one, and walked at half speed for it"
+    );
+}
+
+/// Nobody is over their own limit the moment they take up a carrier.
+///
+/// The double count let an agent fill to a hundred and twenty-five per cent of
+/// its stated capacity, and `movement_speed_at_tick` reads
+/// `weight_percentage` straight off that - so a settlement that could never
+/// get under its own limit walked slowly for the whole of every run.
+#[test]
+fn a_full_pack_is_full_by_the_same_figure_that_fills_it() {
+    use crate::agents::{Agent, AgentConfig};
+
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.now_this_many_years_old(30);
+    agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("basket".to_string(), 1, 0.5));
+    agent.take_up_the_cart();
+
+    // Fill it right up through the door everything else uses.
+    for _ in 0..500 {
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight("stone".to_string(), 1, 1.0));
+    }
+
+    assert!(
+        agent.inventory.weight_percentage() <= 1.0,
+        "filled through `add_item`, a pack cannot end up over its own limit: {:.0}%",
+        100.0 * agent.inventory.weight_percentage()
+    );
+    assert!(!agent.inventory.is_overweight());
 }

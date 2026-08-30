@@ -53,7 +53,7 @@ wrong place, move the owner and update this file. Do not add a second one.
 | **Decisions** | `analytics::wanting` | Given a drive, what would answer it | - |
 | **World_interaction** | `analytics::doing` | One module per family of verbs, and the dispatcher | - |
 | **Discussions** | `analytics::between_us` for the act, `agents::gossip` for distortion and truth-tracking, `agents::shared_knowledge` for what a settlement holds in common | - |
-| **Containers** | `agents::agent::InventoryItem` (`new_container`, `fill_level`, `max_capacity`) and `agents::agent::Inventory` for what a person can carry | What a pack holds is a bare `max_weight = 12.0`, undocumented and unowned - see #230 |
+| **Containers** | `agents::transport::TransportType` for what a carrier adds - baskets, bags, travois, carts, pack animals - and `agents::agent::Inventory::max_weight` for the one figure that comes out of it. `InventoryItem` (`new_container`, `fill_level`, `max_capacity`) for vessels that hold fluid | **held**: `carrying_tests::a_basket_is_counted_once` and `a_full_pack_is_full_by_the_same_figure_that_fills_it`. Both were written after `effective_max_weight` was found counting a basket a second time on top of the transport system - fifty from one basket, and everybody permanently over their own limit and walking slowly for it (#116) |
 | **Map_generation** | `world::WorldConfig` and `world::ResourceConfig` for the knobs, `world::terrain` and `world::resource_spawning` for the generation, `core::dice` for the randomness | The knobs are node counts and a size. There is nothing to turn for terrain, biome, or how clustered a resource is - see #234 |
 
 ## Split - more than one owner today

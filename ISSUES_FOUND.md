@@ -6718,7 +6718,12 @@ driven by something *failing*, and nothing fails. The settlement's own
 verb that would notice, refuses nought times. A rule that fires on failure
 cannot see a slow death.
 
-**The second half: a pack holds twelve weight.** `Inventory::max_weight` is
+**The second half: a pack holds twelve weight.** *(Wrong, and corrected in
+#116: twelve is what a pair of bare hands holds. A live agent almost always
+carries a basket and holds forty-two. The figure below was measured on a fresh
+`Agent::new` in a unit test rather than on anybody in a running world, and the
+rest of this paragraph is right about the waste and wrong about the cause.)*
+`Inventory::max_weight` is
 12.0 and food weighs 0.5, so a pack holds **twenty-four items of food, which is
 two days' eating** against the 11.52 a body gets through in a day. Measured
 over the same eight worlds, 11,656 items of food went into packs and **56,020
@@ -6792,8 +6797,10 @@ and a newborn would eat between now and the land bearing again.
 Which puts the gate at exactly the store's own target and a fifth: **breed when
 you have more put by than you need for yourself.**
 
-It also settles what a surplus can and cannot be. A pack holds twelve weight,
-which is two days' food (#113), so a surplus worth breeding on was never
+It also settles what a surplus can and cannot be. A pack holds forty-two
+weight with a basket on the back - about seven days' food, and #113 said two
+because it measured a fresh agent rather than a live one; see #116 - which is
+still nowhere near a lean season. A surplus worth breeding on was never
 something a person could be *carrying*. It is the camp's stores or it is
 nothing.
 
@@ -6900,7 +6907,8 @@ and not in the verb, which is the shape of every defect in this file.
 all rebuilt the receiving stack from scratch - `new_with_weight(name, how_many,
 1.0)` - so what arrived had the right name and nothing else: no nutrition, no
 freshness, no preparation state, and a flat weight of one against food's real
-half, so a traded meal weighed double against a pack that holds twelve. With no
+half, so a traded meal weighed double against a pack that holds forty-two (#113
+says twelve; see the correction in #116). With no
 freshness it then never spoiled, so it sat in the pack for ever as food that
 read as food and was not. Animal products - milk, eggs - were built the same
 way and had never carried nutrition at all. Measured, 17 of 213 edible-looking
@@ -6946,6 +6954,88 @@ asserting that nothing in the model is ever called "berries", on the strength
 of the word appearing only in prose in the decision layer. `PlantDrop` drops
 "berries". The guard failed the moment the name table was taught the drops, and
 the claim was wrong. A guard that only ever agrees with you is not a guard.
+
+---
+
+### 116. A basket was worth fifty and held thirty, so everybody walked at half speed
+
+Set out to make a pack big enough to provision a journey, on the strength of
+#113's "a pack holds twelve weight, which is two days' eating". **That figure
+was wrong, and the way it was wrong is worth writing down**: twelve is
+`WHAT_TWO_HANDS_HOLD`, what a pair of *bare* hands carries, and it was measured
+off a fresh `Agent::new` in a unit test. Measured on agents in a running world,
+**87% carry a basket and hold forty-two**. The premise of the task did not
+survive its first measurement.
+
+What was actually there is better.
+
+**One basket, two owners, fifty kilos.** `take_up_the_cart` maps the item
+`"basket"` onto `TransportType::Backpack`, whose capacity is thirty, and
+`total_additional_capacity` puts that into `Inventory::max_weight`. Then
+`effective_max_weight` counted **the same basket again**, at twenty, off the
+inventory:
+
+```rust
+self.max_weight
+    + baskets as f32 * Self::WHAT_A_BASKET_HOLDS   // 20
+    + bags as f32 * Self::WHAT_A_LEATHER_BAG_HOLDS // 35
+```
+
+So one basket was worth thirty as a thing on your back and another twenty as a
+thing in your pack. Two subsystems answering "what does a container add", which
+is this project's oldest defect in its plainest form.
+
+**What it cost, which is not what it looks like.** `add_item` gates on
+`effective_max_weight` and every report reads `max_weight`, so agents loaded
+themselves against the loose figure and were measured against the tight one:
+over six worlds, **43.5 kg carried against a stated 34.7 - a hundred and
+twenty-five per cent full, permanently.** And `movement_speed_at_tick` takes
+`1.0 - weight_percentage() * 0.3`, with `is_overweight` halving it on top. A
+settlement of people who could never get under their own limit walked at
+between a half and five eighths of their speed for the whole of every run. The
+double count was not a bookkeeping error; it was a permanent movement penalty
+on everybody.
+
+**Fixed by giving it one owner.** `Transport` has the whole table - capacity,
+speed, durability, twenty-odd kinds of carrier - and `take_up_the_cart` puts
+what is in the pack onto the back every turn from `tick_with_percepts`. So
+`effective_max_weight` is now `self.max_weight` and nothing else, and
+`WHAT_A_BASKET_HOLDS` and `WHAT_A_LEATHER_BAG_HOLDS` are gone. The leather bag
+had reached capacity only through those constants, so it goes into
+`take_up_the_cart` as `LargeBackpack` - fifty, ahead of the basket's thirty,
+which is what being a leatherworker is worth.
+
+**Measured, paired over three blocks of thirty-two seeds:**
+
+| | before | after |
+|---|---|---|
+| mean pack | 43.5 kg of 34.7 (**125% full**) | 30.3 kg of 36.4 (**83%**) |
+| person-days | 32,885 / 27,095 / 30,320 | **36,826 / 27,330 / 33,674** |
+| worlds emptied | 12 / 20 / 14 | 14 / 21 / 16 |
+
+Person-days up twelve, one and eleven per cent - people live longer because
+they can walk again. Worlds emptied is up by one or two in each block, which is
+the same thin tail as everywhere else in this model and not worth reading much
+into at thirty-two.
+
+**And the real reason nothing gets provisioned, which is not capacity at all.**
+With the count corrected, the pack is 83% full and **food is six per cent of
+it**. What fills a pack, by weight over six worlds:
+
+| | share of everything carried |
+|---|---|
+| wood | **23.1%** |
+| iron | 4.7% |
+| handaxes (666 of them) | 4.4% |
+| tinder | 3.5% |
+| stone | 2.9% |
+| all food | **~6%** |
+
+Nobody puts anything down. An agent picks up wood, iron, stone and a second and
+third handaxe, and carries them until it dies. That is what leaves no room for
+food, and it is a decision-layer problem - what to carry, and when to leave
+something - rather than a number. Filed as #236, and it is the true content of
+what #230 was reaching for.
 
 ---
 
