@@ -115,6 +115,40 @@ pub enum ItemType {
 }
 
 impl ItemType {
+    /// Whether a person can eat this.
+    ///
+    /// The one answer. There were eight - `InventoryItem::is_food`,
+    /// `Agent::LOOKS_EDIBLE` matching substrings, `Piece::can_it_be_eaten`
+    /// (which only asks whether a thing is an uncut carcass),
+    /// `FoodDatabase::is_food`, `ResourceType::is_it_food`, `edible_item_for`,
+    /// `Pit::is_it_food` meaning "not a bowl or basket", and an inline
+    /// `is_food() || name.contains("food") || name.contains("grain")` - and
+    /// measured against each other they disagreed. An untracked stack of grain
+    /// counted towards what an agent had put by and could not be eaten by
+    /// anything; untracked greens and roots, which are the whole of spring and
+    /// summer forage, counted as nothing at all because neither word was in
+    /// the substring list.
+    ///
+    /// These are exactly the twelve the food database carries templates for,
+    /// and `every_food_type_has_a_template` holds the two to it.
+    pub fn is_it_food(&self) -> bool {
+        matches!(
+            self,
+            ItemType::Food
+                | ItemType::Meat
+                | ItemType::Fish
+                | ItemType::Greens
+                | ItemType::Roots
+                | ItemType::Grain
+                | ItemType::Flour
+                | ItemType::Bread
+                | ItemType::Milk
+                | ItemType::Cheese
+                | ItemType::Honey
+                | ItemType::Ale
+        )
+    }
+
     /// Check if item is a tool
     pub fn is_tool(&self) -> bool {
         matches!(

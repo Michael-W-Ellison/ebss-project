@@ -6852,6 +6852,103 @@ costs 45 seconds more for it.
 
 ---
 
+### 115. Eight answers to "is this food", and food that stopped being food when it changed hands
+
+Asked how the eating code decides what to eat, when to eat and what counts as
+food, and the third question had no single answer.
+
+**The one part that was well built.** `physiology::how_fast_hunger_rises` reads
+three tables off the body - share of reserve, energy in the stomach, food in
+the gut - and multiplies them, as a *rate* rather than a level, with the
+reasoning for that written down and measured. What to eat is scored by the
+nutrient most needed, times freshness, times how fast the thing goes off, so a
+dried strip scores a twentieth of today's supper and gets kept for February.
+Neither needed touching.
+
+**The eight answers.** `InventoryItem::is_food` (has nutrition data attached);
+`Agent::LOOKS_EDIBLE` (substring match on six words); `Piece::can_it_be_eaten`
+(only asks whether a thing is an uncut carcass); `FoodDatabase::is_food`;
+`ResourceType::is_it_food`; `edible_item_for`; `Pit::is_it_food` ("not a bowl
+or a basket"); and an inline `is_food() || name.contains("food") ||
+name.contains("grain")`. Measured against each other with an untracked stack -
+`food_put_by` / `has_edible_food` / `find_best_food_to_eat`:
+
+| item | put by | can eat | search finds |
+|---|---|---|---|
+| food | 5 | yes | no |
+| grain | 5 | no | no |
+| fish | 5 | no | no |
+| bread | 5 | no | no |
+| greens | **0** | no | no |
+| roots | **0** | no | no |
+
+So a pack of untracked grain, fish or bread **counted as provisions and could
+not be eaten by anything**: `has_edible_food` reached for the literal item id
+`"food"` and no other, and `find_best_food_to_eat` skipped every stack without
+nutrition data. Untracked greens and roots counted as *nothing at all*, neither
+word being among the six - and they are the whole of what a hedgerow gives for
+half the year.
+
+**And the verb trusted its callers.** `eat_food_item` guarded only on
+`Piece::can_it_be_eaten`. Called with "wood", "stone", "clay", "bowl" or
+"flax" it returned Success, credited twenty energy, fed `nutrition.consume` and
+dropped the hunger drive. Nothing reached it that way in a live run, because
+every caller filtered first - which is the point. The rule lived in the callers
+and not in the verb, which is the shape of every defect in this file.
+
+**Where the untracked stacks came from.** Bartering, gifts and going-without
+all rebuilt the receiving stack from scratch - `new_with_weight(name, how_many,
+1.0)` - so what arrived had the right name and nothing else: no nutrition, no
+freshness, no preparation state, and a flat weight of one against food's real
+half, so a traded meal weighed double against a pack that holds twelve. With no
+freshness it then never spoiled, so it sat in the pack for ever as food that
+read as food and was not. Animal products - milk, eggs - were built the same
+way and had never carried nutrition at all. Measured, 17 of 213 edible-looking
+stacks in packs were untracked.
+
+**And a fourth drift in the name table.** `PlantDrop` names sixty-two things a
+plant can give - apples, berries, potatoes, wheat, mushrooms - and
+`id_to_item_type` knew four of them. Everything else the flora system produced
+arrived as a name nothing could resolve: no nutrition, no price, no place in a
+store. The edible ones are mapped onto the types that already exist now; petals,
+fibre, bark, straw, seeds and poison mushrooms deliberately are not.
+
+**What replaced it.** `ItemType::is_it_food` is the one answer for types and
+`nutrition::is_this_food` is that question asked of a name, through
+`id_to_item_type`, so a cooked joint and a cut portion resolve to what they
+were cut off. `food_put_by`, `find_best_food_to_eat`, `has_edible_food`,
+`InventoryItem::is_food`, the pit and the verb all ask it. `eat_food_item`
+refuses anything that is not food. `Simulation::hand_over` moves a stack out of
+one pack and into another whole - same weight, same food data, same quality -
+and returns nought if the receiving pack will not take it, so a one-sided
+bargain is refused rather than half-completed.
+
+One distinction is deliberately kept: a whole fish or an uncut haunch **is**
+food and is **not** supper. `food_put_by` counts it and `has_edible_food` does
+not, which is what `Piece` and `how_many_meals_i_have` have always said.
+
+**Measured.** Untracked edible stacks in packs **17 to nought**. Food eaten out
+of the pack over eight worlds of a year **474 to 920**, which is the direct
+effect: the search can see what the agent is carrying now. Person-ticks alive
+90,272 to 96,956. Wood, stone, clay, a bowl and flax are all refused. Survival
+across three blocks of thirty-two seeds is a wash - alive 21/12/18 to 22/12/18,
+worlds emptied 12/21/14 to 12/20/15 - which is what to expect when the paths
+being repaired are eight per cent of stacks and a rare verb.
+
+**Tests 24, unchanged, none new.** Seven broke on the way and all seven were
+fixtures naming food the model has never produced - "meal", "fruit",
+"raw_meat", "spoiled_meat" - which a predicate that resolves names refuses as
+firmly as it refuses a stone. They say what the model actually makes.
+
+The drift guard `every_food_type_has_a_template` holds the static list to the
+runtime database. It earned its keep immediately: this entry was first written
+asserting that nothing in the model is ever called "berries", on the strength
+of the word appearing only in prose in the decision layer. `PlantDrop` drops
+"berries". The guard failed the moment the name table was taught the drops, and
+the claim was wrong. A guard that only ever agrees with you is not a guard.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

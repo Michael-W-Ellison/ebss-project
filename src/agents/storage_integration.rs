@@ -97,6 +97,30 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "salt" => Some(ItemType::Salt),
         "greens" => Some(ItemType::Greens),
         "roots" => Some(ItemType::Roots),
+
+        // What the flora system drops.
+        //
+        // Fourth time this table has drifted from the vocabulary beside it,
+        // and the largest: `PlantDrop` names sixty-two things a plant can
+        // give, and this table knew four of them. So every apple, berry,
+        // potato and ear of wheat the flora system produced arrived in a pack
+        // as a name nothing could resolve - no nutrition, no price, no place
+        // in a store, and after the edibility sweep, not food at all.
+        //
+        // Mapped onto the types that already exist rather than inventing new
+        // ones: a pear and an apple are both a handful of ordinary food to a
+        // body, and the model has no reason yet to tell them apart. What is
+        // *not* here is deliberate - petals, fibre, bark, straw, seeds and
+        // poison mushrooms are not supper.
+        "apples" | "bananas" | "baobab_fruit" | "berries" | "cherries"
+        | "coconut" | "mushrooms" | "olives" | "oranges" | "pears"
+        | "pumpkin" | "tomatoes" | "rose_hips" | "nuts" | "fruit" => {
+            Some(ItemType::Food)
+        }
+        "barley" | "corn" | "rice" | "wheat" => Some(ItemType::Grain),
+        "carrots" | "onions" | "potatoes" | "tubers" | "lotus_root"
+        | "ginseng_root" => Some(ItemType::Roots),
+        "cabbage" | "seaweed" | "bamboo_shoots" | "leaves" => Some(ItemType::Greens),
         "sand" => Some(ItemType::Sand),
         "coal" => Some(ItemType::Coal),
 

@@ -17,7 +17,7 @@ use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
 use crate::environment::TechnologyKnowledge;
-use crate::world::nutrition::{FoodData, NutritionalState, NutritionalContent, EatResult};
+use crate::world::nutrition::{FoodData, NutritionalState, EatResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -186,8 +186,14 @@ impl InventoryItem {
         };
     }
 
+    /// Whether this is something to eat.
+    ///
+    /// Asked of what the thing *is*, not of whether anybody happened to record
+    /// its freshness. This was `food_data.is_some()`, which made a traded
+    /// stack of grain - rebuilt without its nutrition, see #232 - not food,
+    /// while the pack count beside it said it was.
     pub fn is_food(&self) -> bool {
-        self.food_data.is_some()
+        crate::world::nutrition::is_this_food(&self.item_id)
     }
 
     /// Check if food is spoiled
@@ -1721,8 +1727,7 @@ impl Agent {
             .get_all_items()
             .iter()
             .filter(|(name, item)| {
-                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP
-                    && (item.is_food() || name.contains("food") || name.contains("grain"))
+                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP && item.is_food()
             })
             // What keeps worst is what most wants burying
             .max_by_key(|(_, item)| item.quantity)
@@ -4873,23 +4878,39 @@ impl Agent {
     /// most of what an agent picks up off the land arrives as a plain "food"
     /// stack with no freshness attached, and a count that ignored those would
     /// report an empty pack for an agent carrying a fortnight's eating.
+    ///
+    /// What counts is `nutrition::is_this_food`, the same question
+    /// `find_best_food_to_eat` asks, so that "I am provisioned" and "I can eat
+    /// this" cannot disagree. They did: this used to match substrings from a
+    /// list of six - `LOOKS_EDIBLE` - which counted an untracked stack of
+    /// grain that nothing could eat, and counted untracked greens and roots as
+    /// nothing at all, those being the whole of what a hedgerow gives for half
+    /// the year and neither word being on the list.
     pub fn food_put_by(&self) -> u32 {
         self.inventory
             .get_all_items()
             .values()
             .filter(|item| item.quantity > 0)
-            .filter(|item| match &item.food_data {
-                Some(food) => !food.is_spoiled() && !food.is_harmful(),
-                None => Self::LOOKS_EDIBLE
-                    .iter()
-                    .any(|edible| item.item_id.contains(edible)),
-            })
+            .filter(|item| Self::is_this_worth_eating(item))
             .map(|item| item.quantity)
             .sum()
     }
 
-    /// Item names that mean food when there is no nutrition data to go on
-    const LOOKS_EDIBLE: [&'static str; 6] = ["food", "grain", "meat", "fish", "berr", "bread"];
+    /// Whether this stack is food, and food that would not do harm.
+    ///
+    /// One place, because everything that asks about a pack asks this: what is
+    /// put by, what there is to eat, and what the verb will accept.
+    pub fn is_this_worth_eating(item: &InventoryItem) -> bool {
+        if !crate::world::nutrition::is_this_food(&item.item_id) {
+            return false;
+        }
+        match &item.food_data {
+            Some(food) => !food.is_spoiled() && !food.is_harmful(),
+            // Nothing known about it beyond what it is. An untracked stack has
+            // no freshness to be suspicious of, so it is taken at face value.
+            None => true,
+        }
+    }
 
     /// Whether this agent has any reason to think a child could be fed.
     ///
@@ -5945,10 +5966,22 @@ impl Agent {
             return EatResult::NoFood;
         }
 
-        // You cannot eat a deer. The decision layer knows this and cuts one up
-        // first, but the executor is the place it has to be true: an agent
-        // handed a carcass by any other route would otherwise swallow two
-        // kilos of raw beast in a tick.
+        // You cannot eat a stone. The callers all filter for food before they
+        // get here, and that was the whole of the guard: `Piece::can_it_be_eaten`
+        // asks only whether a thing is an uncut carcass, so anything that was
+        // not a carcass passed. Called with "wood", "stone", "clay", "bowl" or
+        // "flax" this returned Success, credited twenty energy, fed
+        // `nutrition.consume` and dropped the hunger drive. Nothing reached it
+        // that way in a live run - but the rule lived in the callers and not
+        // in the verb, which is the shape every defect in this file has had.
+        if !crate::world::nutrition::is_this_food(item_id) {
+            return EatResult::NoFood;
+        }
+
+        // You cannot eat a deer either. The decision layer knows this and cuts
+        // one up first, but the executor is the place it has to be true: an
+        // agent handed a carcass by any other route would otherwise swallow
+        // two kilos of raw beast in a tick.
         if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
             return EatResult::NoFood;
         }
@@ -5959,7 +5992,8 @@ impl Agent {
                 // Not a tracked food item - consume 1 with flat nutrition
                 self.inventory.remove_item(item_id, 1);
                 self.food_i_ate = self.food_i_ate.saturating_add(1);
-                let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
+                let flat_nutrition =
+                    crate::world::nutrition::what_an_untracked_mouthful_is_worth();
                 self.nutrition.consume(&flat_nutrition);
                 self.state.took_a_meal(
                     current_tick,
@@ -6054,16 +6088,17 @@ impl Agent {
     }
 
     /// Whether the agent is carrying anything it can safely eat
+    /// Whether there is anything in the pack this one could make a meal of.
+    ///
+    /// Exactly what `find_best_food_to_eat` would return, and nothing else.
+    /// There used to be a second clause here reaching for the literal item id
+    /// `"food"`, because the search above could not see untracked stacks - so
+    /// a pack of untracked grain, berries or fish answered *false* to this
+    /// while `food_put_by` counted every one of them. The decision layer asks
+    /// this before it chooses to eat, so those agents read as provisioned and
+    /// never once ate what they were carrying. The search sees them now.
     pub fn has_edible_food(&self) -> bool {
-        if self.find_best_food_to_eat().is_some() {
-            return true;
-        }
-
-        // Untracked stacks have no freshness to judge, so they are always safe
-        self.inventory
-            .get_item("food")
-            .map(|item| item.quantity > 0 && item.food_data.is_none())
-            .unwrap_or(false)
+        self.find_best_food_to_eat().is_some()
     }
 
     /// Find the best food item to eat based on nutritional needs and freshness
@@ -6158,7 +6193,34 @@ impl Agent {
                 continue;
             }
 
-            if let Some(ref food_data) = item.food_data {
+            // Something that is not food at all is not a candidate, whatever
+            // else is true of it. This used to be left to the `if let` below -
+            // no nutrition data meant "skip" - which quietly also skipped
+            // every untracked stack of real food, so a pack of traded grain
+            // was invisible here and counted in `food_put_by` at the same
+            // time.
+            if !crate::world::nutrition::is_this_food(item_id) {
+                continue;
+            }
+
+            let Some(ref food_data) = item.food_data else {
+                // Food with nothing known about it beyond its name. It is
+                // scored on what `eat_food_item` will actually credit it with,
+                // so the search and the verb agree about what it is worth, and
+                // at full freshness because there is nothing to say otherwise.
+                let flat = crate::world::nutrition::what_an_untracked_mouthful_is_worth();
+                let score = match needed {
+                    crate::world::NutrientType::Energy => flat.energy,
+                    crate::world::NutrientType::Protein => flat.protein,
+                    crate::world::NutrientType::Micronutrients => flat.micronutrients,
+                };
+                if best_item.is_none() || score > best_item.as_ref().unwrap().1 {
+                    best_item = Some((item_id.clone(), score));
+                }
+                continue;
+            };
+
+            {
                 // Skip anything that would make the agent sick. Raw food turns
                 // harmful before it counts as spoiled, so checking spoilage
                 // alone leaves agents eating rot: ten health a bite, one bite

@@ -713,3 +713,162 @@ fn old_age_can_be_taken_off_the_board() {
         "nobody in this population dies of old age"
     );
 }
+
+
+// ---------------------------------------------------------------------------
+// One answer to what is food, and food that survives changing hands
+// ---------------------------------------------------------------------------
+
+/// What an agent counts as put by is what it can actually eat.
+///
+/// These two disagreed for every untracked stack in the model. Measured before
+/// the fix, with no `food_data` on the stack: grain, fish and bread each
+/// counted 5 towards `food_put_by` and answered *false* to `has_edible_food`,
+/// so an agent carrying them read as provisioned and never ate one; greens and
+/// roots counted 0, being absent from a six-word substring list, though they
+/// are the whole of what a hedgerow gives for half the year.
+#[test]
+fn what_is_put_by_is_what_can_be_eaten() {
+    use crate::agents::{Agent, AgentConfig, InventoryItem};
+
+    for id in ["food", "grain", "greens", "roots", "fishportions", "bread"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(id.to_string(), 5, 0.1));
+
+        assert_eq!(agent.food_put_by(), 5, "{id} should count as put by");
+        assert!(
+            agent.has_edible_food(),
+            "{id} counts as put by, so it has to be something this one can eat"
+        );
+        assert_eq!(
+            agent.find_best_food_to_eat().as_deref(),
+            Some(id),
+            "and the search has to find it"
+        );
+    }
+
+    // One thing that is food and is not supper, which is a distinction this
+    // model draws on purpose and the unifying above must not flatten: a whole
+    // fish or an uncut haunch is food somebody has, and nobody can eat it
+    // until it has been taken apart. See `Piece` and `how_many_meals_i_have`.
+    for whole in ["fish", "meat"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(whole.to_string(), 5, 1.0));
+
+        assert_eq!(agent.food_put_by(), 5, "an uncut {whole} is still food");
+        assert!(
+            !agent.has_edible_food(),
+            "but nobody can eat a whole {whole} until it is cut up"
+        );
+    }
+
+    // And the other way: a thing that is not food counts for neither.
+    for id in ["wood", "stone", "clay", "flax"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(id.to_string(), 5, 0.1));
+
+        assert_eq!(agent.food_put_by(), 0, "{id} is not food");
+        assert!(!agent.has_edible_food(), "{id} is not a meal");
+    }
+}
+
+/// The verb refuses what is not food, rather than trusting whoever called it.
+///
+/// `eat_food_item` guarded only on `Piece::can_it_be_eaten`, which asks
+/// whether a thing is an uncut carcass and nothing else. Called with wood,
+/// stone, clay or a bowl it returned Success, credited twenty energy, fed the
+/// nutritional state and dropped the hunger drive. Nothing reached it that way
+/// in a live run - the callers all filtered first - which is exactly the point:
+/// the rule was in the callers and not in the verb.
+#[test]
+fn a_body_will_not_swallow_a_stone() {
+    use crate::agents::{Agent, AgentConfig, InventoryItem};
+    use crate::world::EatResult;
+
+    for id in ["wood", "stone", "clay", "bowl", "basket", "flax", "iron"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(id.to_string(), 5, 0.1));
+
+        assert!(
+            matches!(agent.eat_food_item(id, 0), EatResult::NoFood),
+            "a body should refuse {id}"
+        );
+        assert_eq!(
+            agent.inventory.get_item(id).map(|i| i.quantity),
+            Some(5),
+            "and not have swallowed any of it"
+        );
+    }
+
+    // A whole carcass is still refused, on the older rule, and for a different
+    // reason: it is food, and somebody has to take a knife to it first.
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.now_this_many_years_old(30);
+    agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("meat".to_string(), 1, 1.0));
+    assert!(matches!(agent.eat_food_item("meat", 0), EatResult::NoFood));
+}
+
+/// Food keeps what it knows about itself when it changes hands.
+#[test]
+fn a_gift_of_food_is_still_food() {
+    use crate::agents::{AgentConfig, InventoryItem, Population};
+    use crate::analytics::Simulation;
+    use crate::world::nutrition::FoodDatabase;
+    use crate::world::{ItemType, World, WorldConfig};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+
+    // A dried stack, which is the most a settlement can do to keep something.
+    let database = FoodDatabase::new();
+    let mut stack = InventoryItem::new_with_weight("fish".to_string(), 6, 0.5);
+    stack.food_data = database.create_food_data(&ItemType::Fish, 0);
+    stack.food_data.as_mut().unwrap().preparation =
+        crate::world::nutrition::PreparationState::Dried;
+    let kept = stack.food_data.clone().unwrap();
+    simulation.population.agents[0].inventory.add_item(stack);
+
+    let went = simulation.hand_over_for_test(0, 1, "fish", 4);
+    assert_eq!(went, 4, "four of the six went across");
+
+    let arrived = simulation.population.agents[1]
+        .inventory
+        .get_item("fish")
+        .expect("it should be in their pack");
+    assert_eq!(arrived.quantity, 4);
+    assert_eq!(
+        arrived.weight_per_unit, 0.5,
+        "and weigh what it weighed, not a flat one"
+    );
+    let data = arrived
+        .food_data
+        .as_ref()
+        .expect("food that changed hands is still food");
+    assert_eq!(data.preparation, kept.preparation, "still dried");
+    assert_eq!(data.base_nutrition.energy, kept.base_nutrition.energy);
+
+    // And the giver is down by exactly what went.
+    assert_eq!(
+        simulation.population.agents[0]
+            .inventory
+            .get_item("fish")
+            .map(|i| i.quantity),
+        Some(2)
+    );
+}

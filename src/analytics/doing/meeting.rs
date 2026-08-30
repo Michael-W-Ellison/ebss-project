@@ -16,6 +16,68 @@ use log::debug;
 use rand::Rng;
 
 impl Simulation {
+
+    /// Reachable from the tests under the same name.
+    #[cfg(test)]
+    pub(in crate::analytics) fn hand_over_for_test(
+        &mut self,
+        from: usize,
+        to: usize,
+        item_id: &str,
+        how_many: u32,
+    ) -> u32 {
+        self.hand_over(from, to, item_id, how_many)
+    }
+
+    /// Move a stack out of one pack and into another, whole.
+    ///
+    /// Every one of the four places that handed something over built the
+    /// receiving stack from scratch - `new_with_weight(name, how_many, 1.0)` -
+    /// so what arrived had the right name and nothing else. Food lost its
+    /// nutrition, its freshness and its preparation state; a dried strip
+    /// became an anonymous handful, and because an untracked stack has no
+    /// freshness it then never spoiled either. It also weighed a flat one
+    /// whatever it was, against food's real half, so a traded meal weighed
+    /// double against a pack that holds twelve.
+    ///
+    /// A gift is the same thing in somebody else's hands. Take it across
+    /// whole: same weight, same food data, same quality and durability.
+    ///
+    /// Returns how many actually went across, which is nought if the
+    /// receiver's pack would not take them - what will not go in stays with
+    /// the giver rather than vanishing.
+    pub(in crate::analytics) fn hand_over(
+        &mut self,
+        from: usize,
+        to: usize,
+        item_id: &str,
+        how_many: u32,
+    ) -> u32 {
+        let Some(stack) = self.population.agents[from]
+            .inventory
+            .get_item(item_id)
+            .cloned()
+        else {
+            return 0;
+        };
+
+        let going = how_many.min(stack.quantity);
+        if going == 0 {
+            return 0;
+        }
+
+        let mut handed = stack.clone();
+        handed.quantity = going;
+
+        if !self.population.agents[to].inventory.add_item(handed) {
+            return 0;
+        }
+
+        self.population.agents[from]
+            .inventory
+            .remove_item(item_id, going);
+        going
+    }
     /// `Action::Socialize`.
     pub(in crate::analytics) fn socialising(&mut self, target_agent_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
         use crate::agents::social_interactions::{
@@ -753,16 +815,26 @@ impl Simulation {
         let i_hand_over = how_much(mine.1);
         let they_hand_over = how_much(theirs.1);
 
+        // Both stacks go across whole. A trade that came to nothing on either
+        // side is not a trade: if one pack will not take what is offered, the
+        // other keeps what it had.
+        let they_gave = self.hand_over(them, agent_index, &theirs.0, they_hand_over);
+        if they_gave == 0 {
+            return ActionResult::failure(
+                "No room in the pack for what they offered".to_string(),
+            );
+        }
+        let i_gave = self.hand_over(agent_index, them, &mine.0, i_hand_over);
+        if i_gave == 0 {
+            // Put theirs back, so nobody is left holding a one-sided bargain.
+            self.hand_over(agent_index, them, &theirs.0, they_gave);
+            return ActionResult::failure(
+                "No room in their pack for what was offered".to_string(),
+            );
+        }
+
         {
             let agent = &mut self.population.agents[agent_index];
-            agent.inventory.remove_item(&mine.0, i_hand_over);
-            agent.inventory.add_item(
-                crate::agents::InventoryItem::new_with_weight(
-                    theirs.0.clone(),
-                    they_hand_over,
-                    1.0,
-                ),
-            );
             agent.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
         }
 
@@ -771,14 +843,6 @@ impl Simulation {
 
         {
             let other = &mut self.population.agents[them];
-            other.inventory.remove_item(&theirs.0, they_hand_over);
-            other.inventory.add_item(
-                crate::agents::InventoryItem::new_with_weight(
-                    mine.0.clone(),
-                    i_hand_over,
-                    1.0,
-                ),
-            );
             other.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
 
             // A good trade is a good turn on both sides, and both
@@ -829,14 +893,14 @@ impl Simulation {
 
         {
             let agent = &mut self.population.agents[agent_index];
-            agent.inventory.remove_item(&mine, 1);
+        }
+
+        if self.hand_over(agent_index, them, &mine, 1) == 0 {
+            return ActionResult::failure("No room in their pack for it".to_string());
         }
 
         {
             let other = &mut self.population.agents[them];
-            other.inventory.add_item(
-                crate::agents::InventoryItem::new_with_weight(mine.clone(), 1, 1.0),
-            );
             other.they_did_me_a_good_turn(me, Self::WHAT_GOING_WITHOUT_IS_WORTH);
         }
 
@@ -869,21 +933,18 @@ impl Simulation {
         let handed_over = (mine.1 / 2).max(1);
         let me = self.population.agents[agent_index].id;
 
+        let handed_over = self.hand_over(agent_index, them, &mine.0, handed_over);
+        if handed_over == 0 {
+            return ActionResult::failure("No room in their pack for it".to_string());
+        }
+
         {
             let agent = &mut self.population.agents[agent_index];
-            agent.inventory.remove_item(&mine.0, handed_over);
             agent.skills.practise(crate::agents::SkillType::Social, 10, tick_now);
         }
 
         {
             let other = &mut self.population.agents[them];
-            other.inventory.add_item(
-                crate::agents::InventoryItem::new_with_weight(
-                    mine.0.clone(),
-                    handed_over,
-                    1.0,
-                ),
-            );
             other.they_did_me_a_good_turn(me, Self::WHAT_A_GIFT_IS_WORTH);
         }
 

@@ -830,15 +830,32 @@ impl Simulation {
             }
 
             if !collected_products.is_empty() {
-                // Add to agent inventory
+                // Milk and eggs are food, and were arriving with no nutrition
+                // on them at all - so they counted towards what somebody had
+                // put by, could not be eaten, and never spoiled. The same
+                // defect as the trade path; see #232. Anything the food
+                // database knows gets its clock started here, exactly as a
+                // gathered armful does.
+                let now = self.current_tick;
+                let clocks: Vec<_> = collected_products
+                    .iter()
+                    .map(|stack| {
+                        crate::agents::storage_integration::id_to_item_type(
+                            &stack.material_id,
+                        )
+                        .and_then(|kind| self.food_database.create_food_data(&kind, now))
+                    })
+                    .collect();
+
                 let agent = &mut self.population.agents[agent_index];
-                for item_stack in &collected_products {
+                for (item_stack, clock) in collected_products.iter().zip(clocks) {
                     use crate::agents::InventoryItem;
-                    let item = InventoryItem::new_with_weight(
+                    let mut item = InventoryItem::new_with_weight(
                         item_stack.material_id.clone(),
                         item_stack.quantity,
                         1.0, // Animal products are generally light
                     );
+                    item.food_data = clock;
                     agent.inventory.add_item(item);
                 }
 

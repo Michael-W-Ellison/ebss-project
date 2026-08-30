@@ -38,14 +38,14 @@ impl Simulation {
         //
         // Agents gather food into their inventory long before they are
         // hungry; without this they would starve while fully stocked.
+        // `find_best_food_to_eat` is the whole answer. There used to be an
+        // `.or_else` here reaching for the literal item id "food", because the
+        // search could not see a stack with no nutrition data on it - so this
+        // could eat an untracked stack called "food" and no other, and a pack
+        // of untracked grain or fish went uneaten while counting towards what
+        // the agent had put by. The search sees them now; see #231.
         let agent = &mut self.population.agents[agent_index];
-        let carried_food = agent.find_best_food_to_eat().or_else(|| {
-            agent
-                .inventory
-                .get_item("food")
-                .filter(|item| item.quantity > 0 && item.food_data.is_none())
-                .map(|item| item.item_id.clone())
-        });
+        let carried_food = agent.find_best_food_to_eat();
 
         // A sitting down to eat, not a single berry.
         //

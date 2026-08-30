@@ -300,8 +300,12 @@ impl Pit {
 
     /// Whether a thing in the pit is something to eat rather than the vessel
     /// it is kept in.
+    ///
+    /// This was the blocklist "anything that is not a bowl or a basket", which
+    /// counted a spear buried by mistake as a winter's eating. It asks the
+    /// same question as everything else now - see `ItemType::is_it_food`.
     fn is_it_food(item: &crate::agents::InventoryItem) -> bool {
-        item.quantity > 0 && !matches!(item.item_id.as_str(), "bowl" | "basket")
+        item.quantity > 0 && crate::world::nutrition::is_this_food(&item.item_id)
     }
 
     /// What is in there to eat, by name.
