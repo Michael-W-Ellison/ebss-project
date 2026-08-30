@@ -7475,6 +7475,99 @@ the two lists happened to agree.
 
 ---
 
+### 122. Going for a drink was a change of mind, and it emptied the larder
+
+#239 was filed on the reading that undertakings are dropped because two needs
+of the same standing trade places, which is the case
+`what_it_takes_to_turn_me_round` was written for and the case the anticipation
+rule deliberately excludes. **That was wrong, and the measurement says so.**
+
+Tallying every drop by the band of the need that took the turn, over six
+worlds and a year:
+
+| the need that took the turn | drops | share |
+|---|---:|---:|
+| a **higher** band | 1,401 | **84.0%** |
+| the same band | 264 | 15.8% |
+| a lower band | 4 | 0.2% |
+
+And the pairs are not scattered. **1,062 of the 1,669 - 64% - are a
+Preparedness errand cut short by thirst or hunger**: 611 by thirst, 451 by
+hunger. Curiosity and Social lose another 220 the same way.
+
+So it is not two needs of a kind swapping places. It is a primary need
+interrupting a secondary one, which is what primary needs are *for* - a
+primary drive outranks a secondary one whatever its clock says, because
+`DriveRank::precedence` is 100 against 10. Thirst does not have to be
+dangerous to take the turn; it only has to be asking.
+
+**And the anticipation rule could not have helped.** It defers when
+`ticks_before_this_kills_me` runs out inside the job, and thirst's clock is a
+day and a half where the errand is twenty turns. The clock says there is
+plenty of time. The ranking takes the turn anyway. Both are right; they are
+answering different questions.
+
+**What was actually wrong.** `stick_to_the_errand` did not interrupt the
+errand - it **destroyed** it. `self.population.agents[agent_index].errand =
+None`, and the next turn the whole decision was made again from nothing. So
+every attempt at putting food by ended the first time somebody got thirsty,
+which on this map is every attempt, every time; the settlement started an
+errand it never once finished and started it again the next day.
+
+A man who stops for a drink has not changed his mind about the pit he was
+digging. The errand is put down and picked up again: `Errand::set_aside`
+counts the turns it spends waiting, `set_the_errand_aside` books it, and
+resuming resets the count. What still ends an errand is arriving, giving up on
+an unreachable place, being frightened off it, or leaving it standing for two
+days - `HOW_LONG_AN_ERRAND_KEEPS`, long enough to outlast a drink, a meal and
+a night's sleep, short enough that a patch remembered on Tuesday is not still
+being walked to in the spring.
+
+**What it did.** Errand outcomes over the same six worlds:
+
+| | before | after |
+|---|---:|---:|
+| set out on | 3,047 | 1,868 |
+| got there | 1,206 (39.6%) | **1,313 (70.3%)** |
+| dropped for something else | 1,717 (56.3%) | **0** |
+| set aside and picked up again | - | 18,108 turns |
+| left standing too long | - | 130 |
+| gave up on an unreachable place | 98 | 311 |
+
+Fewer errands are begun because the ones already begun are still going. The
+arrival rate goes from two in five to seven in ten.
+
+**Survival, five paired seed blocks, 160 worlds of a full year:**
+
+| seeds | before | after |
+|---|---:|---:|
+| 7000 | 1109 | 1164 |
+| 0 | 1014 | 1079 |
+| 64 | 1047 | 1155 |
+| 128 | 1033 | 1206 |
+| 192 | 1002 | 1109 |
+| **total** | **5205** | **5713 (+9.8%)** |
+
+Every block up, and the largest single gain recorded in this document. Alive
+at midsummer goes from 12.24 a block to 15.85, **+29.5%**; alive at autumn
++10.1%.
+
+**And what it costs, which is real.** Alive at the end of the year falls from
+3.13 a block to 2.59, and worlds emptied inside the year goes from 73 of 160
+to 84. A settlement that carries a third more people through the summer has a
+third more mouths to feed in February, and the winter takes them. That is not
+an argument against the change - the people are alive for most of a year
+rather than dead in the spring - but it does say where the next constraint
+is, and it is the same one every entry in this document has ended at: what a
+settlement has in for the winter.
+
+**A dormant field found in passing.** `Errand::pressed_this_hard` is written
+at all three construction sites and read nowhere. Its doc comment describes a
+rule - "so that a drive going quiet, because somebody handed this one a meal,
+say, ends the errand" - which nothing implements.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

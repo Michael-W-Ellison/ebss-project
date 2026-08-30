@@ -288,6 +288,42 @@ impl Simulation {
             + how_much_is_behind_me * Self::WHAT_A_WALK_ALREADY_MADE_IS_WORTH
     }
 
+    /// Put the errand down without throwing it away, and get on with whatever
+    /// would not wait.
+    ///
+    /// An errand used to be destroyed the moment another need took the turn,
+    /// and measured over six worlds that was **1,717 of the 3,047 a settlement
+    /// set out on** - 56%. Of those, 1,401 were a primary need taking the turn
+    /// from a secondary one: 1,062 of them a Preparedness errand cut short by
+    /// hunger or thirst, which is to say every attempt at putting anything by,
+    /// every time. A primary drive outranks a secondary one whatever its clock
+    /// says, so this was not a rare interruption - it was the rule.
+    ///
+    /// A man who stops to drink has not changed his mind about the pit he was
+    /// digging. He drinks, and goes back to it. What ends an errand is
+    /// arriving, giving up on it, being frightened off it, or leaving it so
+    /// long that the world has moved on - see `Errand::stale`.
+    fn set_the_errand_aside(&mut self, agent_index: usize, action: Action) -> Action {
+        let waited = {
+            let Some(errand) = self.population.agents[agent_index].errand.as_mut() else {
+                return action;
+            };
+            errand.set_aside += 1;
+            errand.stale()
+        };
+
+        let why = if waited {
+            self.population.agents[agent_index].errand = None;
+            "errand: waited too long to be worth going back to"
+        } else {
+            "errand: set aside for something that would not wait"
+        };
+
+        *self.what_a_threat_came_to.entry(why.to_string()).or_insert(0) += 1;
+
+        action
+    }
+
     pub(in crate::analytics) fn stick_to_the_errand(
         &mut self,
         agent_index: usize,
@@ -335,13 +371,19 @@ impl Simulation {
             // five turns of chain, and nobody ever took the second one.
             if let Some(wanted) = errand.to_make.clone() {
                 let done = self.population.agents[agent_index].how_many_i_have(&wanted) > 0;
-                if done || !still_wants_it || given_up {
+
+                // Something that will not wait has taken the turn. The making
+                // is not abandoned for it - it is put down and picked up
+                // again. See `Errand::set_aside`.
+                if !done && !given_up && !still_wants_it {
+                    return self.set_the_errand_aside(agent_index, action);
+                }
+
+                if done || given_up {
                     let why = if done {
                         "errand: made it"
-                    } else if given_up {
-                        "errand: gave up on the making"
                     } else {
-                        "errand: something else came first"
+                        "errand: gave up on the making"
                     };
                     *self.what_a_threat_came_to.entry(why.to_string()).or_insert(0) += 1;
                     self.population.agents[agent_index].errand = None;
@@ -352,6 +394,7 @@ impl Simulation {
                     Some(step) => {
                         if let Some(errand) = self.population.agents[agent_index].errand.as_mut() {
                             errand.turns_on_it += 1;
+                            errand.set_aside = 0;
                         }
                         *self
                             .what_a_threat_came_to
@@ -372,22 +415,26 @@ impl Simulation {
                 }
             }
 
-            if errand.arrived(here) || !still_wants_it || given_up {
+            // The same, for a walk: going for a drink is not a change of mind.
+            if !errand.arrived(here) && !given_up && !still_wants_it {
+                return self.set_the_errand_aside(agent_index, action);
+            }
+
+            if errand.arrived(here) || given_up {
                 let why = if errand.arrived(here) {
                     "errand: got there"
-                } else if given_up {
-                    "errand: gave up on it"
                 } else {
-                    "errand: something else came first"
+                    "errand: gave up on it"
                 };
                 *self.what_a_threat_came_to.entry(why.to_string()).or_insert(0) += 1;
                 self.population.agents[agent_index].errand = None;
                 return action;
             }
 
-            // Nothing has changed. Keep walking.
+            // Nothing has changed. Keep walking, and the waiting is over.
             if let Some(errand) = self.population.agents[agent_index].errand.as_mut() {
                 errand.turns_on_it += 1;
+                errand.set_aside = 0;
             }
             *self
                 .what_a_threat_came_to
@@ -409,6 +456,7 @@ impl Simulation {
                     for_drive,
                     pressed_this_hard,
                     turns_on_it: 1,
+                set_aside: 0,
                 });
                 *self
                     .what_a_threat_came_to
@@ -949,6 +997,7 @@ impl Simulation {
                 for_drive,
                 pressed_this_hard,
                 turns_on_it: 1,
+                set_aside: 0,
             });
         }
 
@@ -1104,6 +1153,7 @@ impl Simulation {
             for_drive,
             pressed_this_hard,
             turns_on_it: 1,
+                set_aside: 0,
         });
     }
 }

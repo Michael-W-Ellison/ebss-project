@@ -8881,6 +8881,20 @@ pub struct Errand {
     pub pressed_this_hard: f32,
     /// How many turns it has been walking
     pub turns_on_it: u32,
+    /// And how many turns it has been standing waiting while its owner dealt
+    /// with something that would not wait.
+    ///
+    /// An errand used to be **destroyed** the moment another need took the
+    /// turn. Measured over six worlds, 1,717 of 3,047 errands a settlement set
+    /// out on ended that way - 56% - and 1,401 of those were a primary need
+    /// taking the turn from a secondary one, most often a Preparedness errand
+    /// cut short by thirst or hunger. Since a primary drive outranks a
+    /// secondary one whatever its clock says, that happened to every single
+    /// attempt at putting food by, over and over, and nothing was ever stocked.
+    ///
+    /// Going for a drink is not a change of mind. The errand waits.
+    #[serde(default)]
+    pub set_aside: u32,
 }
 
 impl Errand {
@@ -8895,6 +8909,21 @@ impl Errand {
     /// The fewest turns any errand is given, so that a short walk is not
     /// abandoned on its first step.
     pub const AT_LEAST_THIS_MANY_TURNS: u32 = 4;
+
+    /// How long an errand keeps while its owner is doing something else.
+    ///
+    /// Two days of the world's calendar. Long enough to outlast a drink, a
+    /// meal, a night's sleep and the walk to each; short enough that a patch
+    /// remembered two days ago is not still being walked to a season later,
+    /// which is the failure the old behaviour was avoiding by throwing the
+    /// errand away.
+    pub const HOW_LONG_AN_ERRAND_KEEPS: u32 =
+        2 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Whether this one has been waiting too long to still be worth resuming.
+    pub fn stale(&self) -> bool {
+        self.set_aside > Self::HOW_LONG_AN_ERRAND_KEEPS
+    }
 
     /// How far off it was set out from
     pub fn how_far_it_was(&self, from: (i32, i32, i32)) -> u32 {
