@@ -294,15 +294,40 @@ impl Simulation {
             }
         }
 
-        // Otherwise head for the closest source the agent knows of
-        if let Some(target) = self.known_source_position(
-            agent,
-            agent_position,
-            ScentType::Food,
-            SpatialMemoryType::Food,
-        ) {
-            let distance =
-                (target.0 - agent_position.0).abs() + (target.1 - agent_position.1).abs();
+        // Otherwise head for the closest source the agent knows of - so long
+        // as it is one that could still come to something.
+        //
+        // This branch is the reason ISSUES #229 never fired. Measured over six
+        // worlds, an agent that had been hungry long enough to give up on the
+        // country it was standing in took this branch in **69% of those
+        // ticks**, and the place it was sent to had nothing standing on it in
+        // **99.6%** of them - a patch a pace and a half away, picked bare, that
+        // it walked back to every tick until it died. The gather that came out
+        // of it was refused by `could_this_gather_come_to_anything` every
+        // single time, so the turn bought nothing and the branches below -
+        // moving camp, and leaving altogether - were reached five times in
+        // eleven hundred.
+        //
+        // The check is the settlement's own, and asks nothing the agent does
+        // not know: is there anything within foraging reach that this one has
+        // not already picked out. When the answer is no, somewhere within that
+        // reach is not somewhere to go, and the tick falls through to the
+        // question of whether to live here at all. A source further off than
+        // foraging reach is outside what that check looked at, so it still
+        // stands.
+        let paces = |target: &(i32, i32, i32)| {
+            (target.0 - agent_position.0).abs() + (target.1 - agent_position.1).abs()
+        };
+
+        let known = self
+            .known_source_position(agent, agent_position, ScentType::Food, SpatialMemoryType::Food)
+            .filter(|target| {
+                paces(target) as u32 > Self::FORAGE_RADIUS
+                    || self.could_this_gather_come_to_anything(agent, agent_position, "food")
+            });
+
+        if let Some(target) = known {
+            let distance = paces(&target);
 
             // Walk to food we know about before trying to pick anything up -
             // and not at all with more about him than he will get through.

@@ -241,18 +241,51 @@ fn sight_outranges_every_food_smell_but_a_fire() {
     let agent = Agent::new(AgentConfig::default());
     let sight = agent.sight_range() as f32;
 
-    for resource in [
-        ResourceType::Food,
-        ResourceType::Grain,
-        ResourceType::Herbs,
-        ResourceType::Meat,
-        ResourceType::Fish,
-        ResourceType::Water,
-    ] {
+    for resource in ResourceType::all() {
         assert!(
             sight > reach(resource.raw_scent_strength()),
             "{resource:?} should be seen before it is smelled: sight {sight}, smell {}",
             reach(resource.raw_scent_strength())
+        );
+    }
+}
+
+/// Everything the world gives off that is not water is given off as
+/// `ScentType::Food`, so anything with a smell had better be something to eat.
+///
+/// The scent table and the answer to "is this food" were two hand-written
+/// lists and they had drifted apart: **herbs** smelled of dinner and nobody in
+/// this model can eat them, while **greens and roots** - most of what anybody
+/// eats in three seasons out of four - smelled of nothing at all. A starving
+/// agent smells the herbs, walks to them, gathers nothing, and does it again
+/// next tick. See ISSUES #229.
+#[test]
+fn only_food_smells_of_food() {
+    for resource in ResourceType::all() {
+        // Water is the other thing a nose is for, and is not food.
+        if resource == ResourceType::Water {
+            assert!(resource.raw_scent_strength() > 0.0, "water should smell");
+            continue;
+        }
+
+        assert_eq!(
+            resource.raw_scent_strength() > 0.0,
+            resource.is_it_food(),
+            "{resource:?} smells of food ({}) but is food ({})",
+            resource.raw_scent_strength() > 0.0,
+            resource.is_it_food()
+        );
+    }
+}
+
+/// And every food carries at least as far as the thinnest of them, so nothing
+/// a settlement lives on is invisible to a nose.
+#[test]
+fn nothing_anybody_eats_is_odourless() {
+    for resource in ResourceType::all().into_iter().filter(|r| r.is_it_food()) {
+        assert!(
+            resource.raw_scent_strength() > 0.0,
+            "{resource:?} is food and gives off nothing"
         );
     }
 }

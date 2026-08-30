@@ -33,7 +33,7 @@ wrong place, move the owner and update this file. Do not add a second one.
 
 | Subject | Owner | Guard |
 |---|---|---|
-| **Resources** | `world::ResourceType` - what kinds exist, what bears when (`is_it_bearing`), what is grown, what is food | `resources::all_resources_tests::every_resource_is_listed` - an exhaustive match that fails to compile if a variant is added and not listed in `all()` |
+| **Resources** | `world::ResourceType` - what kinds exist, what bears when (`is_it_bearing`), what is grown, what is food (`is_it_food`, which `is_edible` and `raw_scent_strength` now both ask rather than answering for themselves) | `resources::all_resources_tests::every_resource_is_listed` - an exhaustive match that fails to compile if a variant is added and not listed in `all()`; `scent_tests::only_food_smells_of_food` and `nothing_anybody_eats_is_odourless` hold the scent table to the food list in both directions |
 | **Sustenance** | `world::ItemType::is_it_food` for types, `world::nutrition::is_this_food` for names, `world::nutrition::FoodDatabase` for what a food is worth | `nutrition::one_answer_to_what_is_food` - holds the static list to the runtime database, and the name-level question to the type-level one |
 | **Ticks** | `environment::seasons` - `TICKS_PER_DAY`, `DAYS_PER_SEASON`, `DAYS_PER_YEAR`, `TICKS_PER_YEAR`, and the window vocabulary (`first_day_of`, `last_day_of`) | `analytics::tests::calendar_tests`, and `growing_up_tests::a_life_is_the_length_the_specification_gives`, which holds the calendar to the specification's own 518,400 minutes a year and 36,288,000 in a life |
 | **Drives** | `core::drives::DriveType` - which drives exist, their thresholds, their rates, their tiers | `DriveType::all()` plus `core::tests::drive_hierarchy_tests` |
@@ -78,7 +78,8 @@ wrong place, move the owner and update this file. Do not add a second one.
 
 A guard is cheap and pays immediately - `every_resource_is_listed` and
 `one_answer_to_what_is_food` have each already caught a mistake made in the
-same hour they were written. The pattern that works:
+same hour they were written, and `only_food_smells_of_food` was written for a
+defect that had been costing a settlement seven per cent of its life. The pattern that works:
 
 1. **Exhaustive match.** An `all()` for the enum plus a test whose `match` has
    an arm per variant. Adding a variant without listing it fails to compile.

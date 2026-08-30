@@ -194,19 +194,38 @@ impl ResourceType {
     /// looking, not by sniffing. Flesh carries further. Nothing raw on the
     /// ground competes with cooking or with rot, which are what a nose is
     /// actually good for.
+    ///
+    /// The list this was written as had drifted off the list of what food is,
+    /// and the world only has one smell for a thing to eat: everything with a
+    /// scent that is not water is given off as `ScentType::Food`. So it named
+    /// **herbs**, which nobody in this model can eat, and did not name
+    /// **greens or roots**, which are most of what anybody eats. A starving
+    /// agent smelling herbs walks to them and gathers nothing, over and over,
+    /// and never gets as far as deciding the country is finished with - which
+    /// is ISSUES #229. Herbs no doubt smell of something; they do not smell of
+    /// dinner, and until there is a scent for what they are they are better
+    /// off smelling of nothing than of food that is not there.
+    ///
+    /// So this asks `is_it_food` rather than keeping a second list. What is
+    /// left here is only how far a thing carries.
     pub fn raw_scent_strength(&self) -> f32 {
-        match self {
-            // Barely detectable: you have to be standing among them
-            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => 0.08,
+        // Damp ground and vegetation, faintly. Not food, and the one other
+        // thing a nose is for in this world.
+        if *self == ResourceType::Water {
+            return 0.12;
+        }
 
+        // Wood, stone and ore have no smell worth the name
+        if !self.is_it_food() {
+            return 0.0;
+        }
+
+        match self {
             // Flesh gives itself away from further off
             ResourceType::Meat | ResourceType::Fish => 0.24,
 
-            // Damp ground and vegetation, faintly
-            ResourceType::Water => 0.12,
-
-            // Wood, stone and ore have no smell worth the name
-            _ => 0.0,
+            // Barely detectable: you have to be standing among them
+            _ => 0.08,
         }
     }
     /// When this thing bears something a person can eat.
@@ -394,18 +413,12 @@ impl ResourceType {
 
     /// Whether an agent can eat this straight from the land.
     ///
-    /// The single answer to "is this food", used by foraging, by what an agent
-    /// remembers seeing, and by the scents the world gives off.
+    /// Which is [`ResourceType::is_it_food`] under another name. Both claimed
+    /// to be the single answer to "is this food" and both wrote the six out by
+    /// hand, so the promise was kept by nothing but the two of them happening
+    /// to agree. Now one of them asks the other.
     pub fn is_edible(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Food
-                | ResourceType::Grain
-                | ResourceType::Greens
-                | ResourceType::Roots
-                | ResourceType::Fish
-                | ResourceType::Meat
-        )
+        self.is_it_food()
     }
 
     /// Get ASCII character for rendering

@@ -7247,6 +7247,114 @@ person to think twelve looks arbitrary finds out that it is not.
 
 ---
 
+### 120. The signal to leave fired, and a bare patch a pace away outbid it
+
+#229 said a starving settlement never picks itself up and moves. The obvious
+reading is that the signal never reaches its threshold, and that reading is
+wrong. Measured over six worlds and 45,732 agent-ticks, hunger's `denied_ticks`
+stands at 120 or more - `HUNGRY_ENOUGH_TO_LEAVE`, ten days of being hungry and
+not being fed - in **3.06% of them**, and reaches 254 at its worst against a
+threshold of 120. Starving agents average 86.8. The signal fires.
+
+**What happens to the tick instead.** Instrumenting every branch of
+`food_action`, counting only the ticks where the agent had already been hungry
+long enough to leave:
+
+| what the tick did | ticks | share |
+|---|---:|---:|
+| walk to a source it knows | 768 | 69.0% |
+| forage where it stands | 323 | 29.0% |
+| hunt something near | 10 | 0.9% |
+| cut up a carcass, eat what is carried, cook | 7 | 0.6% |
+| **reached the branches that leave** | **5** | **0.4%** |
+
+Sixty-nine per cent of them went to one line: `known_source_position` names the
+nearest food the agent can smell or remember, and the branch returns before the
+leaving branches are reached. So the question is what it was naming.
+
+**It was naming nothing.** Of those 768 targets, **765 - 99.6% - had no food
+standing on them at all**, and the mean walk to one was 1.3 paces: the agent
+was standing on the bare patch it was being sent to. The `Gather` that came out
+of it was refused by `could_this_gather_come_to_anything` **every single time**
+(0 of 768 would have survived that gate). A settlement was spending two turns
+in three walking to ground it was already on, being refused, and never getting
+as far as the question of whether to live there.
+
+**Where the phantom sources came from.** Two places, in roughly equal measure -
+434 memories and 334 scents.
+
+The scents are a plain defect. `collect_scent_sources` gives everything a
+smell that is not water as `ScentType::Food`, and reads the strength off
+`ResourceType::raw_scent_strength`, which kept its own hand-written list:
+
+```rust
+ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => 0.08,
+ResourceType::Meat | ResourceType::Fish => 0.24,
+ResourceType::Water => 0.12,
+_ => 0.0,
+```
+
+That list had drifted off `is_it_food`. **Herbs**, which nobody in this model
+can eat, smelled of dinner. **Greens and roots** - which are what a hedgerow
+gives for two seasons out of four and most of what anybody ever eats - smelled
+of nothing at all. A starving agent smells the herbs, walks to them, gathers
+nothing, and does it again next tick, forever.
+
+That is the third time this document has recorded the same shape: a question
+with two answers written out by hand, kept true only by the two of them
+happening to agree. `is_edible` was a fourth copy of the same six variants,
+with a doc comment claiming to be the single answer.
+
+**The fix, in three parts.** `raw_scent_strength` asks `is_it_food` and keeps
+only how far a thing carries; `is_edible` calls `is_it_food`; and the branch
+that walks to a known source now refuses one the settlement's own gate says is
+spent - which is the check the executor was going to apply a moment later
+anyway. A source further off than foraging reach is outside what that gate
+looked at, so it still stands. Two guard tests hold the scent table to the food
+list in both directions.
+
+**What it did.** The same probe, after:
+
+| what the tick did | before | after |
+|---|---:|---:|
+| ticks spent hungry enough to leave | 1,113 | **439** |
+| walk to a source it knows | 768 (69.0%) | 1 (0.2%) |
+| eat what is carried | 4 (0.4%) | 24 (5.5%) |
+| hunt something near | 10 (0.9%) | 41 (9.3%) |
+| **reached the branches that leave** | **5 (0.4%)** | **136 (31.0%)** |
+
+The one remaining walk to a known source is a real one: 39 units standing, 33
+paces off, outside foraging reach. And there are 60% fewer ticks in this state
+to begin with, because agents in it are now doing things that feed them.
+
+Person-days alive over 160 worlds of a full year, five paired seed blocks:
+
+| seeds | before | after |
+|---|---:|---:|
+| 7000 | 1074 | 1161 |
+| 0 | 930 | 1070 |
+| 64 | 961 | 1016 |
+| 128 | 1016 | 1009 |
+| 192 | 977 | 1044 |
+| **total** | **4958** | **5300 (+6.9%)** |
+
+Worlds emptied inside the year: 86 of 160 down to 75. Split three blocks
+apart, the scent fix alone is worth +3.9% and the branch gate a further +5.4%,
+so both halves pay.
+
+**What it does not fix.** Thirty-one per cent of these ticks now reach the
+leaving branches and all of them take `migration_action`;
+`go_and_live_where_it_is` still fires zero times, because it asks its question
+once a day and wants a resource of the right kind within sixty tiles. Whether
+moving house is reachable at all is worth its own measurement.
+
+**Filed in passing.** `is_it_food` counts six resources and excludes **honey**
+and **milk**, both of which the world generates and neither of which anybody
+can eat. Not touched here - changing what food is, is a change to the food
+supply and wants measuring on its own.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in
