@@ -448,20 +448,30 @@ fn a_surplus_and_no_pit_means_digging() {
     );
 }
 
-/// And with a pit under him, buries it.
+/// And with a pit under him, buries it - once it is a thing that will keep.
+///
+/// The `Dry` here used to be decoration: the digger had never watched anything
+/// dry, so the action was refused and the berries went into the ground raw,
+/// where they keep twenty-four days against the seventy-five the land gives
+/// nothing. Burying was unconditional, so the test passed anyway. It is not
+/// unconditional now - see `is_it_worth_burying` and ISSUES_FOUND.md #124 - so
+/// the digger has to actually know how to dry a thing.
 #[test]
 fn a_surplus_and_a_pit_means_burying() {
     let mut simulation = a_digger();
+    simulation.population.agents[0]
+        .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
     simulation.execute_action(&Action::Excavate, 0);
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(supper(30, 0));
-    simulation.execute_action(
+    let dried = simulation.execute_action(
         &Action::Dry {
             what: "food".to_string(),
         },
         0,
     );
+    assert!(dried.success, "the drying should take: {:?}", dried.message);
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -518,17 +528,20 @@ fn nobody_forages_for_the_store_in_summer() {
 #[test]
 fn a_surplus_in_the_hand_gets_buried_in_any_season() {
     let mut simulation = a_digger();
+    simulation.population.agents[0]
+        .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
     simulation.execute_action(&Action::Excavate, 0);
     turn_the_year_to(&mut simulation, Season::Summer);
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(supper(30, simulation.world.tick));
-    simulation.execute_action(
+    let dried = simulation.execute_action(
         &Action::Dry {
             what: "food".to_string(),
         },
         0,
     );
+    assert!(dried.success, "the drying should take: {:?}", dried.message);
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -718,6 +731,8 @@ fn a_starving_man_eats_the_harvest() {
 #[test]
 fn a_full_load_gets_taken_to_the_store() {
     let mut simulation = a_digger();
+    simulation.population.agents[0]
+        .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
     simulation.execute_action(&Action::Excavate, 0);
     turn_the_year_to(&mut simulation, Season::Fall);
 
@@ -1343,5 +1358,110 @@ fn a_starving_man_opens_the_store_whatever_the_month() {
             .something_out_of_the_store(&simulation.population.agents[0], here)
             .is_some(),
         "he does not keep larder discipline on an empty reserve"
+    );
+}
+
+// --------------------------------------------------------------------------
+// Burying what will keep
+// --------------------------------------------------------------------------
+
+/// A pit knows how long what goes into it will still be food.
+///
+/// Bare earth doubles a thing's life and a lined pit quadruples it, and the
+/// same number does the ageing and answers the question - see
+/// `Pit::how_much_slower_things_age`.
+#[test]
+fn a_pit_says_how_long_a_thing_will_keep_in_it() {
+    use crate::agents::InventoryItem;
+    use crate::world::nutrition::{FoodDatabase, PreparationState};
+    use crate::world::{ItemType, Pit, Position};
+
+    let database = FoodDatabase::new();
+    let mut leaf = InventoryItem::new_with_weight("greens".to_string(), 10, 0.5);
+    leaf.food_data = database.create_food_data(&ItemType::Greens, 0);
+
+    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0 };
+    let mut lined = Pit { where_it_is: Position::new(1, 0), holds: Vec::new(), covered: true, dug: 0 };
+    lined.put_in(InventoryItem::new_with_weight("bowl".to_string(), 1, 1.0));
+
+    let in_bare = bare.how_long_this_would_keep(&leaf, 0).expect("leaf has a clock");
+    let in_lined = lined.how_long_this_would_keep(&leaf, 0).expect("leaf has a clock");
+
+    assert!(in_bare > 0.0, "leaf keeps some time in the ground");
+    assert!(
+        (in_lined - in_bare * 2.0).abs() < 0.01,
+        "a bowl between the food and the ground doubles it again: {in_bare} against {in_lined}"
+    );
+
+    // And drying it is worth far more than the hole is.
+    let mut dried = leaf.clone();
+    if let Some(food) = dried.food_data.as_mut() {
+        food.preparation = PreparationState::Dried;
+    }
+    let kept = lined.how_long_this_would_keep(&dried, 0).expect("still has a clock");
+    assert!(
+        kept > in_lined * 10.0,
+        "drying should be worth more than the hole: {in_lined} raw against {kept} dried"
+    );
+}
+
+/// Leaf will not last the winter in a hole, and nobody should bury it there.
+///
+/// A settlement buried 512 units a year and ate four of them: 98.4% rotted,
+/// and 86% of what went in went in raw. Raw greens keep six days in bare earth
+/// against the seventy-five the land gives nothing. See ISSUES_FOUND.md #124.
+#[test]
+fn nothing_goes_in_the_ground_that_will_not_still_be_food_when_it_is_wanted() {
+    use crate::agents::InventoryItem;
+    use crate::world::nutrition::{FoodDatabase, PreparationState};
+    use crate::world::{ItemType, Pit, Position};
+
+    let database = FoodDatabase::new();
+    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0 };
+    let bare_stretch =
+        crate::agents::provision::how_long_the_land_gives_nothing() as f32;
+
+    let mut raw = InventoryItem::new_with_weight("greens".to_string(), 10, 0.5);
+    raw.food_data = database.create_food_data(&ItemType::Greens, 0);
+    let raw_days = bare.how_long_this_would_keep(&raw, 0).expect("has a clock");
+
+    assert!(
+        raw_days < bare_stretch,
+        "raw leaf lasting {raw_days} days would see out a {bare_stretch}-day winter, \
+         which is not the world this rule was written for"
+    );
+
+    let mut dried = raw.clone();
+    if let Some(food) = dried.food_data.as_mut() {
+        food.preparation = PreparationState::Dried;
+    }
+    let dried_days = bare.how_long_this_would_keep(&dried, 0).expect("has a clock");
+
+    assert!(
+        dried_days >= bare_stretch,
+        "dried leaf should see out the winter: {dried_days} days against {bare_stretch}"
+    );
+}
+
+/// And a load that will not keep does not go in the ground at all.
+///
+/// The other half of `a_surplus_and_a_pit_means_burying`: somebody who has
+/// never watched anything dry, standing on a hole with an armful of berries
+/// that keep twenty-four days against a seventy-five day winter, is not
+/// putting anything by by burying them. See ISSUES_FOUND.md #124.
+#[test]
+fn raw_food_that_will_not_last_the_winter_is_not_buried() {
+    let mut simulation = a_digger();
+    simulation.execute_action(&Action::Excavate, 0);
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(30, simulation.world.tick));
+
+    let here = simulation.population.agents[0].state.position;
+    let answer = simulation.putting_food_by(&simulation.population.agents[0], here);
+
+    assert!(
+        !matches!(&answer, Some(Action::Cover { .. })),
+        "burying leaf that goes off in a fortnight is not putting anything by: {answer:?}"
     );
 }

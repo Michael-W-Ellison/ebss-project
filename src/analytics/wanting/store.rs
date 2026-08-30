@@ -135,6 +135,42 @@ impl Simulation {
         )
     }
 
+    /// Whether burying this now would still be food when the land has nothing.
+    ///
+    /// Burying went ahead of every way of preserving a thing, on the reasoning
+    /// that burying is one turn and preserving is several, and that is right
+    /// about the cost and wrong about what is bought. **A settlement buried
+    /// 512 units a year and ate four of them**: 98.4% rotted in the ground,
+    /// and 86% of what went in went in raw. Raw greens keep six days in bare
+    /// earth and twelve with a bowl over them; the land gives nothing for
+    /// seventy-five days running. A hole full of leaf is a hole full of rot in
+    /// a fortnight.
+    ///
+    /// So the question is not "is there a hole" but "will this still be food
+    /// when it is wanted", and where the answer is no there are several turns
+    /// spare to make it yes - which is what the drying and salting branches
+    /// below are for. See ISSUES_FOUND.md #124.
+    pub(in crate::analytics) fn is_it_worth_burying(
+        &self,
+        agent: &crate::agents::Agent,
+        what: &str,
+        here: crate::world::Position,
+    ) -> bool {
+        let Some(pit) = self.world.pit_at(here) else {
+            return false;
+        };
+
+        let Some(item) = agent.inventory.get_item(what) else {
+            return false;
+        };
+
+        match pit.how_long_this_would_keep(item, self.current_tick) {
+            // No clock on it: it keeps as long as anybody needs it to.
+            None => true,
+            Some(days) => days >= Self::how_long_the_hedgerows_give_nothing() as f32,
+        }
+    }
+
     /// Whether the larder round here still wants filling.
     ///
     /// Not "is there room in the hole" - a hole takes three hundred and a
@@ -267,6 +303,12 @@ impl Simulation {
             return Some(Action::Dry { what });
         }
 
+        // And a load that will not keep and cannot be dried is not a load for
+        // the store. Better in a pack, where it will at least be eaten.
+        if !self.is_it_worth_burying(agent, &what, here) {
+            return None;
+        }
+
         Some(Action::Cover { what })
     }
 
@@ -319,7 +361,9 @@ impl Simulation {
         // and put a third as much in the ground as it had before any of it
         // existed - all the machinery working, and the settlement worse off.
         if let Some((what, _)) = spare.clone() {
-            if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
+            if self.world.pit_at(here).is_some_and(|pit| pit.has_room())
+                && self.is_it_worth_burying(agent, &what, here)
+            {
                 return Some(Action::Cover { what });
             }
         }
@@ -413,7 +457,9 @@ impl Simulation {
         // not already full of a winter nobody will get to
         if let Some((what, _)) = spare.clone().filter(|_| self.does_the_store_still_want_filling(here))
         {
-            if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
+            if self.world.pit_at(here).is_some_and(|pit| pit.has_room())
+                && self.is_it_worth_burying(agent, &what, here)
+            {
                 return Some(Action::Cover { what });
             }
 

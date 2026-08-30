@@ -348,6 +348,54 @@ impl Pit {
             .any(|item| matches!(item.item_id.as_str(), "bowl" | "basket"))
     }
 
+    /// One tick in this many is the only one that tells on what is buried
+    /// here.
+    ///
+    /// Bare earth is twice as long as a pack, which is what cool and dark are
+    /// worth on their own. Earth with a vessel between the food and the
+    /// ground is four times: what actually gets at buried food is the ground
+    /// itself, and a bowl or a basket in the way of it is the difference
+    /// between a store and a hole full of rot.
+    ///
+    /// The same number that ages what is in the pit and that answers how long
+    /// a thing would keep if it went in - see `how_long_this_would_keep`. Two
+    /// spellings of that would drift, and the second would be the one the
+    /// decision to bury was made on.
+    pub fn how_much_slower_things_age(&self) -> u32 {
+        if self.is_lined() {
+            Self::EARTH_WITH_SOMETHING_BETWEEN
+        } else {
+            Self::BARE_EARTH
+        }
+    }
+
+    const BARE_EARTH: u32 = 2;
+    const EARTH_WITH_SOMETHING_BETWEEN: u32 = 4;
+
+    /// How many days this would still be food for, if it went in here now.
+    ///
+    /// What is left of its own clock, at the pace this hole lets it run. The
+    /// question nobody was asking: **a settlement buried 512 units a year and
+    /// ate four of them**, because raw greens keep six days in bare earth and
+    /// the land gives nothing for seventy-five. See ISSUES_FOUND.md #124.
+    ///
+    /// `None` for a thing with no clock on it at all, which keeps for ever.
+    pub fn how_long_this_would_keep(
+        &self,
+        item: &crate::agents::InventoryItem,
+        now: u32,
+    ) -> Option<f32> {
+        use crate::environment::seasons::TICKS_PER_DAY;
+
+        let food = item.food_data.as_ref()?;
+
+        let spoils_in = food.base_spoilage_ticks as f32 / food.preparation.spoilage_multiplier();
+        let gone_already = now.saturating_sub(food.created_tick) as f32;
+        let left = (spoils_in - gone_already).max(0.0);
+
+        Some(left * self.how_much_slower_things_age() as f32 / TICKS_PER_DAY as f32)
+    }
+
     /// Take some of a thing out.
     pub fn take_out(&mut self, what: &str, how_many: u32) -> u32 {
         let Some(held) = self
@@ -617,13 +665,7 @@ impl World {
             // damp, and everything that lives in it - and a bowl or a basket
             // between the two is the difference between a store and a hole
             // full of rot.
-            let every = if pit.is_lined() {
-                Self::HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE
-            } else {
-                Self::HOW_OFTEN_BARE_EARTH_LETS_IT_AGE
-            };
-
-            let ageing = now % every == 0;
+            let ageing = now % pit.how_much_slower_things_age() == 0;
 
             for item in pit.holds.iter_mut() {
                 if let Some(food) = item.food_data.as_mut() {
@@ -652,20 +694,6 @@ impl World {
         self.food_that_rotted_in_the_ground =
             self.food_that_rotted_in_the_ground.saturating_add(buried_and_lost);
     }
-
-    /// One tick in this many is the only one that tells on food buried in
-    /// bare earth.
-    ///
-    /// Twice as long as a pack, which is what cool and dark are worth on
-    /// their own.
-    const HOW_OFTEN_BARE_EARTH_LETS_IT_AGE: u32 = 2;
-
-    /// And in earth with a vessel between the food and the ground.
-    ///
-    /// Four times a pack. What gets at buried food is the ground itself, and
-    /// a bowl or a basket in the way of it is the difference between a store
-    /// and a hole full of rot.
-    const HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE: u32 = 4;
 
     /// Whether a thing laid out will dry through before it turns.
     ///

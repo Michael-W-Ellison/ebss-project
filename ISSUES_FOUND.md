@@ -7677,6 +7677,98 @@ Filed.
 
 ---
 
+### 124. A settlement buried five hundred units a year and ate four of them
+
+#240 asked why a full settlement reaches winter with nothing put by. It does
+put things by. Accounting for every unit that goes into the ground over a year,
+eight worlds:
+
+| | units a world |
+|---|---:|
+| buried | 512.2 |
+| taken back out and eaten | **4.0** |
+| **rotted in the ground** | **503.9 (98.4%)** |
+
+And of what was buried, **438.9 of 512.2 - 86% - went in raw**.
+
+**Why raw does not keep.** Measured directly, burying a stack and waiting for
+it to go:
+
+| food | raw, bare earth | raw, lined pit | dried |
+|---|---:|---:|---:|
+| greens | **6 days** | 12 | 240 |
+| fish | 12 | 24 | forever |
+| meat | 20 | 40 | forever |
+| berries | 24 | 48 | forever |
+| roots | 28 | 56 | forever |
+
+**The land gives nothing for seventy-five days running.** Nothing raw survives
+that, and greens - 43% of the food on a map - last six days in the ground. A
+hole full of leaf is a hole full of rot in a fortnight.
+
+**Where it came from, and it is written down.** `putting_food_by` has:
+
+> If there is a hole right here with room in it, use it. This goes first,
+> ahead of every way of preserving a thing, and the ordering is the whole
+> lesson of this batch. Burying is one turn and it is what actually gets food
+> through to February.
+
+The reasoning is right about the cost and wrong about what is bought. Burying
+*is* one turn, and one turn spent burying leaf buys nothing at all. The
+measurement behind that comment - that preservation-first cost a settlement two
+thousand turns and put a third as much in the ground - was taken on a
+settlement that was starving from the first week, where any turn not spent
+eating was fatal.
+
+**The fix.** Not "preserve before burying", which was tried and was worse:
+**bury what will keep, and preserve what will not.** `Pit::how_long_this_would_keep`
+answers how many days a thing would still be food for if it went in - what is
+left of its own clock at the pace that hole lets it run - and
+`is_it_worth_burying` holds that against the bare stretch. Where the answer is
+no, the turn falls through to the drying and salting branches that were always
+underneath.
+
+`Pit::how_much_slower_things_age` is the one owner of what a hole is worth: the
+same number ages what is in the pit and answers what would keep in it, so the
+two cannot drift.
+
+**What it did to the store.**
+
+| | before | after |
+|---|---:|---:|
+| buried a year | 512.2 | 69.4 |
+| of which raw | 438.9 (86%) | **1.1 (1.6%)** |
+| of which preserved | 73.4 | **68.2 (98%)** |
+| eaten out of it | 4.0 | **23.6** |
+| rotted in it | 503.9 (98.4%) | **27.9 (40%)** |
+| standing in the pits at year end | 4.4 | **17.9** |
+
+The larder is no longer a rot pit. Six times as much of what goes in is
+actually eaten.
+
+**And it did not save anybody.** Five paired seed blocks, 160 worlds:
+**11,322 to 11,551 person-days, +2.0%** - inside the noise on a measure whose
+block-to-block spread is ten per cent. Alive at the end of the year fell from
+1.82 a block to 1.30 and worlds emptied rose from 112 of 160 to 129, both on
+numbers small enough (three to sixteen survivors a block) to be scatter; a
+variant with one of the three branches removed came back 2670/2113 against
+2672/2112, which is what noise at this scale looks like.
+
+**Because the volume is nowhere near a winter.** Sixty-nine units go into the
+ground a year. `what_one_mouth_wants_put_by` is 864, and a settlement that
+reaches autumn with seven people wants about six thousand. What limits it is
+not the decision to bury - that fires 886 times an autumn - but how much a
+settlement can *preserve*: drying wants the agent to have watched food dry
+before it will do it on purpose, wants a clear sky, wants the food cut rather
+than whole, and works one stack at a time out of a pack that holds forty-odd.
+Eighty-six per cent of what used to go in the ground went in raw because raw
+was all there was.
+
+So this entry fixes the arithmetic and names the constraint rather than
+lifting it. The next question is preservation throughput, and it is filed.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in
