@@ -7113,6 +7113,74 @@ the last. #236 is reopened with the corrected figures.
 
 ---
 
+### 118. The waste was two counters in a trenchcoat, and behind it an armful refused for being one lump
+
+"Seventy-seven thousand items of food went back on the bush against seven
+thousand carried home" has been in three entries and every answer given about
+this model's food economy. **There is no such waste.** Split the counter and
+the number that means food actually lost is **nought**.
+
+`what_would_not_fit_in_the_pack` was being added to from two places that mean
+opposite things:
+
+- `into_the_pack_or_on_the_ground` calls `somebody_left_this`. A carcass too
+  big to carry is **left on the ground**, where it rots and is gone. That is
+  the waste #165 is about, and measured over eight world-years it is **zero
+  items of food**.
+- The forage branch of `Eat` calls `put_it_back`. An armful that will not go in
+  the pack goes **back on the bush**, and nothing is lost at all: the patch is
+  exactly as it was, and the same berries are counted again on the next trip,
+  and the trip after that. That is all 87,667 of them.
+
+One counter, two meanings, and the meaning that would have been alarming is the
+one that never fired. They are `what_would_not_fit_in_the_pack` and
+`what_went_back_on_the_bush` now.
+
+**But the put-backs are still telling us something, and it is not what I
+thought.** Two candidate causes, both checked and both wrong:
+
+- *The slot limit.* Agents use 5.4 of 20 slots and are at the limit **0.0%** of
+  the time.
+- *A full pack.* The agents putting food back had, on average, **12.55 kg of
+  room - twenty-five items' worth** - while refusing an armful of fourteen.
+
+The actual cause: **`Inventory::add_item` is all or nothing.** Offered twenty
+items when there is room for ten it takes none of them. That is right for a
+tool, which is one thing or no thing, and wrong for an armful of berries, which
+is twenty separate berries. So a forager with room for ten and fourteen in his
+hands walked home empty.
+
+Butchering had already worked this out - it computes `fits` and takes that much
+- and the two paths that bring food home never learned it. Third time in this
+file that one path solved something and its siblings went on without it. There
+is one `take_what_fits` now and all three go through it.
+
+**Measured.** Food into packs **9,691 to 11,107, up fifteen per cent**; food
+put back 87,667 to 80,728. And survival is **unchanged**: paired over five
+blocks of thirty-two seeds, person-days go -6.3%, +9.6%, -8.2%, +0.2%, +3.2%,
+which is **-0.9% over a hundred and sixty worlds** against block-to-block
+swings of ten. Worlds emptied, fifty-one against fifty-one.
+
+That last is worth saying plainly rather than dressing up. **Carrying half as
+much food home again makes no difference to whether anybody lives.** The food
+economy is not short of food that got home; agents are fed on the spot by the
+forage branch and the pack is a store they rarely draw on - 621 items eaten out
+of the pack against tens of thousands foraged. What decides a settlement is
+where its people are standing, which is #229, and this changes nothing about
+that. It is shipped because the model now says a true thing where it said a
+false one, not because it made anybody live longer.
+
+**A note on the three wrong numbers.** #113 said the pack held two days of food
+(measured on a fresh `Agent::new`, corrected in #116). #116 said agents carried
+666 handaxes (a total over 719 samples, corrected in #117). #113, #116 and #117
+all said food was being thrown away ten to one (two counters pooled, corrected
+here). Every one of the three was a real measurement read the wrong way round,
+and every one of them survived several entries and several answers before
+anything checked it. The fix that holds is not "be careful" - it is that a
+number worth acting on is worth a probe that isolates it first.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

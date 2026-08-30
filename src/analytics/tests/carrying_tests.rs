@@ -420,3 +420,54 @@ fn a_full_pack_is_full_by_the_same_figure_that_fills_it() {
     );
     assert!(!agent.inventory.is_overweight());
 }
+
+
+/// An armful offered to a pack with room for half of it leaves half behind,
+/// not all of it.
+///
+/// `Inventory::add_item` is all or nothing, which is right for a tool and
+/// wrong for twenty berries. Butchering had worked this out and computed what
+/// fits; the two paths that bring food home called `add_item` bare, so a man
+/// with room for ten offered fourteen took none. See ISSUES #118.
+#[test]
+fn what_fits_goes_in_and_the_rest_is_left() {
+    let mut simulation = one_person();
+    let here = Position::new(25, 25);
+
+    // Fill the pack to within four items of its limit.
+    let agent = &mut simulation.population.agents[0];
+    agent.take_up_the_cart();
+    let room = agent.inventory.weight_capacity_remaining();
+    let leave_room_for = 4.0 * 0.5;
+    let ballast = ((room - leave_room_for) / 1.0).floor() as u32;
+    agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("stone".to_string(), ballast, 1.0));
+
+    let spare = simulation.population.agents[0]
+        .inventory
+        .weight_capacity_remaining();
+    assert!(
+        (3.0..=5.0).contains(&(spare / 0.5)),
+        "the fixture wants about four items of room, got {:.1}",
+        spare / 0.5
+    );
+
+    // Now offer ten.
+    let left = simulation.into_the_pack_or_on_the_ground(
+        0,
+        vec![a_meal(ItemType::Food, "food", 10, 0.5, PreparationState::Raw)],
+        here,
+    );
+
+    let carried = simulation.population.agents[0].how_many_i_have("food");
+    assert!(
+        carried > 0,
+        "a pack with room for four should take four, not refuse the lot"
+    );
+    assert_eq!(
+        carried + left,
+        10,
+        "and what did not go in is left where it fell, not lost"
+    );
+}

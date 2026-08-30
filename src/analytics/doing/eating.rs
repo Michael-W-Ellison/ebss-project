@@ -289,17 +289,22 @@ impl Simulation {
                     carried.food_data = self
                         .food_database
                         .create_food_data(&foraged_item, self.current_tick);
-                    if self.population.agents[agent_index]
-                        .inventory
-                        .add_item(carried)
-                    {
-                        self.food_items_into_packs += left_in_the_hand as u64;
-                    } else {
-                        self.world.resources[food_index]
-                            .put_it_back(left_in_the_hand);
-                        self.what_would_not_fit_in_the_pack = self
-                            .what_would_not_fit_in_the_pack
-                            .saturating_add(left_in_the_hand as u64);
+                    // What fits goes in and the rest goes back on the bush.
+                    // This was `add_item`, which is all or nothing, so a man
+                    // with room for ten and an armful of fourteen took none of
+                    // them and walked home empty. See #118.
+                    let went_in = self.take_what_fits(agent_index, &carried);
+                    self.food_items_into_packs += went_in as u64;
+
+                    let back = left_in_the_hand.saturating_sub(went_in);
+                    if back > 0 {
+                        // Back on the bush, not on the ground: the patch is
+                        // as it was and nothing has been lost. Counted apart
+                        // from what is genuinely left behind - see
+                        // `what_went_back_on_the_bush`.
+                        self.world.resources[food_index].put_it_back(back);
+                        self.what_went_back_on_the_bush =
+                            self.what_went_back_on_the_bush.saturating_add(back as u64);
                     }
                 }
 

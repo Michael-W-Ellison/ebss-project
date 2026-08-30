@@ -127,6 +127,18 @@ pub struct Simulation {
     /// stayed where it fell. The other half of the waste - see
     /// `into_the_pack_or_on_the_ground`.
     pub what_would_not_fit_in_the_pack: u64,
+    /// And how much of that went straight back where it came from.
+    ///
+    /// Two different things were being added into one counter. A carcass too
+    /// big to carry is *left on the ground*, where it rots and is gone - that
+    /// is the waste #165 is about. An armful of berries that will not go in
+    /// the pack is `put_it_back` on the bush, and **nothing is lost at all**:
+    /// the patch is exactly as it was, and the same berries are counted again
+    /// on the next trip, and the trip after that.
+    ///
+    /// Pooling the two made a settlement look as though it was throwing away
+    /// ten items of food for every one it kept. See ISSUES #118.
+    pub what_went_back_on_the_bush: u64,
     /// Edible items that actually landed in somebody's pack off a forage.
     ///
     /// The other end of the food ledger: `what_would_not_fit_in_the_pack`
@@ -311,6 +323,7 @@ impl Simulation {
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
+            what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
         }
     }
@@ -582,6 +595,54 @@ impl Simulation {
     /// carcass by - see `Agent::how_much_my_tools_help`. Taking a deer apart
     /// with a sharp flake and taking it apart with your hands are not the
     /// same job, and until now they were.
+    /// Put as much of a stack into the pack as will go, and say how much went.
+    ///
+    /// `Inventory::add_item` is all or nothing: offered twenty items when
+    /// there is room for ten it takes **none of them**. That is right for a
+    /// tool, which is one thing or no thing, and wrong for an armful of
+    /// berries, which is twenty separate berries.
+    ///
+    /// Butchering had already worked this out - it computed what fits and took
+    /// that much - and the two paths that bring food home never learned it.
+    /// Measured, 87,667 items of food went back on the bush in eight
+    /// world-years while the agents putting them back had, on average, twelve
+    /// and a half kilos of room: twenty-five items' worth of space, refusing
+    /// an armful of fourteen because it was offered as one lump. See #118.
+    pub(in crate::analytics) fn take_what_fits(
+        &mut self,
+        agent_index: usize,
+        item: &crate::agents::InventoryItem,
+    ) -> u32 {
+        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        let room = self.population.agents[agent_index]
+            .inventory
+            .weight_capacity_remaining();
+
+        let fits = if each > 0.0 {
+            ((room / each).floor() as u32).min(item.quantity)
+        } else {
+            item.quantity
+        };
+
+        if fits == 0 {
+            return 0;
+        }
+
+        let mut taking = item.clone();
+        taking.quantity = fits;
+
+        // The slot limit can still refuse a kind of thing this pack has no
+        // room for at all, and that is not a partial answer.
+        if self.population.agents[agent_index]
+            .inventory
+            .add_item(taking)
+        {
+            fits
+        } else {
+            0
+        }
+    }
+
     /// Put these in the pack, and leave on the ground whatever will not go in.
     ///
     /// `Inventory::add_item` enforces the weight limit and returns `false`,
@@ -604,30 +665,9 @@ impl Simulation {
         let mut left_behind = 0u32;
 
         for item in items {
-            let each = item.weight_per_unit * item.how_much_lighter_it_is();
-
-            let room = self.population.agents[agent_index]
-                .inventory
-                .weight_capacity_remaining();
-
-            let fits = if each > 0.0 {
-                ((room / each).floor() as u32).min(item.quantity)
-            } else {
-                item.quantity
-            };
-
-            if fits > 0 {
-                let mut taking = item.clone();
-                taking.quantity = fits;
-
-                // The slot limit can still refuse a kind of thing this pack
-                // has no room for, in which case the lot stays where it fell
-                if !self.population.agents[agent_index].inventory.add_item(taking) {
-                    self.world.somebody_left_this(item.clone(), where_it_fell, tick_now);
-                    left_behind += item.quantity;
-                    continue;
-                }
-            }
+            // What fits goes in; a slot the pack has no room for at all comes
+            // back as nought, and then the whole lot stays where it fell.
+            let fits = self.take_what_fits(agent_index, &item);
 
             let over = item.quantity - fits;
             if over > 0 {
@@ -1068,6 +1108,7 @@ impl Simulation {
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
+            what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
         };
 

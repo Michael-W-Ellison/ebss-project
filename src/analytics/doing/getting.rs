@@ -432,10 +432,16 @@ impl Simulation {
                 }
 
                 let it_is_food = item.food_data.is_some();
-                let went_in_the_pack =
-                    self.population.agents[agent_index].inventory.add_item(item);
-                if it_is_food && went_in_the_pack {
-                    self.food_items_into_packs += harvested as u64;
+                // As much as will go, rather than all or nothing: an armful
+                // offered as one lump to a pack with room for half of it used
+                // to be refused entire. See #118.
+                let took = self.take_what_fits(agent_index, &item);
+                let went_in_the_pack = took > 0;
+                if it_is_food {
+                    self.food_items_into_packs += took as u64;
+                }
+                if took < harvested {
+                    self.world.resources[resource_index].put_it_back(harvested - took);
                 }
                 let agent = &mut self.population.agents[agent_index];
                 if went_in_the_pack {
