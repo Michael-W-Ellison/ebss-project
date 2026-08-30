@@ -4741,6 +4741,27 @@ impl Agent {
     /// unattributable. Filed as #216. What is here now is the *shape* -
     /// carrying is hands plus containers, and containers are things you make -
     /// on the old number.
+    ///
+    /// **And the old number turns out to be right, which is not luck but is
+    /// not reasoning either - it was measured.** Swept against survival over
+    /// three blocks of thirty-two seeded worlds, person-days total:
+    ///
+    /// | what two hands hold | person-days |
+    /// |---|---|
+    /// | 6 | 97,217 |
+    /// | **12** | **95,371** |
+    /// | 120 | 75,081 |
+    ///
+    /// Flat from six to twelve - the difference is inside the block-to-block
+    /// noise of ten per cent - and **twenty-one per cent worse at ten times**.
+    /// A bigger pack is not a kindness. What it buys is turns: at 120 the
+    /// share of the settlement's turns spent on `Work` rises by twenty-seven
+    /// per cent and the share spent on `Eat` falls, because a person with
+    /// materials in hand has something to make and making competes with
+    /// eating.
+    ///
+    /// So carrying is not what limits this settlement, at this figure or any
+    /// figure near it. See ISSUES #119, which closes #236 on that evidence.
     pub const WHAT_TWO_HANDS_HOLD: f32 = 12.0;
 
     /// Update inventory max_weight from what this one has to carry things in.

@@ -7181,6 +7181,72 @@ number worth acting on is worth a probe that isolates it first.
 
 ---
 
+### 119. Carrying is not what limits this settlement, and a bigger pack makes it worse
+
+#236 has now been wrong three times about the same thing. It began as "a pack
+holds two days of food" (#116: it holds seven, and the two-day figure came off
+a unit-test fixture). It became "nobody puts anything down, six hundred and
+sixty-six handaxes" (#117: about one each, and the rule written for it cost
+five per cent of survival). It became "seventy-seven thousand items of food
+thrown away" (#118: nought thrown away, two counters pooled). Each time the
+premise was replaced rather than the question.
+
+So this time the question was put to the model directly rather than reasoned
+about: **does carrying capacity matter at all?**
+
+Swept over three blocks of thirty-two seeded worlds, total person-days:
+
+| what two hands hold | person-days | against twelve |
+|---|---|---|
+| 6 | 97,217 | +1.9% |
+| **12** (as shipped) | **95,371** | - |
+| 120 | 75,081 | **-21.3%** |
+
+**Flat from six to twelve** - within the block-to-block noise of ten per cent -
+and **a fifth worse at ten times**. Halving the pack costs nothing measurable.
+Making it enormous is the single largest survival regression measured in this
+model since the starvation clock was corrected.
+
+**Why a bigger pack is worse**, which is worth having rather than guessing at.
+Comparing the settlement's action mix at 120 against 12, per person-tick:
+
+| | at 12 | at 120 |
+|---|---|---|
+| `Gather` | 0.347 | 0.345 |
+| `Eat` | 0.289 | **0.276** |
+| `Work` | 0.063 | **0.080** |
+| `Sleep` | 0.051 | 0.041 |
+
+Gathering is unchanged. `Work` is up twenty-seven per cent and `Eat` is down.
+A person with materials in hand has something to make, and making competes with
+eating for the same turn. Capacity is not a bottleneck on food; it is a
+*licence* for other work, and the other work is what kills them. Food into
+packs doubles and food eaten out of packs doubles with it - and it does not
+help, because the settlement was never short of food it had carried home.
+
+**That closes #236.** The four candidates it was reopened with were a bigger
+pack, a lighter kit, a smaller armful and a second trip. The first is refuted
+with the sign reversed. The other three are all ways of moving food from the
+patch to the pack, and #118 already measured what that is worth: fifteen per
+cent more food carried home changed survival by -0.9% over a hundred and sixty
+worlds. There is no version of "carry it better" that this model is waiting
+for.
+
+**What it leaves.** Agents are fed on the spot by the forage branch - 505 items
+eaten out of packs against tens of thousands foraged - and the pack is not a
+larder. A settlement lives or dies on whether the ground its people are
+standing on bears anything, which is #229: a starving agent's best patch within
+twenty-five paces holds seven units against a daily burn of fourteen hundred,
+while the well-fed stand in six hundred, and nothing moves anybody because
+`Eat` never fails. Four entries of carrying work have between them ruled out
+the pack, the kit, the counters and the verb, and every one of them points at
+the same place.
+
+`WHAT_TWO_HANDS_HOLD` now carries this sweep in its doc comment, so the next
+person to think twelve looks arbitrary finds out that it is not.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in
