@@ -7026,16 +7026,90 @@ it**. What fills a pack, by weight over six worlds:
 |---|---|
 | wood | **23.1%** |
 | iron | 4.7% |
-| handaxes (666 of them) | 4.4% |
+| handaxes | 4.4% |
 | tinder | 3.5% |
 | stone | 2.9% |
 | all food | **~6%** |
 
-Nobody puts anything down. An agent picks up wood, iron, stone and a second and
-third handaxe, and carries them until it dies. That is what leaves no room for
-food, and it is a decision-layer problem - what to carry, and when to leave
-something - rather than a number. Filed as #236, and it is the true content of
-what #230 was reaching for.
+*(The reading of this table was wrong, and #117 corrects it: those counts are
+totals over seven hundred agent-samples, not what one person carries. Per
+agent it is five logs, one handaxe and one knife - a sensible kit, not a
+hoard. The shares are right; the story told about them was not.)* Filed as
+#236, and see #117 for what came of it.
+
+---
+
+### 117. Nobody was hoarding anything, and the rule written for it made things worse
+
+#236 said agents carry six hundred and sixty-six handaxes and never put
+anything down. **They carry about one each.** The figure was a total over seven
+hundred and nineteen agent-samples, and I read it as a per-agent count and
+wrote it into #116, into the task, and into a rule built on top of it. Second
+misread in two entries, and the same shape both times: a number measured across
+a population and reported as a number about a person.
+
+What one agent actually carries, per sample over six worlds:
+
+| | per agent | kg |
+|---|---|---|
+| wood | 4.98 | **9.96** |
+| handaxe | 0.93 | 1.86 |
+| fishportions | 1.47 | 1.47 |
+| basket | 0.77 | 0.77 |
+| stoneknife | 1.00 | 0.50 |
+
+One axe, one knife, a basket, some fish and five logs. That is a kit, not a
+hoard. The only thing on it that looks heavy for a forager is the wood, at a
+third of the pack.
+
+**What was tried.** A rule that a person keeps one of each tool, one carrier,
+all their food and a bounded amount of any material - the bound taken from the
+room a trip's load needs, so five logs at two kilos came down to three. Wired
+three ways: a decision branch above everything but eating, a refusal in the
+`Gather` verb so what was set down could not be fetched straight back, and
+`PutDown` setting down the surplus rather than the whole stack.
+
+It worked, in the sense that it did what it said: wood fell from 4.98 to 3.23
+per agent, and **food went from eight per cent of what is carried to eleven**.
+
+**And it made survival worse.** Paired over three blocks of thirty-two seeds,
+person-days against the same seeds before it:
+
+| | person-days | against baseline |
+|---|---|---|
+| baseline | 36,826 / 27,330 / 33,674 | - |
+| everything | 35,394 / 28,838 / 29,516 | **-4.2%** |
+| without the `Gather` refusal | 32,937 / 30,485 / 29,521 | **-5.0%** |
+| surplus-only `PutDown` alone | 34,821 / 28,377 / 29,552 | **-5.2%** |
+
+Every arrangement of it costs more than it gains. A turn spent setting
+something down is a turn not spent eating, and the extra armful it buys does
+not pay for the turn. So it is not shipped. What is left is the part that
+cannot be wrong either way:
+
+- `provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS`, which was the literal `0.5`
+  written in the Gather executor's weight table and again in the forage branch
+  of `Eat`.
+- `provision::AS_MUCH_AS_ONE_TRIP_TAKES`, moved out of the decision layer,
+  where nothing outside it could reach the one figure that says how much a trip
+  brings back.
+- `Agent::WHAT_CARRIES` as an associated constant rather than a local inside
+  `take_up_the_cart`, so what a person carries things in is a list somebody
+  else can read.
+
+Those three are ownership moves with live callers and no behaviour in them, and
+the run bears that out: over the same ninety-six seeded worlds the counts come
+back **bit for bit identical** - 36,826 / 27,330 / 33,674, sixteen and fourteen
+and twenty-one worlds emptied, the same to the person.
+
+**What this leaves.** The waste is real - 77,514 items of food went back on the
+bush against 7,537 carried home - and it is not hoarding and not a rule about
+tidiness. A pack holds thirty-five kilos, a kit weighs thirty, and an armful is
+seven: the trip brings back more than there is room for, and the shortfall is
+about one armful. Whether the answer is a bigger pack, a lighter kit, a smaller
+armful or a second trip is a question for measurement rather than for
+reasoning, and reasoning is what produced both wrong premises in this entry and
+the last. #236 is reopened with the corrected figures.
 
 ---
 

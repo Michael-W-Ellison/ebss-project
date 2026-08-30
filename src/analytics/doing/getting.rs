@@ -417,7 +417,9 @@ impl Simulation {
                         ResourceType::Wood => 2.0,     // Wood is light but bulky
                         ResourceType::Stone => 5.0,    // Stone is heavy
                         ResourceType::Iron => 8.0,     // Iron is very heavy
-                        ResourceType::Food => 0.5,     // Food is light
+                        ResourceType::Food => {
+                            crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS
+                        }
                         _ => 1.0,
                     }
                 );

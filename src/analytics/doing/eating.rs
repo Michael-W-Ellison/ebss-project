@@ -284,7 +284,7 @@ impl Simulation {
                     let mut carried = InventoryItem::new_with_weight(
                         Self::gathered_as(here).unwrap_or("food").to_string(),
                         left_in_the_hand,
-                        0.5,
+                        crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
                     );
                     carried.food_data = self
                         .food_database

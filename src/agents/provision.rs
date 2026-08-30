@@ -70,6 +70,24 @@ pub const UNITS_IN_ONE_STORED_ITEM: f32 =
 pub const WHAT_A_BODY_EATS_IN_A_DAY: f32 =
     physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY / UNITS_IN_ONE_STORED_ITEM;
 
+/// What one handful of gathered food weighs, in the units a pack is weighed in.
+///
+/// Written twice before this - in the Gather executor's weight table and again
+/// in the forage branch of `Eat` - and wanted a third time by anything asking
+/// how much room a day's eating takes.
+pub const WHAT_A_HANDFUL_OF_FOOD_WEIGHS: f32 = 0.5;
+
+/// The most one pair of hands takes off a patch in one trip.
+///
+/// Above this a patch is not worth more for being bigger: a hedge with a
+/// thousand berries on it and one with fifty are the same afternoon's work.
+///
+/// Lived in the decision layer, where nothing outside it could reach the
+/// figure - and what a pack has to have room for is exactly this, since a pack
+/// that cannot take what a trip brings back is a pack that makes the trip
+/// pointless.
+pub const AS_MUCH_AS_ONE_TRIP_TAKES: f32 = 14.0;
+
 /// The longest run of days in the year on which nothing a person can eat is
 /// growing anywhere.
 ///

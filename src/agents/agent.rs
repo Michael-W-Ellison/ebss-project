@@ -4672,23 +4672,28 @@ impl Agent {
     /// This is the largest waste in the model at the far end of it. Measured,
     /// nearly nine thousand items of gathered food went back on the bush in one
     /// run because packs were full.
+    /// The things a person carries other things in, best first.
+    ///
+    /// Nobody drags a travois while pushing a cart. Read by
+    /// `take_up_the_cart`, which puts the best of them on the back, and by
+    /// `how_many_of_this_i_should_keep`, which will not have somebody set down
+    /// the thing everything else is in.
+    pub const WHAT_CARRIES: [(&'static str, super::transport::TransportType); 4] = [
+        ("handcart", super::transport::TransportType::Handcart),
+        ("travois", super::transport::TransportType::Travois),
+        // A leather bag holds a good deal more than a flax basket, which is
+        // what being a leatherworker is worth - see `making::SEW_A_BAG`. It
+        // reached carrying capacity through `effective_max_weight` and not
+        // through here, so it was a second way of holding things that the
+        // transport system knew nothing about. See ISSUES #116.
+        ("leatherbag", super::transport::TransportType::LargeBackpack),
+        ("basket", super::transport::TransportType::Backpack),
+    ];
+
     pub fn take_up_the_cart(&mut self) {
-        use super::transport::{Transport, TransportType};
+        use super::transport::Transport;
 
-        // Best first: nobody drags a travois while pushing a cart.
-        const WHAT_CARRIES: [(&str, TransportType); 4] = [
-            ("handcart", TransportType::Handcart),
-            ("travois", TransportType::Travois),
-            // A leather bag holds a good deal more than a flax basket, which
-            // is what being a leatherworker is worth - see `making::SEW_A_BAG`.
-            // It reached carrying capacity through `effective_max_weight` and
-            // not through here, so it was a second way of holding things that
-            // the transport system knew nothing about.
-            ("leatherbag", TransportType::LargeBackpack),
-            ("basket", TransportType::Backpack),
-        ];
-
-        let best = WHAT_CARRIES
+        let best = Self::WHAT_CARRIES
             .iter()
             .find(|(called, _)| self.how_many_i_have(called) > 0)
             .map(|(_, kind)| *kind);

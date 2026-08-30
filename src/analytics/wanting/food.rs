@@ -753,9 +753,10 @@ impl Simulation {
 
     /// The most one pair of hands takes off a patch in one trip.
     ///
-    /// Above this a patch is not worth more for being bigger: a hedge with a
-    /// thousand berries on it and one with fifty are the same afternoon's work.
-    pub(in crate::analytics) const AS_MUCH_AS_ONE_TRIP_TAKES: f32 = 14.0;
+    /// Owned by `provision`, because what a pack has to have room for is
+    /// exactly this and the pack is not part of the decision layer.
+    pub(in crate::analytics) const AS_MUCH_AS_ONE_TRIP_TAKES: f32 =
+        crate::agents::provision::AS_MUCH_AS_ONE_TRIP_TAKES;
 
     /// How much of a turn one pace of walking comes to.
     ///
