@@ -123,6 +123,21 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "cabbage" | "seaweed" | "bamboo_shoots" | "leaves" => Some(ItemType::Greens),
         "sand" => Some(ItemType::Sand),
         "coal" => Some(ItemType::Coal),
+        // Water is a drive, a resource and an item type, and its own name did
+        // not resolve to it.
+        "water" => Some(ItemType::Water),
+
+        // The whole bronze-age tier. Eighteen of the seventy-four item types
+        // did not survive a round trip through their own name - every copper,
+        // bronze and steel thing, plus water - which is the fifth time this
+        // table has drifted from the vocabulary beside it and the reason
+        // `every_item_type_tests::a_type_survives_the_round_trip_through_its_name`
+        // now exists. A tool nothing can name is a tool nothing can price,
+        // store, trade or put in a pit.
+        "copper" => Some(ItemType::Copper),
+        "tin" => Some(ItemType::Tin),
+        "bronze" => Some(ItemType::Bronze),
+        "steel" => Some(ItemType::Steel),
 
         // Processed
         "flour" => Some(ItemType::Flour),
@@ -162,6 +177,12 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "woodenhammer" | "wooden_hammer" => Some(ItemType::WoodenHammer),
         "stonehammer" | "stone_hammer" => Some(ItemType::StoneHammer),
         "ironhammer" | "iron_hammer" => Some(ItemType::IronHammer),
+        "copperaxe" | "copper_axe" => Some(ItemType::CopperAxe),
+        "bronzeaxe" | "bronze_axe" => Some(ItemType::BronzeAxe),
+        "copperpickaxe" | "copper_pickaxe" => Some(ItemType::CopperPickaxe),
+        "bronzepickaxe" | "bronze_pickaxe" => Some(ItemType::BronzePickaxe),
+        "copperhammer" | "copper_hammer" => Some(ItemType::CopperHammer),
+        "bronzehammer" | "bronze_hammer" => Some(ItemType::BronzeHammer),
 
         // Weapons
         "woodenspear" | "wooden_spear" => Some(ItemType::WoodenSpear),
@@ -169,6 +190,13 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "stonespear" | "stone_spear" => Some(ItemType::StoneSpear),
         "ironsword" | "iron_sword" => Some(ItemType::IronSword),
         "ironbow" | "iron_bow" => Some(ItemType::IronBow),
+        "copperspear" | "copper_spear" => Some(ItemType::CopperSpear),
+        "coppersword" | "copper_sword" => Some(ItemType::CopperSword),
+        "bronzespear" | "bronze_spear" => Some(ItemType::BronzeSpear),
+        "bronzesword" | "bronze_sword" => Some(ItemType::BronzeSword),
+        "bronzebow" | "bronze_bow" => Some(ItemType::BronzeBow),
+        "copperarmor" | "copper_armor" => Some(ItemType::CopperArmor),
+        "bronzearmor" | "bronze_armor" => Some(ItemType::BronzeArmor),
         "steelsword" | "steel_sword" => Some(ItemType::SteelSword),
 
         // Armor

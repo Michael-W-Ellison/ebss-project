@@ -123,6 +123,266 @@ pub enum Trait {
 }
 
 impl Trait {
+    /// Every trait there is.
+    ///
+    /// Wanted by anything that has to sweep the whole personality - which
+    /// traits lean on which drive, whether a new one reaches anything at all.
+    /// Held to the enum by `every_trait_is_listed`, which is an exhaustive
+    /// match: adding a variant and not listing it here fails to compile.
+    pub fn all() -> [Trait; 82] {
+        [
+            Trait::Anxious,
+            Trait::Brave,
+            Trait::HotHeaded,
+            Trait::Calm,
+            Trait::Pacifist,
+            Trait::Empathic,
+            Trait::ColdHearted,
+            Trait::Resilient,
+            Trait::Clown,
+            Trait::Goth,
+            Trait::Melancholic,
+            Trait::Stoic,
+            Trait::Repressed,
+            Trait::Extrovert,
+            Trait::Introvert,
+            Trait::KindHearted,
+            Trait::Cruel,
+            Trait::Charismatic,
+            Trait::Mute,
+            Trait::Gossip,
+            Trait::Intolerant,
+            Trait::Mediator,
+            Trait::Romantic,
+            Trait::Insecure,
+            Trait::Manipulator,
+            Trait::Copycat,
+            Trait::Imaginative,
+            Trait::Handy,
+            Trait::Lazy,
+            Trait::Proud,
+            Trait::Ambitious,
+            Trait::Pragmatist,
+            Trait::Stubborn,
+            Trait::Traditionalist,
+            Trait::Rebel,
+            Trait::Builder,
+            Trait::CraftObsessed,
+            Trait::Archivist,
+            Trait::Greedy,
+            Trait::Ascetic,
+            Trait::Envious,
+            Trait::Frugal,
+            Trait::Survivalist,
+            Trait::Altruist,
+            Trait::Glutton,
+            Trait::Believer,
+            Trait::Atheist,
+            Trait::Ignorant,
+            Trait::Zealot,
+            Trait::Skeptic,
+            Trait::Bookworm,
+            Trait::Curious,
+            Trait::Suspicious,
+            Trait::Deaf,
+            Trait::Blind,
+            Trait::Uncaring,
+            Trait::Paranoid,
+            Trait::Vengeful,
+            Trait::Forgiving,
+            Trait::Coward,
+            Trait::Protector,
+            Trait::Aggressive,
+            Trait::Peaceful,
+            Trait::AnimalLover,
+            Trait::Allergic,
+            Trait::Masochist,
+            Trait::Explorer,
+            Trait::Caretaker,
+            Trait::Trusting,
+            Trait::Honest,
+            Trait::Dishonest,
+            Trait::Callous,
+            Trait::Diligent,
+            Trait::Hottempered,
+            Trait::Sociable,
+            Trait::Introverted,
+            Trait::Empathetic,
+            Trait::Manipulative,
+            Trait::Obsessive,
+            Trait::Infertile,
+            Trait::Narcoleptic,
+            Trait::SoundSleeper,
+        ]
+    }
+}
+
+#[cfg(test)]
+mod every_trait_tests {
+    use super::Trait;
+
+    /// The list and the enum are the same set.
+    #[test]
+    fn every_trait_is_listed() {
+        fn exhaustive(what: Trait) {
+            match what {
+            Trait::Anxious => {}
+            Trait::Brave => {}
+            Trait::HotHeaded => {}
+            Trait::Calm => {}
+            Trait::Pacifist => {}
+            Trait::Empathic => {}
+            Trait::ColdHearted => {}
+            Trait::Resilient => {}
+            Trait::Clown => {}
+            Trait::Goth => {}
+            Trait::Melancholic => {}
+            Trait::Stoic => {}
+            Trait::Repressed => {}
+            Trait::Extrovert => {}
+            Trait::Introvert => {}
+            Trait::KindHearted => {}
+            Trait::Cruel => {}
+            Trait::Charismatic => {}
+            Trait::Mute => {}
+            Trait::Gossip => {}
+            Trait::Intolerant => {}
+            Trait::Mediator => {}
+            Trait::Romantic => {}
+            Trait::Insecure => {}
+            Trait::Manipulator => {}
+            Trait::Copycat => {}
+            Trait::Imaginative => {}
+            Trait::Handy => {}
+            Trait::Lazy => {}
+            Trait::Proud => {}
+            Trait::Ambitious => {}
+            Trait::Pragmatist => {}
+            Trait::Stubborn => {}
+            Trait::Traditionalist => {}
+            Trait::Rebel => {}
+            Trait::Builder => {}
+            Trait::CraftObsessed => {}
+            Trait::Archivist => {}
+            Trait::Greedy => {}
+            Trait::Ascetic => {}
+            Trait::Envious => {}
+            Trait::Frugal => {}
+            Trait::Survivalist => {}
+            Trait::Altruist => {}
+            Trait::Glutton => {}
+            Trait::Believer => {}
+            Trait::Atheist => {}
+            Trait::Ignorant => {}
+            Trait::Zealot => {}
+            Trait::Skeptic => {}
+            Trait::Bookworm => {}
+            Trait::Curious => {}
+            Trait::Suspicious => {}
+            Trait::Deaf => {}
+            Trait::Blind => {}
+            Trait::Uncaring => {}
+            Trait::Paranoid => {}
+            Trait::Vengeful => {}
+            Trait::Forgiving => {}
+            Trait::Coward => {}
+            Trait::Protector => {}
+            Trait::Aggressive => {}
+            Trait::Peaceful => {}
+            Trait::AnimalLover => {}
+            Trait::Allergic => {}
+            Trait::Masochist => {}
+            Trait::Explorer => {}
+            Trait::Caretaker => {}
+            Trait::Trusting => {}
+            Trait::Honest => {}
+            Trait::Dishonest => {}
+            Trait::Callous => {}
+            Trait::Diligent => {}
+            Trait::Hottempered => {}
+            Trait::Sociable => {}
+            Trait::Introverted => {}
+            Trait::Empathetic => {}
+            Trait::Manipulative => {}
+            Trait::Obsessive => {}
+            Trait::Infertile => {}
+            Trait::Narcoleptic => {}
+            Trait::SoundSleeper => {}
+            }
+        }
+
+        let all = Trait::all();
+        for what in all {
+            exhaustive(what);
+        }
+
+        let mut seen: Vec<String> = all.iter().map(|t| format!("{t:?}")).collect();
+        seen.sort();
+        seen.dedup();
+        assert_eq!(seen.len(), all.len(), "a trait is listed twice in all()");
+    }
+
+    /// How many traits lean on no drive at all.
+    ///
+    /// Not an assertion that the number is nought - a good few traits are
+    /// about the senses or the body rather than about wanting, and
+    /// `leanings()` is rightly empty for those. What this holds is that the
+    /// number cannot climb: a trait added without a leaning, where one was
+    /// meant, is otherwise a personality that decides nothing and nothing
+    /// says so. That was ISSUES #64, where sixty-odd defined traits reached
+    /// no live agent at all.
+    #[test]
+    fn no_more_traits_lean_on_nothing_than_did_before() {
+        let inert: Vec<String> = Trait::all()
+            .iter()
+            .filter(|what| what.leanings().is_empty())
+            .map(|what| format!("{what:?}"))
+            .collect();
+
+        assert!(
+            inert.len() <= LEAN_ON_NOTHING,
+            "{} traits lean on no drive, against {LEAN_ON_NOTHING} before: {inert:?}",
+            inert.len()
+        );
+    }
+
+    /// Measured, not chosen. Lower it when a trait is given a leaning.
+    ///
+    /// Thirty-eight of eighty-two, the first time this was run. Some of those
+    /// are right to be inert - `Deaf`, `Blind`, `Infertile` and `Allergic` are
+    /// about the body and the senses, not about what somebody wants. Most are
+    /// not: `HotHeaded`, `Calm`, `Vengeful`, `Forgiving`, `Trusting`, `Honest`
+    /// and `Zealot` all plainly bear on wanting and lean on nothing.
+    const LEAN_ON_NOTHING: usize = 38;
+
+    /// Six variants that call themselves aliases and are not.
+    ///
+    /// `Hottempered` says "Alias for HotHeaded" in its own comment, and is a
+    /// separate variant, so the two never compare equal: an agent given one
+    /// gets none of the other's leanings. Both spellings are live - two call
+    /// sites read `HotHeaded` and three read `Hottempered`; two read `Empathic`
+    /// and eleven read `Empathetic`. Nothing maps one to the other.
+    ///
+    /// This asserts the pairs are still distinct, so that whoever fixes it
+    /// (#234) finds this test rather than discovering it the way it was
+    /// discovered - by a guard written for something else entirely.
+    #[test]
+    fn the_aliases_are_not_aliases() {
+        for (a, b) in [
+            (Trait::HotHeaded, Trait::Hottempered),
+            (Trait::Empathic, Trait::Empathetic),
+            (Trait::Manipulator, Trait::Manipulative),
+        ] {
+            assert_ne!(
+                a, b,
+                "if these are equal now, this test has done its job and can go"
+            );
+        }
+    }
+}
+
+
+impl Trait {
     /// Get description of what this trait does
     pub fn description(&self) -> &'static str {
         match self {
