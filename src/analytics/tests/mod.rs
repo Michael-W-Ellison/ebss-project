@@ -81,3 +81,4 @@ pub mod repeatable_tests;
 pub mod armed_tests;
 pub mod earshot_tests;
 pub mod growing_up_tests;
+pub mod anticipation_tests;

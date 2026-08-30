@@ -7355,6 +7355,126 @@ supply and wants measuring on its own.
 
 ---
 
+### 121. Three spellings of "armed", and a planner that looks one job ahead
+
+"The planner should attempt to anticipate drive demand increase so that
+actions can be efficiently executed, reducing the odds of tasks being dropped
+mid-completion. Each agent should be slightly different due to varying drive
+demands and personality traits. It should also allow for the proper
+preparation of actions such as hunting requiring a weapon."
+
+Three things. Two of them worked, one did not, and the measurements say which
+is which.
+
+**Where hunting was actually dying.** Over six worlds and a year, 599 hunts
+were attempted and **589 failed with "No spear in hand for that"** - 98.3%. No
+surviving agent anywhere held anything to hunt with. Instrumenting the rescue
+path, `make_what_this_wants` was offered 643 hunts, 633 of which wanted a
+spear, and in 613 of those **no step in the spear chain could be taken from
+where the agent was standing** - which was next to a deer, in whatever wood or
+meadow the deer happened to be in, with no stone and no wood in reach. The
+preparation was being attempted one tick before the throw.
+
+**And the requirement was written three times.** `worth_hunting` asked
+`agent.equipment.get_weapon()`, which is the equipment slot and which nothing
+in this model has ever filled. The executor asked
+`what_i_have_to_work_with(SkillType::Hunting)`, which is the pack. And the
+verb matrix asked `Wants::ThisInHand("spear")` - one item, by name. So a man
+carrying a **sharpened stick, a sling or a bow** was refused before the
+executor was reached, and so was a man going after a rabbit, which the
+specification says a thrown stone will kill.
+
+Changing the `HUNT` verb alone changed **nothing at all**, and the reason was
+in a comment on the lookup that had been there since it was written: *"a hunt
+is a throwing and a hunting and both want the spear"*.
+`what_this_action_cannot_do_without` gathers every verb sharing a `done_by`,
+so `THROW` went on asking for the spear after `HUNT` had stopped. A
+requirement written twice is still written once you have removed it from one
+of the two places.
+
+**The fix, in three parts.**
+
+1. `Simulation::could_bring_it_down` is the one owner of whether a kill is
+   possible - the size rule the executor has always had, now asked by
+   `worth_hunting` before anybody sets out.
+2. The verb matrix stops claiming an unconditional requirement it does not
+   have. What a hunt needs depends on the quarry, which that table cannot see.
+3. `what_a_hunt_wants_first`: wanting to hunt with nothing in hand is a reason
+   to go and get something, taken **where the want is formed** rather than at
+   the animal. It walks the hunting ladder from the bottom - `how_much_better`
+   ascending - because `what_i_would_rather_have` answers the *upgrade*
+   question and names the bow, and a man who cannot come by a bow this
+   afternoon then does nothing when a sharpened stick was three turns away.
+   Asked for the best: 1,881 wants and 340 that came to anything. Asked from
+   the bottom: 1,391 and 311, and the difference goes on.
+
+`how_i_would_come_by` is the making step or, failing that, the raw thing the
+chain is short of - the pair of questions that had been written out three
+times over. And `make_what_this_wants` now takes the making on as an errand,
+which `would_a_better_tool_pay` has done since `Errand::to_make` was written
+and this one never did: twenty turns went on the first step of a hunting tool
+in six worlds and not one was ever followed up.
+
+**What it did.** "No spear in hand for that": **589 to nought**. The only
+hunts that fail now fail for reasons a hunt should fail for - deer escaped 26,
+rabbit escaped 16.
+
+**The anticipation, and a negative result inside it.** The first cut asked
+`how_long_before_this_asks` - how many turns until a need crosses its
+threshold - and deferred any job a higher-ranked need would interrupt. It
+fired on nearly everything. Hunger sits a few turns off its threshold most of
+the time and outranks every secondary need, so a settlement stopped
+provisioning, stopped building and stopped making tools and did nothing but
+eat. Measured over 160 worlds against the same five seed blocks: **4,931
+person-days against 5,300**, -7.0%, every block down.
+
+Rewritten on the body's own clock - `ticks_before_this_kills_me`, which is
+what `how_hard_it_presses` already reckons the primaries by - it fires 149
+times in 2,870 multi-turn jobs and costs nothing measurable. A need being
+about to *ask* is ordinary. A need that will have killed you before the job is
+done is worth turning round for.
+
+**Per agent, and honestly so.** Every term in `how_long_before_this_asks` is a
+number the individual already carries: how far its drive is below threshold,
+how fast that drive builds, and how much the weight of having been ignored
+(`Drive::pressure`) is making it build faster. Two people standing in the same
+field get two different answers. Which needs may interrupt which is
+`DriveRank::precedence`, and personality reaches it through `weight` and
+`lean` on the ranking above.
+
+**What it did not do, which was the point of asking for it.** Errands dropped
+for "something else came first" went from 1,818 of 3,445 (52.8%) to 1,661 of
+3,059 (54.3%). **It did not reduce the drop rate at all.** The reason is in
+the rule: the anticipation only defers to needs of a *higher band*, and what
+actually ends errands is `stick_to_the_errand`'s turn-round test, which two
+needs of the *same* band trip constantly as one is nibbled at and the other
+builds. Fixing that means looking ahead inside a band, which needs a way to
+say how hard a drive will press at a future tick rather than only when it will
+start asking. Filed.
+
+**Survival, five paired seed blocks, 160 worlds:**
+
+| | person-days | against HEAD |
+|---|---:|---:|
+| before | 5300 | |
+| preparation only | 5298 | -0.04% |
+| + anticipation on the threshold | 4931 | **-7.0%** (rejected) |
+| + anticipation on the body's clock | 5276 | -0.45% |
+| + the verb matrix fixed | **5205** | **-1.8%** |
+
+Worlds emptied inside the year: 73 of 160, against 75 before. The last 1.3%
+is hunting actually happening where it used to be refused, and a hunt costs
+turns; on a measure whose block-to-block noise is ten per cent, none of this
+is a change in survival either way.
+
+**The guard.** `no_verb_asks_for_one_rung_of_a_tool_ladder_by_name` fails if
+any verb states its precondition by naming a tool, and
+`a_hunt_asks_for_nothing_this_table_cannot_see` pins the hunt in particular.
+The defect they catch cost 589 hunts in 599 and was invisible for as long as
+the two lists happened to agree.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

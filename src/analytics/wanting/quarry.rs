@@ -30,6 +30,15 @@ impl Simulation {
             None => return false,
         };
 
+        // Nothing this one could not bring down with what it is carrying.
+        // The executor has asked this since hunting was written and the
+        // decision layer never did, so an agent walked to a deer it had no
+        // means of killing and threw the turn away being refused. See
+        // `Simulation::could_bring_it_down`.
+        if !Self::could_bring_it_down(agent, species) {
+            return false;
+        }
+
         let dangerous = matches!(
             species.behavior,
             AnimalBehavior::Aggressive | AnimalBehavior::Territorial
@@ -133,6 +142,27 @@ impl Simulation {
             return None;
         }
 
+        // Nothing to throw: the spear is the job.
+        //
+        // This is the preparation the model did not have. Wanting to hunt was
+        // decided here, the walk to the animal was taken, and only when the
+        // agent was standing over it did anything ask whether it had a spear -
+        // at which point `make_what_this_wants` went looking for the makings
+        // of one in whatever wood or meadow the deer happened to be standing
+        // in, and did not find them. Measured over six worlds: 643 hunts
+        // reached that question, 633 of them wanted a spear, and in 613 no
+        // step in the chain could be taken from where the agent was.
+        //
+        // Wanting a thing you have not got is a reason to go and get it, and
+        // the place to do that from is wherever the agent is when it forms the
+        // want - beside the camp, where the stone and the wood are - not
+        // beside the animal. So the answer to "I would hunt" from somebody
+        // empty-handed is the next step towards a spear, and the errand
+        // machinery carries it the rest of the way.
+        if let Some(getting_one) = self.what_a_hunt_wants_first(agent) {
+            return Some(getting_one);
+        }
+
         let (animal_id, animal_position) = self.nearest_prey(agent, agent_position)?;
 
         let reach = (animal_position.0 - agent_position.0)
@@ -149,6 +179,52 @@ impl Simulation {
         Some(Action::Move {
             target: (animal_position.0, animal_position.1, agent_position.2),
         })
+    }
+
+    /// Getting hold of something to hunt with, for somebody who means to hunt
+    /// and has nothing.
+    ///
+    /// `None` when there is nothing to be done about it here - which is the
+    /// honest answer for a man in a meadow with no stone in it, and leaves the
+    /// hunt to be attempted with bare hands against whatever a thrown stone
+    /// will still bring down.
+    pub(in crate::analytics) fn what_a_hunt_wants_first(
+        &self,
+        agent: &crate::agents::Agent,
+    ) -> Option<Action> {
+        use crate::agents::skills::SkillType;
+
+        if agent.what_i_have_to_work_with(SkillType::Hunting).is_some() {
+            return None;
+        }
+
+        // The humblest thing that will do, not the best thing known.
+        //
+        // `what_i_would_rather_have` answers a different question - it is the
+        // *upgrade*, and takes the highest `how_much_better` the agent knows
+        // how to make. Asked by somebody with nothing at all it names the bow,
+        // and a man who cannot come by a bow this afternoon then does nothing,
+        // when a sharpened stick was three turns away. Measured with the best
+        // one asked for: 1,881 wants of a hunting tool in six worlds and 340
+        // that came to anything.
+        //
+        // So the ladder is walked from the bottom and the first rung this one
+        // can actually get onto is the answer. Getting onto it is what makes
+        // the next rung reachable later; `would_a_better_tool_pay` is what
+        // climbs.
+        let mut ladder: Vec<&'static crate::environment::making::Tool> =
+            crate::environment::making::what_helps_with(SkillType::Hunting)
+                .filter(|tool| agent.knows_how_to_make(tool.called))
+                .collect();
+        ladder.sort_by(|a, b| {
+            a.how_much_better
+                .partial_cmp(&b.how_much_better)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        ladder
+            .into_iter()
+            .find_map(|tool| self.how_i_would_come_by(tool.called, agent))
     }
 
     /// How far a parent lets a child of its own get before going after it

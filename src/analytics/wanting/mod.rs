@@ -444,6 +444,16 @@ impl Simulation {
             if let Some(action) =
                 self.how_this_agent_answers(drive_type, agent, agent_position, &here)
             {
+                // And before setting out on it: is there a need that outranks
+                // this one and will start asking before it is finished? If so,
+                // that need is answered now, and this is taken up afterwards
+                // with a clear run at it. See `what_will_not_wait_for`.
+                if let Some(sooner) =
+                    self.what_this_will_not_outlast(agent, agent_position, drive_type, &action, &here)
+                {
+                    return (sooner, false);
+                }
+
                 return (action, false);
             }
         }
@@ -538,6 +548,84 @@ impl Simulation {
         } else {
             None
         }
+    }
+
+    /// How many turns this piece of work would take, as near as the agent can
+    /// tell before starting it.
+    ///
+    /// A walk is its own length; a making is the length of the chain that is
+    /// left, which `how_many_turns_to_make` already counts along the same
+    /// steps the agent will actually walk. Everything else is one turn, which
+    /// is to say it cannot be interrupted half way and does not need to be
+    /// thought about.
+    pub(in crate::analytics) fn how_long_this_would_take(
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        action: &Action,
+    ) -> u32 {
+        match action {
+            Action::Move { target } => (target.0 - agent_position.0)
+                .abs()
+                .max((target.1 - agent_position.1).abs())
+                as u32,
+
+            Action::Craft { item_type } => {
+                let holding = |what: &str| agent.how_many_i_have(what);
+                let knows =
+                    |step: &crate::environment::making::Making| agent.knows_how_to(step);
+                crate::environment::making::how_many_turns_to_make(item_type, &holding, &knows)
+                    .unwrap_or(1)
+                    .max(1)
+            }
+
+            _ => 1,
+        }
+    }
+
+    /// The shortest piece of work there is: one turn, and nothing can be
+    /// dropped half way through it.
+    const AS_SHORT_AS_A_JOB_GETS: u32 = 1;
+
+    /// What to do instead, when the thing this drive is asking for would be
+    /// interrupted before it was finished.
+    ///
+    /// The order of a day was: answer whatever presses hardest this minute,
+    /// and find out afterwards that the walk could not be finished. Measured,
+    /// **more than half of every undertaking a settlement began was dropped
+    /// for something else** - 1,818 of 3,445 over six worlds, against 1,454
+    /// that got where they were going.
+    ///
+    /// So the question is asked in front: this is `turns` long, and there is a
+    /// need that outranks it and starts asking in fewer than `turns`. Answer
+    /// that one now, while it is small, and come back to this with a clear run
+    /// at it.
+    ///
+    /// Two guards, and both matter. The substitute has to be something the
+    /// agent can actually do - a need nobody can answer is not a reason to
+    /// drop what you are doing - and it has to be *shorter* than the thing it
+    /// displaces, or this has traded one interrupted job for another and
+    /// called it planning.
+    pub(in crate::analytics) fn what_this_will_not_outlast(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        serving: DriveType,
+        action: &Action,
+        here: &[Circumstance],
+    ) -> Option<Action> {
+        let turns = Self::how_long_this_would_take(agent, agent_position, action);
+        if turns <= Self::AS_SHORT_AS_A_JOB_GETS {
+            return None;
+        }
+
+        let sooner = agent.what_will_not_wait_for(serving, turns)?;
+        let instead = self.how_this_agent_answers(sooner, agent, agent_position, here)?;
+
+        if Self::how_long_this_would_take(agent, agent_position, &instead) >= turns {
+            return None;
+        }
+
+        Some(instead)
     }
 
     pub(in crate::analytics) fn what_this_drive_offers(

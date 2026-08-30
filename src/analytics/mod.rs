@@ -739,6 +739,26 @@ impl Simulation {
     /// and above it "hunting any larger animal requires at least a spear".
     const AS_BIG_AS_A_STONE_WILL_KILL: f32 = 20.0;
 
+    /// Whether this one could bring that down with what it is carrying.
+    ///
+    /// The decision layer and the executor were asking two different questions
+    /// and getting two different answers. `worth_hunting` asked
+    /// `equipment.get_weapon()`, which is the equipment slot; the executor
+    /// asked `what_i_have_to_work_with(Hunting)`, which is the pack. So an
+    /// agent decided to hunt, walked to the animal, threw the turn away and
+    /// was refused - **589 hunts in 599 over six worlds**, every one of them
+    /// "no spear in hand". Two spellings of one question is how this project
+    /// has lost measurements before, so there is now one.
+    pub(in crate::analytics) fn could_bring_it_down(
+        agent: &crate::agents::Agent,
+        species: &crate::environment::AnimalSpecies,
+    ) -> bool {
+        species.health <= Self::AS_BIG_AS_A_STONE_WILL_KILL
+            || agent
+                .what_i_have_to_work_with(crate::agents::skills::SkillType::Hunting)
+                .is_some()
+    }
+
     const A_THROW_THAT_TELLS: f32 = 0.3;
 
     /// What a throw that tells takes out of an animal.

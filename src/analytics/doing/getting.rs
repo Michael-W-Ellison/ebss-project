@@ -599,11 +599,7 @@ impl Simulation {
             // which they will not, and it was not being asked at all:
             // an agent with nothing in its hands could bring down an
             // ox by walking up to it.
-            if species.health > Self::AS_BIG_AS_A_STONE_WILL_KILL
-                && agent.what_i_have_to_work_with(
-                    crate::agents::skills::SkillType::Hunting,
-                ).is_none()
-            {
+            if !Self::could_bring_it_down(agent, &species) {
                 return ActionResult::failure(format!(
                     "Nothing in hand to bring down a {}",
                     species.name

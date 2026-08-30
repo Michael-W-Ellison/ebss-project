@@ -146,7 +146,12 @@ fn nobody_eats_the_rot_first() {
 // --------------------------------------------------------------------------
 
 /// An animal standing right here, with the nearest berry a walk away, is
-/// worth turning aside for.
+/// worth turning aside for - by somebody who can bring it down.
+///
+/// The spear in the pack is not decoration. A deer is bigger than a thrown
+/// stone will kill, the executor has said so since hunting was written, and
+/// the decision layer now asks the same question before setting out rather
+/// than after walking there. See ISSUES_FOUND.md #121.
 #[test]
 fn a_deer_at_your_feet_beats_a_berry_patch_a_walk_away() {
     use crate::core::DriveType;
@@ -171,11 +176,22 @@ fn a_deer_at_your_feet_beats_a_berry_patch_a_walk_away() {
         }
     }
 
-    let chosen = simulation.food_action(&simulation.population.agents[0], here, false);
+    // Empty-handed, the deer is not an answer to anything: walking to it buys
+    // a refusal at the end of the walk.
+    let empty_handed = simulation.food_action(&simulation.population.agents[0], here, false);
+    assert!(
+        !matches!(empty_handed, Some(Action::Hunt { .. })),
+        "nobody runs down a deer by hand: {empty_handed:?}"
+    );
 
+    simulation.population.agents[0].inventory.add_item(
+        crate::agents::InventoryItem::new_with_weight("spear".to_string(), 1, 2.0),
+    );
+
+    let chosen = simulation.food_action(&simulation.population.agents[0], here, false);
     assert!(
         matches!(chosen, Some(Action::Hunt { .. }) | Some(Action::Move { .. })),
-        "there is a deer two paces off and nothing else to eat: {chosen:?}"
+        "with a spear, a deer two paces off and nothing else to eat: {chosen:?}"
     );
 }
 

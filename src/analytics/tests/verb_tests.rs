@@ -380,18 +380,30 @@ fn what_the_matrix_demands_is_what_the_executor_refuses_without() {
     );
 }
 
-/// A hunt wants a spear, and says so.
+/// A hunt asks the quarry, not this table.
+///
+/// It used to read `ThisInHand("spear")`, on both `HUNT` and `THROW`, and that
+/// was the third spelling of "armed" in the codebase and the one that was
+/// actually refusing the hunts - 589 in 599 over six worlds, including every
+/// hunt by a man carrying a sharpened stick, a sling or a bow, and every hunt
+/// of a rabbit, which the specification says a thrown stone will kill.
+///
+/// What a hunt needs depends on what is being hunted, and this table cannot
+/// see the animal. `Simulation::could_bring_it_down` can, and owns it; see
+/// `anticipation_tests`. See ISSUES_FOUND.md #121.
 #[test]
-fn a_hunt_wants_a_spear() {
-    assert_eq!(
-        verbs::what_this_action_cannot_do_without("hunt"),
-        vec![Wants::ThisInHand("spear")],
-        "the spec's 'hunting = spear + animal', declared where it can be enforced"
+fn a_hunt_asks_the_quarry_rather_than_this_table() {
+    assert!(
+        verbs::what_this_action_cannot_do_without("hunt").is_empty(),
+        "the requirement is conditional on the quarry, so it does not live here: {:?}",
+        verbs::what_this_action_cannot_do_without("hunt")
     );
 
     let mut simulation = a_person();
     empty_the_pack(&mut simulation);
 
+    // And nothing is refused here for want of a named item any more: the hunt
+    // below fails because there is no such animal.
     let barehanded = simulation.execute_action(
         &Action::Hunt {
             animal_id: uuid::Uuid::nil(),
@@ -399,26 +411,15 @@ fn a_hunt_wants_a_spear() {
         },
         0,
     );
-    assert!(!barehanded.success, "nobody runs down a deer by hand");
-
-    // With a spear it gets past the matrix and fails on its own terms - there
-    // is no such animal - rather than for want of a weapon
-    give(&mut simulation, "spear", 1);
-    let armed = simulation.execute_action(
-        &Action::Hunt {
-            animal_id: uuid::Uuid::nil(),
-            weapon: None,
-        },
-        0,
-    );
+    assert!(!barehanded.success, "there is no animal with that id");
     assert!(
-        !armed
+        !barehanded
             .message
             .as_deref()
             .unwrap_or_default()
             .contains("spear in hand"),
-        "a man with a spear should be refused for some other reason: {:?}",
-        armed.message
+        "and not for want of a spear: {:?}",
+        barehanded.message
     );
 }
 

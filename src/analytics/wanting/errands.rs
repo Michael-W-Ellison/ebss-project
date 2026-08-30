@@ -348,7 +348,7 @@ impl Simulation {
                     return action;
                 }
 
-                match self.next_step_towards_making(&wanted, agent_index) {
+                match self.next_step_towards_making(&wanted, &self.population.agents[agent_index]) {
                     Some(step) => {
                         if let Some(errand) = self.population.agents[agent_index].errand.as_mut() {
                             errand.turns_on_it += 1;
@@ -603,9 +603,17 @@ impl Simulation {
         action: &Action,
         agent_index: usize,
     ) -> Option<crate::environment::verbs::Wants> {
-        use crate::environment::verbs;
+        self.what_this_one_is_short_of(action, &self.population.agents[agent_index])
+    }
 
-        let agent = &self.population.agents[agent_index];
+    /// The same question asked of an agent rather than of an index, so that
+    /// the decision layer - which has no index - can ask it too.
+    pub(in crate::analytics) fn what_this_one_is_short_of(
+        &self,
+        action: &Action,
+        agent: &crate::agents::Agent,
+    ) -> Option<crate::environment::verbs::Wants> {
+        use crate::environment::verbs;
 
         // The action's bare name, which is how the matrix refers to it:
         // "gather:wood" is a gather
@@ -951,8 +959,11 @@ impl Simulation {
     ///
     /// The same walk `would_a_better_tool_pay` makes, pulled out so that an
     /// errand can go on making it turn after turn.
-    pub(in crate::analytics) fn next_step_towards_making(&self, wanted: &str, agent_index: usize) -> Option<Action> {
-        let agent = &self.population.agents[agent_index];
+    pub(in crate::analytics) fn next_step_towards_making(
+        &self,
+        wanted: &str,
+        agent: &crate::agents::Agent,
+    ) -> Option<Action> {
         let holding = |what: &str| agent.how_many_i_have(what);
         let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
         let in_hand = |what: &str| agent.how_many_i_have(what) > 0;
@@ -971,16 +982,56 @@ impl Simulation {
         let instead = Action::Craft {
             item_type: step.makes.to_string(),
         };
-        if self
-            .what_this_wants_that_is_missing(&instead, agent_index)
-            .is_some()
-        {
+        if self.what_this_one_is_short_of(&instead, agent).is_some() {
             return None;
         }
         Some(instead)
     }
 
-    pub(in crate::analytics) fn make_what_this_wants(&self, action: Action, agent_index: usize) -> Action {
+    /// The next thing to do towards having one of these in the pack: the
+    /// making step if one can be taken, and otherwise going and getting
+    /// whatever the chain is short of.
+    ///
+    /// The two halves already existed and were written out three times over -
+    /// in `next_step_towards_making`, inside `would_a_better_tool_pay`, and
+    /// again in `make_what_this_wants` - each of which then fell back to
+    /// `fetch_what_the_making_of_it_wants` in its own way. This is the pair as
+    /// one question, so that anybody who wants a thing can ask it.
+    ///
+    /// `None` means there is no step from here: the chain wants something this
+    /// one has never seen, or that this ground has not got.
+    pub(in crate::analytics) fn how_i_would_come_by(
+        &self,
+        wanted: &str,
+        agent: &crate::agents::Agent,
+    ) -> Option<Action> {
+        if let Some(step) = self.next_step_towards_making(wanted, agent) {
+            return Some(step);
+        }
+
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+        let short_of =
+            crate::environment::making::everything_wanting_knowing(wanted, &holding, &knows);
+
+        let here = agent.state.position;
+        let raw = short_of
+            .iter()
+            .filter(|what| agent.have_i_seen(what))
+            .find(|what| self.could_this_gather_come_to_anything(agent, here, what))?;
+
+        let instead = Action::Gather {
+            resource_type: raw.to_string(),
+        };
+
+        if self.what_this_one_is_short_of(&instead, agent).is_some() {
+            return None;
+        }
+
+        Some(instead)
+    }
+
+    pub(in crate::analytics) fn make_what_this_wants(&mut self, action: Action, agent_index: usize) -> Action {
         use crate::environment::verbs::Wants;
 
         // Making a thing is itself an answer to this, and the two must not
@@ -1012,44 +1063,47 @@ impl Simulation {
             Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
         };
 
-        let holding = |what: &str| agent.how_many_i_have(what);
-        let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
-        let in_hand = |what: &str| agent.how_many_i_have(what) > 0;
-        let a_fire_is_to_hand = self
-            .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
-            .is_some();
-
-        // Only a step that can actually be carried out. Naming one that
-        // cannot is worse than the refusal it replaces: the refusal goes into
-        // the record and the man learns from it that making knives does not
-        // work.
-        //
-        // And where no step can be taken, the chain is short of something that
-        // has to be *found* rather than made, so going and getting it is the
-        // job in hand.
-        let Some(step) = crate::environment::making::what_to_do_first_that_can_be_done(
-            wanted,
-            &holding,
-            &knows,
-            &in_hand,
-            a_fire_is_to_hand,
-        ) else {
-            return self.fetch_what_the_making_of_it_wants(action, agent_index, wanted);
-        };
-
-        let instead = Action::Craft {
-            item_type: step.makes.to_string(),
-        };
-
-        // And the substitute must not be short-handed itself, or this trades
-        // one refusal for another and calls it progress
-        if self
-            .what_this_wants_that_is_missing(&instead, agent_index)
-            .is_some()
-        {
+        // Only a step that can actually be carried out, and failing that the
+        // raw thing the chain is short of. Naming a step that cannot be taken
+        // is worse than the refusal it replaces: the refusal goes into the
+        // record and the man learns from it that making knives does not work.
+        // See `how_i_would_come_by`.
+        let wanted = wanted.to_string();
+        let Some(instead) = self.how_i_would_come_by(&wanted, agent) else {
             return action;
-        }
+        };
+
+        // And take it on as an errand, so the chain is finished rather than
+        // started over and over.
+        //
+        // `would_a_better_tool_pay` has done this since `Errand::to_make` was
+        // written and this one never did, which is the same defect one link
+        // along: a turn was diverted onto the first step of a making and the
+        // turn after that the whole decision was made again from scratch.
+        // Measured over six worlds, twenty turns went on the first step of a
+        // hunting tool and not one of them was ever followed up.
+        self.take_the_making_on(&wanted, agent_index);
 
         instead
+    }
+
+    /// Take a making on as an errand, so that a chain several turns long is
+    /// walked rather than restarted.
+    fn take_the_making_on(&mut self, wanted: &str, agent_index: usize) {
+        let Some(for_drive) = self.population.agents[agent_index].what_presses_hardest() else {
+            return;
+        };
+
+        let pressed_this_hard =
+            self.population.agents[agent_index].how_hard_it_presses(for_drive);
+        let here = self.population.agents[agent_index].state.position;
+
+        self.population.agents[agent_index].errand = Some(crate::agents::Errand {
+            going_to: here,
+            to_make: Some(wanted.to_string()),
+            for_drive,
+            pressed_this_hard,
+            turns_on_it: 1,
+        });
     }
 }

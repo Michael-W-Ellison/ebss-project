@@ -3765,6 +3765,89 @@ impl Agent {
     /// clocks rather than by how much anybody happens to want the thing.
     const SOONER_IS_WORSE: f32 = 10.0;
 
+    /// How many turns before this need starts asking.
+    ///
+    /// The only forward-looking question in the model, and every term in it is
+    /// a figure the drive already keeps: how far it is below its threshold,
+    /// how fast it builds, and how much the weight of having been ignored is
+    /// making it build faster. Nothing here is invented and nothing is shared
+    /// between agents - two people standing in the same field get two
+    /// different answers, because they are carrying different values, have
+    /// been denied for different lengths of time, and their bodies burn at
+    /// different rates.
+    ///
+    /// `Some(0)` for a need already asking. `None` for one that cannot ask at
+    /// all yet, because nothing before it in its chain has been answered.
+    pub fn how_long_before_this_asks(&self, drive_type: crate::core::DriveType) -> Option<u32> {
+        let drive = self.drives.get(drive_type)?;
+
+        if !self.drives.is_unlocked(drive_type) {
+            return None;
+        }
+
+        if drive.is_active() {
+            return Some(0);
+        }
+
+        let climbing = drive_type.base_accumulation_rate() * drive.pressure();
+        if climbing <= 0.0 {
+            return None;
+        }
+
+        Some(((drive.threshold - drive.value) / climbing).ceil().max(0.0) as u32)
+    }
+
+    /// The need that will take the turn off this one before it is finished,
+    /// and how long there is before it does.
+    ///
+    /// "The planner should attempt to anticipate drive demand increase so that
+    /// actions can be efficiently executed, reducing the odds of tasks being
+    /// dropped mid-completion." This is the question that asks: I am about to
+    /// spend `turns` on something - is there a need that outranks it and is
+    /// going to start asking before I am done?
+    ///
+    /// Rank decides what may interrupt what, which is the model's own answer
+    /// and not a second one: a primary need takes the turn from a secondary
+    /// one, and no amount of wanting a coat takes it from being thirsty. A
+    /// need in the same band as the one being served does not count, because
+    /// two needs of a kind trading places is the ordinary business of a day
+    /// and turning round for it is how an agent gets nothing done at all -
+    /// see `what_it_takes_to_turn_me_round`.
+    ///
+    /// **What counts as not waiting is the body's clock, not the threshold.**
+    /// Written against `how_long_before_this_asks` it fired on nearly every
+    /// job anybody ever started: hunger is a few turns off its threshold most
+    /// of the time and outranks everything that is not itself primary, so a
+    /// settlement stopped provisioning, stopped building and stopped making
+    /// tools, and did nothing but eat. Measured over 160 worlds that cost
+    /// between four and fifteen per cent of every block. A need being about to
+    /// *ask* is ordinary; a need that will have killed you before the job is
+    /// done is the one worth turning round for, and
+    /// `ticks_before_this_kills_me` is what the model already reckons the
+    /// primaries by.
+    pub fn what_will_not_wait_for(
+        &self,
+        this: crate::core::DriveType,
+        turns: u32,
+    ) -> Option<crate::core::DriveType> {
+        let mine = this.rank().precedence();
+
+        crate::core::DriveType::all()
+            .into_iter()
+            .filter(|other| *other != this)
+            .filter(|other| other.rank().precedence() > mine)
+            .filter(|other| {
+                self.state
+                    .ticks_before_this_kills_me(*other)
+                    .is_some_and(|left| left < turns as f32)
+            })
+            // Of the needs the job would outlast, the one that starts asking
+            // first, which is what an agent would deal with first anyway.
+            .filter_map(|other| Some((other, self.how_long_before_this_asks(other)?)))
+            .min_by_key(|(_, soon)| *soon)
+            .map(|(other, _)| other)
+    }
+
     /// What this agent most needs to do something about.
     ///
     /// `DriveState::most_urgent` compares drives against each other as though
