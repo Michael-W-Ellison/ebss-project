@@ -375,6 +375,88 @@ impl ResourceType {
         ]
     }
 
+    /// How fast a patch of this comes back once something has been taken off
+    /// it, in units per growing pass before the weather and the ground have
+    /// their say. Nought means it does not come back at all.
+    ///
+    /// **This is the one owner of what renews.** `is_renewable` used to keep
+    /// its own list of the same question and `remove_depleted_resources`
+    /// leaned on it to decide what to delete off the map when it was emptied -
+    /// and both lists had the same hole. Greens and Roots came in with the
+    /// rebuilt bearing year and neither list learned about them, so **63.6% of
+    /// the food on a map** - 3,308 units of greens and 1,550 of roots against
+    /// 2,784 of fish, with no berries and no grain standing at the turn of the
+    /// year - grew at nought a day *and was deleted from the world the moment
+    /// somebody finished a patch*. The comment on
+    /// `World::remove_depleted_resources` states the case against exactly what
+    /// it was doing: "deleting it would make berry patches and fish runs
+    /// single-use and drain the world of food permanently."
+    ///
+    /// Measured before: an empty map produced three units a day where a person
+    /// eats 11.5, twelve founders ate the country from 7,641 units down to 886
+    /// in a hundred days, and nine of the twelve were dead by the end of
+    /// spring. It was never a winter problem.
+    pub fn how_fast_it_comes_back(&self) -> f32 {
+        match self {
+            // Renewable resources
+            ResourceType::Wood => 0.01,       // Trees grow slowly
+            ResourceType::Food => 0.025,      // Berries and fruit, in their own time
+
+            // Leaf, which is the quickest thing there is and the reason
+            // there is anything to eat in April.
+            //
+            // This and `Roots` below were **not in this table at all**, and
+            // fell through to `_ => 0.0` with the minerals. They are 63% of
+            // the food on a map - 3,308 units of greens and 1,550 of roots
+            // against 2,784 of fish and, at the turn of the year, no berries
+            // and no grain standing at all - so nearly two thirds of what a
+            // settlement lives on was a **stock that never came back**. Eaten
+            // once and gone for good.
+            //
+            // Measured: a map with nobody on it produced 3 units a day where a
+            // person eats 11.5, and twelve founders ate the country from 7,641
+            // units down to 886 in a hundred days and went from twelve people
+            // to two and a half doing it. That is not a winter problem and
+            // never was; the ground simply did not grow anything.
+            //
+            // The cause is the one this project keeps finding: a hand-written
+            // list that did not learn about a variant added elsewhere. Greens
+            // and Roots came in with the bearing year - see
+            // `ResourceType::bearing_window` - and this match was written
+            // before them. `raw_scent_strength` had the same hole in the same
+            // week. The guard is below in `every_food_grows_back`.
+            ResourceType::Greens => 0.04,
+
+            // And a root is a season's work, so slower than a berry.
+            ResourceType::Roots => 0.02,
+
+            ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
+            ResourceType::Grain => 0.015,     // Wild grain is thin stuff
+            ResourceType::Herbs => 0.04,      // Herbs grow quickly
+            ResourceType::Flax => 0.03,
+            ResourceType::Cotton => 0.03,
+            ResourceType::Honey => 0.02,      // Bees produce honey steadily
+
+            // Slow renewable
+            ResourceType::Fish => 0.02,       // Fish populations regenerate
+
+            // Water is fed by what carries it, which is worked out from the
+            // ground it sits on rather than from a flat rate - see
+            // `water_inflow`.
+            ResourceType::Water => 0.0,
+
+            // Non-renewable (mineral resources don't regenerate)
+            ResourceType::Stone |
+            ResourceType::Iron |
+            ResourceType::Clay |
+            ResourceType::Sand |
+            ResourceType::Coal => 0.0,
+
+            // Processed/finished goods don't regenerate naturally
+            _ => 0.0,
+        }
+    }
+
     /// Whether a person can eat this.
     ///
     /// The same six the decision layer forages for. It lived there as
@@ -792,19 +874,11 @@ impl ResourceNode {
 
     /// Whether this resource regrows on its own once harvested
     pub fn is_renewable(&self) -> bool {
-        matches!(
-            self.resource_type,
-            ResourceType::Wood
-                | ResourceType::Food
-                | ResourceType::Grain
-                | ResourceType::Herbs
-                | ResourceType::Flax
-                | ResourceType::Cotton
-                | ResourceType::Honey
-                | ResourceType::Fish
-                // A river is not used up by the people drinking from it
-                | ResourceType::Water
-        )
+        // A river is not used up by the people drinking from it, and it is
+        // fed by `water_inflow` rather than by growing, so it is the one
+        // thing that renews without a growth rate.
+        self.resource_type == ResourceType::Water
+            || self.resource_type.how_fast_it_comes_back() > 0.0
     }
 
     /// Take in a fractional amount of water, carrying the remainder over.
@@ -1109,35 +1183,7 @@ impl ResourceNode {
         // careful, it made it range further and hoard worse. The waste in this
         // model is a behaviour and not a supply artefact, and starving people
         // does not fix a behaviour. See ISSUES_FOUND #57.
-        let base_rate = match self.resource_type {
-            // Renewable resources
-            ResourceType::Wood => 0.01,       // Trees grow slowly
-            ResourceType::Food => 0.025,      // Berries and fruit, in their own time
-            ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
-            ResourceType::Grain => 0.015,     // Wild grain is thin stuff
-            ResourceType::Herbs => 0.04,      // Herbs grow quickly
-            ResourceType::Flax => 0.03,
-            ResourceType::Cotton => 0.03,
-            ResourceType::Honey => 0.02,      // Bees produce honey steadily
-
-            // Slow renewable
-            ResourceType::Fish => 0.02,       // Fish populations regenerate
-
-            // Water is fed by what carries it, which is worked out from the
-            // ground it sits on rather than from a flat rate - see
-            // `water_inflow`.
-            ResourceType::Water => 0.0,
-
-            // Non-renewable (mineral resources don't regenerate)
-            ResourceType::Stone |
-            ResourceType::Iron |
-            ResourceType::Clay |
-            ResourceType::Sand |
-            ResourceType::Coal => 0.0,
-
-            // Processed/finished goods don't regenerate naturally
-            _ => 0.0,
-        };
+        let base_rate = self.resource_type.how_fast_it_comes_back();
 
         if base_rate == 0.0 {
             return 0;
@@ -1147,6 +1193,8 @@ impl ResourceNode {
         let temp_modifier = match self.resource_type {
             ResourceType::Food
             | ResourceType::Grain
+            | ResourceType::Greens
+            | ResourceType::Roots
             | ResourceType::Herbs
             | ResourceType::StrangePlant => {
                 // Plants prefer 15-25°C
@@ -1183,7 +1231,12 @@ impl ResourceNode {
 
         // Apply precipitation modifier (water availability)
         let precip_modifier = match self.resource_type {
-            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs | ResourceType::Flax => {
+            ResourceType::Food
+            | ResourceType::Grain
+            | ResourceType::Greens
+            | ResourceType::Roots
+            | ResourceType::Herbs
+            | ResourceType::Flax => {
                 // Most crops need moderate precipitation
                 if precipitation >= 0.4 && precipitation <= 0.8 {
                     1.5 // Good rainfall

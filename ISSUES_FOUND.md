@@ -7568,6 +7568,115 @@ say, ends the errand" - which nothing implements.
 
 ---
 
+### 123. Two thirds of the food on a map never grew back, and was deleted when eaten
+
+Asked to work on the winter food problem, and the first measurement said there
+was no winter food problem - there was barely a winter. Deaths by season over
+twelve worlds of twelve founders:
+
+| season | deaths a world | alive at the end of it |
+|---|---:|---:|
+| **Spring** | **9.0** | 3.00 |
+| Summer | 0.9 | 2.08 |
+| Autumn | 0.0 | 2.08 |
+| Winter | 1.8 | 0.33 |
+
+**Three quarters of everybody died in the first season.** Of the deaths with a
+cause on them, 80% were hunger or starvation. Winter was not killing
+settlements; it was finishing off the two or three people a settlement had left
+by the time it arrived.
+
+**Where the food went.** Day by day over sixteen worlds, the food standing on
+the whole map fell from 7,360 units on day one to **886 by day 101** - an 88%
+drawdown - while the population fell from twelve to two and a half. The ground
+only recovered once there was almost nobody left on it. So the question is what
+the ground produces, and the answer is best asked of a map with nobody on it at
+all:
+
+| a map nobody is standing on | |
+|---|---:|
+| food standing on day one | 7,641 |
+| most it ever holds, in autumn | 8,155 |
+| grown over a whole year | **514 units** |
+| what one person eats in a year | 4,147 |
+
+**The map grows enough food in a year to feed one person for forty-five days.**
+Stripped bare and left alone for a year it comes back to 3,038 units - 37% of
+what it started with - and stalls there.
+
+**Why.** Tracking each kind separately on ground stripped bare, only **Fish**
+ever came back. Greens, Roots, Food and Grain all sat at nought. And the
+composition of a map's food at the turn of the year is:
+
+| kind | units | share | grew back? |
+|---|---:|---:|---|
+| Greens | 3,308 | 43.3% | **no** |
+| Fish | 2,784 | 36.4% | yes |
+| Roots | 1,550 | 20.3% | **no** |
+| Food (berries) | 0 | - | yes, out of season |
+| Grain | 0 | - | yes, out of season |
+
+**Two thirds of everything a settlement eats was a stock that never came back**,
+and berries and grain - the two that do grow - have nothing standing at the
+turn of the year because their bearing windows open in summer and autumn.
+
+**And it was worse than not growing.** Instrumenting the growth pass, greens
+were never offered to it at all - not once in twenty days. The reason is at the
+end of every world tick: `World::remove_depleted_resources` keeps an emptied
+node only if `ResourceNode::is_renewable` says so, and that function kept **its
+own hand-written list** of what renews, with the same hole. So a patch of
+greens picked bare was **deleted off the map**, permanently, and could not have
+grown back if it had wanted to. The comment on that function states the case
+against precisely what it was doing:
+
+> A renewable node stays on the map when emptied so it can regrow; deleting it
+> would make berry patches and fish runs single-use and drain the world of food
+> permanently.
+
+Three hand-written lists asked what a resource is - `how_fast_it_comes_back`
+(then a local inside the growth function), `is_renewable`, and `is_it_grown` -
+and two of them had never learned about Greens and Roots, which came in with
+the rebuilt bearing year. It is the third time this month: `raw_scent_strength`
+had the same hole (#120), and so did the three spellings of "armed" (#121).
+
+**The fix.** The rate table is lifted onto the type as
+`ResourceType::how_fast_it_comes_back`, and `is_renewable` now *asks* it rather
+than answering for itself - water excepted, which is fed by `water_inflow` and
+is the one thing that renews without growing. Greens are given 0.04, the rate
+of herbs, because leaf is the quickest thing there is and the reason there is
+anything to eat in April; roots 0.02, because a root is a season's work.
+
+Two guards: everything that grows in the ground and can be eaten must have a
+rate, and nothing with a rate may be deleted off the map when it is emptied.
+
+**What it did.** Ground stripped bare now recovers its greens in eleven days
+and its roots in a fortnight. And over five paired seed blocks, 160 worlds of a
+full year:
+
+| seeds | before | after |
+|---|---:|---:|
+| 7000 | 1164 | 2694 |
+| 0 | 1079 | 2032 |
+| 64 | 1155 | 2098 |
+| 128 | 1206 | 2213 |
+| 192 | 1109 | 2285 |
+| **person-days** | **5713** | **11322 (+98%)** |
+
+Alive at midsummer 15.85 a block to **40.04**; alive at autumn 9.88 to
+**32.81**. Every block up, and a settlement of twelve now reaches midsummer
+with eight or nine people rather than three.
+
+**And now there is a winter problem.** Alive at the end of the year falls from
+2.59 a block to **1.82**, and worlds emptied inside the year goes from 84 of
+160 to **112**. A full settlement now arrives at winter with nothing put by -
+the pits held between half a unit and seven all year, against the 300 one
+holds - and the bearing year gives nothing between Fall-Deep and Spring-Early
+by design. Before this, everybody was dead by autumn and the store was never
+the question. It is the question now, and it is the first time it has been one.
+Filed.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

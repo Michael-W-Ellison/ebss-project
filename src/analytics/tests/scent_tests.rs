@@ -278,6 +278,39 @@ fn only_food_smells_of_food() {
     }
 }
 
+/// Everything a person can eat grows back, and everything that grows back
+/// stays on the map when it is emptied.
+///
+/// Three hand-written lists asked the same question and two of them had the
+/// same hole. `how_fast_it_comes_back` did not name **Greens** or **Roots**,
+/// so they grew at nothing; `is_renewable` did not name them either, so
+/// `World::remove_depleted_resources` **deleted the node off the map** the
+/// moment somebody finished a patch. Between them that made 63.6% of the food
+/// on a map single-use - eaten once and gone for good - which is the whole of
+/// why a settlement of twelve was down to three by the end of its first
+/// spring. See ISSUES_FOUND.md #123.
+///
+/// The two questions are one function now, and this holds it to the food list.
+#[test]
+fn everything_a_person_eats_grows_back() {
+    // Anything that stands in the ground as a crop. Meat is food and does not
+    // grow: it is what is left of an animal, and an eaten carcass is rightly
+    // deleted. Fish come up the river rather than growing back out of what is
+    // left of them - see `ResourceNode::fish_run`.
+    let crops = ResourceType::all()
+        .into_iter()
+        .filter(|kind| kind.is_it_food() && kind.is_it_grown());
+
+    for resource in crops {
+        assert!(
+            resource.how_fast_it_comes_back() > 0.0,
+            "{resource:?} grows in the ground and can be eaten, and it does not \
+             grow back - so a patch of it is eaten once and gone, and \
+             `remove_depleted_resources` will delete the node as well"
+        );
+    }
+}
+
 /// And every food carries at least as far as the thinnest of them, so nothing
 /// a settlement lives on is invisible to a nose.
 #[test]

@@ -367,3 +367,41 @@ fn a_hunt_asks_for_nothing_this_table_cannot_see() {
          `Simulation::could_bring_it_down` owns it. Still asked for: {wanted:?}"
     );
 }
+
+/// Nothing that grows back is deleted off the map when it is emptied.
+///
+/// `World::remove_depleted_resources` keeps a node at nought only if
+/// `is_renewable` says so, and `is_renewable` used to keep its own hand-written
+/// list of what grows. Greens and Roots were in neither list, so a patch picked
+/// bare ceased to exist. The comment on that function states the case against
+/// exactly what it was doing: "deleting it would make berry patches and fish
+/// runs single-use and drain the world of food permanently."
+#[test]
+fn a_patch_picked_bare_is_still_there_to_grow_back() {
+    use crate::world::{Position, ResourceNode, ResourceType, World, WorldConfig};
+
+    let growing: Vec<ResourceType> = ResourceType::all()
+        .into_iter()
+        .filter(|kind| kind.how_fast_it_comes_back() > 0.0)
+        .collect();
+
+    assert!(!growing.is_empty(), "something in this world grows");
+
+    let mut world = World::new(WorldConfig::default());
+    world.resources.clear();
+    for (which, kind) in growing.iter().enumerate() {
+        let mut node = ResourceNode::new(*kind, Position::new(which as i32, 0), 30);
+        node.amount = 0;
+        world.resources.push(node);
+    }
+
+    world.remove_depleted_resources();
+
+    for kind in growing {
+        assert!(
+            world.resources.iter().any(|node| node.resource_type == kind),
+            "a patch of {kind:?} was picked bare and the world deleted it, so it \
+             can never grow back"
+        );
+    }
+}
