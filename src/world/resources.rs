@@ -302,6 +302,79 @@ impl ResourceType {
     /// Whether this is a thing that grows out of the ground, and so a thing
     /// the ground's condition has a say in.
     ///
+    /// Every kind of resource there is.
+    ///
+    /// Wanted by anything that has to ask a question of the whole set - which
+    /// day of the year anything is bearing, for one. The exhaustive match in
+    /// `every_resource_is_listed` below fails to compile if a variant is added
+    /// and not put here, so this cannot quietly fall behind the enum.
+    pub fn all() -> [ResourceType; 43] {
+        [
+        ResourceType::Wood,
+        ResourceType::Stone,
+        ResourceType::Iron,
+        ResourceType::Food,
+        ResourceType::Water,
+        ResourceType::StrangePlant,
+        ResourceType::Greens,
+        ResourceType::Roots,
+        ResourceType::Grain,
+        ResourceType::Flax,
+        ResourceType::Herbs,
+        ResourceType::Cotton,
+        ResourceType::Hides,
+        ResourceType::Wool,
+        ResourceType::Meat,
+        ResourceType::Milk,
+        ResourceType::Fish,
+        ResourceType::Honey,
+        ResourceType::Clay,
+        ResourceType::Sand,
+        ResourceType::Coal,
+        ResourceType::Salt,
+        ResourceType::Flour,
+        ResourceType::Leather,
+        ResourceType::Cloth,
+        ResourceType::Linen,
+        ResourceType::Glass,
+        ResourceType::Bricks,
+        ResourceType::Charcoal,
+        ResourceType::Rope,
+        ResourceType::Paper,
+        ResourceType::Dye,
+        ResourceType::Bread,
+        ResourceType::Ale,
+        ResourceType::Cheese,
+        ResourceType::Clothing,
+        ResourceType::Shoes,
+        ResourceType::Tools,
+        ResourceType::Weapons,
+        ResourceType::Armor,
+        ResourceType::Pottery,
+        ResourceType::Furniture,
+        ResourceType::Jewelry,
+        ]
+    }
+
+    /// Whether a person can eat this.
+    ///
+    /// The same six the decision layer forages for. It lived there as
+    /// `edible_resources`, which is analytics-private, so anything outside
+    /// that layer wanting to know what counts as food had to write its own
+    /// list - and a second list is a list that drifts. What is edible is a
+    /// fact about a resource, so it lives on the resource.
+    pub fn is_it_food(&self) -> bool {
+        matches!(
+            self,
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Fish
+                | ResourceType::Meat
+        )
+    }
+
     /// A seam of clay does not care how rich the topsoil over it is; a
     /// hedgerow does.
     pub fn is_it_grown(&self) -> bool {
@@ -1246,5 +1319,74 @@ mod tests {
 
         node.harvest(50);
         assert!((node.percentage_remaining() - 0.0).abs() < 0.1);
+    }
+}
+
+#[cfg(test)]
+mod all_resources_tests {
+    use super::ResourceType;
+
+    /// `ResourceType::all()` has to list every variant, and nothing but a
+    /// match the compiler checks can promise that. Adding a variant to the
+    /// enum without adding it to `all()` fails to compile here.
+    #[test]
+    fn every_resource_is_listed() {
+        fn exhaustive(what: ResourceType) {
+            match what {
+            ResourceType::Wood => {}
+            ResourceType::Stone => {}
+            ResourceType::Iron => {}
+            ResourceType::Food => {}
+            ResourceType::Water => {}
+            ResourceType::StrangePlant => {}
+            ResourceType::Greens => {}
+            ResourceType::Roots => {}
+            ResourceType::Grain => {}
+            ResourceType::Flax => {}
+            ResourceType::Herbs => {}
+            ResourceType::Cotton => {}
+            ResourceType::Hides => {}
+            ResourceType::Wool => {}
+            ResourceType::Meat => {}
+            ResourceType::Milk => {}
+            ResourceType::Fish => {}
+            ResourceType::Honey => {}
+            ResourceType::Clay => {}
+            ResourceType::Sand => {}
+            ResourceType::Coal => {}
+            ResourceType::Salt => {}
+            ResourceType::Flour => {}
+            ResourceType::Leather => {}
+            ResourceType::Cloth => {}
+            ResourceType::Linen => {}
+            ResourceType::Glass => {}
+            ResourceType::Bricks => {}
+            ResourceType::Charcoal => {}
+            ResourceType::Rope => {}
+            ResourceType::Paper => {}
+            ResourceType::Dye => {}
+            ResourceType::Bread => {}
+            ResourceType::Ale => {}
+            ResourceType::Cheese => {}
+            ResourceType::Clothing => {}
+            ResourceType::Shoes => {}
+            ResourceType::Tools => {}
+            ResourceType::Weapons => {}
+            ResourceType::Armor => {}
+            ResourceType::Pottery => {}
+            ResourceType::Furniture => {}
+            ResourceType::Jewelry => {}
+            }
+        }
+
+        let all = ResourceType::all();
+        for what in all {
+            exhaustive(what);
+        }
+
+        let mut seen = all.to_vec();
+        seen.sort_by_key(|what| format!("{what:?}"));
+        seen.dedup();
+        assert_eq!(seen.len(), all.len(), "a resource is listed twice in all()");
     }
 }

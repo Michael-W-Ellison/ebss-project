@@ -46,6 +46,7 @@ fn main() {
         abandonment_happiness_threshold: -0.3,
         abandonment_unhappy_duration: 1000,
         abandonment_probability: 0.01,
+        ..PopulationConfig::default()
     };
 
     // Spawn initial agents near longhouse

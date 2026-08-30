@@ -4848,31 +4848,7 @@ impl Agent {
         self.pregnancy.is_some()
     }
 
-    /// How much food an agent has to be carrying, over and above its own
-    /// needs, before it will consider a child.
-    ///
-    /// A few days' eating for two. Not a stockpile - just enough that the
-    /// answer to "could this child be fed next week" is something other than
-    /// "I had a meal this morning".
-    pub const FOOD_TO_RAISE_A_CHILD: u32 = 4;
 
-    /// How full a body's reserve has to be for feeding itself to count as
-    /// having been easy.
-    ///
-    /// The reserve is three weeks of food, so this is a body that has lost
-    /// less than three days of it - one that has been eating enough to stay
-    /// topped up rather than scraping.
-    ///
-    /// This was `SETTLED_ENOUGH_TO_GROW`, twenty days of the Hunger drive
-    /// never once crossing its threshold. That was a fair reading when hunger
-    /// accumulated at a rate somebody chose. It is not one now: hunger is read
-    /// off the stomach, and a well-fed body crosses that threshold three times
-    /// a day because that is what three meals a day *is*. The counter reset
-    /// every few hours and could never reach twenty days for anybody, ever - so
-    /// this clause of the breeding gate failed 24,229 times out of 24,260
-    /// adult-turns, and a settlement could only breed on a full pack. See
-    /// ISSUES #76.
-    pub const WELL_FED: f32 = 0.85;
 
     /// How much of a stretch of going short counts against it.
     ///
@@ -4890,11 +4866,6 @@ impl Agent {
             .unwrap_or(true)
     }
 
-    /// How long hunger has not had to ask at all
-    pub fn food_has_been_easy(&self) -> bool {
-        self.state.physiology.reserve
-            >= self.state.physiology.reserve_capacity * Self::WELL_FED
-    }
 
     /// What the agent is carrying that it or a child could eat.
     ///
@@ -4936,13 +4907,52 @@ impl Agent {
             return false;
         }
 
-        // Either there is food in hand for two, or feeding themselves has
-        // simply not been a problem for a long stretch. The second matters as
-        // much as the first: an agent living beside a full field eats as it
-        // goes and carries nothing, and it is in a far better position to
-        // raise a child than one with a full pack on ground that has stopped
-        // giving.
-        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD || self.food_has_been_easy()
+        // There has to be food actually put by. Not "and also, alternatively,
+        // a full belly" - which is what the second half of this used to say,
+        // and which made the first half dead letter.
+        //
+        // `food_has_been_easy` reads the body's reserve, so it is true of
+        // every healthy agent in the model: measured, a fed agent sits at
+        // eighty-five to ninety-nine per cent of reserve, and the threshold is
+        // eighty-five. Behind an `||` that meant the pack was never once the
+        // binding question, and a settlement bred on the strength of having
+        // eaten that morning - the exact reading the paragraph above this one
+        // says is not good enough, written into the line underneath it.
+        //
+        // A full belly is not a surplus. A surplus is food that is still there
+        // tomorrow.
+        self.enough_put_by_for_a_child()
+    }
+
+    /// Whether there is enough put by to see this agent and a newborn through
+    /// the stretch of the year the land gives nothing.
+    ///
+    /// What is put by, not what has been eaten: the pack and this agent's
+    /// share of the camp's stores, with the stomach and the gut taken back off
+    /// - see `WhatIsPutBy::units_put_by`. Against what the two of them would
+    /// get through in that stretch, a newborn counting for a fifth of a grown
+    /// appetite on the specification's own table.
+    ///
+    /// This is the whole of "do not breed until there is a surplus", and it is
+    /// deliberately a hard number rather than a feeling. The settlement store
+    /// is sized at exactly this stretch for one mouth (see the store's
+    /// `what_one_mouth_wants_put_by`), so the gate says: breed when you have
+    /// more put by than you need for yourself.
+    ///
+    /// Falls back to the pack alone before the first reckoning of the year has
+    /// run, which is the only time `what_the_larder_says` is empty for a live
+    /// agent.
+    pub fn enough_put_by_for_a_child(&self) -> bool {
+        let gap = super::provision::how_long_the_land_gives_nothing() as f32;
+        let for_the_two_of_them = self.state.physiology.what_i_burn_in_a_day
+            * (1.0 + what_a_body_this_age_eats(0));
+
+        let put_by = match self.state.what_the_larder_says.as_ref() {
+            Some(larder) => larder.units_put_by(),
+            None => self.food_put_by() as f32 * super::provision::UNITS_IN_ONE_STORED_ITEM,
+        };
+
+        put_by >= for_the_two_of_them * gap
     }
 
     /// Check if agent should attempt reproduction given current survival state

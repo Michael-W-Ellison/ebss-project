@@ -78,27 +78,7 @@ impl Simulation {
     /// seventy-five days from the last root out of the cold ground to the
     /// first leaf.
     pub(in crate::analytics) fn how_long_the_hedgerows_give_nothing() -> u32 {
-        use crate::environment::seasons::DAYS_PER_YEAR;
-        static ANSWER: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
-
-        *ANSWER.get_or_init(|| {
-            // Round the turn of the year, so a run that straddles new year is
-            // one run and not two. Twice through the year, and only count the
-            // second lap.
-            let mut longest = 0;
-            let mut running = 0;
-            for day in 0..(DAYS_PER_YEAR * 2) {
-                running = if Self::are_the_hedgerows_bearing_on(day % DAYS_PER_YEAR) {
-                    0
-                } else {
-                    running + 1
-                };
-                if day >= DAYS_PER_YEAR {
-                    longest = longest.max(running.min(DAYS_PER_YEAR));
-                }
-            }
-            longest
-        })
+        crate::agents::provision::how_long_the_land_gives_nothing()
     }
 
     /// Whether anything a person can eat is growing anywhere on this day.
@@ -146,10 +126,13 @@ impl Simulation {
     ///
     /// Derived now, from the two things it is actually about: what a body eats
     /// in a day, and how many days the land gives it nothing.
+    /// Asked of a grown mouth. The breeding gate asks the same question about
+    /// a newborn, so the arithmetic lives in `provision` and both come here
+    /// for it - two spellings of one sum gave 864 and 865 for the same thing.
     pub(in crate::analytics) fn what_one_mouth_wants_put_by() -> u32 {
-        (crate::agents::provision::WHAT_A_BODY_EATS_IN_A_DAY
-            * Self::how_long_the_hedgerows_give_nothing() as f32)
-            .ceil() as u32
+        crate::agents::provision::what_one_mouth_this_age_wants_put_by(
+            crate::agents::agent::Agent::WHAT_AGE_A_PERSON_IS_UNLESS_TOLD,
+        )
     }
 
     /// Whether the larder round here still wants filling.

@@ -588,6 +588,20 @@ fn there_is_no_gender_left_to_refuse_anybody() {
         agent.reproduction_drive_modifier = 1.5;
         agent.developmental_nutrition.finalized = true;
         agent.developmental_nutrition.stat_modifiers.fertility = 1.0;
+
+        // And a stocked larder, for the same reason the fertility is forced:
+        // breeding now waits on a real surplus, and a settlement with nothing
+        // put by refuses everybody. That is a perfectly good reason to refuse
+        // a pair and it is not the one under test here - see
+        // `a_child_waits_on_a_surplus_and_not_on_a_full_stomach`.
+        let a_day = agent.state.physiology.what_i_burn_in_a_day;
+        let gap = crate::agents::provision::how_long_the_land_gives_nothing() as f32;
+        agent.state.what_the_larder_says = Some(crate::agents::provision::WhatIsPutBy::reckon(
+            a_day * 2.0 * gap,
+            a_day,
+            90.0,
+            0,
+        ));
     }
 
     assert!(
@@ -602,4 +616,100 @@ fn there_is_no_gender_left_to_refuse_anybody() {
     // And it is not that everything passes: a child is still refused.
     let child = somebody_of(7, (2, 0, 0));
     assert!(!can_mate(&one, &child, &criteria));
+}
+
+
+// ---------------------------------------------------------------------------
+// Breeding on a surplus, and taking old age off the board
+// ---------------------------------------------------------------------------
+
+/// The hungry gap is derived from the bearing windows, not picked, and the
+/// store and the breeding gate get it from the same place.
+#[test]
+fn the_hungry_gap_is_derived_once() {
+    use crate::agents::provision::{
+        how_long_the_land_gives_nothing, is_anything_bearing_on,
+        what_one_mouth_this_age_wants_put_by, WHAT_A_BODY_EATS_IN_A_DAY,
+    };
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let gap = how_long_the_land_gives_nothing();
+    assert!(gap > 0 && gap < DAYS_PER_YEAR, "a gap of {gap} days is not a year");
+
+    // It has to be a real run of days with nothing bearing on any of them.
+    let mut longest = 0;
+    let mut running = 0;
+    for day in 0..(DAYS_PER_YEAR * 2) {
+        running = if is_anything_bearing_on(day % DAYS_PER_YEAR) { 0 } else { running + 1 };
+        if day >= DAYS_PER_YEAR {
+            longest = longest.max(running.min(DAYS_PER_YEAR));
+        }
+    }
+    assert_eq!(gap, longest);
+
+    // And what one mouth wants put by is that stretch times what it eats.
+    let grown = what_one_mouth_this_age_wants_put_by(30);
+    assert_eq!(grown, (WHAT_A_BODY_EATS_IN_A_DAY * gap as f32).ceil() as u32);
+
+    // A newborn is a fifth of a grown appetite on the specification's table,
+    // so it wants about a fifth as much.
+    let newborn = what_one_mouth_this_age_wants_put_by(0);
+    assert!(
+        newborn * 4 < grown && newborn * 6 > grown,
+        "a newborn wants about a fifth of a grown mouth: {newborn} against {grown}"
+    );
+}
+
+/// What is in the stomach is not what is put by.
+#[test]
+fn a_swallowed_meal_is_not_a_store() {
+    use crate::agents::provision::WhatIsPutBy;
+
+    let reckoning = WhatIsPutBy::reckon(1000.0, 1440.0, 90.0, 0);
+    assert_eq!(reckoning.units_put_by(), 1000.0, "nothing said to be in the body");
+
+    let half_eaten = WhatIsPutBy::reckon(1000.0, 1440.0, 90.0, 0).of_which_in_the_body(400.0);
+    assert_eq!(half_eaten.units_put_by(), 600.0);
+
+    // And it cannot go negative or exceed what there is.
+    let all_of_it = WhatIsPutBy::reckon(1000.0, 1440.0, 90.0, 0).of_which_in_the_body(9999.0);
+    assert_eq!(all_of_it.units_put_by(), 0.0);
+}
+
+/// Old age takes you at seventy, and can be taken off the board for a run that
+/// is measuring something else.
+#[test]
+fn old_age_can_be_taken_off_the_board() {
+    use crate::agents::{AgentConfig, Population};
+
+    let mut ordinary = Population::new();
+    ordinary.spawn_agent(AgentConfig::default());
+    let takes_you = ordinary.agents[0].state.max_age;
+    assert!(
+        takes_you < u32::MAX,
+        "an ordinary run keeps the seventieth year"
+    );
+    assert_eq!(
+        takes_you,
+        crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
+            * crate::environment::TICKS_PER_YEAR,
+        "and it is the specification's seventy years"
+    );
+
+    let mut deathless = Population::new();
+    deathless.config.nobody_dies_of_old_age = true;
+    deathless.spawn_agent(AgentConfig::default());
+    assert_eq!(deathless.agents[0].state.max_age, u32::MAX);
+
+    // And it holds: a body past seventy is still alive.
+    let agent = &mut deathless.agents[0];
+    agent.state.age = crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
+        * crate::environment::TICKS_PER_YEAR
+        + 1;
+    agent.state.health = 100.0;
+    agent.state.age_tick_with_modifier(agent.state.age, 1.0);
+    assert!(
+        agent.state.is_alive,
+        "nobody in this population dies of old age"
+    );
 }

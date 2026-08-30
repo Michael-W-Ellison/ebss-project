@@ -369,7 +369,8 @@ impl Simulation {
                 agent.state.physiology.what_i_burn_in_a_day,
                 agent.state.winters_seen.how_long_a_winter_lasts(),
                 day_of_year,
-            );
+            )
+            .of_which_in_the_body(in_the_body);
 
             if let Some(drive) = agent.drives.get_mut(DriveType::Preparedness) {
                 drive.value = reckoning.stress();

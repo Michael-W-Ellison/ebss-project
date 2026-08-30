@@ -444,6 +444,9 @@ mod tests {
             }
         }
 
+        with_a_full_larder(&mut other);
+        with_a_full_larder(&mut carrier);
+
         (other, carrier)
     }
 
@@ -456,6 +459,21 @@ mod tests {
 
     /// Give an agent food in hand, which reproduction now requires: being
     /// un-hungry for a moment says nothing about whether the next meal exists.
+    /// A camp with a lean season's eating in the ground for two.
+    ///
+    /// Breeding waits on a real surplus now, and a surplus is the camp's
+    /// stores rather than anything a person carries - a pack holds twelve
+    /// weight, which is about two days' food. Tests here are about *pairing*,
+    /// so they stock the larder and let the food gate pass; the gate itself is
+    /// tested in `a_child_waits_on_a_surplus_and_not_on_a_full_stomach`.
+    fn with_a_full_larder(agent: &mut Agent) {
+        let a_day = agent.state.physiology.what_i_burn_in_a_day;
+        let gap = crate::agents::provision::how_long_the_land_gives_nothing() as f32;
+        agent.state.what_the_larder_says = Some(
+            crate::agents::provision::WhatIsPutBy::reckon(a_day * 2.0 * gap, a_day, 90.0, 0),
+        );
+    }
+
     fn give_food(agent: &mut Agent, quantity: u32) {
         use crate::agents::InventoryItem;
         use crate::world::nutrition::FoodDatabase;
@@ -539,7 +557,14 @@ mod tests {
     /// at this moment.
     #[test]
     fn a_pair_with_nothing_put_by_do_not_have_a_child() {
-        let (other, carrier) = create_mating_pair();
+        let (mut other, mut carrier) = create_mating_pair();
+
+        // Nothing put by: no pack, and an empty camp. This is the one test
+        // here that is about the food gate, so it takes back what
+        // `create_mating_pair` stocked.
+        for agent in [&mut other, &mut carrier] {
+            agent.state.what_the_larder_says = None;
+        }
 
         let criteria = MateSelectionCriteria::default();
         assert!(
@@ -566,6 +591,9 @@ mod tests {
         agent1.state.position = (0, 0, 0);
         agent2.state.position = (10, 10, 0);
 
+        with_a_full_larder(&mut agent1);
+        with_a_full_larder(&mut agent2);
+
         let criteria = MateSelectionCriteria::default();
         assert!(
             can_mate(&agent1, &agent2, &criteria),
@@ -590,6 +618,9 @@ mod tests {
         let mut agent2 = Agent::new(AgentConfig::default());
         agent1.state.now_this_many_years_old(30);
         agent2.state.now_this_many_years_old(30);
+
+        with_a_full_larder(&mut agent1);
+        with_a_full_larder(&mut agent2);
 
         let criteria = MateSelectionCriteria::default();
         assert!(can_mate(&agent1, &agent2, &criteria));
@@ -756,11 +787,12 @@ mod tests {
         use crate::core::DriveType;
 
         let mut agent = Agent::new(AgentConfig::default());
-        agent.state.age = 3000;
-        agent.state.life_stage = crate::agents::LifeStage::Adult;
-        give_food(&mut agent, 12);
+        // Years, not ticks - 3,000 ticks is most of one year, and a year is
+        // 4,320. The life stage was then set by hand to paper over it.
+        agent.state.now_this_many_years_old(30);
+        with_a_full_larder(&mut agent);
 
-        // Fed, watered, and carrying enough for two: should attempt reproduction
+        // Fed, watered, and a lean season in the ground: should attempt
         assert!(agent.should_attempt_reproduction());
 
         // Hungry agent should NOT attempt reproduction

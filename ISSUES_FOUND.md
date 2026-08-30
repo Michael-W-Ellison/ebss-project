@@ -6682,6 +6682,176 @@ requires that every grown pair be allowed and every child pair refused.
 
 ---
 
+### 113. Why they still starve: a trickle that never fails, and a pack that holds two days
+
+The food year was rebalanced (#107), the world stopped being seeded with
+summer fruit in winter (#108), and the store was given a real target (#109).
+Settlements still empty. This is what is actually killing them, measured
+rather than guessed.
+
+**It is not that there is no food.** Over four worlds of half a year, taking
+every living agent every tick and splitting them by how full their reserve is:
+
+| | starving (reserve under 15%) | fed (reserve over 60%) |
+|---|---|---|
+| food units within 25 paces | **20** | **618** |
+| patches within 25 paces | 3.9 | 25.9 |
+| biggest patch within 25 paces | **7.4** | 64.6 |
+| food in own pack | 0.5 items | - |
+
+A body burns 1,440 units a day. **The best patch within reach of a starving
+agent holds seven and a half units** - half a per cent of one day's food - and
+there are four such patches. The fed are standing in thirty times as much. The
+two groups are in the same world on the same day.
+
+**And `Eat` never fails.** Over eight worlds of a full year: 24,861 `Eat`
+actions, **nought failures**. Not one. The executor has three ways to refuse -
+too full, the patch was empty, nothing within the forage radius - and in a year
+of twelve settlements starving to death none of them fired, because a patch
+holding seven units is not an empty patch. An agent in stripped ground
+successfully eats a trickle, every turn, until it dies.
+
+That is the mechanism, and it is why none of the food-year work reached it.
+Every signal that could tell an agent to leave ground that will not feed it is
+driven by something *failing*, and nothing fails. The settlement's own
+`Gather` refuses 500 times for "No food sources nearby"; `Eat`, which is the
+verb that would notice, refuses nought times. A rule that fires on failure
+cannot see a slow death.
+
+**The second half: a pack holds twelve weight.** `Inventory::max_weight` is
+12.0 and food weighs 0.5, so a pack holds **twenty-four items of food, which is
+two days' eating** against the 11.52 a body gets through in a day. Measured
+over the same eight worlds, 11,656 items of food went into packs and **56,020
+would not fit** - five dropped for every one kept. So nobody can carry a store,
+nobody can provision a walk to better ground, and a settlement is obliged to
+live where it stands and eat what is underfoot. This is #215 and #216 arriving
+from the other direction: they were filed as a wrong constant, and they are
+also the reason the larder never fills.
+
+**What the numbers rule out.** Density is not the whole story: a lone agent on
+an empty world survives its first year 62% of the time and starves nought
+times, while at twelve founders 77% of everybody dies of hunger. But it is not
+simple crowding either - the survivors of a collapsed settlement sit at
+85-99% of reserve for the rest of the year, comfortable, on the same map. What
+the land supports is not twelve people; it is however many happen to be
+standing somewhere that bears.
+
+**A correction to my own first reading.** I ran the food ledger, saw 474 items
+eaten against the ~50,000 twelve people need in a year, and drafted the
+conclusion that nobody eats at all. That was wrong: `food_i_ate` is incremented
+only in `eat_food_item`, and the forage branch of the `Eat` executor feeds the
+body directly through `physiology::eat` without going near it. The counter
+measures eating *out of the pack* and always has. Worth writing down twice
+over - once because the number is misleading to anybody who finds it, and once
+because it is the same defect as everything else in this entry: a measurement
+that only sees one of two paths.
+
+Filed as #229 (leave ground that will not feed you, on a signal that is not a
+failure) and #230 (a pack that holds two days cannot provision anything).
+
+---
+
+### 114. Breeding on a full belly, and one derivation spelled two ways
+
+"Agents should not be reproducing until there is surplus food." They were, and
+the reason is one `||`.
+
+`expects_to_be_able_to_feed_a_child` read:
+
+```rust
+self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD || self.food_has_been_easy()
+```
+
+with a careful paragraph above it explaining that "am I hungry this minute" is
+not the question, that it says nothing about the next meal, and that a person
+who ate today but has nothing put by is in no position to raise a child. And
+then `food_has_been_easy` is `reserve >= reserve_capacity * 0.85` - which is
+"am I full this minute" - and it is behind an `||`, so it is sufficient on its
+own. Measured, a fed agent in this model sits between 85% and 99% of reserve.
+The clause was true of every healthy adult alive, the pack was **never once**
+the binding question, and the reasoning written directly above the line was
+contradicted by the line.
+
+`FOOD_TO_RAISE_A_CHILD` was four items - about eight hours' eating for a grown
+body - so even when it did bind it was asking "could you feed this child until
+Tuesday".
+
+**What it is now.** A surplus is food that is still there tomorrow, so the gate
+asks for what is *put by*: the pack and this agent's share of the camp's
+stores, with the stomach and the gut taken back off, against what the parent
+and a newborn would eat between now and the land bearing again.
+
+- The stretch is `how_long_the_land_gives_nothing()` - derived from the bearing
+  windows, 75 days, not picked.
+- The newborn is a fifth of a grown appetite, off the specification's own food
+  table.
+- `WhatIsPutBy` gained `units_in_the_body`, because the reckoning counts what
+  is in the stomach (rightly - somebody who has just eaten is not short of
+  supper) and a breeding gate has to be able to take it off again.
+
+Which puts the gate at exactly the store's own target and a fifth: **breed when
+you have more put by than you need for yourself.**
+
+It also settles what a surplus can and cannot be. A pack holds twelve weight,
+which is two days' food (#113), so a surplus worth breeding on was never
+something a person could be *carrying*. It is the camp's stores or it is
+nothing.
+
+**One derivation, one answer.** The hungry gap was derived inside the decision
+layer's store code, where nothing outside that layer could reach it, so the
+breeding gate had to derive it again - and the two spellings of the same sum
+came out 864 and 865 through float ordering alone. Both now come to
+`provision::how_long_the_land_gives_nothing`, which is where the file's own doc
+comment already said this kind of figure belongs ("so that anything sizing a
+store against a stretch of days has one place to get it from and cannot pick
+its own"). `ResourceType` gained `is_it_food` and `all`, so "what counts as
+food" is a fact about a resource rather than a list private to analytics;
+`all()` is guarded by an exhaustive match that fails to compile if a variant is
+added and not listed.
+
+**Measured, paired over thirty-two seeds:**
+
+| | before | after |
+|---|---|---|
+| births | 20 | **0** |
+| alive at the end | 18 | 21 |
+| person-days | 31,718 | 32,257 |
+| worlds emptied | 14 / 32 | 12 / 32 |
+| hunger deaths | 299 | 301 |
+
+Births to nought, which is the point: no settlement in this model has a lean
+season's eating in the ground, so no settlement can afford a child, and it
+should not be having one. Survival is marginally *better* for it. Births come
+back when the larder does, and the gate is the thing that will say so.
+
+**And old age, taken off the board.** `PopulationConfig::nobody_dies_of_old_age`
+sets `max_age` past reach, honoured at both ways into a population - spawned as
+a founder and born - because a switch honoured in one of them works until the
+first birth. Default false, and it is worth being plain about why that costs
+nothing: over sixteen worlds of a full year **every death in the model was
+hunger or thirst and not one was old age**, because founders are twenty to
+forty and nobody has ever lived to seventy. It is insurance against a confound
+in a multi-year run, not a fix for anything, and turning it on today would
+change no number in this document.
+
+**Tests: 26 failing to 24, none new.** Two cleared, and they are the two that
+had been asserting this all along - `a_pair_with_nothing_put_by_do_not_have_a_child`
+and `a_child_waits_on_a_surplus_and_not_on_a_full_stomach`. The model had been
+failing its own stated rule and the tests had been right about it.
+
+Three fixtures were wrong in the same way and are corrected here:
+`fed_adult` set `state.age = 4000` - *ticks*, from the calendar where a year
+was about eleven hundred of them - so "a fed adult" was a body in its first
+year. The same slip as the one `a_hungry_year_takes_the_children_first` found
+and wrote down. And `a_settlement_lives_through_a_winter` went from eight
+seeded worlds to thirty-two: at eight it flipped to zero survivors on a change
+that improved every count underneath it, which is the failure mode its own doc
+comment predicted for asserting a *rate* and is just as true of asserting "at
+least one". Seeds 0..32 have eleven settlements alive at the end. The suite
+costs 45 seconds more for it.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

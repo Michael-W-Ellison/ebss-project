@@ -109,6 +109,21 @@ pub struct PopulationConfig {
     pub abandonment_unhappy_duration: u32,
     /// Probability per tick that an unhappy agent will leave
     pub abandonment_probability: f32,
+    /// Whether anybody in this population ever dies of old age.
+    ///
+    /// True in an ordinary run: the specification says "Age 70: Death from old
+    /// age" and the model obeys it. Set false to take the seventieth year off
+    /// the board entirely, so that a long run measures the food economy and
+    /// nothing else - a settlement that empties has then emptied for a reason
+    /// worth reading.
+    ///
+    /// It is worth saying plainly that at present this changes nothing: over
+    /// sixteen worlds of a full year, every death in the model was hunger or
+    /// thirst and **not one was old age**, because founders are twenty to
+    /// forty and nobody has ever lived long enough to reach seventy. This is
+    /// insurance against a confound in multi-year runs, not a fix for
+    /// anything. See ISSUES #113.
+    pub nobody_dies_of_old_age: bool,
 }
 
 impl Default for PopulationConfig {
@@ -117,6 +132,7 @@ impl Default for PopulationConfig {
             abandonment_happiness_threshold: -0.3, // Leave if happiness below -0.3
             abandonment_unhappy_duration: 1000,    // Must be unhappy for 1000 ticks
             abandonment_probability: 0.01,         // 1% chance per tick when eligible
+            nobody_dies_of_old_age: false,
         }
     }
 }
@@ -323,8 +339,23 @@ impl Population {
         // everything else - an agent that cannot make an axe stops trying to
         // quite so often.
 
+        self.let_this_one_live_forever_if_asked(&mut agent);
+
         self.agents.push(agent);
         self.stats.current_population = self.agents.len();
+    }
+
+    /// Take the seventieth year off the board for this one, if the population
+    /// was configured that way.
+    ///
+    /// Applied at both ends of the only two ways into a population - spawned
+    /// as a founder, and born - because a switch honoured in one of them is a
+    /// switch that works until the first birth. See
+    /// `PopulationConfig::nobody_dies_of_old_age`.
+    fn let_this_one_live_forever_if_asked(&self, agent: &mut Agent) {
+        if self.config.nobody_dies_of_old_age {
+            agent.state.max_age = u32::MAX;
+        }
     }
 
     /// Get current population size (alive agents only)
@@ -1202,6 +1233,9 @@ impl Population {
                 let mother = &self.agents[mother_idx];
                 reproduce(mother, mother, self.current_tick)
             };
+
+            let mut offspring = offspring;
+            self.let_this_one_live_forever_if_asked(&mut offspring);
 
             let child_id = offspring.id;
             let mother_id = self.agents[mother_idx].id;
