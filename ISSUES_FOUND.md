@@ -6594,6 +6594,94 @@ births in 308,000 turns. Filed and done next rather than tacked on here.
 
 ---
 
+### 112. Half of every candidate pairing was refused on a distinction the specification does not have
+
+"Agents are gender neutral. There are no male/female agents, merely child and
+adult agents." The model had a `Gender` enum on every agent, and forty-four
+references to it across ten files. `can_mate` opened with a match that took
+`(Male, Female)` or `(Female, Male)` and returned false for anything else;
+pregnancy could only be started on the female and only be read off her; and
+`give_birth` placed the newborn at `parent1.state.position` if parent1 was
+female and at parent2's otherwise, with a silent default of 0.8 prenatal
+nutrition when neither was - which nothing could reach, and which is the shape
+a rule takes when it is written around a field rather than around a fact.
+
+**What it cost.** Gender was rolled at spawn on an even coin. A settlement of
+twelve therefore has about half of its 66 possible pairs refused before
+fertility, distance, trust, or food put by is asked about at all - in a model
+whose largest single failure is that nobody is born.
+
+**What replaced it.** `can_mate` now asks three things: two different people,
+neither already carrying, both fertile. `attempt_impregnation(male, female)`
+became `attempt_impregnation(carrier, other)`, and which of a pair carries is
+the *caller's* decision rather than a property of either of them. Both callers
+- the population pairing pass and the `Mate` executor - choose the carrier by
+the lower of the two ids: a coin that always lands the same way for the same
+pair, which keeps the run repeatable without putting the distinction back on
+the agent. Prenatal nutrition and the newborn's position are read off whoever
+actually holds the pregnancy, so there is no default left to be silently
+wrong. `can_become_pregnant` and `can_impregnate` collapsed into
+`can_carry_a_child`. `src/agents/gender.rs` is deleted, along with the field,
+the four GUI call sites that displayed it, and the map colouring that used it.
+
+**Measured, and it is a genuine trade.** Two blocks of thirty-two worlds,
+4,320 ticks each, paired seeds before and after:
+
+| | before | after |
+|---|---|---|
+| pairings attempted | 40, 23 | 92, 102 |
+| births | 13, 10 | 19, 25 |
+| alive at the end (96 worlds) | 3534 | 3160 |
+| worlds emptied | 49 / 96 | 59 / 96 |
+
+Pairings roughly quadrupled and births roughly doubled, which is the change
+doing exactly what the arithmetic said it would. **Survival fell about eleven
+per cent**, and that is not a defect in this change: a settlement that could
+not feed twelve now cannot feed twelve plus infants, so the extra children are
+being born into the food shortage that #109, #208 and #213 have each moved and
+none has closed. The model is specification-conformant and harder, and the
+births are now real enough to make the shortage the thing that shows.
+
+**A correction to the status report.** It gave `Mate` two firings and read that
+as the reproduction path being all but dead. Two was measured before this
+session's food-year work; re-measured on the current head the baseline is 13
+and 10 births per thirty-two worlds. The path was not dead, it was halved.
+
+Failing tests 29 to 26, taken as a set difference against a worktree at the
+previous head rather than by counting. Five cleared:
+`being_told_lets_you_try_it_rather_than_making_you_believe_it`,
+`a_settlement_of_the_suspicious_still_feeds_itself`,
+`agents_do_not_stay_frozen_over_a_long_run`,
+`population_feeds_itself_over_a_long_run`, and
+`what_agents_do_in_a_run_becomes_something_they_know`. Two new:
+`a_cold_agent_ends_up_dressed` and
+`the_young_are_kept_warm_by_the_adults_around_them`.
+
+Neither of the two new ones is about clothing or warmth. Read the panics: the
+first is `index out of bounds: the len is 0 but the index is 0` reaching for
+`agents[0]`, and the second compares 37.0 against `inf`, which is a mean taken
+over an empty set. Both worlds emptied. That is the eleven per cent arriving
+in the two tests whose settlements were closest to the edge, and it also says
+something about the tests - a settlement test that indexes `agents[0]` without
+asking whether anybody is left reports a wiped-out world as an index panic, and
+one that averages without a count reports it as `inf`. Filed as #228: a run
+that ends with nobody alive should fail saying so.
+
+`a_pair_with_nothing_put_by_do_not_have_a_child` fails, and was failing before
+this change too - a fresh agent's reserve is full, `food_has_been_easy` reads a
+full reserve as food having been easy, and so an agent carrying nothing passes
+the gate that the test says it should not. That is #227's question and it is
+not this change's to answer.
+
+The four gender tests were rewritten rather than deleted:
+`any_two_grown_people_can_pair` (which was `test_cannot_mate_same_gender`, and
+asserted the opposite), `nobody_pairs_with_themselves`,
+`nobody_already_carrying_starts_another`, and
+`there_is_no_gender_left_to_refuse_anybody`, which pairs ten agents and
+requires that every grown pair be allowed and every child pair refused.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

@@ -564,3 +564,42 @@ fn a_child_under_ten_cannot_cook() {
         refused.message
     );
 }
+
+/// There are no male or female agents, merely child and adult ones.
+///
+/// The type is gone, so this asserts on the *consequence*: two grown people
+/// with nothing to distinguish them but their ids can pair. The gendered rule
+/// refused about half of all such pairs, and measured over thirty-two worlds
+/// that refusal was costing a settlement roughly half its births.
+#[test]
+fn there_is_no_gender_left_to_refuse_anybody() {
+    use crate::agents::{can_mate, MateSelectionCriteria};
+
+    let criteria = MateSelectionCriteria::default();
+
+    // Fertility forced, so that the only thing left that could refuse them is
+    // who they are. The first cut of this ran ten random pairs and got nine:
+    // the tenth was refused on a low fertility draw, which is a perfectly good
+    // reason and not the one under test.
+    let mut one = somebody_of(30, (0, 0, 0));
+    let mut two = somebody_of(30, (2, 0, 0));
+    for agent in [&mut one, &mut two] {
+        agent.traits = Default::default();
+        agent.reproduction_drive_modifier = 1.5;
+        agent.developmental_nutrition.finalized = true;
+        agent.developmental_nutrition.stat_modifiers.fertility = 1.0;
+    }
+
+    assert!(
+        can_mate(&one, &two, &criteria),
+        "two grown people, and nothing else to say about them: {:.2} and {:.2} \
+         against a bar of {:.2}",
+        one.fertility(),
+        two.fertility(),
+        criteria.min_fertility
+    );
+
+    // And it is not that everything passes: a child is still refused.
+    let child = somebody_of(7, (2, 0, 0));
+    assert!(!can_mate(&one, &child, &criteria));
+}

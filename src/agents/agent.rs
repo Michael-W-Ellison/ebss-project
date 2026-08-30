@@ -1376,9 +1376,7 @@ pub struct Agent {
     pub learning_exposure: crate::core::learning::LearningExposure,
     /// Nutritional state (energy, protein, micronutrients)
     pub nutrition: NutritionalState,
-    /// Biological gender
-    pub gender: super::gender::Gender,
-    /// Pregnancy state (for females)
+    /// Pregnancy state, on whichever of the pair is carrying
     pub pregnancy: Option<super::pregnancy::PregnancyState>,
     /// Nursing state (for infants)
     pub nursing: Option<super::childcare::NursingState>,
@@ -1444,7 +1442,6 @@ impl Agent {
             plan_step_ticks: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
             nutrition: NutritionalState::new(),
-            gender: super::gender::Gender::random(),
             pregnancy: None,
             nursing: None,
             developmental_nutrition: super::childcare::DevelopmentalNutrition::default(),
@@ -4822,8 +4819,8 @@ impl Agent {
             return false;
         }
 
-        // Females cannot reproduce while pregnant
-        if self.gender.can_become_pregnant() && self.pregnancy.is_some() {
+        // Nobody already carrying a child starts another
+        if self.pregnancy.is_some() {
             return false;
         }
 
@@ -4835,14 +4832,15 @@ impl Agent {
         self.traits.has(crate::core::traits::Trait::Infertile)
     }
 
-    /// Check if female agent can become pregnant
-    pub fn can_become_pregnant(&self) -> bool {
-        self.can_reproduce() && self.gender.can_become_pregnant() && self.pregnancy.is_none()
-    }
-
-    /// Check if male agent can impregnate
-    pub fn can_impregnate(&self) -> bool {
-        self.can_reproduce() && self.gender.can_impregnate()
+    /// Whether this agent could carry a child.
+    ///
+    /// Anybody grown who is not already carrying one. There is no gender in
+    /// this model - "agents are gender neutral; there are no male/female
+    /// agents, merely child and adult agents" - so this replaces both
+    /// `can_become_pregnant`, which asked whether somebody was female, and
+    /// `can_impregnate`, which asked whether they were not.
+    pub fn can_carry_a_child(&self) -> bool {
+        self.can_reproduce() && self.pregnancy.is_none()
     }
 
     /// Check if this agent is currently pregnant

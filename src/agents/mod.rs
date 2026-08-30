@@ -13,7 +13,6 @@ pub mod temperature;
 pub mod observational_learning;
 pub mod transport;
 pub mod drive_satisfaction;
-pub mod gender;
 pub mod pregnancy;
 pub mod childcare;
 pub mod fatigue;
@@ -62,7 +61,6 @@ pub use transport::{
 pub use drive_satisfaction::{
     SatisfactionTracker, DriveSatisfactionTracker, SatisfactionRecord,
 };
-pub use gender::Gender;
 pub use pregnancy::PregnancyState;
 pub use childcare::{DevelopmentalNutrition, NursingState, StatModifiers};
 pub use fatigue::{FatigueState, FatigueSeverity, SleepQualityFactors};

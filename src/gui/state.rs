@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 use uuid::Uuid;
-use crate::agents::{LifeStage, Gender, JobCategory};
+use crate::agents::{LifeStage, JobCategory};
 use crate::core::DriveType;
 use crate::world::{Position, BuildingType, ResourceType, TerrainType};
 use super::events::TimelineState;
@@ -104,7 +104,6 @@ pub struct AgentSnapshot {
     pub relationship_count: usize,
     pub inventory_count: u32,
     pub current_activity: Option<String>,
-    pub gender: Gender,
     pub inferred_job: Option<JobCategory>,
 }
 
@@ -149,7 +148,6 @@ pub struct SimulationSnapshot {
 pub struct SelectedAgentData {
     pub id: Uuid,
     pub name: String,
-    pub gender: Gender,
     pub position: (i32, i32, i32),
     pub health: f32,
     pub energy: f32,
@@ -637,13 +635,6 @@ impl AgentMapFilter {
             LifeStage::Adolescent => self.show_adolescent,
             LifeStage::Adult => self.show_adult,
             LifeStage::Elderly => self.show_elderly,
-        }
-    }
-
-    pub fn show_gender(&self, gender: Gender) -> bool {
-        match gender {
-            Gender::Male => self.show_male,
-            Gender::Female => self.show_female,
         }
     }
 

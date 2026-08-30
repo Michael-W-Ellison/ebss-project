@@ -1084,19 +1084,33 @@ impl Population {
                         .unwrap_or(false);
 
                     if drive1 && drive2 {
-                        // Determine male/female for impregnation
-                        use crate::agents::gender::Gender;
-                        let (male_idx, female_idx) = match (agent1.gender, agent2.gender) {
-                            (Gender::Male, Gender::Female) => (idx1, idx2),
-                            (Gender::Female, Gender::Male) => (idx2, idx1),
-                            _ => continue, // Same-sex pairs can't reproduce
+                        // Which of the two carries it.
+                        //
+                        // There is no gender in this model - "agents are
+                        // gender neutral; there are no male/female agents,
+                        // merely child and adult agents" - so this is not a
+                        // property of either of them and something has to
+                        // decide. The lower id, which is a coin that always
+                        // lands the same way for the same pair: a settlement
+                        // that fails to conceive on a Tuesday does not get a
+                        // second roll on the Wednesday by swapping who is
+                        // carrying.
+                        //
+                        // What this replaces refused the pair outright unless
+                        // one was male and one female, which threw away about
+                        // half of every candidate pairing in a model that
+                        // manages two births in 308,000 turns of action.
+                        let (carrier_idx, other_idx) = if agent1.id <= agent2.id {
+                            (idx1, idx2)
+                        } else {
+                            (idx2, idx1)
                         };
 
-                        let male = &self.agents[male_idx];
-                        let female = &self.agents[female_idx];
+                        let carrier = &self.agents[carrier_idx];
+                        let other = &self.agents[other_idx];
 
                         // Try to impregnate - this uses proper pregnancy system
-                        let got = attempt_impregnation(male, female, self.current_tick);
+                        let got = attempt_impregnation(carrier, other, self.current_tick);
                         *self
                             .stats
                             .how_it_went
@@ -1107,12 +1121,12 @@ impl Population {
                             .or_insert(0) += 1;
 
                         if let Some(pregnancy) = got {
-                            let mother_id = female.id;
-                            let father_id = male.id;
-                            let pos = (female.state.position.0, female.state.position.1);
+                            let mother_id = carrier.id;
+                            let father_id = other.id;
+                            let pos = (carrier.state.position.0, carrier.state.position.1);
 
                             // Store pregnancy info to apply after iteration
-                            new_offspring.push((female_idx, pregnancy, mother_id, father_id, pos));
+                            new_offspring.push((carrier_idx, pregnancy, mother_id, father_id, pos));
 
                             // Add cooldown (prevent immediate re-reproduction)
                             self.reproduction_cooldown.insert(mother_id, 800); // Full pregnancy duration

@@ -13,7 +13,6 @@ use crate::gui::state::{
     SelectedAgentData, SelectedBuildingData, SelectedResourceData,
     DriveData, SkillData, InventoryItemData, GoalData,
 };
-use crate::agents::Gender;
 use crate::environment::TICKS_PER_YEAR;
 
 /// How many ticks make a year, in the shape the age fields want.
@@ -201,13 +200,13 @@ fn render_agent_header(ui: &mut egui::Ui, agent: &SelectedAgentData, notificatio
         let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(24.0, 24.0), egui::Sense::hover());
         ui.painter().circle_filled(rect.center(), 10.0, stage_color);
 
-        // Gender symbol overlay (only shown for non-children)
+        // There is no gender in this model - "agents are gender neutral; there
+        // are no male/female agents, merely child and adult agents" - so what
+        // used to be a male or female symbol beside somebody grown is now the
+        // only distinction there is: whether they are grown.
         let gender_symbol = match agent.life_stage {
             crate::agents::LifeStage::Infant | crate::agents::LifeStage::Child => "",
-            _ => match agent.gender {
-                Gender::Male => "♂",
-                Gender::Female => "♀",
-            }
+            _ => "\u{25CF}",
         };
 
         ui.vertical(|ui| {

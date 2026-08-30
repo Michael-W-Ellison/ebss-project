@@ -6,7 +6,7 @@
 - [ ] **Relationship Graph** - Visual network of agent relationships
 - [ ] **Fatigue/Sleep Indicators** - Show sleep status on agent icons
 - [ ] **Tooltip Improvements** - Hover info on map entities
-- [ ] **Filter Toggles** - Show/hide agent types (by life stage, gender, job)
+- [ ] **Filter Toggles** - Show/hide agent types (by life stage, job)
 
 ## Medium Effort (3-5 days each)
 

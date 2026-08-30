@@ -13,7 +13,7 @@ pub const PREGNANCY_ENERGY_MULTIPLIER: f32 = 1.3;
 /// Movement speed reduction while pregnant (late stages)
 pub const PREGNANCY_SPEED_PENALTY: f32 = 0.7;
 
-/// Pregnancy state for female agents
+/// Pregnancy state, held by whichever agent is carrying
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PregnancyState {
     /// Tick when conception occurred

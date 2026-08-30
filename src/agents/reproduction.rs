@@ -1,10 +1,9 @@
 // src/agents/reproduction.rs
-//! Reproduction and genetic inheritance system with gender, pregnancy, and nursing.
+//! Reproduction and genetic inheritance: pairing, pregnancy, and nursing.
 
 use rand::Rng;
 use uuid::Uuid;
 use crate::agents::{Agent, AgentConfig};
-use crate::agents::gender::Gender;
 use crate::agents::pregnancy::PregnancyState;
 use crate::core::{DriveState, DriveType, BehaviorTree};
 
@@ -32,7 +31,7 @@ impl Default for MateSelectionCriteria {
 /// Result of a mating attempt
 #[derive(Debug)]
 pub enum MatingResult {
-    /// Mating successful, female is now pregnant
+    /// Mating succeeded; `mother_id` is whoever came away carrying
     PregnancyStarted { mother_id: Uuid, father_id: Uuid },
     /// Mating failed due to infertility or chance
     Failed(String),
@@ -41,8 +40,8 @@ pub enum MatingResult {
 /// Check if two agents can mate
 ///
 /// Requirements:
-/// - One must be male, one must be female
-/// - Female must not already be pregnant
+/// - Two different agents
+/// - Neither already carrying a pregnancy
 /// - Both must be capable of reproduction AND have their survival needs met
 /// - Agents that are hungry or thirsty will not attempt reproduction
 pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria) -> bool {
@@ -51,20 +50,26 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
         return false;
     }
 
-    // One must be male, one must be female
-    let (male, female) = match (agent1.gender, agent2.gender) {
-        (Gender::Male, Gender::Female) => (agent1, agent2),
-        (Gender::Female, Gender::Male) => (agent2, agent1),
-        _ => return false, // Same gender cannot mate
-    };
+    // Two different people, and neither of them already carrying.
+    //
+    // "Agents are gender neutral. There are no male/female agents, merely
+    // child and adult agents." This required one of each, so a pair drawn
+    // from a settlement had about an even chance of being refused before
+    // anything else was asked - in a model that manages two births in 308,000
+    // turns of action, half of every candidate pair was thrown away on a
+    // distinction the specification does not have.
+    if agent1.id == agent2.id {
+        return false;
+    }
 
-    // Female must not be pregnant
-    if female.is_pregnant() {
+    if agent1.is_pregnant() || agent2.is_pregnant() {
         return false;
     }
 
     // Check fertility levels
-    if male.fertility() < criteria.min_fertility || female.fertility() < criteria.min_fertility {
+    if agent1.fertility() < criteria.min_fertility
+        || agent2.fertility() < criteria.min_fertility
+    {
         return false;
     }
 
@@ -89,17 +94,21 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
 
 
 
-/// Attempt to impregnate the female agent
-/// Returns the pregnancy state if successful
+/// Whether a pairing takes, and the pregnancy it leaves on the one carrying.
+///
+/// The names were `male` and `female`; there is no gender in this model, so
+/// they are `carrier` - whichever of the two will be carrying it - and
+/// `other`. Which of a pair carries is the caller's to decide and is
+/// deliberately not a property of either of them.
 pub fn attempt_impregnation(
-    male: &Agent,
-    female: &Agent,
+    carrier: &Agent,
+    other: &Agent,
     current_tick: u32,
 ) -> Option<PregnancyState> {
     let mut rng = crate::core::dice::roll();
 
     // Check basic requirements
-    if !male.can_impregnate() || !female.can_become_pregnant() {
+    if !carrier.can_carry_a_child() || !other.can_reproduce() {
         return None;
     }
 
@@ -107,10 +116,10 @@ pub fn attempt_impregnation(
     //
     // Clamped because this is handed straight to the sampler, which panics on
     // anything outside 0.0 to 1.0 rather than saturating.
-    let conception_chance = (male.fertility() * female.fertility()).clamp(0.0, 1.0);
+    let conception_chance = (carrier.fertility() * other.fertility()).clamp(0.0, 1.0);
 
     if rng.gen_bool(conception_chance as f64) {
-        Some(PregnancyState::new(current_tick, male.id))
+        Some(PregnancyState::new(current_tick, other.id))
     } else {
         None
     }
@@ -126,16 +135,15 @@ fn calculate_distance(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> f32 {
 
 /// Create offspring from two parent agents (used for immediate birth in legacy code)
 pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
-    // Determine which parent is mother for prenatal nutrition
-    let prenatal_nutrition = match (parent1.gender, parent2.gender) {
-        (Gender::Female, _) => parent1.pregnancy.as_ref()
-            .map(|p| p.nutrition_quality)
-            .unwrap_or(0.8),
-        (_, Gender::Female) => parent2.pregnancy.as_ref()
-            .map(|p| p.nutrition_quality)
-            .unwrap_or(0.8),
-        _ => 0.8, // Default if no clear mother
-    };
+    // Whichever of them is carrying it is the one whose nutrition it grew on.
+    // Either may be - there is no gender in this model, so the carrier is
+    // simply the one with a pregnancy on them.
+    let prenatal_nutrition = parent1
+        .pregnancy
+        .as_ref()
+        .or(parent2.pregnancy.as_ref())
+        .map(|p| p.nutrition_quality)
+        .unwrap_or(0.8);
 
     give_birth_internal(parent1, parent2, current_tick, prenatal_nutrition)
 }
@@ -214,11 +222,15 @@ fn give_birth_internal(
     // Generate random preferences
     offspring.preferences = crate::core::Preferences::default();
 
-    // Place offspring near mother (parent1 if female, otherwise parent2)
-    let mother_pos = if parent1.gender == Gender::Female {
+    // Placed beside whoever carried it, which is whichever of them has the
+    // pregnancy on them. Falling back to the first parent rather than to a
+    // gender, because there is no gender to fall back to.
+    let mother_pos = if parent1.pregnancy.is_some() {
         parent1.state.position
-    } else {
+    } else if parent2.pregnancy.is_some() {
         parent2.state.position
+    } else {
+        parent1.state.position
     };
     offspring.state.position = (
         mother_pos.0 + crate::core::dice::roll().gen_range(-1..=1),
@@ -391,29 +403,26 @@ mod tests {
     use super::*;
     use crate::agents::AgentConfig;
 
-    /// Helper to create a mating-ready agent pair (male and female)
+    /// Two grown people who could pair, and nothing else to say about them.
+    ///
+    /// The two are interchangeable. Which of them carries a child is decided
+    /// by whoever calls `attempt_impregnation` - the first argument is the
+    /// carrier - and not by anything either of them is.
     fn create_mating_pair() -> (Agent, Agent) {
         use crate::core::DriveType;
 
-        let mut male = Agent::new(AgentConfig::default());
-        let mut female = Agent::new(AgentConfig::default());
+        let mut other = Agent::new(AgentConfig::default());
+        let mut carrier = Agent::new(AgentConfig::default());
 
-        // Set genders
-        male.gender = Gender::Male;
-        female.gender = Gender::Female;
-
-        // Set to adult stage
-        male.state.age = 3000;
-        male.state.life_stage = crate::agents::LifeStage::Adult;
-        female.state.age = 3000;
-        female.state.life_stage = crate::agents::LifeStage::Adult;
+        other.state.now_this_many_years_old(30);
+        carrier.state.now_this_many_years_old(30);
 
         // Set positions close together
-        male.state.position = (0, 0, 0);
-        female.state.position = (10, 10, 0);
+        other.state.position = (0, 0, 0);
+        carrier.state.position = (10, 10, 0);
 
         // Ensure both are well-fed (low survival drives)
-        for agent in [&mut male, &mut female] {
+        for agent in [&mut other, &mut carrier] {
             if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
                 hunger.value = 0.2;
             }
@@ -435,7 +444,7 @@ mod tests {
             }
         }
 
-        (male, female)
+        (other, carrier)
     }
 
     /// Fertility is handed to the sampler as a probability, so it has to keep
@@ -494,9 +503,9 @@ mod tests {
     /// this surfaced as a rare crash a few thousand ticks into a run.
     #[test]
     fn test_impregnation_survives_maximum_fertility() {
-        let (mut male, mut female) = create_mating_pair();
+        let (mut other, mut carrier) = create_mating_pair();
 
-        for agent in [&mut male, &mut female] {
+        for agent in [&mut other, &mut carrier] {
             agent.state.health = 100.0;
             agent.reproduction_drive_modifier = 1.8;
             agent.developmental_nutrition.finalized = true;
@@ -507,59 +516,92 @@ mod tests {
         }
 
         assert!(
-            male.fertility() * female.fertility() <= 1.0,
+            other.fertility() * carrier.fertility() <= 1.0,
             "the conception roll needs a probability, got {}",
-            male.fertility() * female.fertility()
+            other.fertility() * carrier.fertility()
         );
 
         // Would panic outright before the clamp
-        let _ = attempt_impregnation(&male, &female, 100);
+        let _ = attempt_impregnation(&other, &carrier, 100);
     }
 
     #[test]
     fn test_can_mate_basic() {
-        let (mut male, mut female) = create_mating_pair();
-        give_food(&mut male, 12);
-        give_food(&mut female, 12);
+        let (mut other, mut carrier) = create_mating_pair();
+        give_food(&mut other, 12);
+        give_food(&mut carrier, 12);
 
         let criteria = MateSelectionCriteria::default();
-        assert!(can_mate(&male, &female, &criteria));
+        assert!(can_mate(&other, &carrier, &criteria));
     }
 
     /// A pair with nothing put by will not have a child, however full they are
     /// at this moment.
     #[test]
     fn a_pair_with_nothing_put_by_do_not_have_a_child() {
-        let (male, female) = create_mating_pair();
+        let (other, carrier) = create_mating_pair();
 
         let criteria = MateSelectionCriteria::default();
         assert!(
-            !can_mate(&male, &female, &criteria),
+            !can_mate(&other, &carrier, &criteria),
             "an empty pack is not a plan for feeding a child"
         );
     }
 
+    /// Any two grown people can pair.
+    ///
+    /// This was `test_cannot_mate_same_gender` and it asserted the opposite:
+    /// two males or two females were refused. "Agents are gender neutral.
+    /// There are no male/female agents, merely child and adult agents", so
+    /// there is nothing to refuse them for - and refusing them threw away
+    /// about half of every candidate pairing in a settlement that manages two
+    /// births in 308,000 turns.
     #[test]
-    fn test_cannot_mate_same_gender() {
+    fn any_two_grown_people_can_pair() {
         let mut agent1 = Agent::new(AgentConfig::default());
         let mut agent2 = Agent::new(AgentConfig::default());
 
-        // Both male
-        agent1.gender = Gender::Male;
-        agent2.gender = Gender::Male;
-        agent1.state.age = 3000;
-        agent1.state.life_stage = crate::agents::LifeStage::Adult;
-        agent2.state.age = 3000;
-        agent2.state.life_stage = crate::agents::LifeStage::Adult;
+        agent1.state.now_this_many_years_old(30);
+        agent2.state.now_this_many_years_old(30);
         agent1.state.position = (0, 0, 0);
         agent2.state.position = (10, 10, 0);
 
         let criteria = MateSelectionCriteria::default();
-        assert!(!can_mate(&agent1, &agent2, &criteria));
+        assert!(
+            can_mate(&agent1, &agent2, &criteria),
+            "two grown people, and nothing else to say about them"
+        );
+    }
 
-        // Both female
-        agent1.gender = Gender::Female;
-        agent2.gender = Gender::Female;
+    /// But not two of the same person.
+    #[test]
+    fn nobody_pairs_with_themselves() {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+
+        let criteria = MateSelectionCriteria::default();
+        assert!(!can_mate(&agent, &agent, &criteria));
+    }
+
+    /// And nobody already carrying one starts another.
+    #[test]
+    fn nobody_already_carrying_starts_another() {
+        let mut agent1 = Agent::new(AgentConfig::default());
+        let mut agent2 = Agent::new(AgentConfig::default());
+        agent1.state.now_this_many_years_old(30);
+        agent2.state.now_this_many_years_old(30);
+
+        let criteria = MateSelectionCriteria::default();
+        assert!(can_mate(&agent1, &agent2, &criteria));
+
+        agent1.pregnancy = Some(PregnancyState::new(0, agent2.id));
+        assert!(
+            !can_mate(&agent1, &agent2, &criteria),
+            "and it does not matter which of the two it is"
+        );
+
+        agent1.pregnancy = None;
+        agent2.pregnancy = Some(PregnancyState::new(0, agent1.id));
         assert!(!can_mate(&agent1, &agent2, &criteria));
     }
 
@@ -576,14 +618,12 @@ mod tests {
     #[test]
     fn test_cannot_mate_infant() {
         let mut infant = Agent::new(AgentConfig::default());
-        infant.gender = Gender::Male;
         // In years. `Agent::new` makes a grown person now, so an infant has to
         // say so - it used to be one by default, which is the trap that fix
         // removed.
         infant.state.now_this_many_years_old(2);
 
         let mut adult = Agent::new(AgentConfig::default());
-        adult.gender = Gender::Female;
         adult.state.now_this_many_years_old(30);
         
 
@@ -593,13 +633,13 @@ mod tests {
 
     #[test]
     fn test_cannot_mate_when_pregnant() {
-        let (male, mut female) = create_mating_pair();
+        let (other, mut carrier) = create_mating_pair();
 
         // Female is pregnant
-        female.pregnancy = Some(PregnancyState::new(0, male.id));
+        carrier.pregnancy = Some(PregnancyState::new(0, other.id));
 
         let criteria = MateSelectionCriteria::default();
-        assert!(!can_mate(&male, &female, &criteria));
+        assert!(!can_mate(&other, &carrier, &criteria));
     }
 
     #[test]
@@ -607,8 +647,6 @@ mod tests {
         let mut parent1 = Agent::new(AgentConfig::default());
         let mut parent2 = Agent::new(AgentConfig::default());
 
-        parent1.gender = Gender::Male;
-        parent2.gender = Gender::Female;
         parent1.state.age = 3000;
         parent1.state.life_stage = crate::agents::LifeStage::Adult;
         parent2.state.age = 3000;
@@ -635,71 +673,76 @@ mod tests {
     fn test_cannot_mate_when_hungry() {
         use crate::core::DriveType;
 
-        let (mut male, female) = create_mating_pair();
+        let (mut other, carrier) = create_mating_pair();
 
-        // Set male as hungry (drive active)
-        if let Some(hunger) = male.drives.get_mut(DriveType::Hunger) {
+        // Set other as hungry (drive active)
+        if let Some(hunger) = other.drives.get_mut(DriveType::Hunger) {
             hunger.value = 0.9; // Above threshold (0.7)
         }
 
         let criteria = MateSelectionCriteria::default();
-        // Should NOT be able to mate - male is hungry
-        assert!(!can_mate(&male, &female, &criteria));
+        // Should NOT be able to mate - other is hungry
+        assert!(!can_mate(&other, &carrier, &criteria));
     }
 
     #[test]
     fn test_cannot_mate_when_thirsty() {
         use crate::core::DriveType;
 
-        let (male, mut female) = create_mating_pair();
+        let (other, mut carrier) = create_mating_pair();
 
-        // Set female as thirsty (drive active)
-        if let Some(thirst) = female.drives.get_mut(DriveType::Thirst) {
+        // Set carrier as thirsty (drive active)
+        if let Some(thirst) = carrier.drives.get_mut(DriveType::Thirst) {
             thirst.value = 0.9; // Above threshold (0.75)
         }
 
         let criteria = MateSelectionCriteria::default();
-        // Should NOT be able to mate - female is thirsty
-        assert!(!can_mate(&male, &female, &criteria));
+        // Should NOT be able to mate - carrier is thirsty
+        assert!(!can_mate(&other, &carrier, &criteria));
     }
 
     #[test]
     fn test_can_mate_when_well_fed() {
         use crate::core::DriveType;
 
-        let (mut male, mut female) = create_mating_pair();
+        let (mut other, mut carrier) = create_mating_pair();
 
         // Ensure both are well-fed (low hunger/thirst)
-        if let Some(hunger) = male.drives.get_mut(DriveType::Hunger) {
+        if let Some(hunger) = other.drives.get_mut(DriveType::Hunger) {
             hunger.value = 0.2; // Well below threshold
         }
-        if let Some(thirst) = male.drives.get_mut(DriveType::Thirst) {
+        if let Some(thirst) = other.drives.get_mut(DriveType::Thirst) {
             thirst.value = 0.2;
         }
-        if let Some(hunger) = female.drives.get_mut(DriveType::Hunger) {
+        if let Some(hunger) = carrier.drives.get_mut(DriveType::Hunger) {
             hunger.value = 0.2;
         }
-        if let Some(thirst) = female.drives.get_mut(DriveType::Thirst) {
+        if let Some(thirst) = carrier.drives.get_mut(DriveType::Thirst) {
             thirst.value = 0.2;
         }
 
-        give_food(&mut male, 12);
-        give_food(&mut female, 12);
+        give_food(&mut other, 12);
+        give_food(&mut carrier, 12);
 
         let criteria = MateSelectionCriteria::default();
         // Should be able to mate - both are well-fed and have food in hand
-        assert!(can_mate(&male, &female, &criteria));
+        assert!(can_mate(&other, &carrier, &criteria));
     }
 
     #[test]
     fn test_impregnation() {
-        let (male, female) = create_mating_pair();
+        // The first argument is the one carrying it and the second is the
+        // other parent, which is what the pregnancy records. These were
+        // `other` and `carrier`, and the assertion below read the first as the
+        // father - there is no gender in this model and which of a pair
+        // carries is the caller's to decide, so the names had to go.
+        let (carrier, other) = create_mating_pair();
 
         // Try multiple times since it's probabilistic
         let mut success = false;
         for _ in 0..100 {
-            if let Some(pregnancy) = attempt_impregnation(&male, &female, 100) {
-                assert_eq!(pregnancy.father_id, male.id);
+            if let Some(pregnancy) = attempt_impregnation(&carrier, &other, 100) {
+                assert_eq!(pregnancy.father_id, other.id);
                 assert_eq!(pregnancy.conception_tick, 100);
                 success = true;
                 break;
@@ -829,32 +872,32 @@ mod tests {
     fn test_infertile_cannot_mate() {
         use crate::core::traits::Trait;
 
-        let (mut male, female) = create_mating_pair();
+        let (mut other, carrier) = create_mating_pair();
 
-        // Make male infertile
-        male.traits.add_trait(Trait::Infertile);
+        // Make other infertile
+        other.traits.add_trait(Trait::Infertile);
 
         let criteria = MateSelectionCriteria::default();
-        // Should NOT be able to mate - male is infertile
-        assert!(!can_mate(&male, &female, &criteria));
-        assert!(!male.can_reproduce());
-        assert!(male.is_infertile());
+        // Should NOT be able to mate - other is infertile
+        assert!(!can_mate(&other, &carrier, &criteria));
+        assert!(!other.can_reproduce());
+        assert!(other.is_infertile());
     }
 
     #[test]
     fn test_infertile_female_cannot_mate() {
         use crate::core::traits::Trait;
 
-        let (male, mut female) = create_mating_pair();
+        let (other, mut carrier) = create_mating_pair();
 
-        // Make female infertile
-        female.traits.add_trait(Trait::Infertile);
+        // Make carrier infertile
+        carrier.traits.add_trait(Trait::Infertile);
 
         let criteria = MateSelectionCriteria::default();
-        // Should NOT be able to mate - female is infertile
-        assert!(!can_mate(&male, &female, &criteria));
-        assert!(!female.can_reproduce());
-        assert!(female.is_infertile());
+        // Should NOT be able to mate - carrier is infertile
+        assert!(!can_mate(&other, &carrier, &criteria));
+        assert!(!carrier.can_reproduce());
+        assert!(carrier.is_infertile());
     }
 
     #[test]

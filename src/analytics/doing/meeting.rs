@@ -491,20 +491,20 @@ impl Simulation {
 
         // Attempt mating
         if rng.gen_bool(success_probability as f64) {
-            // Mating successful - determine male/female and attempt impregnation
+            // Mating successful - decide who carries it and attempt impregnation
             use crate::agents::reproduction::attempt_impregnation;
-            use crate::agents::Gender;
 
             let initiator = &self.population.agents[agent_index];
             let target = &self.population.agents[target_index];
 
-            // Get male and female from the pair
-            let (male_index, female_index) = match (initiator.gender, target.gender) {
-                (Gender::Male, Gender::Female) => (agent_index, target_index),
-                (Gender::Female, Gender::Male) => (target_index, agent_index),
-                _ => {
-                    return ActionResult::failure("Same-gender mating not possible".to_string());
-                }
+            // Which of the two carries it. There is no gender in this model,
+            // so this is not a property of either of them: the lower id, the
+            // same rule the population's own pairing pass uses, so that a pair
+            // gets the same answer whichever of them started it.
+            let (female_index, male_index) = if initiator.id <= target.id {
+                (agent_index, target_index)
+            } else {
+                (target_index, agent_index)
             };
 
             // Attempt impregnation
@@ -512,13 +512,13 @@ impl Simulation {
             let female = &self.population.agents[female_index];
             let current_tick = self.current_tick;
 
-            if let Some(pregnancy) = attempt_impregnation(male, female, current_tick) {
+            if let Some(pregnancy) = attempt_impregnation(female, male, current_tick) {
                 // Pregnancy started!
                 let female = &mut self.population.agents[female_index];
                 female.pregnancy = Some(pregnancy);
 
                 debug!(
-                    "Agent {} (male) and agent {} (female) mated - pregnancy started!",
+                    "Agent {} and agent {} mated - the second is carrying it",
                     self.population.agents[male_index].id,
                     self.population.agents[female_index].id
                 );

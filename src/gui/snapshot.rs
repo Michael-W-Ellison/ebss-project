@@ -89,7 +89,6 @@ pub fn agent_to_snapshot(agent: &Agent) -> AgentSnapshot {
         relationship_count: agent.relationships.get_all().len(),
         inventory_count: agent.inventory.get_all_items().len() as u32,
         current_activity,
-        gender: agent.gender,
         inferred_job,
     }
 }
@@ -285,7 +284,6 @@ pub fn agent_to_detailed(agent: &Agent) -> SelectedAgentData {
     SelectedAgentData {
         id: agent.id,
         name: format!("Agent {:?}", agent.id),
-        gender: agent.gender,
         position: agent.state.position,
         health: agent.state.health,
         energy: agent.state.energy,
