@@ -465,6 +465,13 @@ fn what_nobody_picks_goes_back_into_the_ground() {
 /// and stalk, and the other half comes back when the uneaten crop falls. Over
 /// a year of growing and shedding with nobody near it, the ground it grew on
 /// should be no poorer than it started.
+///
+/// Measured from the fifth year rather than from the first, which is a change
+/// to when the question is asked and not to the question. A world now opens
+/// with less standing growth on it than it settles at, and the difference is
+/// laid down over the first few years - so a tile does genuinely and rightly
+/// lose ground in year one, into the plants standing on it. What has to break
+/// even is the steady state, and by year five it is one.
 #[test]
 fn ground_nobody_harvests_is_no_poorer_a_year_later() {
     use crate::environment::seasons::TICKS_PER_DAY;
@@ -472,12 +479,16 @@ fn ground_nobody_harvests_is_no_poorer_a_year_later() {
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
 
-    let before = mean_fertility_under(&world, ResourceType::Greens);
+    let a_year = TICKS_PER_DAY * 360;
 
-    for _ in 0..(TICKS_PER_DAY * 360) {
+    for _ in 0..(a_year * 5) {
         world.tick();
     }
+    let before = mean_fertility_under(&world, ResourceType::Greens);
 
+    for _ in 0..a_year {
+        world.tick();
+    }
     let after = mean_fertility_under(&world, ResourceType::Greens);
 
     assert!(

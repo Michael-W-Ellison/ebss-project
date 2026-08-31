@@ -137,7 +137,7 @@ impl PlantSpecies {
         /// knife edge. What brings three back down to one is ground that is
         /// already taken, and after that it is whatever is eating the
         /// seedlings.
-        const WHAT_A_PLANT_LEAVES_IN_ITS_LIFE: f32 = 100.0;
+        const WHAT_A_PLANT_LEAVES_IN_ITS_LIFE: f32 = 40.0;
 
         let passes = (self.lives_for_ticks() as f32 / 10.0).max(1.0);
         (WHAT_A_PLANT_LEAVES_IN_ITS_LIFE / passes).clamp(0.0, 1.0)
@@ -1953,14 +1953,30 @@ impl PlantManager {
 
                 let terrain = grid.tiles[y][x].terrain.terrain_type;
 
+                // How thickly the ground carries growth when a world opens.
+                //
+                // These were four to five times thinner, from when a `Plant`
+                // was a fixture that nothing ate and nothing replaced: a
+                // fifty by fifty map opened with 212 plants on 2,500 tiles.
+                // Left alone for fifteen years the same country settles at
+                // about two-fifths covered, so the old figures were not a
+                // sparser world, they were the same world before it had
+                // filled in - and in the meantime there was nothing on it for
+                // a grazing animal to eat. A dozen sheep on twenty-five
+                // hectares, which is light stocking for real ground, starved.
+                //
+                // A world opens at roughly where it settles now, which is
+                // also what stops the first fifteen years of every run being
+                // spent growing the vegetation the map was supposed to start
+                // with.
                 let (density, want_trees) = match terrain {
-                    crate::world::TerrainType::Forest => (0.35, true),
-                    crate::world::TerrainType::Meadow => (0.25, false),
-                    crate::world::TerrainType::Wetland => (0.20, false),
-                    crate::world::TerrainType::Riverbank => (0.15, false),
-                    crate::world::TerrainType::Plains => (0.10, false),
-                    crate::world::TerrainType::Hills => (0.06, false),
-                    crate::world::TerrainType::Desert => (0.02, false),
+                    crate::world::TerrainType::Forest => (0.85, true),
+                    crate::world::TerrainType::Meadow => (0.80, false),
+                    crate::world::TerrainType::Wetland => (0.60, false),
+                    crate::world::TerrainType::Riverbank => (0.55, false),
+                    crate::world::TerrainType::Plains => (0.45, false),
+                    crate::world::TerrainType::Hills => (0.25, false),
+                    crate::world::TerrainType::Desert => (0.05, false),
                     _ => (0.0, false),
                 };
 
@@ -2036,7 +2052,32 @@ impl PlantManager {
         }
     }
 
+    /// What a plant sheds, for what it has just drawn out of the ground.
+    ///
+    /// A plant that has finished growing gives back everything it takes: it
+    /// is not putting anything on, so what goes up the stem comes down again
+    /// as leaf and root and stalk. One that is still building itself keeps
+    /// half - the same half `Soil::RESIDUE_PER_UNIT_GROWN` holds back for a
+    /// crop node - and that half comes back when it dies. Both are grossed up
+    /// by `KEPT_FROM_ROT` the same way, because litter loses some of itself to
+    /// the air on the way to becoming soil again.
+    ///
+    /// This used to be two unrelated tables: an appetite that took no notice
+    /// of what kind of plant it was, and a leaf fall by size that took no
+    /// notice of what the plant had drawn. A small plant took two and a half
+    /// times out of its tile what it put back, and a meadow with nobody near
+    /// it lost a tenth of its fertility in a year. It is the third accounting
+    /// of the same physics in this model and it was the only one nobody had
+    /// balanced against itself.
+    fn what_a_plant_sheds_for_what_it_drew(drawn: f32, still_growing: bool) -> f32 {
+        use crate::world::soil::Soil;
+
+        let goes_back = if still_growing { 0.5 } else { 1.0 };
+        drawn * goes_back / Soil::KEPT_FROM_ROT
+    }
+
     /// How much leaf fall this plant puts on the ground each tick
+    #[allow(dead_code)]
     fn leaf_fall_of(size: PlantSize) -> f32 {
         match size {
             PlantSize::Huge => 0.00040,
@@ -2204,12 +2245,20 @@ impl PlantManager {
             // depends on how far short the ground is falling.
             let living = conditions.growth_share();
             if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-                let short = (Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN - living) / Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN;
-                plant.current_health -= plant.max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * ticks;
+                let short = (Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN - living)
+                    / Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN;
+                plant.current_health -=
+                    plant.max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * ticks;
             } else {
-                plant.current_health =
-                    (plant.current_health + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * ticks)
-                        .min(plant.max_health);
+                // What it puts back on is what the ground and the sky give it,
+                // so a plant on poor ground comes back slowly and one in a
+                // wet meadow comes back fast. This is what makes a sward
+                // forage rather than a stock: something crops it, and it grows
+                // again out of the same water and light and nutrient
+                // everything else here runs on.
+                plant.current_health = (plant.current_health
+                    + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                    .min(plant.max_health);
             }
 
             // What it grows with, it takes out of the ground
@@ -2217,15 +2266,29 @@ impl PlantManager {
             if wanted > 0.0 {
                 tile.soil.draw(wanted);
             }
+            let drawn = wanted;
 
-            // And what it sheds, it puts back
-            if matches!(
+            // And what it sheds, it puts back.
+            //
+            // At every stage, not only once grown. A seedling drops leaves
+            // too, and only counting the grown ones left every young plant on
+            // the map drawing nutrient out of the ground and putting nothing
+            // back - which did not matter while nothing ever came up from
+            // seed, and matters now that most of what is standing on a tile
+            // in any given decade has come up from seed. A meadow nobody
+            // touched lost a tenth of its fertility in a year.
+            //
+            // What a young plant sheds is less than what a grown one does,
+            // in proportion to how much of the plant there is yet.
+            // A plant still building itself keeps half of what it draws; one
+            // that has finished growing is not putting on anything and gives
+            // back everything it takes.
+            let keeps_some_of_it = matches!(
                 plant.growth_stage,
-                GrowthStage::Mature | GrowthStage::Flowering | GrowthStage::Fruiting
-            ) {
-                tile.soil
-                    .add_leaf_litter(Self::leaf_fall_of(species.size) * ticks);
-            }
+                GrowthStage::Seedling | GrowthStage::Growing
+            );
+            tile.soil
+                .add_leaf_litter(Self::what_a_plant_sheds_for_what_it_drew(drawn, keeps_some_of_it));
         }
 
         self.what_bore_seed_this_pass(&registry, ticks);
@@ -2271,9 +2334,24 @@ impl PlantManager {
     /// away under it. Two thousand ticks, half a year, from full to gone.
     const HOW_FAST_A_PLANT_GOES_BACK: f32 = 0.0005;
 
-    /// And how fast it puts it back on when things improve, which is slower:
-    /// a bad season costs more than a good one gives.
-    const HOW_FAST_A_PLANT_COMES_BACK: f32 = 0.0002;
+    /// And how fast it puts condition back on, per tick, at its best pace.
+    ///
+    /// A plant cropped to nothing is back to full in about a month given
+    /// everything it wants, and longer than that on any real ground, because
+    /// this is scaled by `growth_share`. That rate is what decides how many
+    /// mouths a piece of country will feed: what a grazing animal can take in
+    /// the long run is what grows back, not what is standing.
+    ///
+    /// It was fifteen times slower and not scaled by anything, which was fine
+    /// while nothing ate a plant and hopeless the moment something did: a
+    /// grass has five points of condition and put back a fiftieth of one in a
+    /// pass, so a dozen sheep on twenty-five hectares - light stocking for
+    /// real ground - ate it bare and starved.
+    ///
+    /// A month is what a sward takes to come back after it is grazed off,
+    /// which is the case this number has to be right for. It is too fast for
+    /// an oak, and nothing crops an oak.
+    const HOW_FAST_A_PLANT_COMES_BACK: f32 = 0.003;
 
     /// Everything that has come to the end of its life, and what it leaves.
     ///

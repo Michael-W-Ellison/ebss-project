@@ -41,14 +41,6 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
 /// take.
 const BREEDING_INTERVAL_SCALE: f32 = 3.0;
 
-/// Side of the patches the world is divided into when asking how crowded a
-/// piece of ground is
-const GRAZING_PATCH: i32 = 6;
-
-/// How many animals a patch of that size will carry before the ones on it stop
-/// breeding
-const PATCH_CARRYING_CAPACITY: u32 = 8;
-
 /// Configuration for naturalistic animal spawning during world generation
 #[derive(Debug, Clone)]
 pub struct AnimalSpawnConfig {
@@ -1958,6 +1950,16 @@ impl Animal {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimalManager {
     animals: Vec<Animal>,
+
+    /// What the grazers have taken off the map altogether, for measuring.
+    #[serde(default)]
+    forage_taken: f64,
+    /// How many animal-passes ended in a mouthful, and how many tried.
+    #[serde(default)]
+    mouths_fed: u64,
+    #[serde(default)]
+    mouths_that_tried: u64,
+
     groups: BTreeMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
 
     /// Spawning parameters
@@ -1987,6 +1989,9 @@ impl AnimalManager {
     pub fn new(max_population: usize) -> Self {
         Self {
             animals: Vec::new(),
+            forage_taken: 0.0,
+            mouths_fed: 0,
+            mouths_that_tried: 0,
             groups: BTreeMap::new(),
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
@@ -2050,6 +2055,12 @@ impl AnimalManager {
     }
 
     /// Get all animals
+    /// What the grazers have taken off the map, how many animal-passes ended
+    /// in a mouthful, and how many looked. For measuring only.
+    pub fn what_the_grazing_came_to(&self) -> (f64, u64, u64) {
+        (self.forage_taken, self.mouths_fed, self.mouths_that_tried)
+    }
+
     pub fn get_all(&self) -> &Vec<Animal> {
         &self.animals
     }
@@ -2134,7 +2145,27 @@ impl AnimalManager {
 
 
     /// Tick all animals (age, products, natural healing, AI behaviors, lifecycle)
-    pub fn tick(&mut self) {
+    /// A tick of everything with legs, in the world it is standing in.
+    ///
+    /// It took nothing before, which is how grazing came to feed every animal
+    /// out of thin air: there was no ground and no vegetation to take from,
+    /// so what a mouthful was worth came down to a headcount per patch
+    /// standing in for the food that should have been doing the work. What
+    /// sets the size of a herd now is what is growing where it is standing.
+    /// `grazing_ticks` is how many ticks of feeding this pass stands for, and
+    /// nought means "not this tick". Grazing runs on the same ten-tick
+    /// cadence the vegetation does, because it has to look up what is growing
+    /// on each tile and building that lookup is a pass over every plant in the
+    /// world - eighty thousand of them on a hundred square kilometres, which
+    /// at every tick was three-quarters of what a tick cost. It also has to be
+    /// the *same* pass, because the lookup holds indices into the plant list
+    /// and that list is rebuilt whenever anything dies.
+    pub fn tick_in_world(
+        &mut self,
+        grid: &mut crate::world::Grid,
+        plants: &mut crate::environment::PlantManager,
+        grazing_ticks: f32,
+    ) {
         if self.registry.is_none() {
             return;
         }
@@ -2201,8 +2232,9 @@ impl AnimalManager {
         // wiped out or hunted down to nothing here
         self.process_immigration();
 
-        // Fifth pass: Herbivore feeding (grazing reduces hunger)
-        self.process_grazing();
+        // Fifth pass: Herbivore feeding - what is taken off the ground, and
+        // what goes back onto it
+        self.what_the_grazers_took(grid, plants, grazing_ticks);
 
         // Sixth pass: AI behavior (needs fresh registry borrow)
         let animals_data: Vec<(usize, String, AnimalBehavior, bool, bool)> = {
@@ -2394,34 +2426,23 @@ impl AnimalManager {
             return;
         }
 
-        // How many mouths are already on each patch of ground.
+        // Find breeding candidates by species.
         //
-        // Animals breed when the land around them will carry another. Without
-        // this a herd has no size it stops at: grazing feeds every animal
-        // nearly a hundred times what it burns, so hunger never becomes the
-        // limit, and herds grew until they hit the hard population cap however
-        // little ground they were on.
-        let mut crowding: BTreeMap<(i32, i32), u32> = BTreeMap::new();
-        for animal in &self.animals {
-            if animal.is_alive() {
-                *crowding
-                    .entry((animal.position.0 / GRAZING_PATCH, animal.position.1 / GRAZING_PATCH))
-                    .or_insert(0) += 1;
-            }
-        }
-
-        // Find breeding candidates by species
+        // What decides whether the land will carry another is whether the
+        // animals already on it are fed, and `can_breed` is where that is
+        // asked - it wants hunger under two-fifths of what the animal can
+        // stand. Since grazing takes real forage off real plants, a herd that
+        // has eaten its ground bare is a hungry herd and a hungry herd does
+        // not breed, so carrying capacity comes out of the grass.
+        //
+        // There used to be a headcount of mouths per six-by-six patch here,
+        // with a hard ceiling on it, standing in for exactly that. It had to
+        // be there while grazing fed every animal out of thin air; it is a
+        // second answer to a question the food now answers, and two answers to
+        // one question is how they drift.
         let mut breeding_candidates: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         for (idx, animal) in self.animals.iter().enumerate() {
             if !animal.can_breed() {
-                continue;
-            }
-
-            let patch = (
-                animal.position.0 / GRAZING_PATCH,
-                animal.position.1 / GRAZING_PATCH,
-            );
-            if crowding.get(&patch).copied().unwrap_or(0) > PATCH_CARRYING_CAPACITY {
                 continue;
             }
 
@@ -2738,87 +2759,344 @@ impl AnimalManager {
         }
     }
 
-    /// Process grazing - herbivores reduce hunger when grazing.
+    /// What the grazers took off the ground, and what went back onto it.
     ///
-    /// What a mouthful is worth depends on how many other mouths are on the
-    /// same ground. Grazing used to feed every animal the same amount however
-    /// many of them there were, which is to say the grass was infinite: nothing
-    /// stopped a herd growing until it hit the hard population cap, and no
-    /// number of predators could hold a herd that had no other limit on it.
-    fn process_grazing(&mut self) {
-        /// How many grazers a patch feeds properly before they start
-        /// competing for it
-        const GRAZERS_PER_PATCH: f32 = 6.0;
+    /// Grazing used to feed every animal out of nothing. There was a crowding
+    /// term - a headcount of mouths per patch - standing in for the food that
+    /// should have been doing the work, and the comment above `process_breeding`
+    /// has said as much since it was written: "grazing feeds every animal
+    /// nearly a hundred times what it burns, so hunger never becomes the
+    /// limit". Nothing on the map got any smaller for being eaten, so what
+    /// stopped a herd growing was a hard number in a field.
+    ///
+    /// Now a mouthful comes off a plant that is standing there and the plant
+    /// is that much less of a plant for it. What is left over after the animal
+    /// has taken what it can use lands on the ground behind it - see
+    /// `WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL` - so the greater part of what
+    /// is grazed comes back to the soil a little further on, which is what
+    /// grazing animals are for as far as the ground is concerned.
+    fn what_the_grazers_took(
+        &mut self,
+        grid: &mut crate::world::Grid,
+        plants: &mut crate::environment::PlantManager,
+        grazing_ticks: f32,
+    ) {
+        use crate::world::Position;
+
+        if grazing_ticks <= 0.0 {
+            return;
+        }
 
         let registry = match &self.registry {
-            Some(r) => r,
+            Some(r) => r.clone(),
             None => return,
         };
 
-        // How many grazers are on each patch of ground
-        let mut crowding: BTreeMap<(i32, i32), f32> = BTreeMap::new();
-        for animal in &self.animals {
-            if !animal.is_alive() {
-                continue;
-            }
+        let flora = crate::environment::FloraRegistry::new();
 
-            let grazes = registry
-                .get(&animal.species_id)
-                .map(|species| {
-                    matches!(species.diet, DietType::Herbivore | DietType::Omnivore)
-                })
-                .unwrap_or(false);
-
-            if grazes {
-                *crowding
-                    .entry((
-                        animal.position.0 / GRAZING_PATCH,
-                        animal.position.1 / GRAZING_PATCH,
-                    ))
-                    .or_insert(0.0) += 1.0;
+        // Where the standing growth is. Built once for the pass, and laid out
+        // flat rather than as a map keyed by position: asking each animal to
+        // search the plant list would be every animal against every plant, and
+        // a tree map of eighty thousand entries a pass is not much better -
+        // see the canopy in `PlantManager::tick_in_world`, which is the same
+        // shape for the same reason. `u32::MAX` means nothing is growing here.
+        let (width, height) = (grid.width, grid.height);
+        let mut where_it_grows = vec![u32::MAX; width * height];
+        for (index, plant) in plants.all_plants().iter().enumerate() {
+            let (x, y) = plant.position;
+            if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
+                where_it_grows[y as usize * width + x as usize] = index as u32;
             }
         }
 
+        // What each plant lost this pass, and whether it was pulled up whole.
+        let mut cropped: BTreeMap<usize, f32> = BTreeMap::new();
+        let mut pulled_up: std::collections::BTreeSet<usize> =
+            std::collections::BTreeSet::new();
+        let mut dunged: Vec<((i32, i32), f32)> = Vec::new();
+        let mut took_altogether = 0.0f64;
+        let mut mouths = 0u64;
+        let mut reached = 0u64;
+
         for animal in &mut self.animals {
-            if !animal.is_alive() {
+            if !animal.is_alive() || animal.state != AnimalState::Grazing {
                 continue;
             }
 
-            // Only grazing animals get food
-            if animal.state != AnimalState::Grazing {
+            let Some(species) = registry.get(&animal.species_id) else {
+                continue;
+            };
+
+            if species.diet == DietType::Carnivore {
                 continue;
             }
 
-            // Get diet type
-            if let Some(species) = registry.get(&animal.species_id) {
-                match species.diet {
-                    DietType::Herbivore | DietType::Omnivore => {
-                        // Grazing provides food (proportional to size)
-                        let graze_amount = match species.size {
-                            AnimalSize::Tiny => 2.0,
-                            AnimalSize::Small => 4.0,
-                            AnimalSize::Medium => 6.0,
-                            AnimalSize::Large => 10.0,
-                            AnimalSize::Huge => 15.0,
-                        };
+            let mut wanted = Self::what_it_reaches_for(species) * grazing_ticks;
+            let mut taken = 0.0;
 
-                        let mouths = crowding
-                            .get(&(
-                                animal.position.0 / GRAZING_PATCH,
-                                animal.position.1 / GRAZING_PATCH,
-                            ))
-                            .copied()
-                            .unwrap_or(1.0);
-                        let share = 1.0 / (1.0 + (mouths / GRAZERS_PER_PATCH));
+            // Underfoot first, then a step in any direction. An animal that is
+            // grazing is standing still and eating what is around it, not
+            // ranging - the ranging is what `update_animal_behavior_with_hunger`
+            // does when it is hungry and there is nothing here.
+            for (dx, dy) in Self::WHERE_AN_ANIMAL_CAN_REACH {
+                if wanted <= 0.0 {
+                    break;
+                }
 
-                        animal.feed(graze_amount * share);
-                    }
-                    DietType::Carnivore => {
-                        // Carnivores don't benefit from grazing
-                    }
+                let (x, y) = (animal.position.0 + dx, animal.position.1 + dy);
+                if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                    continue;
+                }
+
+                let index = where_it_grows[y as usize * width + x as usize];
+                if index == u32::MAX {
+                    continue;
+                }
+                let index = index as usize;
+
+                let plant = &plants.all_plants()[index];
+                let Some(kind) = flora.get(&plant.species_id) else {
+                    continue;
+                };
+
+                let already = cropped.get(&index).copied().unwrap_or(0.0);
+                let standing = plant.current_health - already;
+                if standing <= 0.0 {
+                    continue;
+                }
+
+                // A grown tree is browse, not grazing. Nothing eats a trunk;
+                // what a deer or a sheep gets off an oak is the shoots and
+                // leaves it can reach, which is a mouthful or two and no more
+                // however big the tree is - so what a tree offers is a flat
+                // small amount rather than a share of its bulk, and cropping
+                // it does not touch the tree.
+                //
+                // Excluding grown trees outright was the first cut and it is
+                // wrong on a wooded map: most of what is standing on a fresh
+                // map is timber, so twelve sheep on twenty-five hectares had
+                // almost nothing in reach, overshot to thirty on the hunger
+                // they were born with, and starved.
+                let grown_tree = kind.is_tree
+                    && !matches!(
+                        plant.growth_stage,
+                        crate::environment::GrowthStage::Seedling
+                            | crate::environment::GrowthStage::Growing
+                    );
+
+                let there_to_take = if grown_tree {
+                    standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_ticks - already)
+                } else {
+                    standing
+                };
+
+                if there_to_take <= 0.0 {
+                    continue;
+                }
+
+                let bite = wanted.min(there_to_take);
+                *cropped.entry(index).or_insert(0.0) += bite;
+                wanted -= bite;
+                taken += bite;
+
+                // A bear does not crop a root, it digs it up, and what has
+                // been dug up does not come back. Which animals do that is
+                // which animals feed by digging: the big omnivores. It is the
+                // manner of the feeding rather than a list of plants that
+                // decides it, so nothing here has to keep a hand-written
+                // vocabulary of what counts as a root.
+                if Self::does_it_dig(species) && !kind.is_tree {
+                    pulled_up.insert(index);
+                }
+            }
+
+            reached += 1;
+
+            if taken <= 0.0 {
+                // Nothing within reach. An animal that cannot feed where it
+                // is standing walks until it can, and until now nothing in
+                // this module did: a hungry animal either stood still or
+                // shuffled a cell or two at random once its `state_timer` ran
+                // out, which will not carry a herd off ground it has eaten
+                // bare. Twelve sheep on a fifty by fifty map cropped their own
+                // few tiles to nothing by tick two thousand eight hundred and
+                // then took not one further mouthful in three thousand ticks,
+                // with six hundred plants and thirty-eight thousand of
+                // standing growth on the map around them.
+                if let Some(towards) =
+                    Self::where_there_is_something_growing(animal.position, &where_it_grows, width, height)
+                {
+                    animal.position = towards;
+                }
+                continue;
+            }
+
+            animal.feed(taken * Self::WHAT_A_MOUTHFUL_IS_WORTH);
+            took_altogether += taken as f64;
+            mouths += 1;
+
+            // And what came straight through lands where the animal is now.
+            dunged.push((
+                animal.position,
+                taken * (1.0 - Self::WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL),
+            ));
+        }
+
+        // Take it off the plants, and take up what was pulled up.
+        let standing = plants.all_plants_mut();
+        for (index, lost) in cropped {
+            if let Some(plant) = standing.get_mut(index) {
+                plant.current_health -= lost;
+                if pulled_up.contains(&index) {
+                    plant.current_health = 0.0;
                 }
             }
         }
+
+        self.forage_taken += took_altogether;
+        self.mouths_fed += mouths;
+        self.mouths_that_tried += reached;
+
+        // The dead go back into the ground on the plants' own pass - see
+        // `PlantManager::what_died`, which is what reads a plant at nothing.
+
+        for (at, muck) in dunged {
+            let here = Position::new(at.0, at.1);
+            if let Some(tile) = grid.get_tile_mut(&here) {
+                tile.soil.add_leaf_litter(muck);
+            }
+        }
+    }
+
+    /// The tile an animal is on, and the eight around it.
+    const WHERE_AN_ANIMAL_CAN_REACH: [(i32, i32); 9] = [
+        (0, 0),
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, -1),
+        (-1, 1),
+        (-1, -1),
+    ];
+
+    /// How much standing growth an animal reaches for in a tick.
+    ///
+    /// Worked out from what it costs to be that animal - its own
+    /// `hunger_rate` - rather than from a table of appetites by size. Size is
+    /// what sets `hunger_rate` in the first place, so a second table by size
+    /// is a second answer to one question, and the first cut of this had one:
+    /// it set the appetites so that a mouthful came out worth what the old
+    /// flat rates gave, which preserved a number the module's own comments
+    /// call out as feeding an animal "nearly a hundred times what it burns".
+    /// Five thousand seven hundred head on a hundred and forty-four hectares
+    /// with a mean hunger of 0.30 - which is to say the grass was still
+    /// infinite, only now it was infinite by arithmetic instead of by
+    /// omission.
+    ///
+    /// The margin over what it burns is what lets a well-fed animal put
+    /// condition on and get to breeding; on ground that will not give it that
+    /// much it takes what there is and stays hungry.
+    fn what_it_reaches_for(species: &AnimalSpecies) -> f32 {
+        /// How much over its own burn an animal eats when it can.
+        const MORE_THAN_IT_BURNS: f32 = 3.0;
+
+        species.hunger_rate * MORE_THAN_IT_BURNS / Self::WHAT_A_MOUTHFUL_IS_WORTH
+    }
+
+    /// A step towards the nearest ground with something growing on it.
+    ///
+    /// Rings outwards from where the animal is standing and stops at the
+    /// first thing it finds, so it walks towards the near side of the next
+    /// patch rather than across the map. A cell is ten metres, so
+    /// `HOW_FAR_AN_ANIMAL_WILL_LOOK` is a couple of hundred metres - about as
+    /// far as an animal can see over open ground, and as far as it is worth
+    /// spending on the search.
+    fn where_there_is_something_growing(
+        from: (i32, i32),
+        where_it_grows: &[u32],
+        width: usize,
+        height: usize,
+    ) -> Option<(i32, i32)> {
+        const HOW_FAR_AN_ANIMAL_WILL_LOOK: i32 = 20;
+
+        for ring in 2..=HOW_FAR_AN_ANIMAL_WILL_LOOK {
+            for dy in -ring..=ring {
+                for dx in -ring..=ring {
+                    // Only the edge of this ring; the inside has been looked at.
+                    if dx.abs() != ring && dy.abs() != ring {
+                        continue;
+                    }
+
+                    let (x, y) = (from.0 + dx, from.1 + dy);
+                    if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                        continue;
+                    }
+                    if where_it_grows[y as usize * width + x as usize] == u32::MAX {
+                        continue;
+                    }
+
+                    // A step of the size an animal covers between grazing
+                    // passes, in the direction of what it has found.
+                    let step = |d: i32| d.signum() * d.abs().min(Self::HOW_FAR_AN_ANIMAL_WALKS);
+                    return Some((from.0 + step(dx), from.1 + step(dy)));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// How far an animal moves in a grazing pass, in cells.
+    ///
+    /// Ten ticks is most of a day and a cell is ten metres, so this is a few
+    /// hundred metres of walking - which is what a grazing animal does in a
+    /// day when the ground it is on has been eaten off.
+    const HOW_FAR_AN_ANIMAL_WALKS: i32 = 3;
+
+    /// How much a grown tree gives a browsing animal, per tick.
+    ///
+    /// A flat amount rather than a share of the tree: what is within reach of
+    /// something on four legs is the same handful of shoots whether the tree
+    /// is a birch or a sequoia. Enough that a wood will carry a few animals
+    /// and nothing like what a meadow carries, which is the right way round.
+    const WHAT_A_TREE_OFFERS_A_BROWSER: f32 = 0.05;
+
+    /// How much hunger a point of standing growth answers.
+    ///
+    /// One for one. Plant condition and animal hunger are both arbitrary
+    /// scales and there is no reason to put a rate between them; what matters
+    /// is that the two ends are real - how fast a plant puts condition back on
+    /// (`HOW_FAST_A_PLANT_COMES_BACK`, scaled by what the ground gives it) and
+    /// how fast an animal burns it (`hunger_rate`) - because their ratio is
+    /// what a piece of country will carry.
+    ///
+    /// As it comes out: a grass has five points of condition and puts back
+    /// about eight a year on middling ground, and a deer burns two hundred a
+    /// year. So a deer wants the whole yield of something like seventy or
+    /// eighty patches of sward, and a hundred and forty-four hectares carrying
+    /// ten thousand of them will feed deer in the low hundreds.
+    const WHAT_A_MOUTHFUL_IS_WORTH: f32 = 1.0;
+
+    /// How much of a mouthful an animal actually gets out of it.
+    ///
+    /// A grazing animal digests something over half of what it eats and the
+    /// rest goes through and lands on the ground behind it. Of the half it
+    /// does digest, nearly all is burnt for warmth and movement and leaves as
+    /// breath and water; only a few per cent ever becomes animal. So what the
+    /// ground gets back is what came straight through, and what it loses for
+    /// good is what the animal burned.
+    const WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL: f32 = 0.55;
+
+    /// Whether this animal feeds by digging.
+    ///
+    /// A big omnivore does: a bear turns ground over for roots and grubs and
+    /// what it turns over does not grow back. A deer crops what is above the
+    /// ground and the plant puts it back.
+    fn does_it_dig(species: &AnimalSpecies) -> bool {
+        species.diet == DietType::Omnivore
+            && matches!(species.size, AnimalSize::Large | AnimalSize::Huge)
     }
 
     /// Update animal behavior with hunger consideration
@@ -3298,11 +3576,16 @@ mod tests {
 
     #[test]
     fn test_animal_manager_tick_aging() {
+        let mut grid = crate::world::Grid::new(8, 8);
+        grid.generate_terrain();
+        grid.settle_soil();
+        let mut plants = crate::environment::PlantManager::new(16);
+
         let mut manager = AnimalManager::new(100);
         manager.spawn_animal("rabbit".to_string(), (0, 0));
 
         let initial_age = manager.animals[0].age;
-        manager.tick();
+        manager.tick_in_world(&mut grid, &mut plants, 10.0);
 
         // Animal should have aged
         assert!(manager.animals[0].age > initial_age);

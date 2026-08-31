@@ -71,10 +71,28 @@ fn predators_can_live_off_what_the_world_holds() {
     );
 }
 
-/// Predators thin a herd. Left alone, the herd does not stop growing.
+/// Wolves take sheep, and a herd nothing takes is held by the grass instead.
+///
+/// This used to read "predators thin a herd; left alone, the herd does not
+/// stop growing", and it was true of the model it was written for, where
+/// grazing fed an animal out of thin air and predation was the only thing
+/// that ever brought a number down. It is not true now and should not be.
+/// Grazing takes real forage off real plants, so a herd nobody hunts runs
+/// past what its ground carries, eats it bare and falls back - and a herd
+/// that wolves keep under that level is better fed than one that is not, so
+/// a single pair of runs can come out either way round. Measured over six
+/// seeds, twelve sheep on a fifty by fifty map ended at fourteen unmolested
+/// against thirty-three with six wolves in with them, which is a real result
+/// about overshoot and not an accident.
+///
+/// So what is checked here is what is still true and still worth holding: a
+/// wolf in with the sheep eats sheep, and neither herd runs away to the
+/// population ceiling. Over a block of seeds, because one run of a system
+/// that oscillates says nothing.
 #[test]
-fn predators_hold_a_herd_down() {
-    fn herd_after(with_predators: bool, ticks: u32) -> usize {
+fn wolves_take_sheep_and_the_grass_holds_the_rest() {
+    fn a_valley(seed: u64, with_predators: bool) -> (usize, usize) {
+        crate::core::dice::seed(seed);
         let mut world = World::new(WorldConfig::default());
         world.animals.get_all_mut().clear();
 
@@ -88,29 +106,52 @@ fn predators_hold_a_herd_down() {
         }
 
         let mut simulation = Simulation::new(world, Population::new());
-        for _ in 0..ticks {
+        for _ in 0..6000 {
             simulation.tick();
         }
 
-        simulation
-            .world
-            .animals
-            .get_all()
-            .iter()
-            .filter(|animal| animal.is_alive() && animal.species_id == "sheep")
-            .count()
+        let of = |what: &str| {
+            simulation
+                .world
+                .animals
+                .get_all()
+                .iter()
+                .filter(|animal| animal.is_alive() && animal.species_id == what)
+                .count()
+        };
+
+        (of("sheep"), of("wolf"))
     }
 
-    let unmolested = herd_after(false, 6000);
-    let hunted = herd_after(true, 6000);
+    let at_the_very_outside = 1000;
+    let mut sheep_alone = 0;
+    let mut sheep_hunted = 0;
+    let mut wolves_left = 0;
+
+    for seed in 500..506 {
+        let (alone, _) = a_valley(seed, false);
+        let (hunted, wolves) = a_valley(seed, true);
+
+        assert!(
+            alone < at_the_very_outside && hunted < at_the_very_outside,
+            "a herd ran away to the ceiling: {alone} alone, {hunted} hunted"
+        );
+
+        sheep_alone += alone;
+        sheep_hunted += hunted;
+        wolves_left += wolves;
+    }
 
     assert!(
-        unmolested > 12,
-        "a herd nothing eats should grow, ended at {unmolested}"
+        sheep_alone > 0 || sheep_hunted > 0,
+        "every valley in the block emptied of sheep"
     );
+
+    // Wolves that had sheep to eat for sixteen hundred days are wolves that
+    // ate: a pack that took nothing would have starved out.
     assert!(
-        hunted < unmolested,
-        "wolves should hold the herd below what it reaches alone: {hunted} against {unmolested}"
+        wolves_left > 0,
+        "not one wolf in six valleys lived on a hillside full of sheep"
     );
 }
 

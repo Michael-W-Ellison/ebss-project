@@ -334,3 +334,162 @@ fn the_ground_register_and_the_map_agree() {
         simulation.world.grid.width * simulation.world.grid.height
     );
 }
+
+// --- what the grazers take, and what they give back --------------------------
+
+/// A world with one plant and one animal standing on it.
+fn a_beast_on_a_plant(
+    beast: &str,
+    plant: &str,
+) -> (
+    crate::world::Grid,
+    crate::environment::PlantManager,
+    crate::environment::AnimalManager,
+) {
+    use crate::environment::{AnimalManager, AnimalState, PlantManager};
+    use crate::world::{Grid, Terrain, TerrainType};
+
+    let mut grid = Grid::new(16, 16);
+    for row in grid.tiles.iter_mut() {
+        for tile in row.iter_mut() {
+            tile.terrain = Terrain::new(TerrainType::Meadow);
+        }
+    }
+    grid.settle_soil();
+
+    let mut plants = PlantManager::new(64);
+    plants.spawn_plant(plant.to_string(), (8, 8));
+
+    let mut animals = AnimalManager::new(16);
+    animals.spawn_animal(beast.to_string(), (8, 8));
+    for animal in animals.get_all_mut() {
+        animal.state = AnimalState::Grazing;
+    }
+
+    (grid, plants, animals)
+}
+
+/// Grazing takes something off the map.
+///
+/// It took nothing at all before: `process_grazing` fed an animal out of thin
+/// air, and the comment above the breeding pass has said so in as many words
+/// since it was written. What stopped a herd growing was a hard number in a
+/// field rather than the grass running out.
+#[test]
+fn a_grazing_animal_takes_the_plant_down_with_it() {
+    let (mut grid, mut plants, mut animals) = a_beast_on_a_plant("deer", "grass");
+
+    let before = plants.all_plants()[0].current_health;
+    assert!(before > 0.0, "the fixture has no plant standing in it");
+
+    for _ in 0..20 {
+        animals.tick_in_world(&mut grid, &mut plants, 10.0);
+    }
+
+    let after = plants
+        .all_plants()
+        .first()
+        .map(|plant| plant.current_health)
+        .unwrap_or(0.0);
+
+    assert!(
+        after < before,
+        "a deer stood on a patch of grass for two hundred ticks and the grass \
+         is no smaller: {before:.2} to {after:.2}"
+    );
+}
+
+/// And what it does not use lands on the ground behind it.
+///
+/// Most of a mouthful goes straight through. That is what a grazing animal
+/// does for the ground it walks on, and until now nothing in the model did it:
+/// what an animal ate came from nowhere and went nowhere.
+#[test]
+fn what_an_animal_passes_goes_back_into_the_ground() {
+    use crate::world::Position;
+
+    let (mut grid, mut plants, mut animals) = a_beast_on_a_plant("deer", "grass");
+
+    let underfoot = Position::new(8, 8);
+    let before = grid
+        .get_tile(&underfoot)
+        .map(|tile| tile.soil.litter())
+        .unwrap_or(0.0);
+
+    for _ in 0..20 {
+        animals.tick_in_world(&mut grid, &mut plants, 10.0);
+    }
+
+    let after = grid
+        .get_tile(&underfoot)
+        .map(|tile| tile.soil.litter())
+        .unwrap_or(0.0);
+
+    assert!(
+        after > before,
+        "the ground under a feeding deer is no richer: {before:.4} to {after:.4}"
+    );
+}
+
+/// A bear digs a plant up; a deer crops it and it comes back.
+///
+/// The difference is in how the animal feeds rather than in a hand-written
+/// list of which plants count as roots.
+#[test]
+fn what_is_dug_up_does_not_come_back() {
+    let (mut grid, mut plants, mut bears) = a_beast_on_a_plant("bear", "potato");
+    let (mut deer_ground, mut deer_plants, mut deer) = a_beast_on_a_plant("deer", "potato");
+
+    for _ in 0..3 {
+        bears.tick_in_world(&mut grid, &mut plants, 10.0);
+        deer.tick_in_world(&mut deer_ground, &mut deer_plants, 10.0);
+    }
+
+    let dug = plants.all_plants()[0].current_health;
+    let cropped = deer_plants.all_plants()[0].current_health;
+
+    assert!(
+        dug <= 0.0,
+        "a bear fed on this and left {dug:.2} of it standing"
+    );
+    assert!(
+        cropped > 0.0,
+        "a deer took the whole plant rather than cropping it: {cropped:.2}"
+    );
+}
+
+/// The size of a herd comes from the land, not from a number in a field.
+///
+/// A hundred and twenty by a hundred and twenty carries a ceiling of 5,760
+/// animals. With grazing feeding every animal out of nothing the herds went
+/// to that ceiling inside three years and sat on it - 5,750 head on a hundred
+/// and forty-four hectares, mean hunger 0.30, which is to say the grass was
+/// infinite. What they settle at now is what the ground grows.
+#[test]
+fn a_herd_settles_at_what_the_ground_will_feed() {
+    use crate::world::WorldConfig;
+
+    crate::core::dice::seed(23);
+    let mut world = World::new(WorldConfig::default().with_size(120, 120));
+
+    let at_the_very_outside = 5760;
+    let started_with = world.animals.how_many_are_alive();
+
+    // Five years is well past where the old model was pinned to its ceiling.
+    for _ in 0..(5 * crate::environment::seasons::TICKS_PER_YEAR) {
+        world.tick();
+    }
+
+    let alive = world.animals.how_many_are_alive();
+
+    assert!(
+        alive > 0,
+        "the country carried {started_with} head and now carries none"
+    );
+    assert!(
+        alive < at_the_very_outside / 4,
+        "{alive} head on a hundred and forty-four hectares, against a ceiling \
+         of {at_the_very_outside}: the herd is still bounded by the array and \
+         not by the grass"
+    );
+}

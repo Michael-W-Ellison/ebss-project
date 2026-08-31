@@ -8351,6 +8351,132 @@ seed, and an assertion about a block of worlds rather than about one. Filed.
 
 ---
 
+### 133. Grazing that took nothing, and a herd size that was a number in a field
+
+`process_grazing` fed an animal out of thin air. The comment above the
+breeding pass had said so in as many words since it was written - "grazing
+feeds every animal nearly a hundred times what it burns, so hunger never
+becomes the limit" - and what stopped a herd growing instead was a headcount
+of mouths per six-by-six patch with a ceiling of eight on it. Nothing on the
+map got any smaller for being eaten and nothing went back onto it.
+
+Now `AnimalManager::tick_in_world` takes the ground and the growing things.
+A mouthful comes off a plant standing within a step, and the plant is that
+much less of a plant for it. What the animal cannot use lands behind it as
+muck. A plant cropped to nothing dies on the vegetation's own pass. An animal
+that feeds by digging - a big omnivore - takes the whole plant rather than
+cropping it, so a bear that digs up a root kills it; that is decided by how
+the animal feeds and not by a hand-written list of which plants are roots.
+`PATCH_CARRYING_CAPACITY` and `GRAZING_PATCH` are gone: `can_breed` already
+asks whether an animal is fed, and now that being fed depends on the grass,
+carrying capacity comes out of the grass.
+
+Five things had to be found by measuring, and every one of them was the
+ecology settling somewhere plainly wrong.
+
+**The first calibration preserved the number the module calls out as wrong.**
+Setting the appetites so a mouthful came out worth what the old flat rates
+gave kept the hundredfold. Five thousand seven hundred head on a hundred and
+forty-four hectares with a mean hunger of 0.30: the grass was still infinite,
+by arithmetic instead of by omission. What an animal reaches for is its own
+`hunger_rate` and a margin now, and a point of plant condition answers a point
+of hunger, so the two ends of the exchange are both real things.
+
+**A hungry animal stood still.** It either did nothing or shuffled a cell or
+two at random when its `state_timer` ran out. Twelve sheep cropped their own
+few tiles bare by tick 2,800 and then took **not one further mouthful in
+three thousand ticks**, with six hundred plants and thirty-eight thousand of
+standing growth on the map around them. An animal that finds nothing in reach
+walks towards the nearest ground with something on it.
+
+**A grown tree is browse, not nothing.** Excluding standing timber outright is
+right about trunks and wrong about a wooded map, where most of what is growing
+is timber. A grown tree gives a flat small amount - the shoots something on
+four legs can reach - whatever its size, and cropping it does not touch it.
+
+**A fresh map could not feed the fauna it spawned.** `spawn_naturalistic` put
+212 plants on 2,500 tiles, from when a `Plant` was a fixture nothing ate. Left
+alone the same country settles at about two-fifths covered, so those figures
+were not a sparser world, they were the same world before it had filled in - 
+and in the meantime a dozen sheep on twenty-five hectares, light stocking for
+real ground, starved. A world opens near where it settles now.
+
+**A plant took more out of its tile than it put back.** An appetite that took
+no notice of what kind of plant it was, and a leaf fall by size that took no
+notice of what the plant had drawn: two unrelated tables for the same physics,
+and the third accounting of it in this model. A small plant took two and a
+half times what it returned, and a meadow nobody walked on lost a tenth of its
+fertility in a year. A plant that has finished growing gives back everything
+it takes; one still building itself keeps half, which comes back when it dies.
+
+What a hundred and twenty by a hundred and twenty does with nobody on it, over
+a hundred and fifty years:
+
+| year | trees | bushes | small | animals |
+|---:|---:|---:|---:|---:|
+| 0 | 326 | 145 | 607 | 174 |
+| 15 | 318 | 154 | 4,998 | 31 |
+| 60 | 338 | 151 | 5,683 | 63 |
+| 150 | 365 | 130 | 5,673 | 55 |
+
+The animals overshoot, eat their ground back, fall, and settle into a cycle
+between twenty and a hundred head - which is the shape of a forage cycle and
+not a number in a field. Nothing goes extinct.
+
+**Speed.** A tick at a thousand by a thousand, over the whole of this work:
+
+| | simulation | a world-year |
+|---|---:|---:|
+| before any of it | 47.233 ms | 204 s |
+| after the ground register and the map (#128, #129) | 5.693 | 24.6 s |
+| plants that live and die (#131) | 8.067 | 34.8 s |
+| grazing, and a map stocked to feed it | 16.088 | 69.5 s |
+| the growing worked out once in twenty ticks | **11.353** | **49.0 s** |
+
+Two things paid for most of it: the grazing lookup was rebuilt over every
+plant every tick, which was three-quarters of a tick on its own, and now runs
+on the ten-tick cadence with a flat index; and the vegetation pass, which is
+the single most expensive thing in a tick and the one that least needs doing
+often, runs once in twenty ticks and stands for twenty. Twenty ticks is under
+two days and nothing a plant does happens faster than that.
+
+So a living ecology on a hundred square kilometres - a quarter of a million
+plants growing, seeding and dying, and the fauna that eats them - costs about
+twice what a dead one did, and a quarter of what the same map cost at the
+start of this work.
+
+Thirty-two worlds, 4,320 ticks, against the same code without grazing: mean
+alive up at five of the seven marks, mean last-alive tick **3,783 -> 4,062**,
+mean peak store 125.8 -> 101.1. Settlements last longer and put by less, which
+is what you would expect from a country where the game has to eat too.
+
+`predator_prey_tests::predators_hold_a_herd_down` was rewritten rather than
+made to pass. It asserted that a herd nothing eats grows without limit and
+that wolves are what stops it - true of the model it was written for, where
+grazing was free and predation was the only brake. Now the grass is the brake,
+a herd nobody hunts overshoots and crashes, and a herd wolves keep under
+carrying capacity is *better* fed: over six seeds, twelve sheep ended at
+fourteen unmolested against thirty-three with six wolves in with them. What it
+holds now is what is still true - wolves eat sheep, and neither herd runs away
+to the ceiling - measured over a block of seeds, because one run of a system
+that oscillates says nothing.
+
+`bearing_tests::ground_nobody_harvests_is_no_poorer_a_year_later` now measures
+from the fifth year rather than the first. That is a change to when the
+question is asked and not to the question: a world opens with less standing
+growth than it settles at, so a tile genuinely and rightly loses ground in
+year one, into the plants standing on it. What has to break even is the steady
+state.
+
+Two tests moved and both are of the kind #132 names: `clothing_tests::a_cold_agent_ends_up_dressed`
+and `situation_tests::a_settlement_works_things_out_that_nobody_wrote_down`
+build unseeded worlds and assert on the outcome of one settlement, so they
+turn over whenever anything upstream draws a roll it did not draw before. The
+clothing one fails as an index panic on an empty population rather than as an
+assertion, which is #228.
+
+---
+
 ---
 
 ## Recently fixed

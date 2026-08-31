@@ -2075,17 +2075,37 @@ impl World {
         // What is under the earth keeps
         self.what_is_buried_keeps();
 
-        // Update animals (AI, movement, aging)
-        self.animals.tick();
+        // Update animals (AI, movement, aging), and what they take off the
+        // ground and put back onto it. Grazing runs on the vegetation's own
+        // ten-tick cadence - see `AnimalManager::tick_in_world` - so a
+        // grazing pass stands for ten ticks of feeding.
+        let grazing_ticks = if self.tick % 10 == 0 { 10.0 } else { 0.0 };
+        self.animals
+            .tick_in_world(&mut self.grid, &mut self.plants, grazing_ticks);
 
         // Update plants: growth on what the ground and sky give them, and the
-        // leaf fall that in time becomes more of it. Every ten ticks, because
-        // plants take thousands to grow and a world holds hundreds of them.
-        if self.tick % 10 == 0 {
+        // leaf fall that in time becomes more of it.
+        //
+        // Once in twenty ticks, and each pass stands for twenty. Plants take
+        // thousands of ticks to grow and a hundred square kilometres carries
+        // a quarter of a million of them, so this is the single most
+        // expensive thing in a tick and the one that least needs doing often:
+        // twenty ticks is under two days, and nothing a plant does happens
+        // faster than that. Grazing keeps its own ten-tick cadence and builds
+        // its own view of what is growing where - see
+        // `AnimalManager::tick_in_world` - because an animal does need to be
+        // asked oftener than a tree.
+        const HOW_OFTEN_THE_GROWING_IS_WORKED_OUT: u32 = 20;
+
+        if self.tick % HOW_OFTEN_THE_GROWING_IS_WORKED_OUT == 0 {
             let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
             let season = self.climate.current_season();
-            self.plants
-                .tick_in_world(&mut self.grid, precipitation, 10.0, season);
+            self.plants.tick_in_world(
+                &mut self.grid,
+                precipitation,
+                HOW_OFTEN_THE_GROWING_IS_WORKED_OUT as f32,
+                season,
+            );
         }
 
         // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
