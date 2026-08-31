@@ -2026,7 +2026,7 @@ impl World {
             // and no use for a store. What is on the plant now falls off it
             // outside the weeks it bears, which is what fruit does.
             if !resource.resource_type.is_it_bearing(today) {
-                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK);
+                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK, soil);
                 continue;
             }
 

@@ -850,13 +850,39 @@ impl ResourceNode {
     /// Fruit falls, leaf goes over, and a seed head that nobody cut shatters.
     /// Always takes at least one, so a patch actually empties rather than
     /// creeping down by fractions for ever.
-    pub fn what_it_carries_falls_off(&mut self, share: f32) {
+    ///
+    /// And what falls goes into the ground it fell on. This was the hole in
+    /// the whole ecology: a crop nobody picked was simply **deleted**, so
+    /// every growing tile on the map was mined out by its own plants with
+    /// nobody near it. Measured on a world with no people in it at all, the
+    /// ground under the greens went from 0.60 fertility to 0.35 in nine
+    /// years, and because standing capacity follows fertility the map's
+    /// standing greens fell from 3,516 units to 2,260 - **five per cent a
+    /// year, compounding, for ever**. See ISSUES_FOUND.md #127.
+    ///
+    /// The arithmetic closes exactly, and it has to be `RESIDUE_PER_UNIT_GROWN`
+    /// for it to. Growing a unit draws `NUTRIENT_PER_UNIT_GROWN` and puts back
+    /// half of it at once as root and stalk; the other half is in the part
+    /// somebody carries away. Nobody carried this away, so the other half
+    /// falls here too, and the two halves are the same plant and the same
+    /// number. A patch nobody touches breaks even. A patch that is picked
+    /// still loses, which is what picking a patch means.
+    pub fn what_it_carries_falls_off(&mut self, share: f32, soil: &mut Soil) {
         if self.amount == 0 {
             return;
         }
 
-        let falling = ((self.amount as f32) * share).ceil() as u32;
-        self.amount = self.amount.saturating_sub(falling.max(1));
+        let falling = (((self.amount as f32) * share).ceil() as u32)
+            .max(1)
+            .min(self.amount);
+        self.amount -= falling;
+
+        // What grew in the water fell in the water, and the bank is none the
+        // richer for it - the same exception `regenerate_in_ground` makes when
+        // it draws.
+        if !self.resource_type.grows_in_water() {
+            soil.add_leaf_litter(falling as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
+        }
     }
 
     /// Check if node is depleted

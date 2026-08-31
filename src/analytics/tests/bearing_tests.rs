@@ -426,9 +426,77 @@ fn a_nearly_bare_patch_finishes_emptying() {
     let mut bush = ResourceNode::new(ResourceType::Food, Position::new(1, 1), 60);
     bush.amount = 1;
 
-    bush.what_it_carries_falls_off(0.0001);
+    let mut ground = crate::world::soil::Soil::for_terrain(
+        crate::world::TerrainType::Plains,
+    );
+
+    bush.what_it_carries_falls_off(0.0001, &mut ground);
 
     assert_eq!(bush.amount, 0);
+}
+
+/// And what falls off goes into the ground it fell on.
+///
+/// A crop nobody picked used to be deleted, so a growing tile was mined out
+/// by its own plants with nobody near it. See ISSUES_FOUND.md #127.
+#[test]
+fn what_nobody_picks_goes_back_into_the_ground() {
+    let mut bush = ResourceNode::new(ResourceType::Food, Position::new(1, 1), 60);
+    bush.amount = 40;
+
+    let mut ground = crate::world::soil::Soil::for_terrain(
+        crate::world::TerrainType::Plains,
+    );
+    ground.leaf_litter = 0.0;
+
+    bush.what_it_carries_falls_off(0.5, &mut ground);
+
+    assert!(bush.amount < 40, "some of it came off the bush");
+    assert!(
+        ground.leaf_litter > 0.0,
+        "and it is lying on the ground under it, not gone out of the world"
+    );
+}
+
+/// A patch nobody ever touches breaks even on the ground it grows in.
+///
+/// This is the whole of what makes the map self-sufficient: growing a unit
+/// takes nutrient out of the tile and puts half of it straight back as root
+/// and stalk, and the other half comes back when the uneaten crop falls. Over
+/// a year of growing and shedding with nobody near it, the ground it grew on
+/// should be no poorer than it started.
+#[test]
+fn ground_nobody_harvests_is_no_poorer_a_year_later() {
+    use crate::environment::seasons::TICKS_PER_DAY;
+
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+
+    let before = mean_fertility_under(&world, ResourceType::Greens);
+
+    for _ in 0..(TICKS_PER_DAY * 360) {
+        world.tick();
+    }
+
+    let after = mean_fertility_under(&world, ResourceType::Greens);
+
+    assert!(
+        after >= before * 0.98,
+        "a meadow nobody walked on lost its fertility: {before:.3} then {after:.3}"
+    );
+}
+
+/// The mean fertility of every tile carrying this kind of growing thing.
+fn mean_fertility_under(world: &World, kind: ResourceType) -> f32 {
+    let mut total = 0.0;
+    let mut n = 0.0;
+    for r in world.resources.iter().filter(|r| r.resource_type == kind) {
+        if let Some(tile) = world.grid.get_tile(&r.position) {
+            total += tile.soil.fertility();
+            n += 1.0;
+        }
+    }
+    if n == 0.0 { 0.0 } else { total / n }
 }
 
 // --------------------------------------------------------------------------

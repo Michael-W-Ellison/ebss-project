@@ -1999,7 +1999,7 @@ impl AnimalManager {
 
     /// Spawn an animal at a position
     pub fn spawn_animal(&mut self, species_id: String, position: (i32, i32)) -> Option<Uuid> {
-        if self.animals.len() >= self.max_population {
+        if self.how_many_are_alive() >= self.max_population {
             return None;
         }
 
@@ -2011,6 +2011,16 @@ impl AnimalManager {
     }
 
     /// Spawn a herd/pack of animals
+    /// Put a group of one species on the map.
+    ///
+    /// Whether there is room for them is the caller's question, not this
+    /// one's - `process_breeding`, `spawn_initial_population` and
+    /// `process_immigration` each ask it before they get here, and each means
+    /// something slightly different by it. This used to ask again on its own
+    /// account, which quietly overrode the one caller that had a reason to
+    /// say yes: a species that is *gone* is let back into a full map on
+    /// purpose - see `process_immigration` - and every one of its arrivals
+    /// was refused here.
     pub fn spawn_group(&mut self, species_id: String, center: (i32, i32), count: u32) -> Option<Uuid> {
         let group_id = crate::core::dice::name();
         let mut members = Vec::new();
@@ -2018,10 +2028,6 @@ impl AnimalManager {
         let species = self.registry.as_ref()?.get(&species_id)?;
 
         for i in 0..count {
-            if self.animals.len() >= self.max_population {
-                break;
-            }
-
             // Spawn in a circle around center
             let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
             let radius = 3.0;
@@ -2046,6 +2052,38 @@ impl AnimalManager {
     /// Get all animals
     pub fn get_all(&self) -> &Vec<Animal> {
         &self.animals
+    }
+
+    /// How many animals this world actually holds.
+    ///
+    /// Not `self.animals.len()`, which is how many animal *records* exist -
+    /// and every one of those checks was asking the wrong question, because
+    /// nothing ever took a dead animal out of the list. Measured on a world
+    /// with nobody in it at all, twenty years in: **898 records of which 9.8
+    /// were alive**. The corpses filled `max_population`, so nothing could be
+    /// born and nothing could migrate in, the boom cohort aged out together,
+    /// and **seventeen of twenty species were extinct in every world**. A map
+    /// with no people on it emptied itself of animals.
+    ///
+    /// One owner, because the cap is asked about in seven places and all
+    /// seven meant the living. See ISSUES_FOUND.md #127.
+    pub fn how_many_are_alive(&self) -> usize {
+        self.animals.iter().filter(|animal| animal.is_alive()).count()
+    }
+
+    /// Take the dead off the map.
+    ///
+    /// A body is read exactly once, in the tick it falls: whatever killed it
+    /// looks at it there and then - a predator to feed, a hunter to butcher -
+    /// and nothing wants it afterwards. Leaving them in the list made the
+    /// world's animal population a tally of everything that had ever lived in
+    /// it.
+    ///
+    /// If something is one day wanted that eats what nobody stood over - see
+    /// the open note on a kill left lying - it will want the bodies kept for
+    /// a while, and this is where that would go.
+    fn bury_the_dead(&mut self) {
+        self.animals.retain(|animal| animal.is_alive());
     }
 
     /// All animals, mutably
@@ -2186,6 +2224,10 @@ impl AnimalManager {
         for (idx, _species_id, behavior, is_wild, is_hungry) in animals_data {
             self.update_animal_behavior_with_hunger(idx, behavior, is_wild, is_hungry);
         }
+
+        // And what died this pass goes off the map. Everything that wanted to
+        // look at a body has looked at it by now.
+        self.bury_the_dead();
     }
 
     /// What a wild animal does about people.
@@ -2316,7 +2358,7 @@ impl AnimalManager {
         for (species_id, position, group_id, litter_size, _cooldown) in births {
             if let Some(species) = registry.get(&species_id) {
                 for _ in 0..litter_size {
-                    if self.animals.len() >= self.max_population {
+                    if self.how_many_are_alive() >= self.max_population {
                         break;
                     }
 
@@ -2437,7 +2479,7 @@ impl AnimalManager {
                                 // Spawn eggs (as new animals with age 0)
                                 let litter = rng.gen_range(species.litter_size.0..=species.litter_size.1);
                                 for _ in 0..litter {
-                                    if self.animals.len() >= self.max_population {
+                                    if self.how_many_are_alive() >= self.max_population {
                                         break;
                                     }
                                     let pos = self.animals[idx_a].position;
@@ -2613,18 +2655,15 @@ impl AnimalManager {
         /// How many arrive at once
         const ARRIVALS: (u32, u32) = (1, 3);
 
-        self.ticks_since_migration += 1;
-        if self.ticks_since_migration < MIGRATION_INTERVAL {
-            return;
-        }
-        self.ticks_since_migration = 0;
-
-        let bounds = match self.world_bounds {
-            Some(bounds) => bounds,
-            None => return,
-        };
-
-        // What is here now, and the most there has ever been
+        // What is here now, and the most there has ever been.
+        //
+        // Counted every pass rather than every two thousand ticks. This used
+        // to sit below the interval gate, so a species had to be alive at a
+        // migration moment to be remembered at all - anything that came into
+        // the world and died inside its first two thousand ticks was recorded
+        // as never having lived here, and could never come back. That is what
+        // happened to the owl, which was in one world of eight at the start
+        // and in none of them ever again. See ISSUES_FOUND.md #127.
         let mut present: BTreeMap<String, u32> = BTreeMap::new();
         for animal in &self.animals {
             if animal.is_alive() {
@@ -2636,6 +2675,17 @@ impl AnimalManager {
             let peak = self.peak_population.entry(species_id.clone()).or_insert(0);
             *peak = (*peak).max(*count);
         }
+
+        self.ticks_since_migration += 1;
+        if self.ticks_since_migration < MIGRATION_INTERVAL {
+            return;
+        }
+        self.ticks_since_migration = 0;
+
+        let bounds = match self.world_bounds {
+            Some(bounds) => bounds,
+            None => return,
+        };
 
         let depleted: Vec<String> = self
             .peak_population
@@ -2654,8 +2704,21 @@ impl AnimalManager {
         let mut rng = crate::core::dice::roll();
 
         for species_id in depleted {
-            if self.animals.len() >= self.max_population {
-                break;
+            // A species that is *gone* comes back whether the map is full or
+            // not. The cap is a rough statement of how much life this country
+            // carries, and a country carrying its whole weight in rabbits is
+            // exactly the country a fox should walk into - refusing him for
+            // want of room is the cap deciding which species exist.
+            //
+            // Measured before this: with the map pinned at its cap, the
+            // immigration pass broke out on the first line every time, so
+            // owl and fox went out of every world that had them in the first
+            // year and never came back in twenty. A merely thin species still
+            // waits for room; an absent one does not.
+            let gone = present.get(&species_id).copied().unwrap_or(0) == 0;
+
+            if !gone && self.how_many_are_alive() >= self.max_population {
+                continue;
             }
 
             if !rng.gen_bool(MIGRATION_CHANCE) {
@@ -2935,7 +2998,9 @@ impl AnimalManager {
         let mut spawned = 0;
         let mut prey_present: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for _ in 0..prey_herds {
-            if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
+            if spawned >= config.max_initial_population
+                || self.how_many_are_alive() >= self.max_population
+            {
                 break;
             }
 
@@ -2982,7 +3047,9 @@ impl AnimalManager {
 
         if config.spawn_predators && !feedable.is_empty() {
             for _ in 0..predator_herds {
-                if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
+                if spawned >= config.max_initial_population
+                || self.how_many_are_alive() >= self.max_population
+            {
                     break;
                 }
 

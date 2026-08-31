@@ -7978,6 +7978,135 @@ That is the same defect `HUNT` had, and it is filed.
 
 ---
 
+### 127. A map with nobody on it starved its own soil and buried its own animals
+
+The ask was that the ecology should stand up on its own: a world with no
+people in it should still be there in thirty years. Run empty, it was not.
+Two defects, both of the kind this document keeps naming - a thing that left
+the world without going anywhere, and a number that meant two things.
+
+**The vegetation was in terminal decline with nobody touching it.** Midsummer
+standing crop, eight worlds, no agents at all:
+
+| | y1 | y10 |
+|---|---:|---:|
+| Greens | 3,516 | **2,260** |
+| Roots | 1,681 | 1,277 |
+| Flax | 245 | 183 |
+| Cotton | 127 | 95 |
+
+Five per cent a year, compounding, for ever. Not a boom settling to a floor -
+the ratio between successive years is flat at 0.95, which is a geometric decay
+to nothing.
+
+**And it was the ground, not the growth.** Sampled every fifteen days, greens
+sit *exactly* at `how_heavy_a_crop_it_carries` on all 75 patches, all year.
+The standing crop was tracking a falling capacity, and capacity follows
+fertility. On the tiles that grow greens, fertility went **0.60 to 0.35** in
+nine years - while the map-wide mean *rose* to 0.38, which is why nothing had
+noticed: the tiles that grow nothing were quietly getting richer while the
+tiles that grow food were being mined out.
+
+**By their own plants.** `regenerate_in_ground` draws
+`NUTRIENT_PER_UNIT_GROWN` per unit and puts half of it straight back as root
+and stalk. The other half is in the part somebody carries away - and nobody
+carried it away. What nobody picked went over in its own time through
+`what_it_carries_falls_off`, which **deleted it**. Every growing tile on the
+map was a one-way drain with no one near it.
+
+The fix closes the arithmetic exactly: what falls goes into the ground it fell
+on, at `RESIDUE_PER_UNIT_GROWN`, because the two halves are the same plant and
+the same number. A patch nobody touches breaks even; a patch that is picked
+still loses, which is what picking a patch means.
+
+| | before | after |
+|---|---:|---:|
+| Greens, y1 → y10 | 3,516 → 2,260 | 3,516 → **3,338** |
+| Roots | 1,681 → 1,277 | 1,681 → **1,692** |
+| Flax | 245 → 183 | 245 → **221** |
+| Herbs | 406 → 375 | 406 → **408** |
+
+Every growing thing settles inside five to eight years and holds.
+
+**Then the animals.** With the hedgerows fixed, an empty world was still empty
+of animals inside twenty years: **seventeen of twenty species extinct in every
+one of eight worlds**. Rabbits went 1.6 → 233 → 45.8 → 1.2 → 85 → 0. Sheep,
+goat, squirrel, goose, reindeer, elk, boar, fox, owl, eagle, snake, wolf,
+polar bear: gone.
+
+**Nothing ever took a dead animal out of the list.** There is no `retain` and
+no sweep anywhere in `AnimalManager`, and `self.animals.len()` is what all
+seven of the "is there room in this world for another animal" checks ask.
+Twenty years in, an empty world held:
+
+| | y7 | y12 | y20 |
+|---|---:|---:|---:|
+| animal records | 889 | 897 | 918 |
+| **of them alive** | **374** | **9.8** | **15.9** |
+
+The corpses reach `max_population` by year seven and hold every slot for
+ever. Nothing can be born; the immigration pass breaks out on its first line;
+the boom cohort ages out together on a one-to-three-year lifespan; and the
+world empties. Ninety-nine per cent of the animal table was carrion.
+
+Three things, all one shape:
+
+- `AnimalManager::how_many_are_alive` is the one owner of "how many animals
+  this world holds", and every cap check asks it.
+- `bury_the_dead` takes the fallen off the map at the end of the animal pass.
+  A body is read exactly once, in the tick it falls - a predator feeds off it
+  there and then, a hunter butchers it there and then - and nothing wants it
+  afterwards.
+- `spawn_group` no longer asks the cap on its own account. Whether there is
+  room is the caller's question and each of the three callers already asks it,
+  meaning something slightly different each time; asking again here quietly
+  overrode the one caller with a reason to say yes.
+
+**And what is gone comes back.** `process_immigration` now lets a species that
+is *absent* into a full map. The cap is a rough statement of how much life
+this country carries, and a country carrying its whole weight in rabbits is
+exactly the country a fox should walk into; refusing him for want of room is
+the cap deciding which species exist. A merely thin species still waits.
+
+It also records the peak at spawn rather than only for something alive at a
+migration moment - anything that died inside its first two thousand ticks was
+otherwise forgotten and could never return, which is what happened to the owl.
+
+**Thirty years, eight worlds, nobody in any of them.** Worlds still holding
+each species at year thirty, against the same run before:
+
+| | before | after |
+|---|---:|---:|
+| sheep | 0/8 | **4/8** |
+| squirrel | 0/8 | **6/8** |
+| rabbit | 0/8 | **3/8** |
+| goat | 0/8 | **3/8** |
+| elk | 0/8 | **3/8** |
+| deer | 1/8 | **6/8** |
+| camel | 1/8 | **4/8** |
+| boar | 0/8 | **4/8** |
+| wolf | 0/8 | 3/8 |
+| fox | 0/8 | 1/8 |
+| reindeer, goose, cow, polar bear | 0/8 | present |
+
+Nothing is permanently lost. The wolf, fox, eagle and owl still flicker in and
+out - a solitary predator in a world that only ever held one or two of them
+genuinely can die out, and immigration is deliberately slow - but they return
+rather than being gone for good.
+
+**What this did not fix, and it is worth being plain about it.** The total
+head of animals still pins at `max_population` - 880 to 995 living, sat on the
+ceiling from year seven onwards. It is an array length, not a carrying
+capacity. Grazing takes **nothing at all** off the map: `process_grazing`
+feeds an animal from thin air, and the comment above `process_breeding` has
+said so in as many words since it was written - "grazing feeds every animal
+nearly a hundred times what it burns, so hunger never becomes the limit". The
+breeding crowding term is a headcount per patch standing in for the food that
+should be doing the work. The ecology is now self-sufficient; what sets the
+size of its fauna is still a constant rather than the land. Filed.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in
