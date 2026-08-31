@@ -8154,6 +8154,95 @@ change.
 
 ---
 
+### 129. A hundred square kilometres, and a country frozen on its first morning
+
+The map is now `Grid::METRES_PER_CELL` (ten) into a thousand cells each way:
+a hundred square kilometres, reached by `WorldConfig::big_enough_for_an_ecology`.
+`WorldConfig::default` stays at fifty by fifty and says in its own doc why - it
+is the map a test builds, and a test that ticks a hundred square kilometres to
+find out whether one man ate is a test nobody runs.
+
+Making it that big turned up four things, three of them cost and one of them
+plain wrong.
+
+**The counts were counts, not densities.** Every number in `ResourceConfig` was
+an absolute. A hundred square kilometres came out with the same 361 nodes a
+quarter of a square kilometre had, spread over four hundred times the ground.
+`ResourceConfig::spread_over` scales them against the map they were written for
+(`THE_MAP_THESE_WERE_WRITTEN_FOR`, fifty by fifty), and the animal and plant
+ceilings go through `Grid::at_the_very_outside` for the same reason. 133,246
+nodes and 78,078 plants now, which is the same country only more of it -
+`land_tests::a_bigger_map_carries_more` holds the density to within a tenth.
+
+**Placement was the square of the map.** Each node placed asked
+`is_position_occupied`, which walks the whole resource list. Stocking a map
+places about one node per seven tiles, so building a world cost n². A quarter
+of a square kilometre took a millisecond, twenty-five square kilometres took
+5,320 ms, and a hundred would not finish. The scan is hoisted into a register
+carried through the three spawners (`World::what_ground_is_taken`), and
+`spawn_naturalistic` no longer looks up the plant it just planted by id -
+`Vec::last_mut` is the one on the end.
+
+**The biome cache was keyed by a coordinate and never cleared.** A biome is a
+question about what kind of ground this is and what the calendar says; the
+position never entered the calculation. Keying it by position meant one entry
+per tile anything had ever asked about - 133,000 of them, one BTreeMap lookup
+per node per pass - and, because nothing has ever called `clear_biome_cache`,
+**the answer was frozen at the hour and the day it was first asked**. A wood in
+a world a year old still carried the temperature of the first morning of it.
+Only the weather modifier laid over the top moved at all.
+
+**And the season was a float pretending to be one of four things.**
+`Biome::season` was an `f32` documented "0.0 to 4.0, representing
+spring/summer/fall/winter", read back as `self.season as u32` and matched
+against 0..3. Both tests that set it wrote 1.0 and 3.0 and got what they asked
+for. The one live caller wrote `day_of_year / DAYS_PER_YEAR`, which is a
+fraction under one, which casts to zero, which is spring. **No world has ever
+had a winter as far as its biomes were concerned.** It is a `Season` now.
+
+What a tick costs, at a thousand by a thousand:
+
+| | world | simulation | a world-year |
+|---|---:|---:|---:|
+| before any of this | 9.270 ms | 47.233 ms | 204 s |
+| ground register (#128) | 14.489 | 15.843 | 68.4 s |
+| biome by ground, not coordinate | 10.021 | 10.737 | 46.4 s |
+| canopy flat, not a tree map | 5.047 | **5.693** | **24.6 s** |
+
+(The register's own row is higher than #128's because the map now carries four
+hundred times the nodes and plants; per node it is far cheaper.)
+
+The canopy was the last of it: `tick_in_world` gathered what stands over each
+tile into a `BTreeMap` keyed by position, five entries per plant, 390,000
+tree inserts a pass. Four megabytes of floats indexed flat is an order of
+magnitude cheaper, and the map was never sparse.
+
+Building the big world once still costs about six seconds, most of it the
+fallback full-map scan in `find_random_terrain_position` when a hundred random
+tries fail to hit rare ground. One-off, and left alone.
+
+Thirty-two worlds, 4,320 ticks, against the same code without the climate fix:
+mean last-alive tick 3,772 -> 3,876, mean peak store 112.2 -> 122.3, headcount
+at tick 1,000 8.31 -> 7.69. Winter costs something now and more is put by
+against it. No test failed that was not already failing;
+`news_reaches_everybody_within_earshot` started passing.
+
+### 130. The naturalistic spawner puts two clusters on one tile
+
+`NaturalisticSpawner::spawn_all` builds its own list and never asks what is
+already standing where it is putting things, so its clusters land on top of
+each other and on top of what the basic spawner placed: eighty by eighty gives
+71 doubled tiles, all of them clay, sand, coal, grain, flax, herbs, cotton,
+honey or fish. Whichever of the two a tile lookup finds first is the one that
+exists as far as anything asking about that tile is concerned; the other is
+inventory nobody can reach.
+
+Found by `land_tests::stocking_a_map_leaves_no_two_things_on_a_tile`, which
+holds those nine kinds out by name rather than lowering its sights, so the day
+this is fixed the exclusion list comes out. Filed.
+
+---
+
 ---
 
 ## Recently fixed

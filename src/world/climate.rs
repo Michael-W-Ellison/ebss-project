@@ -56,9 +56,28 @@ pub struct ClimateManager {
     /// Base climate for the world (influences all biomes)
     pub base_climate: Climate,
 
-    /// Biome data per position (cached for performance)
+    /// The biome under each kind of ground, as it stands today.
+    ///
+    /// A biome is a question about what kind of ground this is and what the
+    /// calendar says, and about nothing else - the position never entered the
+    /// calculation. Keying it by position meant one entry for every tile
+    /// anything had ever asked about, which on a hundred square kilometres is
+    /// a hundred and thirty thousand of them and a lookup per resource per
+    /// pass; and, worse, it meant the answer was frozen at the hour and the
+    /// day it was first asked, because nothing has ever called
+    /// `clear_biome_cache`. A wood in a world a year old still had the
+    /// temperature of the first morning in it. Only the weather modifier laid
+    /// over the top of it moved at all.
     #[serde(skip)]
-    biome_cache: BTreeMap<Position, Biome>,
+    biome_today: BTreeMap<BiomeType, Biome>,
+
+    /// What the calendar said when `biome_today` was worked out.
+    ///
+    /// Two representations of one fact, so they are checked against each
+    /// other on every read rather than trusted: when the hour or the day has
+    /// moved on, what is cached is thrown away and worked out again.
+    #[serde(skip)]
+    biome_as_of: Option<(f32, u32)>,
 
 
     /// Recent lightning strikes
@@ -93,7 +112,8 @@ impl ClimateManager {
             weather,
             weather_gen,
             base_climate: Climate::temperate(), // Default temperate
-            biome_cache: BTreeMap::new(),
+            biome_today: BTreeMap::new(),
+            biome_as_of: None,
             lightning_strikes: Vec::new(),
             current_tick: 0,
             cold_climate,
@@ -119,7 +139,8 @@ impl ClimateManager {
             weather,
             weather_gen,
             base_climate: Climate::temperate(),
-            biome_cache: BTreeMap::new(),
+            biome_today: BTreeMap::new(),
+            biome_as_of: None,
             lightning_strikes: Vec::new(),
             current_tick: 0,
             cold_climate,
@@ -208,14 +229,24 @@ impl ClimateManager {
 
 
     /// Get biome for a specific position
-    pub fn get_biome(&mut self, pos: Position, terrain: TerrainType) -> &Biome {
-        if !self.biome_cache.contains_key(&pos) {
-            let biome_type = terrain_to_biome(terrain);
+    ///
+    /// The position is what kind of ground it is and nothing else, so what
+    /// comes back is shared by every tile of that kind - see `biome_today`.
+    pub fn get_biome(&mut self, _pos: Position, terrain: TerrainType) -> &Biome {
+        let now = (self.calendar.time_of_day, self.calendar.day_of_year);
+        if self.biome_as_of != Some(now) {
+            self.biome_today.clear();
+            self.biome_as_of = Some(now);
+        }
+
+        let biome_type = terrain_to_biome(terrain);
+
+        if !self.biome_today.contains_key(&biome_type) {
             let mut biome = Biome::new(biome_type);
 
             // Update biome with current time and season
             biome.time_of_day = self.calendar.time_of_day;
-            biome.season = self.calendar.day_of_year as f32 / seasons::DAYS_PER_YEAR as f32;
+            biome.season = self.calendar.current_season();
             biome.update_climate(0.0); // Initial update
 
             // Apply climate modifiers AFTER update_climate (which overwrites temperature)
@@ -228,10 +259,10 @@ impl ClimateManager {
                 biome.current_climate.humidity = (biome.current_climate.humidity + 0.3).min(1.0);
             }
 
-            self.biome_cache.insert(pos, biome);
+            self.biome_today.insert(biome_type, biome);
         }
 
-        self.biome_cache.get(&pos).unwrap()
+        self.biome_today.get(&biome_type).unwrap()
     }
 
     /// Get effective temperature at a position
@@ -303,8 +334,12 @@ impl ClimateManager {
 
 
     /// Clear biome cache (call when world terrain changes)
+    ///
+    /// The calendar clears it of its own accord every time the hour moves,
+    /// so this is only for a change to the ground itself.
     pub fn clear_biome_cache(&mut self) {
-        self.biome_cache.clear();
+        self.biome_today.clear();
+        self.biome_as_of = None;
     }
 }
 
@@ -403,11 +438,52 @@ mod tests {
 
         // First access creates cache entry
         let _ = manager.get_biome(pos, TerrainType::Forest);
-        assert!(manager.biome_cache.contains_key(&pos));
+        assert!(manager.biome_today.contains_key(&BiomeType::TemperateForest));
 
         // Clear cache
         manager.clear_biome_cache();
-        assert!(manager.biome_cache.is_empty());
+        assert!(manager.biome_today.is_empty());
+    }
+
+    /// Two woods a mile apart are the same wood as far as this is concerned.
+    ///
+    /// What is cached is one entry for each kind of ground, not one for each
+    /// tile anybody has ever stood on: asking about a thousand different
+    /// patches of forest leaves one thing in the cache.
+    #[test]
+    fn the_biome_is_a_question_about_ground_not_about_a_coordinate() {
+        let mut manager = ClimateManager::new(false, false);
+
+        for x in 0..1000 {
+            let _ = manager.get_biome(Position::new(x, 0), TerrainType::Forest);
+        }
+
+        assert_eq!(manager.biome_today.len(), 1);
+    }
+
+    /// And it is not still the first morning of the world at midwinter.
+    ///
+    /// Nothing ever called `clear_biome_cache`, so what was worked out on the
+    /// first tick anything asked was the answer for ever after - a wood in a
+    /// world a year old still had the temperature of the day it was made in.
+    #[test]
+    fn the_ground_gets_colder_as_the_year_turns() {
+        let mut spring = ClimateManager::new(false, false);
+        let here = Position::new(5, 5);
+        let in_spring = spring.get_temperature(here, TerrainType::Plains);
+
+        // Ask now, so that anything cached is cached; then run on to winter
+        // and ask again.
+        let mut winter = spring.clone();
+        while winter.calendar.current_season() != Season::Winter {
+            winter.tick();
+        }
+        let in_winter = winter.get_temperature(here, TerrainType::Plains);
+
+        assert!(
+            in_winter < in_spring,
+            "spring {in_spring:.1}, winter {in_winter:.1} - the year turned and the ground did not"
+        );
     }
 
     #[test]

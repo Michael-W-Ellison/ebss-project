@@ -528,7 +528,60 @@ impl Default for ResourceConfig {
     }
 }
 
+impl ResourceConfig {
+    /// The map these counts were written for.
+    ///
+    /// Every number in this config is a number for a map of this many tiles.
+    /// What makes a country liveable is how much wood there is within a walk
+    /// of you, not how much wood there is in it altogether, so a map sixteen
+    /// times the size gets sixteen times as many of everything. Without this
+    /// a hundred square kilometres came out with the same three hundred and
+    /// sixty-odd nodes a quarter of a square kilometre had, spread over four
+    /// hundred times the ground, and a man could walk all day between bushes.
+    pub const THE_MAP_THESE_WERE_WRITTEN_FOR: usize = 50 * 50;
+
+    /// This config as it applies to a map of the given size.
+    ///
+    /// Rounds up rather than down, so that a small map still gets one of each
+    /// thing rather than none: a map with no water on it is not a small map,
+    /// it is a dead one.
+    pub fn spread_over(&self, tiles: usize) -> Self {
+        let over = |count: usize| -> usize {
+            if count == 0 {
+                return 0;
+            }
+            let scaled =
+                (count * tiles).div_ceil(Self::THE_MAP_THESE_WERE_WRITTEN_FOR);
+            scaled.max(1)
+        };
+
+        Self {
+            wood_nodes: over(self.wood_nodes),
+            stone_nodes: over(self.stone_nodes),
+            iron_nodes: over(self.iron_nodes),
+            food_nodes: over(self.food_nodes),
+            water_sources: over(self.water_sources),
+            clay_clusters: over(self.clay_clusters),
+            sand_clusters: over(self.sand_clusters),
+            coal_clusters: over(self.coal_clusters),
+            grain_patches: over(self.grain_patches),
+            flax_patches: over(self.flax_patches),
+            herb_patches: over(self.herb_patches),
+            cotton_patches: over(self.cotton_patches),
+            honey_locations: over(self.honey_locations),
+            fish_areas: over(self.fish_areas),
+            use_naturalistic_spawning: self.use_naturalistic_spawning,
+        }
+    }
+}
+
 impl Default for WorldConfig {
+    /// A corner of a country: a quarter of a square kilometre.
+    ///
+    /// Small on purpose. This is the map a test builds, and a test that has to
+    /// tick a hundred square kilometres to find out whether one man ate is a
+    /// test nobody runs. For the map an ecology actually needs, see
+    /// [`WorldConfig::big_enough_for_an_ecology`].
     fn default() -> Self {
         Self {
             size: (50, 50),
@@ -538,6 +591,28 @@ impl Default for WorldConfig {
 }
 
 impl WorldConfig {
+    /// A map big enough for the ecology on it to stand up on its own.
+    ///
+    /// A hundred square kilometres, which is [`Grid::METRES_PER_CELL`] into a
+    /// thousand cells each way. That is the size at which a wolf pack, the
+    /// deer it lives on and the grass the deer live on can each hold a
+    /// population without any of them being one bad winter from gone - a
+    /// quarter of a square kilometre cannot, however carefully it is tuned.
+    ///
+    /// A square metre a cell was the other way of getting there and does not
+    /// fit: a hundred million tiles at forty bytes apiece is four gigabytes
+    /// before anything happens in them. Ten metres is also the unit the rest
+    /// of the model already thinks in - a forage radius of 25 cells is a
+    /// quarter-kilometre walk, which is about right for a morning's gathering
+    /// and nonsense as 25 metres.
+    pub fn big_enough_for_an_ecology() -> Self {
+        let side = Grid::HOW_MANY_CELLS_ACROSS_A_COUNTRY;
+        Self {
+            size: (side, side),
+            initial_resources: ResourceConfig::default(),
+        }
+    }
+
     /// Set world size
     pub fn with_size(mut self, width: usize, height: usize) -> Self {
         self.size = (width, height);
@@ -993,8 +1068,19 @@ impl World {
             tech_tree: TechnologyTree::new(),
             climate: ClimateManager::default(),
             heat_sources: HeatSourceRegistry::new(),
-            animals: AnimalManager::new(1000), // Max 1000 animals
-            plants: PlantManager::new(5000), // Max 5000 plants
+            // What a map will hold at the very outside. These are not the
+            // carrying capacity - what a country will feed is a question for
+            // the grass on it - they are the point past which the vectors
+            // stop growing, and so they have to be a question about area
+            // rather than a number somebody picked for a fifty by fifty map.
+            animals: AnimalManager::new(Grid::at_the_very_outside(
+                config.size.0 * config.size.1,
+                Self::MOST_ANIMALS_A_SMALL_MAP_HOLDS,
+            )),
+            plants: PlantManager::new(Grid::at_the_very_outside(
+                config.size.0 * config.size.1,
+                Self::MOST_PLANTS_A_SMALL_MAP_HOLDS,
+            )),
             combat_manager: combat::CombatManager::new(),
             crafting_manager: crafting::CraftingManager::new(),
             tick: 0,
@@ -1016,8 +1102,13 @@ impl World {
         world.grid.settle_soil();
 
 
-        // Place initial resources
-        world.generate_resources(&config.initial_resources);
+        // Place initial resources, as many of them as this much ground
+        // should carry rather than as many as the config names - see
+        // `ResourceConfig::spread_over`.
+        let for_this_map = config
+            .initial_resources
+            .spread_over(config.size.0 * config.size.1);
+        world.generate_resources(&for_this_map);
 
         // Build initial longhouse at center
         let center = (config.size.0 / 2, config.size.1 / 2);
@@ -1038,6 +1129,21 @@ impl World {
         world
     }
 
+    /// The most animals a fifty by fifty map will hold, scaled up from there.
+    ///
+    /// Room, not carrying capacity. A thousand animals on a quarter of a
+    /// square kilometre is already far more than the ground would feed; what
+    /// this stops is a vector growing without bound if something upstream
+    /// goes wrong.
+    const MOST_ANIMALS_A_SMALL_MAP_HOLDS: usize = 1000;
+
+    /// The most plants a fifty by fifty map will hold, scaled up from there.
+    ///
+    /// A `Plant` here is the standing growth on its cell rather than one
+    /// stem - a hundred square metres of hazel is one of these - so two per
+    /// cell is generous.
+    const MOST_PLANTS_A_SMALL_MAP_HOLDS: usize = 5000;
+
     /// How many patches of each unknown plant a world carries.
     const PATCHES_OF_EACH_STRANGE_PLANT: u32 = 4;
 
@@ -1050,7 +1156,11 @@ impl World {
     /// clustered: the point is that a people walking about its own country
     /// keeps coming across them, and has to decide each time whether today is
     /// the day somebody tries one.
-    fn scatter_the_strange_plants(&mut self, today: u32) {
+    fn scatter_the_strange_plants(
+        &mut self,
+        today: u32,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) {
         use rand::Rng;
 
         let mut rng = crate::core::dice::roll();
@@ -1079,13 +1189,14 @@ impl World {
                     continue;
                 }
 
-                if self
-                    .resources
-                    .iter()
-                    .any(|resource| resource.position == where_it_is)
-                {
+                // This had a fourth spelling of "is anything standing here"
+                // and walked the whole resource list to answer it, four
+                // hundred times per kind of plant. It asks the register the
+                // other spawners use now.
+                if taken.contains(&(where_it_is.x, where_it_is.y)) {
                     continue;
                 }
+                taken.insert((where_it_is.x, where_it_is.y));
 
                 let mut patch = ResourceNode::of_kind(
                     ResourceType::StrangePlant,
@@ -1118,26 +1229,37 @@ impl World {
         // not only on the ground - see `what_this_ground_carries`.
         let today = self.climate.calendar.day_of_year;
 
+        // The ground already spoken for, asked once and carried through all
+        // three spawners rather than re-derived per node - see
+        // `World::what_ground_is_taken`.
+        let mut taken = self.what_ground_is_taken();
+
         // Generate basic resources (legacy method for backward compatibility)
-        self.generate_basic_resources(config, today, &mut rng);
+        self.generate_basic_resources(config, today, &mut rng, &mut taken);
 
         // Generate additional resources using naturalistic spawning
         if config.use_naturalistic_spawning {
-            self.generate_naturalistic_resources(config, today);
+            self.generate_naturalistic_resources(config, today, &mut taken);
         }
 
         // And the things nobody has tried
-        self.scatter_the_strange_plants(today);
+        self.scatter_the_strange_plants(today, &mut taken);
 
         // Update resource_nodes map for spatial queries
         self.update_resource_node_map();
     }
 
     /// Generate basic resources (wood, stone, iron, food)
-    fn generate_basic_resources(&mut self, config: &ResourceConfig, today: u32, rng: &mut impl Rng) {
+    fn generate_basic_resources(
+        &mut self,
+        config: &ResourceConfig,
+        today: u32,
+        rng: &mut impl Rng,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) {
         // Generate wood nodes (in forest areas)
         for _ in 0..config.wood_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Forest);
+            let pos = self.find_random_terrain_position(TerrainType::Forest, taken);
             self.resources.push(ResourceNode::new(
                 ResourceType::Wood,
                 pos,
@@ -1152,7 +1274,7 @@ impl World {
             } else {
                 TerrainType::Hills
             };
-            let pos = self.find_random_terrain_position(terrain);
+            let pos = self.find_random_terrain_position(terrain, taken);
             self.resources.push(ResourceNode::new(
                 ResourceType::Stone,
                 pos,
@@ -1162,7 +1284,7 @@ impl World {
 
         // Generate iron nodes (rare, in mountains)
         for _ in 0..config.iron_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Mountain);
+            let pos = self.find_random_terrain_position(TerrainType::Mountain, taken);
             self.resources.push(ResourceNode::new(
                 ResourceType::Iron,
                 pos,
@@ -1184,7 +1306,7 @@ impl World {
             } else {
                 TerrainType::Meadow
             };
-            let pos = self.find_random_terrain_position(terrain);
+            let pos = self.find_random_terrain_position(terrain, taken);
             let (thin, heavy) =
                 resource_spawning::TerrainResourceMapper::amount_range(ResourceType::Food);
             self.resources
@@ -1214,7 +1336,7 @@ impl World {
                 } else {
                     TerrainType::Plains
                 };
-                let pos = self.find_random_terrain_position(terrain);
+                let pos = self.find_random_terrain_position(terrain, taken);
                 self.resources
                     .push(resource_spawning::what_this_ground_carries(
                         &self.grid,
@@ -1244,7 +1366,7 @@ impl World {
                 if !self.is_there_any_of_this_terrain(terrain) {
                     continue;
                 }
-                let pos = self.find_random_terrain_position(terrain);
+                let pos = self.find_random_terrain_position(terrain, taken);
                 self.resources.push(ResourceNode::new(
                     ResourceType::Salt,
                     pos,
@@ -1263,7 +1385,7 @@ impl World {
                 2 => TerrainType::Forest,   // Spring in forest
                 _ => TerrainType::Hills,    // Well in hills
             };
-            let pos = self.find_random_terrain_position(terrain);
+            let pos = self.find_random_terrain_position(terrain, taken);
             // Water sources are renewable and have high capacity
             self.resources.push(ResourceNode::new(
                 ResourceType::Water,
@@ -1285,7 +1407,7 @@ impl World {
                 continue;
             }
             for _ in 0..Self::HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED {
-                let pos = self.find_random_terrain_position(terrain);
+                let pos = self.find_random_terrain_position(terrain, taken);
                 self.resources.push(ResourceNode::new(
                     ResourceType::Water,
                     pos,
@@ -1330,7 +1452,12 @@ impl World {
     }
 
     /// Generate naturalistic resources for technology progression
-    fn generate_naturalistic_resources(&mut self, config: &ResourceConfig, today: u32) {
+    fn generate_naturalistic_resources(
+        &mut self,
+        config: &ResourceConfig,
+        today: u32,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) {
         use resource_spawning::{NaturalisticResourceConfig, NaturalisticSpawner};
 
         // Convert ResourceConfig to NaturalisticResourceConfig
@@ -1352,7 +1479,12 @@ impl World {
         let mut spawner = NaturalisticSpawner::new(&self.grid, today);
         let new_resources = spawner.spawn_all(&nat_config);
 
-        // Add spawned resources
+        // Add spawned resources. The spawner chooses its own ground and does
+        // not ask about what is already there, so the register hears about
+        // what it put down rather than the other way about.
+        for resource in &new_resources {
+            taken.insert((resource.position.x, resource.position.y));
+        }
         self.resources.extend(new_resources);
 
         log::info!(
@@ -1400,9 +1532,49 @@ impl World {
     /// And how many seams there are in the hills, for a people with no coast.
     const HOW_MANY_SEAMS_IN_THE_HILLS: u32 = 2;
 
-    fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
+    /// The ground that already has something standing on it.
+    ///
+    /// The same question [`World::is_position_occupied`] answers, asked once
+    /// for the whole map instead of once for every node placed on it.
+    ///
+    /// Stocking a map places about one node per seven tiles and each placement
+    /// walked the whole resource list to find out whether its spot was taken,
+    /// so the cost of building a world was the square of the world. A quarter
+    /// of a square kilometre took a millisecond; twenty-five square kilometres
+    /// took five and a half seconds; a hundred would not finish.
+    pub fn what_ground_is_taken(&self) -> std::collections::BTreeSet<(i32, i32)> {
+        self.buildings
+            .iter()
+            .map(|building| (building.position.x, building.position.y))
+            .chain(
+                self.resources
+                    .iter()
+                    .map(|resource| (resource.position.x, resource.position.y)),
+            )
+            .collect()
+    }
+
+    /// Somewhere with this ground on it that nothing is standing on yet.
+    ///
+    /// `taken` is the ground already spoken for, and this adds to it before
+    /// returning, so a caller placing a great many things in a row asks the
+    /// map once rather than once a thing. It has to give the same answers as
+    /// asking `is_position_occupied` afresh every time, which means every
+    /// caller that puts something down at a position this did not choose has
+    /// to say so - see `land_tests::stocking_a_map_leaves_no_two_things_on_a
+    /// _tile`.
+    fn find_random_terrain_position(
+        &self,
+        terrain_type: TerrainType,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) -> Position {
         use rand::seq::SliceRandom;
         let mut rng = crate::core::dice::roll();
+
+        let mut claim = |pos: Position, taken: &mut std::collections::BTreeSet<(i32, i32)>| {
+            taken.insert((pos.x, pos.y));
+            pos
+        };
 
         // First, try random sampling (efficient for common terrain types)
         for _ in 0..100 {
@@ -1413,8 +1585,8 @@ impl World {
             if let Some(tile) = self.grid.get_tile(&pos) {
                 if tile.terrain.terrain_type == terrain_type {
                     // Check if position is not occupied
-                    if !self.is_position_occupied(&pos) {
-                        return pos;
+                    if !taken.contains(&(pos.x, pos.y)) {
+                        return claim(pos, taken);
                     }
                 }
             }
@@ -1426,7 +1598,8 @@ impl World {
             .flat_map(|x| (0..self.grid.height).map(move |y| Position::new(x as i32, y as i32)))
             .filter(|pos| {
                 if let Some(tile) = self.grid.get_tile(pos) {
-                    tile.terrain.terrain_type == terrain_type && !self.is_position_occupied(pos)
+                    tile.terrain.terrain_type == terrain_type
+                        && !taken.contains(&(pos.x, pos.y))
                 } else {
                     false
                 }
@@ -1434,7 +1607,7 @@ impl World {
             .collect();
 
         if let Some(pos) = valid_positions.choose(&mut rng) {
-            return *pos;
+            return claim(*pos, taken);
         }
 
         // Last resort: if no valid terrain exists, find ANY unoccupied position
@@ -1451,7 +1624,7 @@ impl World {
             .collect();
 
         if let Some(pos) = any_matching.choose(&mut rng) {
-            return *pos;
+            return claim(*pos, taken);
         }
 
         // Absolute last resort: return center position (should never happen in a valid world)
@@ -1459,7 +1632,10 @@ impl World {
             "Could not find any {:?} terrain in world, placing resource at center",
             terrain_type
         );
-        Position::new(self.grid.width as i32 / 2, self.grid.height as i32 / 2)
+        claim(
+            Position::new(self.grid.width as i32 / 2, self.grid.height as i32 / 2),
+            taken,
+        )
     }
 
     pub fn is_position_occupied(&self, pos: &Position) -> bool {

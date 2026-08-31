@@ -1726,10 +1726,16 @@ impl PlantManager {
                 let species = candidates[rng.gen_range(0..candidates.len())];
                 let species_id = species.id.clone();
 
-                if let Some(id) = self.spawn_plant(species_id, (x as i32, y as i32)) {
+                if self.spawn_plant(species_id, (x as i32, y as i32)).is_some() {
                     // A world does not start as bare seedlings: what is
-                    // standing has been standing a while
-                    if let Some(plant) = self.plants.iter_mut().find(|plant| plant.id == id) {
+                    // standing has been standing a while.
+                    //
+                    // The one just planted is the one on the end. Looking it
+                    // up by id meant walking every plant already standing for
+                    // every plant put down, which is the square of the map:
+                    // stocking a hundred square kilometres took a quarter of
+                    // an hour and most of it was this.
+                    if let Some(plant) = self.plants.last_mut() {
                         plant.growth_stage = GrowthStage::Mature;
                         plant.growth_progress = rng.gen::<f32>();
                         plant.is_harvestable = true;
@@ -1807,8 +1813,23 @@ impl PlantManager {
 
         // What is standing over each tile, gathered once. Doing this per plant
         // would be a comparison against every other plant in the world.
-        let mut canopy: std::collections::BTreeMap<(i32, i32), f32> =
-            std::collections::BTreeMap::new();
+        //
+        // One number a tile, laid out flat, rather than a map keyed by
+        // position: a wooded hundred square kilometres carries eighty thousand
+        // plants, each of which puts five entries into this, and four hundred
+        // thousand tree-map inserts a pass was seven of the ten milliseconds a
+        // tick cost. Four megabytes of floats and a memset is cheaper than the
+        // tree by an order of magnitude, and the map was never sparse anyway.
+        let width = grid.width;
+        let height = grid.height;
+        let mut canopy = vec![0.0f32; width * height];
+
+        let mut shade_at = |x: i32, y: i32, by: f32, canopy: &mut Vec<f32>| {
+            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                return;
+            }
+            canopy[y as usize * width + x as usize] += by;
+        };
 
         for plant in &self.plants {
             let species = match registry.get(&plant.species_id) {
@@ -1824,14 +1845,17 @@ impl PlantManager {
             }
 
             let shade = Self::canopy_of(species.size, species.is_tree);
-            *canopy.entry(plant.position).or_insert(0.0) += shade;
+            shade_at(plant.position.0, plant.position.1, shade, &mut canopy);
 
             // Big things shade their neighbours too
             if shade >= 0.4 {
                 for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-                    *canopy
-                        .entry((plant.position.0 + dx, plant.position.1 + dy))
-                        .or_insert(0.0) += shade * 0.35;
+                    shade_at(
+                        plant.position.0 + dx,
+                        plant.position.1 + dy,
+                        shade * 0.35,
+                        &mut canopy,
+                    );
                 }
             }
         }
@@ -1857,7 +1881,15 @@ impl PlantManager {
             // Light: full sun less whatever is standing over it. A plant does
             // not shade itself out of existence, so its own canopy is
             // discounted.
-            let over_it = canopy.get(&plant.position).copied().unwrap_or(0.0);
+            let over_it = if plant.position.0 >= 0
+                && plant.position.1 >= 0
+                && (plant.position.0 as usize) < width
+                && (plant.position.1 as usize) < height
+            {
+                canopy[plant.position.1 as usize * width + plant.position.0 as usize]
+            } else {
+                0.0
+            };
             let own = if matches!(
                 plant.growth_stage,
                 GrowthStage::Mature | GrowthStage::Flowering | GrowthStage::Fruiting

@@ -88,6 +88,38 @@ pub struct Grid {
 }
 
 impl Grid {
+    /// How much ground one cell of this map stands for, in metres a side.
+    ///
+    /// A cell is a hundred square metres. This is the unit the rest of the
+    /// model has always quietly been using: a forage radius of 25 cells is a
+    /// quarter-kilometre walk and a sight radius of 8 is eighty metres, both
+    /// of which are sensible for a person, and both of which are nonsense at
+    /// a metre a cell. It is also the coarsest cell an ecology still reads
+    /// properly on - one of these holds a stand of hazel or a good deal of
+    /// grass, which is the scale the grazing and the seeding work at.
+    pub const METRES_PER_CELL: f32 = 10.0;
+
+    /// A thousand cells is ten kilometres is a hundred square kilometres.
+    pub const HOW_MANY_CELLS_ACROSS_A_COUNTRY: usize = 1000;
+
+    /// How much ground this map is, in square kilometres.
+    pub fn how_much_ground(&self) -> f32 {
+        let metres = Self::METRES_PER_CELL * Self::METRES_PER_CELL;
+        (self.width * self.height) as f32 * metres / 1_000_000.0
+    }
+
+    /// The most of something a map of this many tiles should ever hold, given
+    /// what a fifty by fifty map holds.
+    ///
+    /// A ceiling, not a carrying capacity: what a country will actually feed
+    /// is a question for the grass on it. This is only the point past which a
+    /// vector stops growing, and the one thing it must not be is a number
+    /// somebody chose for a small map and then never revisited.
+    pub fn at_the_very_outside(tiles: usize, on_a_small_map: usize) -> usize {
+        let reference = 50 * 50;
+        (on_a_small_map * tiles).div_ceil(reference).max(on_a_small_map)
+    }
+
     pub fn new(width: usize, height: usize) -> Self {
         let tiles = vec![vec![Tile::default(); width]; height];
 
