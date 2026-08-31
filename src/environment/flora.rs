@@ -54,6 +54,165 @@ pub struct PlantSpecies {
     pub size: PlantSize,
 }
 
+impl PlantSpecies {
+    /// How long one of these lives, in years.
+    ///
+    /// Worked out from what kind of thing it is rather than written out
+    /// fifty-one times. Fifty-one hand-written numbers is fifty-one numbers to
+    /// get wrong and then to let drift apart, which this document has a
+    /// standing entry about; and what decides how long a plant lives is how
+    /// big it gets and whether it is woody, which `size` and `is_tree` already
+    /// say.
+    ///
+    /// The figures are the ones a field guide gives. A grass or a herb is one
+    /// or two seasons. A bush is a few decades - a hazel or a bramble stool
+    /// will go thirty years and a willow rather longer. A birch is eighty, an
+    /// oak two or three hundred, and the very largest trees run into the
+    /// better part of a thousand. The one this is plainly short on is the
+    /// sequoia, which really does go two or three thousand years; eight
+    /// hundred of them is three and a half million ticks, and a run that long
+    /// is a long way past anything anybody has measured here.
+    pub fn lives_for_years(&self) -> f32 {
+        if self.is_tree {
+            match self.size {
+                PlantSize::Tiny | PlantSize::Small => 40.0,
+                PlantSize::Medium => 80.0,
+                PlantSize::Large => 250.0,
+                PlantSize::Huge => 800.0,
+            }
+        } else {
+            match self.size {
+                // A grass, a herb, a corn: up in the spring and gone by the
+                // second winter, whether or not anybody cut it.
+                PlantSize::Tiny | PlantSize::Small => 2.0,
+                // A bush.
+                PlantSize::Medium => 30.0,
+                PlantSize::Large | PlantSize::Huge => 60.0,
+            }
+        }
+    }
+
+    /// The same, in ticks, which is what a plant actually counts in.
+    pub fn lives_for_ticks(&self) -> u32 {
+        (self.lives_for_years() * crate::environment::seasons::TICKS_PER_YEAR as f32) as u32
+    }
+
+    /// How likely one of these is to put seed on the ground in a pass.
+    ///
+    /// Set by what it takes to replace itself. A grass has two years to leave
+    /// a successor and an oak has two hundred and fifty, and they shed
+    /// accordingly - the grass many times over in its short life, the oak a
+    /// handful of times a century as far as seed that comes to anything goes.
+    ///
+    /// One flat rate for everything is what killed the grass. At a fixed
+    /// chance per pass an oak seeded a hundred times over in its life and a
+    /// grass a fraction of once, so every open sward on a map went to wood
+    /// inside five years and the small plants were gone by year four.
+    ///
+    /// What the number is aimed at: a plant leaves a couple of dozen seed
+    /// over its whole life, of which a small share on open ground take, so a
+    /// species holding its ground replaces itself with a little to spare and
+    /// one being crowded out goes. Ground that is already taken is what turns
+    /// "a little to spare" into a population that stops climbing - see
+    /// `PlantManager::how_likely_a_seed_takes`.
+    pub fn seeds_per_pass(&self) -> f32 {
+        /// Seed that arrives somewhere with a chance of coming to something,
+        /// over a whole life. Not seed shed, which for a grass is thousands
+        /// and nearly all of it eaten, on rock, or under the parent.
+        ///
+        /// It has to clear what the two filters downstream take. Counted over
+        /// twenty years on a hundred and twenty by a hundred and twenty: two
+        /// seed in five land on country of a kind their species cannot live
+        /// on at all, and of the three that do land somewhere possible about
+        /// one in twenty gets a root down. So a seed is worth about three
+        /// hundredths of a plant, and a plant that leaves twenty-five of them
+        /// leaves two-thirds of a successor - which is a species on its way
+        /// out, and at twenty-five every class on the map was on its way out.
+        /// The bushes went first, being neither long-lived enough to wait it
+        /// out like a tree nor quick enough to flood the ground like a grass:
+        /// a hundred and forty-five of them at the start and none at all by
+        /// year a hundred and fifty.
+        ///
+        /// A hundred leaves about three, which is a margin rather than a
+        /// knife edge. What brings three back down to one is ground that is
+        /// already taken, and after that it is whatever is eating the
+        /// seedlings.
+        const WHAT_A_PLANT_LEAVES_IN_ITS_LIFE: f32 = 100.0;
+
+        let passes = (self.lives_for_ticks() as f32 / 10.0).max(1.0);
+        (WHAT_A_PLANT_LEAVES_IN_ITS_LIFE / passes).clamp(0.0, 1.0)
+    }
+
+    /// How long a seed of this will keep in the ground before it is no good.
+    ///
+    /// A seed that falls on ground its kind cannot live on does not sit there
+    /// for ever waiting to be wrong: it rots. An acorn on a salt flat is
+    /// finished by the following autumn. Small dry seed keeps far longer - a
+    /// grass seed will lie in the soil through a couple of seasons and come up
+    /// when something disturbs it - so the split is the same one that decides
+    /// everything else here.
+    pub fn seed_keeps_for_ticks(&self) -> u32 {
+        use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
+
+        // A season for an acorn, two for small dry seed. This is seed lying
+        // on ground of a kind its species cannot live on at all - a beach, a
+        // mountain, a salt flat - not seed worked into good soil, so it is
+        // the short end of what a seed keeps rather than the long one. It is
+        // also what stops the bank being the biggest thing in the model: at a
+        // year and two years there were three and a half seed lying for every
+        // tile on the map, and walking them was most of what a tick cost.
+        let seasons = if self.is_tree { 1 } else { 2 };
+        seasons * DAYS_PER_SEASON * TICKS_PER_DAY
+    }
+
+    /// Whether this is ground one of these could live on at all.
+    ///
+    /// Primary country is where it thrives and secondary is where it manages,
+    /// and a seed will take in either. Anywhere else it comes to nothing.
+    pub fn could_live_on(&self, terrain: crate::world::TerrainType) -> bool {
+        let zone = crate::environment::fauna::terrain_to_climate_zone(terrain);
+        self.primary_biomes.contains(&zone) || self.secondary_biomes.contains(&zone)
+    }
+
+    /// How much of a place this takes, for deciding who gets the ground.
+    ///
+    /// A seedling of something bigger comes up through what is already
+    /// standing and takes the tile - a sapling in a sward shades the sward
+    /// out - and nothing smaller ever displaces something larger, however
+    /// much seed it sheds.
+    ///
+    /// Without this the ground went to whoever shed the most seed, and that
+    /// is whoever lives the shortest: one flat count of seed per lifetime
+    /// makes seed per year the reciprocal of the lifetime, so a grass at two
+    /// years puts out a hundred and fifty times what an oak at three hundred
+    /// does. A hundred and twenty by a hundred and twenty went to pure grass
+    /// in a century and a half, the last bush gone by year one hundred and
+    /// fifty and the trees down a third and still falling. What actually
+    /// stops that in a field is not seed at all, it is that the bramble wins.
+    pub fn how_much_ground_it_claims(&self) -> u8 {
+        let by_size = match self.size {
+            PlantSize::Tiny => 0,
+            PlantSize::Small => 1,
+            PlantSize::Medium => 2,
+            PlantSize::Large => 3,
+            PlantSize::Huge => 4,
+        };
+
+        // Woody beats soft of the same bulk, and beats everything softer.
+        if self.is_tree {
+            by_size + 5
+        } else {
+            by_size
+        }
+    }
+
+    /// And whether this is the country it actually belongs in.
+    pub fn thrives_on(&self, terrain: crate::world::TerrainType) -> bool {
+        self.primary_biomes
+            .contains(&crate::environment::fauna::terrain_to_climate_zone(terrain))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlantSize {
     Tiny,    // Moss, small herbs
@@ -1408,6 +1567,14 @@ impl Plant {
         conditions: GrowingConditions,
         ticks: f32,
     ) -> bool {
+        // A plant gets older whether or not the ground lets it grow, and
+        // whether or not it has been cut. This used to sit below the two
+        // early returns and below the `share <= 0.0` one, so a plant on
+        // ground too poor to grow on, or a coppiced stool waiting to come
+        // back, did not age at all - which is most of why nothing in this
+        // world had ever died of being old.
+        self.age_ticks = self.age_ticks.saturating_add(ticks.max(0.0) as u32);
+
         if self.has_been_harvested && self.regrow_timer > 0 {
             self.regrow_timer = self.regrow_timer.saturating_sub(ticks.max(1.0) as u32);
             if self.regrow_timer == 0 {
@@ -1424,7 +1591,6 @@ impl Plant {
             return false; // Dead plant
         }
 
-        self.age_ticks += ticks.max(0.0) as u32;
 
         // Calculate growth for current stage, at whatever share of its natural
         // best pace this ground allows. Nothing here can exceed that pace: the
@@ -1508,10 +1674,70 @@ impl Plant {
     }
 }
 
+/// A tally of what has happened to the vegetation, for measuring only.
+///
+/// Each figure is counted against the plant's own size class, because the
+/// question that keeps coming up is not how many plants there are but which
+/// kind is losing ground and at what step: seed that never fell, seed that
+/// fell on the wrong country, seed that lost its one throw, or plants that
+/// something bigger came up through.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PlantLedger {
+    pub seed_dropped: [u64; 3],
+    pub seed_took: [u64; 3],
+    pub seed_lost_its_throw: [u64; 3],
+    pub seed_rotted_on_wrong_ground: [u64; 3],
+    pub died_of_age: [u64; 3],
+    pub died_of_the_ground: [u64; 3],
+    pub shaded_out: [u64; 3],
+}
+
+impl PlantLedger {
+    /// Small, woody-and-middling, or tree - the three the tallies are kept in.
+    pub fn which_class(species: &PlantSpecies) -> usize {
+        if species.is_tree {
+            2
+        } else if matches!(
+            species.size,
+            PlantSize::Medium | PlantSize::Large | PlantSize::Huge
+        ) {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+/// Seed that has fallen and not yet come to anything.
+///
+/// It is either waiting for the ground it is on to be free, or it is on
+/// ground its kind cannot live on and is quietly going off. Either way it is
+/// on a clock: see `PlantSpecies::seed_keeps_for_ticks`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Seed {
+    pub species_id: String,
+    pub position: (i32, i32),
+    pub age_ticks: u32,
+}
+
 /// Manages plant population and growth
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlantManager {
     plants: Vec<Plant>,
+
+    /// What has been happening to the vegetation, for measuring only.
+    #[serde(default)]
+    ledger: PlantLedger,
+
+    /// What has fallen and not yet come up.
+    ///
+    /// A seed is far smaller than a plant and most of them come to nothing,
+    /// so this is deliberately a separate list rather than a growth stage
+    /// before `Seedling`: a Seedling is something standing on a tile and
+    /// taking up its light, and a seed is not.
+    #[serde(default)]
+    seeds: Vec<Seed>,
+
     max_population: usize,
     natural_spawn_rate: f32,
     #[serde(skip)]
@@ -1519,9 +1745,43 @@ pub struct PlantManager {
 }
 
 impl PlantManager {
+    /// How far seed falls from what dropped it, in cells.
+    ///
+    /// A cell is ten metres, so this is forty metres at the outside: under
+    /// the parent and a little beyond, which is where nearly all seed goes.
+    /// What carries further than that is carried by something, and the things
+    /// that carry seed here are animals - see the midden, which has always
+    /// brought up what went through somebody.
+    ///
+    /// It was a hundred metres, which threw two seed in five onto country of
+    /// a kind the parent's own species cannot live on. Seed does not usually
+    /// travel far enough to leave the ground its parent is growing in.
+    const HOW_FAR_A_SEED_FALLS: i32 = 4;
+
+    /// The most seed the ground can be holding at once.
+    ///
+    /// A safety valve, and it has to be well clear of what the bank actually
+    /// settles at or it stops being a valve and starts being the thing that
+    /// decides the ecology: while the bank is full nothing seeds at all, so
+    /// which species holds the ground comes down to who was in the list
+    /// first. At a quarter of the plant ceiling it was full from year three
+    /// onwards.
+    ///
+    /// What the bank holds is only seed that landed on country of a kind its
+    /// species cannot live on - everything else is spent on the pass after it
+    /// falls - so its size is the seed going astray times how long seed keeps,
+    /// and two seed in five go astray.
+    fn how_much_seed_the_ground_holds(&self) -> usize {
+        self.max_population * 2
+    }
+}
+
+impl PlantManager {
     pub fn new(max_population: usize) -> Self {
         Self {
             plants: Vec::new(),
+            ledger: PlantLedger::default(),
+            seeds: Vec::new(),
             max_population,
             natural_spawn_rate: 0.01,
             registry: Some(FloraRegistry::new()),
@@ -1726,6 +1986,8 @@ impl PlantManager {
                 let species = candidates[rng.gen_range(0..candidates.len())];
                 let species_id = species.id.clone();
 
+                let how_old = rng.gen::<f32>();
+
                 if self.spawn_plant(species_id, (x as i32, y as i32)).is_some() {
                     // A world does not start as bare seedlings: what is
                     // standing has been standing a while.
@@ -1737,8 +1999,20 @@ impl PlantManager {
                     // an hour and most of it was this.
                     if let Some(plant) = self.plants.last_mut() {
                         plant.growth_stage = GrowthStage::Mature;
-                        plant.growth_progress = rng.gen::<f32>();
+                        plant.growth_progress = how_old;
                         plant.is_harvestable = true;
+
+                        // And they have not all been standing the same while.
+                        // A wood put down all at once is a wood that comes
+                        // down all at once: every tree in it born on tick
+                        // zero reaches two hundred and fifty years within a
+                        // few passes of every other, and the country goes
+                        // from full timber to bare ground inside a season.
+                        // What makes a wood a wood is that there is an age
+                        // of everything in it, so they start scattered
+                        // across a lifetime.
+                        plant.age_ticks =
+                            (how_old * species.lives_for_ticks() as f32) as u32;
                     }
                 }
             }
@@ -1919,6 +2193,25 @@ impl PlantManager {
 
             plant.grow_in(species, conditions, ticks);
 
+            // And whether it can hold its own where it is standing.
+            //
+            // Growth alone had no downward half: a plant on ground that gave
+            // it nothing simply did not grow, and sat there not growing for
+            // ever. That is what let a wood fill up - every seedling that
+            // ever took under a closed canopy stayed a seedling and stayed on
+            // its tile, and the tile was never free again. A plant that
+            // cannot make a living where it is now goes back, and how fast
+            // depends on how far short the ground is falling.
+            let living = conditions.growth_share();
+            if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
+                let short = (Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN - living) / Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN;
+                plant.current_health -= plant.max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * ticks;
+            } else {
+                plant.current_health =
+                    (plant.current_health + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * ticks)
+                        .min(plant.max_health);
+            }
+
             // What it grows with, it takes out of the ground
             let wanted = conditions.draw_per_tick() * ticks;
             if wanted > 0.0 {
@@ -1934,6 +2227,377 @@ impl PlantManager {
                     .add_leaf_litter(Self::leaf_fall_of(species.size) * ticks);
             }
         }
+
+        self.what_bore_seed_this_pass(&registry, ticks);
+        self.what_came_up_and_what_rotted(grid, &registry, &canopy, ticks);
+        self.what_died(grid, &registry);
+    }
+
+    /// What a plant leaves on the ground when it finally goes over.
+    ///
+    /// A tree is mostly wood, which lies for years; a herb is soft and gone
+    /// in a season. The two litters already break down at their own rates -
+    /// see `Soil::decay` - so all this has to decide is how much of which,
+    /// and that follows from how big the thing was. A dead oak is the largest
+    /// single thing that ever happens to a tile of soil in this model, which
+    /// is right: a fallen tree is what makes the ground under a wood.
+    fn what_a_dead_plant_leaves(size: PlantSize, is_tree: bool) -> (f32, f32) {
+        let bulk = match size {
+            PlantSize::Huge => 3.0,
+            PlantSize::Large => 2.0,
+            PlantSize::Medium => 0.8,
+            PlantSize::Small => 0.2,
+            PlantSize::Tiny => 0.05,
+        };
+
+        if is_tree {
+            // Mostly timber, some leaf
+            (bulk * 0.25, bulk * 0.75)
+        } else {
+            (bulk * 0.9, bulk * 0.1)
+        }
+    }
+
+    /// The least share of its best pace a plant can live on.
+    ///
+    /// Below this it is not growing slowly, it is dying slowly. The number
+    /// has to sit under what a short winter's day gives - `day_length` at
+    /// midwinter is nine hours against fifteen, so light alone drops to 0.6
+    /// and everything would be starving every January - and over what a
+    /// closed canopy leaves, which is 0.05.
+    const WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN: f32 = 0.12;
+
+    /// How much of itself a plant loses per tick when the ground falls right
+    /// away under it. Two thousand ticks, half a year, from full to gone.
+    const HOW_FAST_A_PLANT_GOES_BACK: f32 = 0.0005;
+
+    /// And how fast it puts it back on when things improve, which is slower:
+    /// a bad season costs more than a good one gives.
+    const HOW_FAST_A_PLANT_COMES_BACK: f32 = 0.0002;
+
+    /// Everything that has come to the end of its life, and what it leaves.
+    ///
+    /// Two ends: old age, and a plant that could not make a living where it
+    /// stood for long enough. Nothing here had either before. A plant aged,
+    /// and its age was read by nothing: a hedgerow put down when the world
+    /// was made was the same hedgerow thirty years later, and the only way
+    /// anything ever left the map was being harvested by somebody. So a map
+    /// with nobody on it had exactly the vegetation it started with, for
+    /// ever, and no room anywhere for anything new to come up.
+    fn what_died(&mut self, grid: &mut crate::world::Grid, registry: &FloraRegistry) {
+        use crate::world::Position;
+
+        let mut fell = Vec::new();
+        let mut tally = self.ledger.clone();
+
+        self.plants.retain(|plant| {
+            let Some(species) = registry.get(&plant.species_id) else {
+                return true;
+            };
+
+            let of_old_age = plant.age_ticks >= species.lives_for_ticks();
+            let of_the_ground = plant.current_health <= 0.0;
+
+            if !of_old_age && !of_the_ground {
+                return true;
+            }
+
+            let class = PlantLedger::which_class(species);
+            if of_old_age {
+                tally.died_of_age[class] += 1;
+            } else {
+                tally.died_of_the_ground[class] += 1;
+            }
+
+            fell.push((
+                plant.position,
+                Self::what_a_dead_plant_leaves(species.size, species.is_tree),
+            ));
+            false
+        });
+
+        self.ledger.died_of_age = tally.died_of_age;
+        self.ledger.died_of_the_ground = tally.died_of_the_ground;
+
+        for (at, (soft, woody)) in fell {
+            let here = Position::new(at.0, at.1);
+            if let Some(tile) = grid.get_tile_mut(&here) {
+                tile.soil.add_leaf_litter(soft);
+                tile.soil.add_woody_litter(woody);
+            }
+        }
+    }
+
+    /// What dropped seed, and where it fell.
+    ///
+    /// Only what is bearing: a seedling has nothing to drop and a plant that
+    /// has just been picked has had its seed taken. Where it falls is within
+    /// `HOW_FAR_A_SEED_FALLS` of the parent, which is under it and a little
+    /// beyond.
+    fn what_bore_seed_this_pass(&mut self, registry: &FloraRegistry, ticks: f32) {
+        use rand::Rng;
+
+        let room = self.how_much_seed_the_ground_holds();
+        if self.seeds.len() >= room {
+            return;
+        }
+
+        let mut rng = crate::core::dice::roll();
+        let pass = ticks / 10.0;
+
+        let mut fell = Vec::new();
+
+        for plant in &self.plants {
+            if !matches!(
+                plant.growth_stage,
+                GrowthStage::Flowering | GrowthStage::Fruiting
+            ) {
+                continue;
+            }
+
+            if plant.has_been_harvested {
+                continue;
+            }
+
+            let Some(species) = registry.get(&plant.species_id) else {
+                continue;
+            };
+
+            if rng.gen::<f32>() >= (species.seeds_per_pass() * pass).clamp(0.0, 1.0) {
+                continue;
+            }
+
+            self.ledger.seed_dropped[PlantLedger::which_class(species)] += 1;
+
+            let reach = Self::HOW_FAR_A_SEED_FALLS;
+            fell.push(Seed {
+                species_id: plant.species_id.clone(),
+                position: (
+                    plant.position.0 + rng.gen_range(-reach..=reach),
+                    plant.position.1 + rng.gen_range(-reach..=reach),
+                ),
+                age_ticks: 0,
+            });
+
+            if self.seeds.len() + fell.len() >= room {
+                break;
+            }
+        }
+
+        // Seed of something this world does not have a species for is not
+        // seed, it is a name nobody can look up.
+        fell.retain(|seed| registry.get(&seed.species_id).is_some());
+        self.seeds.extend(fell);
+    }
+
+    /// What came up, and what went off waiting to.
+    ///
+    /// A seed comes up when the ground under it will carry its kind and
+    /// nothing is standing on that ground already. A seed on ground its kind
+    /// cannot live on never comes up, and does not sit there for ever either:
+    /// it keeps for `PlantSpecies::seed_keeps_for_ticks` and then it has
+    /// rotted, which puts the little it was back into the litter.
+    fn what_came_up_and_what_rotted(
+        &mut self,
+        grid: &mut crate::world::Grid,
+        registry: &FloraRegistry,
+        canopy: &[f32],
+        ticks: f32,
+    ) {
+        use crate::world::Position;
+        use rand::Rng;
+
+        if self.seeds.is_empty() {
+            return;
+        }
+
+        // What is standing on each tile and how much of a place it takes, as
+        // `how_much_ground_it_claims` plus one so that nought means free. One
+        // pass over the plants and a flat lookup, rather than a search of
+        // every plant for every seed - see the canopy above, which is laid
+        // out the same way and for the same reason.
+        let (width, height) = (grid.width, grid.height);
+        let mut standing = vec![0u8; width * height];
+        for plant in &self.plants {
+            let (x, y) = plant.position;
+            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                continue;
+            }
+            let claim = registry
+                .get(&plant.species_id)
+                .map(|species| species.how_much_ground_it_claims() + 1)
+                .unwrap_or(1);
+            let at = y as usize * width + x as usize;
+            standing[at] = standing[at].max(claim);
+        }
+
+        let mut rng = crate::core::dice::roll();
+        let older_by = ticks.max(0.0) as u32;
+        let mut coming_up = Vec::new();
+        let mut rotted = Vec::new();
+        let mut shaded_out = Vec::new();
+
+        // The ledger cannot be borrowed inside the retain, which is holding
+        // `self.seeds`, so the tallies are gathered aside and folded back in.
+        let mut tally = self.ledger.clone();
+
+        self.seeds.retain_mut(|seed| {
+            seed.age_ticks = seed.age_ticks.saturating_add(older_by);
+
+            let Some(species) = registry.get(&seed.species_id) else {
+                return false;
+            };
+
+            let (x, y) = seed.position;
+            let here = Position::new(x, y);
+
+            let Some(tile) = grid.get_tile(&here) else {
+                return false; // off the edge of the world
+            };
+
+            if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                return false;
+            }
+
+            let at = y as usize * width + x as usize;
+
+            // Free ground, or ground held by something this would come up
+            // through. Equal claims stand: a grass does not displace a grass.
+            let room = standing[at] == 0
+                || species.how_much_ground_it_claims() + 1 > standing[at];
+
+            // Seed that has landed on ground of the kind this plant lives on
+            // is spent on the next pass, whichever way it goes. That is one
+            // throw, which is what actually happens - a seed germinates once,
+            // and the seedling either gets a root down or it does not - and
+            // it is also the only way the light gate can bite. A fresh throw
+            // every pass, over the four hundred passes a seed keeps for, took
+            // every seed that ever landed on free ground however dark it was.
+            //
+            // Ground already held by something counts as a failure, not as a
+            // wait. Seed does fall into a gap that opens later, but not the
+            // greater part of it, and letting every seed queue for a tile
+            // meant the bank filled to its ceiling and stayed there - and a
+            // full bank stops all further seeding, so which species held the
+            // ground came down to who happened to be in the list first.
+            if species.could_live_on(tile.terrain.terrain_type) {
+                let took = room
+                    && rng.gen::<f32>() < Self::how_likely_a_seed_takes(canopy[at]);
+
+                let class = PlantLedger::which_class(species);
+                if took {
+                    if standing[at] != 0 {
+                        shaded_out.push(seed.position);
+                    }
+                    coming_up.push((seed.species_id.clone(), seed.position));
+                    standing[at] = species.how_much_ground_it_claims() + 1;
+                    tally.seed_took[class] += 1;
+                } else {
+                    rotted.push((seed.position, Self::WHAT_A_SEED_IS_WORTH));
+                    tally.seed_lost_its_throw[class] += 1;
+                }
+                return false;
+            }
+
+            // On ground of a kind it cannot live on it never comes up at all,
+            // and it does not sit there for ever either: it keeps for its
+            // season or two and then it has rotted.
+            if seed.age_ticks >= species.seed_keeps_for_ticks() {
+                rotted.push((seed.position, Self::WHAT_A_SEED_IS_WORTH));
+                tally.seed_rotted_on_wrong_ground[PlantLedger::which_class(species)] += 1;
+                return false;
+            }
+
+            true
+        });
+
+        self.ledger.seed_took = tally.seed_took;
+        self.ledger.seed_lost_its_throw = tally.seed_lost_its_throw;
+        self.ledger.seed_rotted_on_wrong_ground = tally.seed_rotted_on_wrong_ground;
+
+        // What was standing where something bigger has just come up goes back
+        // into the ground it was standing in, the same as anything else that
+        // dies.
+        if !shaded_out.is_empty() {
+            let gone: std::collections::BTreeSet<(i32, i32)> =
+                shaded_out.into_iter().collect();
+            let mut left_behind = Vec::new();
+
+            self.plants.retain(|plant| {
+                if !gone.contains(&plant.position) {
+                    return true;
+                }
+                if let Some(species) = registry.get(&plant.species_id) {
+                    left_behind.push((
+                        plant.position,
+                        Self::what_a_dead_plant_leaves(species.size, species.is_tree),
+                    ));
+                    self.ledger.shaded_out[PlantLedger::which_class(species)] += 1;
+                }
+                false
+            });
+
+            for (at, (soft, woody)) in left_behind {
+                let here = Position::new(at.0, at.1);
+                if let Some(tile) = grid.get_tile_mut(&here) {
+                    tile.soil.add_leaf_litter(soft);
+                    tile.soil.add_woody_litter(woody);
+                }
+            }
+        }
+
+        for (species_id, at) in coming_up {
+            self.spawn_plant(species_id, at);
+        }
+
+        for (at, worth) in rotted {
+            let here = Position::new(at.0, at.1);
+            if let Some(tile) = grid.get_tile_mut(&here) {
+                tile.soil.add_leaf_litter(worth);
+            }
+        }
+    }
+
+    /// How likely a seed on ground that would suit it is to actually take.
+    ///
+    /// Seed is cheap and a seedling is not, and nearly everything that falls
+    /// fails. What decides it here is light, which is the one thing the model
+    /// already knows about the ground over a tile - see the canopy in
+    /// `tick_in_world`. Under a closed wood almost nothing comes up, which is
+    /// why a wood has a floor rather than a thicket and why open ground stays
+    /// open. Cubed rather than straight, because a half-shaded tile is a good
+    /// deal worse than half as good for something trying to get a root down.
+    ///
+    /// Without this a seed took the moment it landed on free ground, and a
+    /// hundred and twenty by a hundred and twenty went from a thousand plants
+    /// to ten thousand in twenty years with the count still climbing, every
+    /// grass and herb on the map crowded out by year thirteen.
+    fn how_likely_a_seed_takes(shade: f32) -> f32 {
+        const ON_OPEN_GROUND: f32 = 0.06;
+
+        let sun = (1.0 - shade).clamp(0.0, 1.0);
+        ON_OPEN_GROUND * sun * sun * sun
+    }
+
+    /// How much a seed that came to nothing puts back into the ground.
+    ///
+    /// Almost nothing, which is the point: what is being closed here is the
+    /// loop, not the books. A seed that rots is a hundredth of what the plant
+    /// that dropped it will leave when it goes over.
+    const WHAT_A_SEED_IS_WORTH: f32 = 0.002;
+
+    /// How much seed is lying in the ground.
+    pub fn how_much_seed_is_waiting(&self) -> usize {
+        self.seeds.len()
+    }
+
+    /// A running count of what has happened to the vegetation, for measuring.
+    ///
+    /// Not used by anything in the model. It is here because the only way to
+    /// tell a species that is losing its ground from one that never had any
+    /// seed on the ground in the first place is to count both.
+    pub fn what_has_been_happening(&self) -> &PlantLedger {
+        &self.ledger
     }
 
     /// Get count of plants by species
@@ -1950,6 +2614,12 @@ impl PlantManager {
     }
 
     /// Get all plants
+    /// The plants, to be reached into. For fixtures and tests: nothing in the
+    /// model changes a plant except through this module's own passes.
+    pub fn all_plants_mut(&mut self) -> &mut Vec<Plant> {
+        &mut self.plants
+    }
+
     pub fn all_plants(&self) -> &Vec<Plant> {
         &self.plants
     }
@@ -1986,6 +2656,7 @@ impl PlantManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::environment::Season;
 
     #[test]
     fn test_flora_registry() {
@@ -2036,4 +2707,187 @@ mod tests {
         assert!(grass.regrows);
         assert!(!oak.regrows);
     }
+
+// --- a plant's own clock ------------------------------------------------------
+
+/// A grass is finished in two seasons and an oak is not finished in two.
+///
+/// Lifespan is worked out from what kind of thing a plant is rather than
+/// written out once per species, so what this actually checks is that the
+/// derivation puts the fifty-one species in the right order of magnitude.
+#[test]
+fn a_grass_and_an_oak_do_not_live_the_same_length_of_time() {
+    use crate::environment::seasons::TICKS_PER_YEAR;
+
+    let registry = FloraRegistry::new();
+    let grass = registry.get("grass").expect("there is grass in this world");
+    let oak = registry.get("oak_tree").expect("and there are oaks");
+    let bush = registry.get("berry_bush").expect("and berry bushes");
+
+    assert!(
+        (1.0..=3.0).contains(&grass.lives_for_years()),
+        "a grass lives {} years",
+        grass.lives_for_years()
+    );
+    assert!(
+        (20.0..=60.0).contains(&bush.lives_for_years()),
+        "a bush lives {} years",
+        bush.lives_for_years()
+    );
+    assert!(
+        (150.0..=400.0).contains(&oak.lives_for_years()),
+        "an oak lives {} years",
+        oak.lives_for_years()
+    );
+
+    assert_eq!(
+        oak.lives_for_ticks(),
+        (oak.lives_for_years() * TICKS_PER_YEAR as f32) as u32
+    );
+}
+
+/// A short life means seeding hard; a long one means it can take its time.
+///
+/// What has to hold is that the two come out even over a lifetime, because
+/// otherwise the ground goes to whatever lives the shortest whatever else is
+/// true about it - which is what happened, and what took the bushes off the
+/// map entirely.
+#[test]
+fn what_lives_briefly_seeds_the_harder_for_it() {
+    let registry = FloraRegistry::new();
+    let grass = registry.get("grass").unwrap();
+    let oak = registry.get("oak_tree").unwrap();
+
+    assert!(
+        grass.seeds_per_pass() > oak.seeds_per_pass() * 50.0,
+        "grass {} against oak {}",
+        grass.seeds_per_pass(),
+        oak.seeds_per_pass()
+    );
+
+    let over_a_life = |species: &PlantSpecies| {
+        species.seeds_per_pass() * species.lives_for_ticks() as f32 / 10.0
+    };
+
+    let (short, long) = (over_a_life(grass), over_a_life(oak));
+    assert!(
+        (short - long).abs() < short * 0.05,
+        "over a whole life: grass {short:.0}, oak {long:.0}"
+    );
+}
+
+/// A sapling comes up through a sward. A sward never comes up through a wood.
+#[test]
+fn something_bigger_takes_the_ground_from_something_smaller() {
+    let registry = FloraRegistry::new();
+    let grass = registry.get("grass").unwrap();
+    let bush = registry.get("berry_bush").unwrap();
+    let oak = registry.get("oak_tree").unwrap();
+
+    assert!(grass.how_much_ground_it_claims() < bush.how_much_ground_it_claims());
+    assert!(bush.how_much_ground_it_claims() < oak.how_much_ground_it_claims());
+}
+
+/// Ground a plant cannot live on is ground a plant cannot live on.
+#[test]
+fn a_plant_knows_what_country_it_belongs_in() {
+    use crate::world::TerrainType;
+
+    let registry = FloraRegistry::new();
+    let cactus = registry.get("cactus").expect("there are cacti");
+
+    assert!(cactus.could_live_on(TerrainType::Desert));
+    assert!(!cactus.could_live_on(TerrainType::Wetland));
+}
+
+/// Something that has stood for its whole lifetime is not standing any more.
+#[test]
+fn a_plant_that_has_had_its_years_goes_over() {
+    use crate::environment::seasons::TICKS_PER_YEAR;
+    use crate::world::{Grid, Position};
+
+    let mut grid = Grid::new(12, 12);
+    grid.generate_terrain();
+    grid.settle_soil();
+
+    let mut plants = PlantManager::new(100);
+    plants.spawn_plant("grass".to_string(), (5, 5));
+
+    let litter_before = grid
+        .get_tile(&Position::new(5, 5))
+        .map(|tile| tile.soil.litter())
+        .unwrap_or(0.0);
+
+    // A grass lives two years. Three of them is well past it.
+    for _ in 0..(3 * TICKS_PER_YEAR / 10) {
+        plants.tick_in_world(&mut grid, 40.0, 10.0, Season::Summer);
+    }
+
+    assert!(
+        !plants.all_plants().iter().any(|plant| plant.position == (5, 5)),
+        "a grass three years old is still standing"
+    );
+
+    let litter_after = grid
+        .get_tile(&Position::new(5, 5))
+        .map(|tile| tile.soil.litter())
+        .unwrap_or(0.0);
+    assert!(
+        litter_after > litter_before,
+        "and it left nothing behind: {litter_before:.4} to {litter_after:.4}"
+    );
+}
+
+/// Seed on ground that will not carry it never comes up, and does not lie
+/// there for ever either.
+#[test]
+fn seed_on_the_wrong_ground_rots_instead_of_waiting_for_ever() {
+    use crate::world::{Grid, Position, Terrain, TerrainType};
+
+    // A whole map of one kind of ground, so that nothing a desert plant drops
+    // can land anywhere that would suit it.
+    let mut grid = Grid::new(20, 20);
+    for y in 0..20 {
+        for x in 0..20 {
+            grid.tiles[y][x].terrain = Terrain::new(TerrainType::Wetland);
+        }
+    }
+    grid.settle_soil();
+
+    let mut plants = PlantManager::new(400);
+
+    // A cactus, standing where a cactus cannot live, still sheds.
+    plants.spawn_plant("cactus".to_string(), (10, 10));
+    if let Some(plant) = plants.all_plants_mut().last_mut() {
+        plant.growth_stage = GrowthStage::Fruiting;
+    }
+
+    let registry = FloraRegistry::new();
+    let cactus = registry.get("cactus").unwrap();
+
+    // Long enough for seed to have fallen and for the first of it to be gone.
+    let passes = cactus.seed_keeps_for_ticks() / 10 * 3;
+    for _ in 0..passes {
+        plants.tick_in_world(&mut grid, 40.0, 10.0, Season::Summer);
+    }
+
+    let ledger = plants.what_has_been_happening();
+    let class = PlantLedger::which_class(cactus);
+
+    assert!(
+        ledger.seed_dropped[class] > 0,
+        "nothing was ever shed, so this test proves nothing"
+    );
+    assert!(
+        ledger.seed_rotted_on_wrong_ground[class] > 0,
+        "seed on ground it cannot live on never rotted"
+    );
+    assert_eq!(
+        ledger.seed_took[class], 0,
+        "a cactus came up in a marsh"
+    );
+
+    let _ = Position::new(0, 0);
+}
+
 }

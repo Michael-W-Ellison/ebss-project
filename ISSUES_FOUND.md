@@ -8243,6 +8243,114 @@ this is fixed the exclusion list comes out. Filed.
 
 ---
 
+### 131. Plants that never grew old, never seeded, and never died
+
+Vegetation was a fixture. A plant had an `age_ticks` and nothing read it, so
+a hedgerow put down when the world was made was the same hedgerow three
+hundred years later; the only way anything ever left the map was somebody
+harvesting it, and nothing new ever came up. Trees in particular had no life
+cycle at all, which is the thing that decides what a wood is.
+
+Now:
+
+- **Lifespans, worked out rather than written down.** `lives_for_years` comes
+  off `size` and `is_tree` rather than being a fifty-second field on each of
+  fifty-one hand-written species - fifty-one numbers is fifty-one numbers to
+  drift, which this document has a standing entry about. A grass or a herb is
+  two years, a bush thirty, a birch eighty, an oak two hundred and fifty, the
+  largest trees eight hundred.
+- **A founding wood has an age in it.** `spawn_naturalistic` gave everything
+  it planted `age_ticks` of nought, so a wood laid down all at once would come
+  down all at once; the founding cohort is scattered across a lifetime now.
+- **Aging happens whether or not a plant grows.** It sat below two early
+  returns and below the `share <= 0.0` gate, so a plant on ground too poor to
+  grow on did not get any older.
+- **Seed.** A bearing plant drops seed within four cells - forty metres, which
+  is where nearly all seed goes. On ground of a kind its species can live on it
+  gets one throw, and takes or fails; on ground its kind cannot live on it lies
+  there and rots on its own clock, a season for a tree's seed and two for small
+  dry seed.
+- **Two ways to die.** Old age, and a plant that could not make a living where
+  it stood: `growth_share` below `WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN` takes
+  condition off it, and at nothing it goes over. Both put the plant back into
+  the ground it was standing in, woody litter for a tree and leaf for a herb.
+- **Something bigger comes up through something smaller.** A sapling in a
+  sward shades the sward out; no amount of grass seed displaces a sapling.
+
+Four of those came out of measurement rather than design, and each was a case
+of the ecology settling somewhere obviously wrong.
+
+**The light gate did nothing.** Germination was a fresh throw every pass and a
+seed keeps for hundreds of them, so every seed that ever landed on free ground
+took in the end however dark it was. A hundred and twenty by a hundred and
+twenty went from a thousand plants to ten thousand in twenty years, still
+climbing, with every grass and herb crowded out by year thirteen. One throw
+fixed it.
+
+**Seeds per lifetime had to be the same for everything.** At a flat chance per
+pass, a plant's seed output over its life is proportional to its lifetime, so
+an oak seeded a hundred times over and a grass a fraction of once. `seeds_per_pass`
+is now the reciprocal of the lifetime, and the two come out even over a life.
+
+**A flat count is not enough on its own.** Counted over twenty years: two seed
+in five landed on country of a kind their species cannot live on, and of the
+three that could, about one in twenty got a root down. So a seed is worth
+about three hundredths of a plant, and twenty-five seed a lifetime is
+two-thirds of a successor - every class on the map on its way out. The bushes
+went first, being neither long-lived enough to wait it out like a tree nor
+quick enough to flood the ground like a grass: 145 at the start and none at
+all by year 150. A hundred a lifetime leaves about three, and what brings
+three back to one is ground that is already taken.
+
+**The seed bank was deciding the ecology.** While the bank is full nothing
+seeds at all, so which species held the ground came down to who was earliest
+in the list. At a quarter of the plant ceiling it was full from year three
+onwards.
+
+A hundred and twenty by a hundred and twenty, nobody on it, one hundred and
+twenty years:
+
+| year | trees | bushes | small |
+|---:|---:|---:|---:|
+| 0 | 326 | 145 | 607 |
+| 20 | 365 | 340 | 9,601 |
+| 60 | 484 | 1,460 | 8,351 |
+| 120 | 696 | 3,099 | 6,096 |
+
+Which is succession: the open ground goes to grass, the grass goes to scrub,
+and the scrub is going to wood. Nothing is lost.
+
+**What it costs, and what should pay for it.** The map goes from seven per
+cent vegetated to about sixty-eight, which is nine times the plants, and a
+year at a hundred and twenty by a hundred and twenty went from 0.2 s to 2.4 s.
+Sixty-eight per cent vegetated temperate country is right; what holds it back
+in the world is something eating it, and nothing in this model eats a plant
+yet. That is the next entry.
+
+Thirty-two worlds, 4,320 ticks: mean alive is up a little at every mark after
+the first two (7.69 -> 7.91 at tick 1,000, 5.53 -> 5.97 at 3,000), mean peak
+store 122.3 -> 125.8, mean last-alive tick 3,876 -> 3,783.
+
+One test moved: `survival_loop_tests::population_feeds_itself_over_a_long_run`.
+It builds its world without seeding `dice`, so its outcome shifts with any
+change to how much randomness anything upstream draws, and this change draws
+two rolls a pass that were not there before. A test that cannot survive a new
+`rng.gen` somewhere else in the model is not holding a line; it should take a
+seed like the rest. Filed as #132.
+
+### 132. A test that fails when anything else draws a random number
+
+`survival_loop_tests::population_feeds_itself_over_a_long_run` runs 4,000
+ticks of a twelve-person settlement on an unseeded world and asserts that
+somebody is still alive. Roughly a third of worlds are empty by tick 4,000 on
+any version of this code, so what the test actually depends on is which world
+the shared `dice` stream happens to hand it - and that moves whenever
+anything anywhere else in a tick draws a roll it did not draw before. It went
+red on the plant-seeding change for that reason and for no other. It wants a
+seed, and an assertion about a block of worlds rather than about one. Filed.
+
+---
+
 ---
 
 ## Recently fixed
