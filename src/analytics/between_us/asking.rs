@@ -33,15 +33,11 @@ impl Simulation {
 
         let telling = &self.population.agents[them];
 
-        // A meal that has been somewhere - dried, smoked - where what is worth
-        // knowing is where it was rather than how it was made
-        if let Some(item) = telling.inventory.get_item(what) {
-            if let Some(discovery) = Agent::what_asking_about_this_meal_would_teach(item) {
-                if telling.what_i_found_out().contains(discovery) {
-                    return Some(discovery.to_string());
-                }
-            }
-        }
+        // A meal that has been somewhere - dried, smoked - used to be worth
+        // asking about, because laying food out to keep it had to be watched
+        // before anybody would do it. Everybody is born knowing that now, so
+        // there is nothing a dried strip can tell you. See
+        // `Agent::what_anybody_is_born_knowing`.
 
         let made = Agent::what_asking_about_this_would_teach(what)?;
 

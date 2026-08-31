@@ -423,35 +423,12 @@ impl Simulation {
             return Some(Action::Dry { what });
         }
 
-        // Lay it out where you stand, if you do not yet know what that does.
-        //
-        // This is how anybody ever finds out, and it has to come before
-        // burying or nobody ever does. Nobody here is born knowing that cut
-        // flesh laid in the sun keeps and a whole fish laid in the sun turns;
-        // somebody has to put something down and come back to it.
-        //
-        // It sat after the pit branches and after the autumn gate to begin
-        // with, so it effectively never ran - a fourth circular precondition
-        // of the same family as the three the provisioning work turned up.
-        // You had to have seen drying to choose to dry, and the only route to
-        // seeing it was behind two conditions that were almost never both
-        // true. What a settlement actually did instead was lay whole fish out
-        // to dry, which worked and should not have.
-        //
-        // Once somebody knows, the drying branch above catches it first and
-        // this goes quiet - which is right. Laying food on the ground is what
-        // you do before you know better; drying it deliberately is what you
-        // do after.
-        if !agent
-            .what_i_found_out()
-            .contains(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
-        {
-            if let Some((what, _)) = spare.clone() {
-                if crate::world::World::will_this_dry(&what) && self.is_the_sky_clear() {
-                    return Some(Action::PutDown { what });
-                }
-            }
-        }
+        // The branch that used to sit here laid food on the ground so that
+        // somebody might notice what the sun does to it, because nobody was
+        // born knowing. Everybody is born knowing now - see
+        // `Agent::what_anybody_is_born_knowing` - so the drying branch above
+        // always catches it first and this could never fire again. A branch
+        // that cannot fire is worse than no branch, so it is gone.
 
         // Something to bury, and somewhere to bury it - and a store that is
         // not already full of a winter nobody will get to

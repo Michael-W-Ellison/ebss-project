@@ -120,24 +120,96 @@ fn in_february_the_store_is_what_there_is() {
     );
 }
 
-/// "Eat what will be lost first" must not become "eat the rot first". A raw
-/// thing on the turn still scores below a raw thing that is fresh.
+/// What is nearest to going is what gets eaten, of two of the same thing.
+///
+/// This asserted the opposite - that the fresher of the two wins - and the
+/// rule behind it applied freshness twice over: `effective_nutrition` folds
+/// freshness in, and the old score multiplied by it again, so the preference
+/// for this morning's berries over last week's was squared. A settlement ate
+/// the new and let the old rot beside it. See ISSUES_FOUND.md #125.
+#[test]
+fn what_is_nearest_to_going_is_what_gets_eaten() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+
+    // A half-gone lot of berries and a fresh lot of cut meat. The meat is the
+    // better meal by some way and keeps longer; the berries will be lost
+    // first, so the berries are supper.
+    let mut going = a_meal(ItemType::Food, "berries", 6, PreparationState::Raw);
+    if let Some(food) = going.food_data.as_mut() {
+        food.freshness = 0.5;
+    }
+    let keeps = a_meal(ItemType::Meat, "meatstrips", 6, PreparationState::Raw);
+
+    let berries_have = going
+        .food_data
+        .as_ref()
+        .expect("berries have a clock")
+        .how_long_this_has_left();
+    let meat_has = keeps
+        .food_data
+        .as_ref()
+        .expect("meat has a clock")
+        .how_long_this_has_left();
+
+    assert!(
+        berries_have < meat_has,
+        "the fixture wants the berries to be the ones going first: \
+         {berries_have} against {meat_has}"
+    );
+
+    agent.inventory.add_item(going);
+    agent.inventory.add_item(keeps);
+
+    assert_eq!(
+        agent.find_best_food_to_eat().as_deref(),
+        Some("berries"),
+        "what will be lost first is what gets eaten, even when the other thing \
+         is the better meal"
+    );
+}
+
+/// And that is still not "eat the rot first": what has actually turned is not
+/// food, and no amount of being nearest to going makes it a meal.
 #[test]
 fn nobody_eats_the_rot_first() {
     let mut simulation = one_person();
     let agent = &mut simulation.population.agents[0];
 
-    let mut going = a_meal(ItemType::Food, "berries", 6, PreparationState::Raw);
-    if let Some(food) = going.food_data.as_mut() {
-        food.freshness = 0.35;
+    let mut gone = a_meal(ItemType::Food, "berries", 6, PreparationState::Raw);
+    if let Some(food) = gone.food_data.as_mut() {
+        food.freshness = 0.0;
     }
-    agent.inventory.add_item(going);
-    agent.inventory.add_item(a_meal(ItemType::Food, "greens", 6, PreparationState::Raw));
+    agent.inventory.add_item(gone);
+    agent
+        .inventory
+        .add_item(a_meal(ItemType::Food, "greens", 6, PreparationState::Raw));
 
     assert_eq!(
         agent.find_best_food_to_eat().as_deref(),
         Some("greens"),
-        "fresh beats nearly-gone, even though nearly-gone will be lost sooner"
+        "what has turned is not on the menu however soon it would be lost"
+    );
+}
+
+/// And a thing put by is still saved: the whole point of drying something is
+/// that it is not what you eat this afternoon.
+#[test]
+fn what_was_dried_is_not_this_afternoons_supper() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+
+    agent
+        .inventory
+        .add_item(a_meal(ItemType::Food, "driedberries", 6, PreparationState::Dried));
+    agent
+        .inventory
+        .add_item(a_meal(ItemType::Food, "berries", 6, PreparationState::Raw));
+
+    assert_eq!(
+        agent.find_best_food_to_eat().as_deref(),
+        Some("berries"),
+        "the raw lot goes first and the dried lot keeps for February"
     );
 }
 

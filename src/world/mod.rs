@@ -388,10 +388,11 @@ impl Pit {
         use crate::environment::seasons::TICKS_PER_DAY;
 
         let food = item.food_data.as_ref()?;
+        let _ = now;
 
-        let spoils_in = food.base_spoilage_ticks as f32 / food.preparation.spoilage_multiplier();
-        let gone_already = now.saturating_sub(food.created_tick) as f32;
-        let left = (spoils_in - gone_already).max(0.0);
+        // What is left of its own clock - see `FoodData::how_long_this_has_left`
+        // - at the pace this hole lets it run.
+        let left = food.how_long_this_has_left();
 
         Some(left * self.how_much_slower_things_age() as f32 / TICKS_PER_DAY as f32)
     }

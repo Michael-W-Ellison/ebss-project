@@ -453,6 +453,22 @@ impl FoodData {
     }
 
     /// Update freshness based on current tick
+    /// How many ticks this has before it stops being food.
+    ///
+    /// What is left of its own clock: the whole of it at the pace its
+    /// preparation lets it run, times how much of that is still to come.
+    /// Freshness is *derived* from `created_tick` by `update_freshness`, so
+    /// this needs no tick handed to it and cannot disagree with what the
+    /// world last worked out.
+    ///
+    /// The one owner of the question. `Pit::how_long_this_would_keep` asks it
+    /// and multiplies by what the hole is worth; `find_best_food_to_eat` asks
+    /// it to decide what to eat first.
+    pub fn how_long_this_has_left(&self) -> f32 {
+        let spoils_in = self.base_spoilage_ticks as f32 / self.preparation.spoilage_multiplier();
+        (spoils_in * self.freshness.clamp(0.0, 1.0)).max(0.0)
+    }
+
     pub fn update_freshness(&mut self, current_tick: u32) {
         let elapsed = current_tick.saturating_sub(self.created_tick);
         let spoilage_rate = self.preparation.spoilage_multiplier();

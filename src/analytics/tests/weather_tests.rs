@@ -269,12 +269,12 @@ fn whoever_is_standing_near_learns_what_the_sun_did() {
     let mut simulation = one_person();
     let where_it_is = Position::new(25, 25);
 
-    assert!(
-        !simulation.population.agents[0]
-            .what_i_found_out()
-            .contains(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT),
-        "nobody is born knowing this"
-    );
+    // This used to be where somebody found out that laying food out keeps it.
+    // Everybody is born knowing that now - see
+    // `Agent::what_anybody_is_born_knowing` - so what is still taken from
+    // watching it happen is what it was worth, which is a lesson rather than
+    // a discovery.
+    let before = simulation.population.agents[0].lessons.tried_this("dry");
 
     simulation.world.somebody_left_this(
         a_meal(ItemType::Fish, "fishstrips", 6, 0),
@@ -288,12 +288,11 @@ fn whoever_is_standing_near_learns_what_the_sun_did() {
         simulation.who_saw_that_dry();
     }
 
+    let after = simulation.population.agents[0].lessons.tried_this("dry");
 
     assert!(
-        simulation.population.agents[0]
-            .what_i_found_out()
-            .contains(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT),
-        "he was standing over it while it happened"
+        after > before,
+        "he was standing over it while it happened: {before} then {after}"
     );
 }
 
@@ -315,23 +314,24 @@ fn nobody_across_the_map_learns_anything() {
         simulation.who_saw_that_dry();
     }
 
-    assert!(
-        !simulation.population.agents[0]
-            .what_i_found_out()
-            .contains(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT),
-        "he was forty tiles away"
+    assert_eq!(
+        simulation.population.agents[0].lessons.tried_this("dry"),
+        0,
+        "he was forty tiles away and took nothing from it"
     );
 }
 
-/// Until somebody has seen it, they cannot do it on purpose.
+/// Laying food out to keep it is not a discovery: everybody has always known
+/// that a thing left in the sun goes hard rather than green. See
+/// `Agent::what_anybody_is_born_knowing` and ISSUES_FOUND.md #125.
 #[test]
-fn nobody_dries_anything_on_purpose_before_they_have_seen_it_work() {
+fn anybody_can_dry_a_thing_without_being_shown_first() {
     let mut simulation = one_person();
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(a_meal(ItemType::Meat, "meatportions", 6, 0));
 
-    let refused = simulation.execute_action(
+    let straight_off = simulation.execute_action(
         &Action::Dry {
             what: "meatportions".to_string(),
         },
@@ -339,20 +339,29 @@ fn nobody_dries_anything_on_purpose_before_they_have_seen_it_work() {
     );
 
     assert!(
-        !refused.success,
-        "nobody here knows what laying it out would do"
+        straight_off.success,
+        "a person knows what the sun does to a thing left out in it: {:?}",
+        straight_off.message
     );
 
-    simulation.population.agents[0].found_out_how_to(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT);
+    // And it is not a one-off: the second thing laid out works the same way,
+    // because there was never a thing to be found out in the first place.
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(a_meal(ItemType::Fish, "fishstrips", 6, 0));
 
-    let now = simulation.execute_action(
+    let again = simulation.execute_action(
         &Action::Dry {
-            what: "meatportions".to_string(),
+            what: "fishstrips".to_string(),
         },
         0,
     );
 
-    assert!(now.success, "{:?}", now.message);
+    assert!(
+        again.success,
+        "nothing had to be learned in between: {:?}",
+        again.message
+    );
 }
 
 // --------------------------------------------------------------------------

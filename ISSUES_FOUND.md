@@ -7769,6 +7769,78 @@ lifting it. The next question is preservation throughput, and it is filed.
 
 ---
 
+### 125. Everybody is born knowing what the sun does, and nobody ate what was about to go
+
+Two things the model got wrong about food, both raised in the same breath.
+
+**Drying was a discovery, and it should never have been one.** Laying a thing
+out in the sun so it goes hard rather than green is not an invention. It is
+what happens to anything left out, and a person who has ever seen a dead
+animal in a dry summer has seen it. The model made it a thing an agent had to
+*watch happen* before it would do it on purpose: `is_it_worth_drying` gated on
+`found_out.contains(THAT_LAYING_IT_OUT_KEEPS_IT)`, and the only two ways to
+get that flag were standing over food while the weather dried it, or asking a
+neighbour who already had it.
+
+That is the throughput constraint named at the end of #124, and it is a
+constraint the world invented rather than one it modelled. Removing it:
+`Agent::found_out` is now seeded from `Agent::what_anybody_is_born_knowing()`,
+which is the one owner of the short list of things nobody has to be taught.
+Everything that used to hand the flag out is gone with it - the discovery
+branch in `who_saw_that_dry`, the `PutDown` branch in `store.rs` that could
+never fire anyway, and `what_asking_about_this_meal_would_teach`, because a
+dried strip has nothing left to tell anybody. What is still worth asking a
+neighbour about is a *making* nobody has worked out, which is what that
+machinery was built for.
+
+Watching food dry still teaches something - it is still recorded as a lesson,
+which is what it was worth all along. It is no longer the difference between
+being able to do it and not.
+
+**And the eating rule preferred the food that would keep.** `find_best_food_to_eat`
+scored every stack and took the highest, where the score was
+
+> `effective_nutrition(...) * freshness`
+
+`effective_nutrition` already folds freshness in. So freshness was applied
+**twice**, and the rule read: eat the freshest thing you own. A settlement
+with a week-old fish and a fresh one ate the fresh one and threw the week-old
+one away four days later. Anybody who has ever kept a larder does the
+opposite.
+
+The fix is a straight reordering, and it needed one owner to make it sayable:
+`FoodData::how_long_this_has_left()` answers how many ticks of edible life a
+stack has, from its own clock and what has been done to it.
+`Pit::how_long_this_would_keep` asks it too, so the pit and the plate cannot
+disagree about what is nearly gone. `find_best_food_to_eat` then ranks by
+**fewest whole days left first**, with nutrition as the tie-break inside a
+day - whole days, because ranking on the raw float makes an agent eat a
+mouthful of each of forty stacks in strict order of decay, which is not eating,
+it is grazing. Food the model does not track a clock for sorts last.
+
+**What it did.** Five paired seed blocks, 160 worlds, against #124:
+
+| | before | after |
+|---|---:|---:|
+| person-days | 11,551 | **11,778** |
+| worlds emptied of 160 | 129 | 124 |
+| alive at year end, a block | 1.30 | 1.34 |
+
+**+2.0%**, four of five blocks up - which is inside the noise, the same as
+#124 was. The number that is not noise is what is standing in the pits:
+
+| | spring | summer | autumn | winter |
+|---|---:|---:|---:|---:|
+| units in the ground | 62.4 | 83.3 | 66.8 | **31.4** |
+
+Against **4.2** in winter at the commit before #124. The larder now carries
+something through the bare stretch. It is still nowhere near
+`what_one_mouth_wants_put_by` at 864, and #241 is still the open question:
+what caps it now is the clear sky drying wants, one stack at a time, out of a
+pack that holds forty-odd.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

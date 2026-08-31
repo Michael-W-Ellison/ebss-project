@@ -1422,7 +1422,7 @@ impl Agent {
             technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
-            found_out: std::collections::BTreeSet::new(),
+            found_out: Self::what_anybody_is_born_knowing(),
             wonderings: Vec::new(),
             food_i_ate: 0,
             food_that_rotted_on_me: 0,
@@ -2309,18 +2309,6 @@ impl Agent {
         None
     }
 
-    /// And what asking about a *meal* would teach, which is a different
-    /// question: dried meat is not a thing anybody makes, it is meat that has
-    /// been somewhere.
-    pub fn what_asking_about_this_meal_would_teach(item: &InventoryItem) -> Option<&'static str> {
-        use crate::world::nutrition::PreparationState;
-
-        let how = item.food_data.as_ref()?.preparation;
-
-        matches!(how, PreparationState::Dried | PreparationState::Smoked)
-            .then_some(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
-    }
-
     /// Whether leaving this somewhere could come to anything.
     ///
     /// Food, because the weather and the ground get at it. And clay, because
@@ -2353,6 +2341,27 @@ impl Agent {
     /// Everything this agent has found out that it was not born knowing.
     pub fn what_i_found_out(&self) -> &std::collections::BTreeSet<String> {
         &self.found_out
+    }
+
+    /// What a person does not have to be shown.
+    ///
+    /// **Laying food out to keep it.** It had to be watched happening before
+    /// anybody would do it on purpose, and the only route to watching it was a
+    /// branch that fired when somebody happened to put food down on a clear
+    /// day. That made preserving a thing a settlement stumbled into rather
+    /// than a thing it did, and it is why 86% of what went into the ground
+    /// went in raw and 98.4% of it rotted - see ISSUES_FOUND.md #124.
+    ///
+    /// Drying is not a discovery on the scale of smelting. Every people that
+    /// has ever had a summer has known that a thing left in the sun goes hard
+    /// rather than green, and a model in which a settlement can fail to work
+    /// it out for a generation is not modelling ignorance, it is modelling an
+    /// accident of where the branch sat. What is still discovered is
+    /// everything the making chain calls `Making::obvious == false`.
+    pub fn what_anybody_is_born_knowing() -> std::collections::BTreeSet<String> {
+        [Self::THAT_LAYING_IT_OUT_KEEPS_IT.to_string()]
+            .into_iter()
+            .collect()
     }
 
     /// How an opinion about one of the strange plants is written down
@@ -6287,7 +6296,8 @@ impl Agent {
     pub fn find_best_food_to_eat(&self) -> Option<String> {
         let needed = self.nutrition.most_needed_nutrient();
 
-        let mut best_item: Option<(String, f32)> = None;
+        // What it is, how many whole days it has left, and what it is worth.
+        let mut best_item: Option<(String, u32, f32)> = None;
 
         for (item_id, item) in &self.inventory.items {
             // Skip emptied stacks - an exhausted entry lingering in the
@@ -6324,8 +6334,19 @@ impl Agent {
                     crate::world::NutrientType::Protein => flat.protein,
                     crate::world::NutrientType::Micronutrients => flat.micronutrients,
                 };
-                if best_item.is_none() || score > best_item.as_ref().unwrap().1 {
-                    best_item = Some((item_id.clone(), score));
+
+                // Nothing is known about how long it has, so it is not urgent
+                // and not stale: it sits with the things that will keep.
+                let days_left = u32::MAX;
+                let better = match best_item.as_ref() {
+                    None => true,
+                    Some((_, best_days, best_score)) => {
+                        days_left < *best_days
+                            || (days_left == *best_days && score > *best_score)
+                    }
+                };
+                if better {
+                    best_item = Some((item_id.clone(), days_left, score));
                 }
                 continue;
             };
@@ -6364,35 +6385,49 @@ impl Agent {
                     crate::world::NutrientType::Micronutrients => nutrition.micronutrients,
                 };
 
-                // Prefer fresher food, and prefer food that will not keep.
+                // Eat what will be lost first.
                 //
-                // Freshness alone was exactly backwards for a people with a
-                // store. A person eats the thing that is about to be lost and
-                // saves the thing that will last, which is the whole reason
-                // for preserving anything - and until now nothing did that.
-                // Agents spent three turns drying a lot of fish and then ate
-                // it the same afternoon, so a settlement held 0.56 units of
-                // preserved food through a whole winter.
+                // The rule was `score * freshness * spoilage_multiplier`, and
+                // `score` is `effective_nutrition`, which multiplies by
+                // freshness already - so freshness went in **twice** and the
+                // preference for the fresher of two identical things was
+                // squared. A settlement ate this morning's berries and let
+                // last week's rot beside them.
                 //
-                // `spoilage_multiplier` is how fast a thing goes off, so it
-                // is already the number wanted: raw is 1.0 and dried is 0.05,
-                // which makes a dried strip a twentieth as attractive as
-                // today's supper and exactly as attractive in February, when
-                // there is nothing else.
+                // What matters is not how fresh a thing is but how long it
+                // has left, which is one number - see
+                // `FoodData::how_long_this_has_left`. It carries what the old
+                // expression was reaching for with both its terms: a dried
+                // strip has hundreds of days in it and goes to the back, which
+                // is what saves a winter store from being eaten in October;
+                // and a raw thing three days off turning goes to the front,
+                // ahead of the same thing picked this morning.
                 //
-                // Freshness stays in, so that "eat what will be lost first"
-                // does not become "eat the rot first": a raw thing at 0.35
-                // still scores below a raw thing at 1.0.
-                let adjusted_score =
-                    score * food_data.freshness * food_data.preparation.spoilage_multiplier();
+                // Reckoned in whole days rather than ticks, so that what is
+                // *worth* eating still decides between two things that will be
+                // lost at about the same time. A strict ordering on the clock
+                // alone has somebody eat a crumb with an hour left in front of
+                // a good meal with a day, and a turn spent on a crumb is a
+                // turn.
+                let days_left = (food_data.how_long_this_has_left()
+                    / crate::environment::seasons::TICKS_PER_DAY as f32)
+                    .floor() as u32;
 
-                if best_item.is_none() || adjusted_score > best_item.as_ref().unwrap().1 {
-                    best_item = Some((item_id.clone(), adjusted_score));
+                let better = match best_item.as_ref() {
+                    None => true,
+                    Some((_, best_days, best_score)) => {
+                        days_left < *best_days
+                            || (days_left == *best_days && score > *best_score)
+                    }
+                };
+
+                if better {
+                    best_item = Some((item_id.clone(), days_left, score));
                 }
             }
         }
 
-        best_item.map(|(id, _)| id)
+        best_item.map(|(id, _, _)| id)
     }
 
 

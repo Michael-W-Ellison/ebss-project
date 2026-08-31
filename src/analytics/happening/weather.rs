@@ -53,15 +53,12 @@ impl Simulation {
                     continue;
                 }
 
-                if agent.found_out_how_to(Self::THAT_LAYING_IT_OUT_KEEPS_IT) {
-                    debug!(
-                        "Agent {} watched {what} dry out at {where_it_is:?}",
-                        agent.id
-                    );
-                }
-
-                // And what it was worth: something that would have been
-                // carrion is supper
+                // This used to be where somebody found out that laying food
+                // out keeps it. Everybody is born knowing that now - see
+                // `Agent::what_anybody_is_born_knowing` - so what is left to
+                // take from watching it is what it was worth: something that
+                // would have been carrion is supper.
+                debug!("Agent {} watched {what} dry out at {where_it_is:?}", agent.id);
                 agent.lessons.record_particular("dry", true);
             }
         }

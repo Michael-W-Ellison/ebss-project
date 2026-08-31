@@ -1465,3 +1465,53 @@ fn raw_food_that_will_not_last_the_winter_is_not_buried() {
         "burying leaf that goes off in a fortnight is not putting anything by: {answer:?}"
     );
 }
+
+/// Everybody is born knowing that food left in the sun keeps.
+///
+/// It used to have to be watched happening, and the only route to watching it
+/// was a branch that fired when somebody happened to put food down on a clear
+/// day. That made preserving a thing a settlement stumbled into rather than a
+/// thing it did: 86% of what went into the ground went in raw and 98.4% of it
+/// rotted. See `Agent::what_anybody_is_born_knowing` and ISSUES_FOUND.md #125.
+#[test]
+fn drying_is_not_something_anybody_has_to_be_shown() {
+    use crate::agents::{Agent, AgentConfig};
+
+    let born = Agent::new(AgentConfig::default());
+
+    assert!(
+        born.what_i_found_out()
+            .contains(Agent::THAT_LAYING_IT_OUT_KEEPS_IT),
+        "a person knows what the sun does to a thing left out in it"
+    );
+
+    // And it is not everything: what the making chain calls a discovery still
+    // has to be discovered.
+    assert_eq!(
+        born.what_i_found_out().len(),
+        Agent::what_anybody_is_born_knowing().len(),
+        "born knowing exactly what everybody is born knowing, and no more"
+    );
+}
+
+/// So a digger with a hole and an armful can put something by without having
+/// had to see it done first.
+#[test]
+fn somebody_who_has_never_been_shown_can_still_put_food_by() {
+    let mut simulation = a_digger();
+    simulation.execute_action(&Action::Excavate, 0);
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(30, simulation.world.tick));
+
+    let dried = simulation.execute_action(
+        &Action::Dry { what: "food".to_string() },
+        0,
+    );
+
+    assert!(
+        dried.success,
+        "nobody had to teach him this: {:?}",
+        dried.message
+    );
+}
