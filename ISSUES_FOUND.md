@@ -8581,6 +8581,212 @@ probably wants is for browsing pressure to fall off as the browse gets scarce,
 which is the one feedback the grazer does not have - it takes what is in reach
 and does not care how little is left. Filed.
 
+### 136. Every animal was two thirds of a food chain, and the map had no say in it
+
+Four things decided what a country was stocked with, and none of them was
+about the country.
+
+**A ratio where a pyramid belongs.** `prey_to_predator_ratio: 2.0` put a third
+of everything on four legs into the business of eating the other two thirds,
+and made no distinction at all between a fox and a wolf: one bag of
+"predators", drawn from evenly. There are not as many wolves as foxes and
+there are not half as many deer as wolves. `TrophicRole` is the shape the
+chain actually has - grazers, small predators, mid-level predators, top
+predators, seven tenths and eighteen, nine and three hundredths - and it is
+worked out from what a species is rather than declared on it. A thirty-fourth
+hand-written field on thirty-three species is thirty-three chances to say
+something the other fields already contradict.
+
+**What decides it is what it eats, not how big it is.** A wolf and a fox are
+both `AnimalSize::Small`; the comment on the enum says so in as many words
+("Small: Foxes, wolves"). So size cannot separate the top of the chain from
+the middle of it and the prey list has to: a fox takes rabbits and a wolf
+takes deer. Own size is a floor and never more, which was the second half of
+this and got it wrong on the first attempt - reading own size on the same
+scale as prey size filed the boar and the harbour seal with the tigers,
+because both are `AnimalSize::Medium` and a medium *prey* animal is what an
+apex predator eats. Nothing is apex by being large. A bear is apex because it
+takes deer.
+
+**A head count that was an absolute.** `max_initial_population: 200`, whatever
+the map. It never bound on a fifty by fifty and bound at once on a hundred
+square kilometres, where it held the whole country to two animals a square
+kilometre - and worse, it was one pool filled first-come, so the grazers spent
+all two hundred of it before anything that eats them was placed at all. A
+hundred square kilometres came out with a thousand head on it and not one
+wolf. It is `head_per_10000_tiles` now, and each tier draws against its own
+share of it.
+
+**And the map may veto the top of the chain.** A quarter of a square kilometre
+with a wolf pack on it is not a small ecosystem, it is a pen: the wolves eat
+everything in it and then starve. Only the top tier is held to this, which is
+both what the specification says ("only where habitat scale supports them")
+and the only place the argument holds - a fox on the same ground is a fox
+whose range runs off the edge of the map, which is every animal in this model.
+
+Two things had to be fixed before any of it would show:
+
+- **A species that could not live here lost its slot rather than yielding it.**
+  The spawner drew a climate out of the species and then asked whether the map
+  had any of that climate; when it had not, the herd or pack asked for was
+  simply thrown away. On a small map most of the registry's biomes are absent,
+  so a fifty by fifty came out with no predators at all - one pack wanted, one
+  draw, and the draw was an arctic fox. The draw is now made among the species
+  that could actually live on this ground.
+- **The herbivores were drawn evenly, so a small map was stocked with
+  mammoths.** A quarter of a square kilometre carried cows, elk and mammoths
+  and not one rabbit or squirrel. That is odd to look at and fatal to the
+  middle of the chain: every predator below a wolf in this registry lives on
+  rabbits, squirrels and fish, so a country with no small herbivores in it has
+  nothing for a fox to eat. Species now enter the draw as many times as a
+  thing of their size is common - sixteen for a tiny one against one for a
+  huge one - and the same fifty by fifty carries rabbits, squirrels, geese, a
+  few deer and a hawk.
+
+**And the hunt stopped asking about everything.** A predator looked at every
+animal in the world to find one within eight tiles of it, which is every
+predator against every animal, most of it string comparison against a list of
+prey names. On a hundred square kilometres carrying four thousand head that is
+millions of comparisons a tick to find the handful of animals actually in
+front of it. Animals are bucketed into blocks the size of a hunt and a
+predator looks in the nine around it.
+
+What comes out, seeded alike at four sizes:
+
+| | ground | head | grazers | small | mid | top | ms/tick |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 50x50 | 0.2 km² | 26 | 25 | 0 | 1 | 0 | 0.057 |
+| 200x200 | 4.0 km² | 161 | 143 | 0 | 18 | 0 | 0.279 |
+| 500x500 | 25.0 km² | 211 | 180 | 0 | 22 | 9 | 0.813 |
+| 1000x1000 | 100.0 km² | 823 | 703 | 0 | 90 | 30 | 4.932 |
+
+A hundred square kilometres is 21.3 seconds to the world-year, against 16.0
+for the same map when it carried two hundred head and no wolves. The top of
+the chain appears between four square kilometres and twenty-five, which is
+where the rule puts it. The empty column is #137.
+
+**Settlements do better for it**, which was not the point and is worth
+recording. Thirty-two worlds, 4,320 ticks, world for world:
+
+| alive at tick | 250 | 500 | 1000 | 1500 | 2000 | 3000 | 4000 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| before | 10.63 | 9.66 | 8.63 | 7.16 | 6.91 | 5.50 | 0.94 |
+| after | 10.81 | 10.31 | 9.19 | 8.38 | 8.00 | 6.88 | 1.03 |
+
+Mean last-alive tick 3,976 → 3,999 and mean peak store 120.1 → 129.1. The gain
+is in the middle years and it is about a quarter at tick 3,000. The likeliest
+reason is that there is now small game on the map and a man can take small
+game: `could_bring_it_down` wants a hunting tool for anything a thrown stone
+will not kill, so a country of cattle and mammoths is a country a stone-age
+settlement cannot hunt in at all, and a country with rabbits in it is not.
+
+Four tests moved, and all four had been reading a number that came out of
+where the random stream happened to be standing - the family #132 names, since
+any change at all to world generation moves every draw after it:
+
+- `hunting_tests::an_agent_hunts_for_the_skins_it_needs` spawns a deer three
+  tiles from an unarmed agent and asserts he sets out after it. He cannot,
+  and never could; what he was actually walking towards was a hawk eleven
+  tiles off that the default world happened to have stocked. It now clears the
+  world's own animals and gives the man a spear, which is what its name claims
+  it is about.
+- `fishery_tests::an_agent_at_the_water_catches_something` compares four rungs
+  of tackle, each drawn from wherever the stream stood when its arm began. It
+  read "hands 25, spear 52, rod 75, net 0" - a net that landed nothing in
+  sixty casts, which is not a statement about nets. Each rung is seeded alike
+  now.
+- `armed_tests::a_spear_tells_when_you_stand_your_ground` seeded *before*
+  building its world, which pins the world and leaves the fight wherever the
+  world left the stream. It read 1.4 blows bare-handed against 1.3 with a
+  spear: near enough every fight over in one blow, with no room for a spear to
+  tell. It seeds after the world is built, because the fight is the thing
+  being measured.
+- `news_tests::news_reaches_everybody_within_earshot` is seeded, because
+  whether twelve people who wander at random fall within earshot of each other
+  is a draw.
+
+### 137. There is no such thing in this world as a small predator
+
+The chain this model can build runs grass, grazer, fox, wolf, and skips a
+rung. Of thirty-three species in `FaunaRegistry`, eighteen eat plants, nine
+are mid-level predators and six are at the top; the small-predator tier -
+amphibians, reptiles, small birds, the smaller mustelids, everything that
+lives on insects, eggs, frogs and mice - is empty, and no arrangement of the
+existing species will fill it. Nothing in the registry is both small enough
+itself and takes small enough prey: the smallest thing that hunts anything is
+`AnimalSize::Small`, which is the fox and the owl and the hawk, and the
+specification calls those mid-level.
+
+It shows up as a hole in the middle of every country the model stocks. Eighteen
+hundredths of a country's groups belong to this tier; those groups are asked
+for, nothing can fill them, and the country comes out that much thinner than
+it is meant to be, at every map size measured.
+
+The snake is the near miss and is instructive. It is in the specification's
+small-predator list, and it is in this registry, and it comes out mid-level
+because it is `AnimalSize::Small` and there is no size below it that a hunting
+animal is allowed to be. `AnimalSize::Tiny` exists but every animal in it is a
+rabbit, a squirrel or a bird that eats seed.
+
+Filling it wants species rather than a rule change: a frog, a lizard, a
+songbird, a stoat, a shrew - things that eat insects and eggs and each other's
+young, and that a fox and an owl in turn live on. Two of the specification's
+other guilds are missing in the same way and probably belong in the same piece
+of work: nothing scavenges (vultures, crabs, scavenging fish - the model
+already has carrion falling to the ground and rotting untouched, see #169) and
+nothing engineers a habitat (beavers, burrowing animals, oysters).
+
+One neighbouring oddity in the same data, filed here rather than separately:
+`fish` is `DietType::Carnivore` with an empty prey list, so it is counted a
+primary consumer. That is what the data supports and it is not far wrong for
+what the model uses fish for, but the specification asks for predatory fish as
+a real guild and there is nowhere for one to go.
+
+### 138. Now that the chain runs, it eats itself out
+
+Putting small herbivores on the map (#136) gave every predator below a wolf
+something it can actually eat, and the food chain started running for the
+first time. It does not settle. Over eight worlds and five years, with nobody
+in them:
+
+| | species held | head, year 0 → 5 |
+|---|---:|---:|
+| 0.25 km², before #136 | 38 of 60 (63%) | 344 → 182 |
+| 0.25 km², after | 15 of 39 (38%) | 295 → 121 |
+| 4 km², before #136 | 68 of 88 (77%) | 1,624 → 2,201 |
+| 4 km², after | 57 of 113 (50%) | 1,272 → 1,153 |
+
+The head is steadier than it was - four square kilometres used to grow by a
+third in five years, unchecked, because the herbivores that were stocked were
+cows and elk and mammoths and nothing in the registry could take one. What
+moves now is the *roll call*. The species that go are the small herbivores -
+rabbit, squirrel, goose - and then, one after them, the things that live on
+those: fox, owl, hawk, eagle, arctic fox, snake. It is a cascade, and it runs
+the same way at every map size measured, from a quarter of a square kilometre
+to twelve.
+
+Half of it was there before and was hidden. Even at four square kilometres
+before this change, seven of the species that went were herbivores being eaten
+out; what is new is that their predators now follow them down, which is the
+truer outcome and the more visible one.
+
+The thing missing is the same one #135 names for browsing, in its other half:
+**nothing about hunting slackens as the prey get scarce.** A predator takes
+what is within `HOW_FAR_A_HUNT_REACHES` of it and does not care whether that
+was the last rabbit in the county; there is no refuge, no search cost that
+rises as the quarry thins, and no switch to a commoner prey. A pair of species
+with a fixed per-capita take and no brake is the textbook unstable
+predator-prey pair, and this is what one looks like from the inside.
+
+What it probably wants is for a hunt's chance of finding anything to fall with
+how much of it there is left - the predator's own version of "browsing
+pressure falls off as the browse gets scarce" - and for a predator that
+consistently finds nothing to move rather than to starve where it stands.
+`most_of_what_lived_here_still_lives_here` had to come down from half to a
+quarter to state what the model actually does, and it now guards the head as
+well as the roll call so that a country reduced to one rabbit of every kind
+does not read as a country that kept its species. Filed.
+
 ---
 
 ---

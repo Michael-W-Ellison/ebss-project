@@ -191,6 +191,14 @@ fn an_agent_at_the_water_catches_something() {
     // takes more at a time, and the odds of a cast are capped, so casts alone
     // understate what a net is for.
     let fish_taken = |with: Option<&str>| {
+        // Every rung off the same seed, or the four are not comparable: this
+        // draws from wherever the stream happens to be, and building the world
+        // consumes a different number of draws whenever anything about a world
+        // changes. Measured unseeded on one such change: hands 25, spear 52,
+        // rod 75, net 0 - a net that landed nothing in sixty casts, which is
+        // not a statement about nets. See ISSUES_FOUND.md #132.
+        crate::core::dice::seed(4_100);
+
         let mut world = a_world_with_a_river();
         world.resources.retain(|r| r.resource_type != ResourceType::Fish);
         world

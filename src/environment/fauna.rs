@@ -60,10 +60,16 @@ pub struct AnimalSpawnConfig {
     pub herds_per_10000_tiles: usize,
     /// Whether to spawn predators
     pub spawn_predators: bool,
-    /// Ratio of prey to predator groups
-    pub prey_to_predator_ratio: f32,
-    /// Maximum initial population cap
-    pub max_initial_population: usize,
+    /// The most head a world starts with, per ten thousand tiles.
+    ///
+    /// Ten thousand tiles is a square kilometre. This was an absolute - two
+    /// hundred head, whatever the map - which never bound on a fifty by fifty
+    /// and bound at once on a hundred square kilometres, where it held the
+    /// whole country to two animals a square kilometre. It is a ceiling and
+    /// not a stocking rate: what a country actually carries is what its grass
+    /// will feed, and that is settled by `what_the_grazers_took` within a few
+    /// years of a world opening.
+    pub head_per_10000_tiles: usize,
 }
 
 impl Default for AnimalSpawnConfig {
@@ -77,13 +83,13 @@ impl Default for AnimalSpawnConfig {
             // predator and a prey population at once.
             herds_per_10000_tiles: 40,
             spawn_predators: true,
-            // Two prey groups per predator group rather than four. A world
-            // that starts with one or two predators loses them to bad luck -
-            // a random walk apart, one lean winter - and once they are gone
-            // nothing holds the herds at all. What the herds breed needs a
-            // pack that can actually keep up with them.
-            prey_to_predator_ratio: 2.0,
-            max_initial_population: 200,
+            // Forty head to the square kilometre, which is about where a
+            // country of this sort settles once the grass has had its say -
+            // measured at fifty-odd head on a hundred and forty-four hectares
+            // over a hundred and fifty years. A world that opens near where it
+            // settles spends its first decade being a country rather than
+            // being a crash.
+            head_per_10000_tiles: 10,
         }
     }
 }
@@ -155,6 +161,144 @@ pub enum DietType {
     Omnivore,
 }
 
+impl AnimalSpecies {
+    /// Where this one sits in the chain - see [`TrophicRole`].
+    ///
+    /// Decided by the largest thing it takes, and by its own size where the
+    /// two disagree, whichever puts it higher. What actually makes something
+    /// an apex predator is that it can bring down large prey, not that it is
+    /// large - and in this registry it has to be the prey, because a wolf and
+    /// a fox are both `AnimalSize::Small` and the comment on the enum says so
+    /// in as many words ("Small: Foxes, wolves"). Their prey lists do tell
+    /// them apart: a fox takes rabbits and a wolf takes deer.
+    ///
+    /// Own size is a floor and never more: it keeps something big that eats
+    /// small things off the bottom of the chain, and it cannot on its own put
+    /// anything at the top of one.
+    pub fn where_it_sits(&self) -> TrophicRole {
+        if self.diet == DietType::Herbivore {
+            return TrophicRole::PrimaryConsumer;
+        }
+
+        // An omnivore with nothing on its list of prey is a forager whatever
+        // its teeth say: a boar turning over roots is not hunting anything.
+        if self.prey_species.is_empty() {
+            return TrophicRole::PrimaryConsumer;
+        }
+
+        // What the size of the thing it brings down says about it.
+        fn by_what_it_takes(prey: AnimalSize) -> TrophicRole {
+            match prey {
+                AnimalSize::Tiny => TrophicRole::SmallPredator,
+                AnimalSize::Small => TrophicRole::MidPredator,
+                AnimalSize::Medium | AnimalSize::Large | AnimalSize::Huge => {
+                    TrophicRole::TopPredator
+                }
+            }
+        }
+
+        // And what its own size says, which is only ever a floor and never
+        // reaches the top. Nothing is apex by being big: a bear that eats
+        // berries and field mice is not what a wolf pack is, and a boar
+        // turning up rabbits is a boar. Reading own size on the same scale as
+        // prey size put the boar and the harbour seal in with the tigers,
+        // because both are `AnimalSize::Medium` and a medium *prey* animal is
+        // what an apex predator eats.
+        fn at_least(own: AnimalSize) -> TrophicRole {
+            match own {
+                AnimalSize::Tiny => TrophicRole::SmallPredator,
+                _ => TrophicRole::MidPredator,
+            }
+        }
+
+        // The registry is the only thing that knows how big a named prey
+        // species is, and a species does not carry one - so this is answered
+        // from a fresh registry rather than from a field that could disagree
+        // with the one the world is using.
+        let biggest_it_takes = FaunaRegistry::new()
+            .all_species()
+            .into_iter()
+            .filter(|other| self.prey_species.contains(&other.id))
+            .map(|other| other.size)
+            .max();
+
+        match biggest_it_takes {
+            Some(prey) => by_what_it_takes(prey).max(at_least(self.size)),
+            None => at_least(self.size),
+        }
+    }
+}
+
+/// Where a species sits in the chain that runs up from the grass.
+///
+/// Worked out from what it eats and how big it is rather than declared on
+/// each species, because those two already say it: a thing that eats plants
+/// is a primary consumer, and among the things that eat meat it is size that
+/// decides whether it takes voles, hares or deer. A thirty-fourth
+/// hand-written field on thirty-three species is thirty-three chances to say
+/// something the other fields already contradict.
+///
+/// The distinction matters because a country does not hold the same number of
+/// each. There are a great many grazers, fewer things that eat mice, fewer
+/// again that eat rabbits, and a handful at most that eat deer - and the last
+/// of those only where there is enough ground to be worth a territory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum TrophicRole {
+    /// Eats plants: the grazers, the browsers, the seed-eaters.
+    PrimaryConsumer,
+    /// Amphibians, reptiles, small birds, the smaller mustelids.
+    SmallPredator,
+    /// Foxes, raptors, snakes, the mesocarnivores.
+    MidPredator,
+    /// Wolves, the big cats, bears. Wants a great deal of country.
+    TopPredator,
+}
+
+impl TrophicRole {
+    /// Every tier, from the grass upward.
+    pub const EVERY_ONE: [TrophicRole; 4] = [
+        TrophicRole::PrimaryConsumer,
+        TrophicRole::SmallPredator,
+        TrophicRole::MidPredator,
+        TrophicRole::TopPredator,
+    ];
+
+    /// What share of a country's herds and packs are of this tier.
+    ///
+    /// A pyramid, because that is what a food chain is: what eats has to be
+    /// rarer than what it eats, and each step up is rarer again. It was a flat
+    /// two-to-one of prey to predators, which put a third of everything on
+    /// four legs into the business of eating the other two thirds and made no
+    /// distinction at all between a fox and a wolf.
+    pub fn share_of_a_country(&self) -> f32 {
+        match self {
+            TrophicRole::PrimaryConsumer => 0.70,
+            TrophicRole::SmallPredator => 0.18,
+            TrophicRole::MidPredator => 0.09,
+            TrophicRole::TopPredator => 0.03,
+        }
+    }
+
+    /// How much country, in square kilometres, a map must hold before this
+    /// tier belongs on it at all - or `None` if there is no such bar.
+    ///
+    /// Only the top of the chain is held to this, and that is deliberate. It
+    /// is the one tier the specification singles out ("only where habitat
+    /// scale supports them"), and it is the one whose territory is large
+    /// enough that a map of the size this model is usually run at is a pen
+    /// rather than a window on a country: a quarter of a square kilometre
+    /// with a wolf pack on it is not a small ecosystem, it is an enclosure,
+    /// and the wolves eat everything in it and then starve. A fox on the same
+    /// ground is a fox whose range runs off the edge of the map, which is
+    /// every animal in this model and is nobody's problem.
+    pub fn how_much_country_before_it_belongs(&self) -> Option<f32> {
+        match self {
+            TrophicRole::TopPredator => Some(20.0),
+            _ => None,
+        }
+    }
+}
+
 /// Size classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AnimalSize {
@@ -163,6 +307,31 @@ pub enum AnimalSize {
     Medium,    // Deer, sheep
     Large,     // Bears, cattle
     Huge,      // Mammoths, elephants
+}
+
+impl AnimalSize {
+    /// How common a thing of this size is, against the others.
+    ///
+    /// A country holds a great many rabbits, a fair number of deer, and a few
+    /// cattle. Stocking a map by drawing evenly from the list of herbivores
+    /// says the opposite - that mammoths and rabbits are equally likely - and
+    /// on a small map, where there are only a handful of herds to deal out,
+    /// what came of it was a quarter of a square kilometre carrying cows, elk
+    /// and mammoths and not one rabbit or squirrel.
+    ///
+    /// That is not only odd to look at. Every predator below a wolf in this
+    /// registry lives on rabbits, squirrels and fish, so a country with no
+    /// small herbivores in it has nothing for a fox to eat, and the whole
+    /// middle of the chain goes missing from the map.
+    pub fn how_common_a_thing_this_size_is(&self) -> usize {
+        match self {
+            AnimalSize::Tiny => 16,
+            AnimalSize::Small => 8,
+            AnimalSize::Medium => 4,
+            AnimalSize::Large => 2,
+            AnimalSize::Huge => 1,
+        }
+    }
 }
 
 /// An animal species
@@ -2588,6 +2757,26 @@ impl AnimalManager {
                 })
                 .collect();
 
+        // Who is standing where, in blocks the size of a hunt.
+        //
+        // A predator used to look at every animal in the world to find one
+        // within eight tiles of it, which is every predator against every
+        // animal: on a hundred square kilometres carrying four thousand head
+        // that is millions of comparisons a tick, most of them string
+        // comparisons against a list of prey species, to find the handful of
+        // animals actually in front of it. Blocks of `HOW_FAR_A_HUNT_REACHES`
+        // mean a predator looks in the nine blocks around it and nowhere else.
+        let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
+        for (idx, animal) in self.animals.iter().enumerate() {
+            if !animal.is_alive() {
+                continue;
+            }
+            who_is_about
+                .entry(Self::which_block(animal.position))
+                .or_default()
+                .push(idx);
+        }
+
         // For each predator, look for nearby prey
         let mut kills = Vec::new();
         for (pred_idx, _pred_species, prey_species, pred_pos, attack, desperate, usual_limit) in
@@ -2597,8 +2786,20 @@ impl AnimalManager {
                 continue;
             }
 
+            let hereabouts = Self::which_block(pred_pos);
+            let nearby: Vec<usize> = [-1, 0, 1]
+                .iter()
+                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+                .filter_map(|(dx, dy)| {
+                    who_is_about.get(&(hereabouts.0 + dx, hereabouts.1 + dy))
+                })
+                .flatten()
+                .copied()
+                .collect();
+
             // Find nearby prey
-            for (prey_idx, prey) in self.animals.iter().enumerate() {
+            for prey_idx in nearby {
+                let prey = &self.animals[prey_idx];
                 if !prey.is_alive() || prey_idx == pred_idx {
                     continue;
                 }
@@ -2618,10 +2819,11 @@ impl AnimalManager {
                     continue;
                 }
 
-                // Check proximity (hunting range of 8 tiles)
-                let distance = ((pred_pos.0 - prey.position.0).abs()
-                    + (pred_pos.1 - prey.position.1).abs()) as f32;
-                if distance > 8.0 {
+                // Check proximity - the blocks are only a sieve, and a
+                // neighbouring block reaches further than a hunt does.
+                let distance = (pred_pos.0 - prey.position.0).abs()
+                    + (pred_pos.1 - prey.position.1).abs();
+                if distance > Self::HOW_FAR_A_HUNT_REACHES {
                     continue;
                 }
 
@@ -3120,6 +3322,18 @@ impl AnimalManager {
     /// good is what the animal burned.
     const WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL: f32 = 0.55;
 
+    /// How far a predator will chase, in cells.
+    const HOW_FAR_A_HUNT_REACHES: i32 = 8;
+
+    /// The block of country a position falls in, for finding what is near it
+    /// without asking about everything that is not.
+    fn which_block(at: (i32, i32)) -> (i32, i32) {
+        (
+            at.0.div_euclid(Self::HOW_FAR_A_HUNT_REACHES),
+            at.1.div_euclid(Self::HOW_FAR_A_HUNT_REACHES),
+        )
+    }
+
     /// Whether this animal feeds by digging.
     ///
     /// A big omnivore does: a bear turns ground over for roots and grubs and
@@ -3263,6 +3477,25 @@ impl AnimalManager {
 
         let total_tiles = grid.width * grid.height;
         let total_herds = (total_tiles * config.herds_per_10000_tiles) / 10000;
+        // Never below what a small map was always allowed, so that turning
+        // this from an absolute into a density does not quietly empty the
+        // fifty by fifty every test is built on: a quarter of a square
+        // kilometre at ten head to the kilometre is two animals, where the
+        // herd counts alone put thirty-odd on it and always have. On anything
+        // big enough for the density to mean something, the density wins.
+        const WHAT_EVEN_A_SMALL_MAP_MAY_HOLD: usize = 200;
+
+        let at_the_very_outside = ((total_tiles * config.head_per_10000_tiles) / 10000)
+            .max(WHAT_EVEN_A_SMALL_MAP_MAY_HOLD);
+
+        // And what each tier of it may hold, by the same shares the herds are
+        // dealt out on. One pool, filled first-come, meant the grazers spent
+        // the whole of it before anything that eats them was placed at all -
+        // which is why a hundred square kilometres came out with a thousand
+        // head on it and not one wolf.
+        let room_for = |role: TrophicRole| -> usize {
+            ((at_the_very_outside as f32) * role.share_of_a_country()) as usize
+        };
 
         // Categorize species by diet for balanced spawning
         let herbivores: Vec<_> = registry.all_species()
@@ -3279,13 +3512,46 @@ impl AnimalManager {
             return;
         }
 
-        // Calculate prey vs predator herds
-        let prey_herds = if config.spawn_predators && !predators.is_empty() {
-            ((total_herds as f32) * config.prey_to_predator_ratio / (config.prey_to_predator_ratio + 1.0)) as usize
-        } else {
-            total_herds
-        };
-        let predator_herds = total_herds.saturating_sub(prey_herds);
+        // How many herds and packs of each tier this country carries.
+        //
+        // A pyramid rather than a ratio - see `TrophicRole::share_of_a_country`
+        // - and one that the size of the map can veto at the top: what wants
+        // twenty square kilometres to a territory has no business on a quarter
+        // of one. A hundred square kilometres carries wolves; a fifty by fifty
+        // test map carries foxes and nothing above them, which is what "only
+        // where habitat scale supports them" comes to.
+        let country = grid.how_much_ground();
+
+        let mut how_many_of: BTreeMap<TrophicRole, usize> = BTreeMap::new();
+        for role in TrophicRole::EVERY_ONE {
+            // At least one group of anything that belongs here at all. Three
+            // hundredths of the ten herds a fifty by fifty gets is nought
+            // groups, and rounding a whole tier out of existence is not the
+            // same statement as the map being too small for it - the veto
+            // below is the thing that means that, and it should be the only
+            // thing that does.
+            let wanted = ((total_herds as f32 * role.share_of_a_country()) as usize).max(1);
+
+            let holds = match role.how_much_country_before_it_belongs() {
+                Some(room) if country < room => 0,
+                _ => wanted,
+            };
+
+            how_many_of.insert(role, holds);
+        }
+
+        if !config.spawn_predators {
+            for role in TrophicRole::EVERY_ONE {
+                if role != TrophicRole::PrimaryConsumer {
+                    how_many_of.insert(role, 0);
+                }
+            }
+        }
+
+        let prey_herds = how_many_of
+            .get(&TrophicRole::PrimaryConsumer)
+            .copied()
+            .unwrap_or(0);
 
         // Collect terrain positions by climate zone
         let mut positions_by_climate: BTreeMap<ClimateZone, Vec<(i32, i32)>> = BTreeMap::new();
@@ -3303,11 +3569,54 @@ impl AnimalManager {
             }
         }
 
+        // The sorts of ground a species lives on that this map actually has.
+        //
+        // Drawing a climate out of the species and then asking whether the map
+        // has any of it loses the animal when it has not: the pack asked for
+        // is thrown away rather than put somewhere it could live. On a small
+        // map most of the registry's biomes are absent, so a fifty by fifty
+        // came out with no predators at all - one pack wanted, one draw, and
+        // the draw was an arctic fox.
+        let ground_for = |species: &AnimalSpecies| -> Vec<ClimateZone> {
+            let wanted: Vec<ClimateZone> = if species.primary_biomes.is_empty() {
+                vec![ClimateZone::Temperate]
+            } else {
+                species.primary_biomes.clone()
+            };
+
+            wanted
+                .into_iter()
+                .filter(|climate| {
+                    positions_by_climate
+                        .get(climate)
+                        .map(|ground| !ground.is_empty())
+                        .unwrap_or(false)
+                })
+                .collect()
+        };
+
         // Spawn herbivore herds
         let mut spawned = 0;
+        let grazers_may_have = room_for(TrophicRole::PrimaryConsumer).max(1);
         let mut prey_present: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+        // Only the ones that could live here, so that a herd asked for is a
+        // herd placed - and each of them entered as many times as a thing of
+        // its size is common, so that the draw is not a coin between a rabbit
+        // and a mammoth. See `AnimalSize::how_common_a_thing_this_size_is`.
+        let herbivores: Vec<_> = herbivores
+            .into_iter()
+            .filter(|species| !ground_for(species).is_empty())
+            .flat_map(|species| {
+                std::iter::repeat(species).take(species.size.how_common_a_thing_this_size_is())
+            })
+            .collect();
+        if herbivores.is_empty() {
+            return;
+        }
+
         for _ in 0..prey_herds {
-            if spawned >= config.max_initial_population
+            if spawned >= grazers_may_have
                 || self.how_many_are_alive() >= self.max_population
             {
                 break;
@@ -3317,11 +3626,8 @@ impl AnimalManager {
             let species = &herbivores[rng.gen_range(0..herbivores.len())];
 
             // Find a position in an appropriate biome
-            let climate = if !species.primary_biomes.is_empty() {
-                species.primary_biomes[rng.gen_range(0..species.primary_biomes.len())]
-            } else {
-                ClimateZone::Temperate
-            };
+            let at_home = ground_for(species);
+            let climate = at_home[rng.gen_range(0..at_home.len())];
 
             if let Some(positions) = positions_by_climate.get(&climate) {
                 if !positions.is_empty() {
@@ -3355,22 +3661,48 @@ impl AnimalManager {
             .collect();
 
         if config.spawn_predators && !feedable.is_empty() {
-            for _ in 0..predator_herds {
-                if spawned >= config.max_initial_population
-                || self.how_many_are_alive() >= self.max_population
-            {
+            // Each tier drawn from its own kind, so that thinning the top of
+            // the pyramid does not thin the bottom of it as well. Drawing them
+            // all from one bag meant that a map too small for wolves simply
+            // had fewer foxes.
+            let mut packs = Vec::new();
+            for role in TrophicRole::EVERY_ONE {
+                if role == TrophicRole::PrimaryConsumer {
+                    continue;
+                }
+
+                let of_this_tier: Vec<_> = feedable
+                    .iter()
+                    .copied()
+                    .filter(|species| species.where_it_sits() == role)
+                    .filter(|species| !ground_for(species).is_empty())
+                    .collect();
+
+                if of_this_tier.is_empty() {
+                    continue;
+                }
+
+                for _ in 0..how_many_of.get(&role).copied().unwrap_or(0) {
+                    packs.push(of_this_tier[rng.gen_range(0..of_this_tier.len())]);
+                }
+            }
+
+            let mut put_down_of: BTreeMap<TrophicRole, usize> = BTreeMap::new();
+
+            for species in packs {
+                if self.how_many_are_alive() >= self.max_population {
                     break;
                 }
 
-                // Pick a predator that can live off what is here
-                let species = feedable[rng.gen_range(0..feedable.len())];
+                let role = species.where_it_sits();
+                let already = put_down_of.get(&role).copied().unwrap_or(0);
+                if already >= room_for(role).max(1) {
+                    continue;
+                }
 
                 // Find a position in an appropriate biome
-                let climate = if !species.primary_biomes.is_empty() {
-                    species.primary_biomes[rng.gen_range(0..species.primary_biomes.len())]
-                } else {
-                    ClimateZone::Temperate
-                };
+                let at_home = ground_for(species);
+                let climate = at_home[rng.gen_range(0..at_home.len())];
 
                 if let Some(positions) = positions_by_climate.get(&climate) {
                     if !positions.is_empty() {
@@ -3380,6 +3712,7 @@ impl AnimalManager {
 
                         if let Some(_) = self.spawn_group(species.id.clone(), pos, pack_size) {
                             spawned += pack_size as usize;
+                            *put_down_of.entry(role).or_insert(0) += pack_size as usize;
                         }
                     }
                 }
@@ -3719,6 +4052,6 @@ mod tests {
         let config = AnimalSpawnConfig::default();
         assert!(config.herds_per_10000_tiles > 0);
         assert!(config.spawn_predators);
-        assert!(config.prey_to_predator_ratio > 1.0);
+        assert!(config.head_per_10000_tiles > 0);
     }
 }

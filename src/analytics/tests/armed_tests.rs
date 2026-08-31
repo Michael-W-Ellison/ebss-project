@@ -59,11 +59,20 @@ fn blows_to_put_it_down(with_a_spear: bool) -> f32 {
 
     let mut blows = 0u32;
     for seed in 0..HOW_MANY_FIGHTS {
-        crate::core::dice::seed(9_000 + seed);
         let (mut simulation, which) = a_man_and_a_wolf();
         if with_a_spear {
             give_him_a_spear(&mut simulation);
         }
+
+        // Seeded *after* the world is built, not before it. What is being
+        // measured is the fight, and building a world draws an unknown number
+        // of times before the first blow is struck - so a seed set beforehand
+        // pins the world and leaves the fight wherever the world happened to
+        // leave the stream. Any change at all to world generation then moves
+        // the fights, and this read 1.4 blows bare-handed against 1.3 with a
+        // spear on one such change: near enough every fight over in one blow,
+        // with no room left for a spear to tell. See ISSUES_FOUND.md #132.
+        crate::core::dice::seed(9_000 + seed);
 
         for swung in 1..=BEFORE_GIVING_UP {
             let mut rng = crate::core::dice::roll();

@@ -278,6 +278,11 @@ fn walking_past_a_thing_again_is_seeing_it_again() {
 /// News reaches more than one person at a time.
 #[test]
 fn news_reaches_everybody_within_earshot() {
+    // Seeded, because whether twelve people who wander at random fall within
+    // earshot of each other is a draw, and this test has flipped either way on
+    // changes that had nothing to do with talking. See ISSUES_FOUND.md #132.
+    crate::core::dice::seed(4_101);
+
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
     for _ in 0..12 {
