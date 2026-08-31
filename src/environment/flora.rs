@@ -1843,6 +1843,7 @@ impl PlantManager {
             };
 
             let position = Position::new(plant.position.0, plant.position.1);
+
             let tile = match grid.get_tile_mut(&position) {
                 Some(tile) => tile,
                 None => continue,

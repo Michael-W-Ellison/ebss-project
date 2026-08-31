@@ -253,6 +253,11 @@ impl Soil {
     ///
     /// Goes into the litter like anything else soft, and additionally leaves
     /// the two things that make a midden a midden: a smell, and seeds.
+    ///
+    /// This is soil on its own, and knows nothing about the map it sits in.
+    /// If you have a grid in your hand, call `Grid::somebody_voided_on`
+    /// instead: fouling and seed are the two things the ground register is
+    /// keeping track of, and a tile fouled behind its back never gets visited.
     pub fn somebody_voided_here(&mut self, amount: f32) {
         self.add_leaf_litter(amount);
         self.fouling = (self.fouling + amount).clamp(0.0, Self::AS_FOUL_AS_IT_GETS);
@@ -368,6 +373,34 @@ impl Soil {
         let taken = wanted.min(self.nutrients).max(0.0);
         self.nutrients -= taken;
         taken
+    }
+
+    /// Whether somebody has left something on this ground.
+    ///
+    /// Muck and the seed in it: the two things that are *put* on a tile by
+    /// something happening there, as against the litter that every piece of
+    /// ground in the world carries from the day it is made. Two phases of the
+    /// tick - what comes up out of a midden, and what a midden smells of -
+    /// used to look for these by walking every tile in the world, which made
+    /// a tick cost the area of the map rather than what was happening on it.
+    /// At a hundred square kilometres that was 47ms a tick and three and a
+    /// half minutes a simulated year.
+    ///
+    /// The first cut of this asked whether the ground had *anything* on it,
+    /// litter included, and so answered yes for every tile in the world -
+    /// `Soil::for_terrain` gives a forest floor 1.5 of leaf litter and even a
+    /// desert 0.02. A register that holds everything is not a register. What
+    /// distinguishes these two is that they start at nought everywhere and
+    /// only ever arrive through `somebody_voided_here`.
+    ///
+    /// Litter is not in here on purpose: every tile has some, so rotting it is
+    /// honest work over the whole map and stays a sweep. It runs once in ten
+    /// ticks and costs about half a millisecond over a million tiles, which is
+    /// a twentieth of what these two were costing.
+    ///
+    /// See ISSUES_FOUND.md #128.
+    pub fn has_somebody_left_something_here(&self) -> bool {
+        self.fouling > 0.0 || self.seeds_dropped > 0.0
     }
 
     /// How well fed this ground is, as a fraction of what it could hold

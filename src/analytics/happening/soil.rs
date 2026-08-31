@@ -28,11 +28,17 @@ impl Simulation {
 
         let mut came_up: Vec<Position> = Vec::new();
 
-        for (y, row) in self.world.grid.tiles.iter().enumerate() {
-            for (x, tile) in row.iter().enumerate() {
-                if tile.soil.ready_to_sprout() {
-                    came_up.push(Position::new(x as i32, y as i32));
-                }
+        // The ground that has something on it, rather than every tile in the
+        // world - see `Grid::note_something_on`. Seed only ever arrives with
+        // waste, which notes the tile as it lands.
+        for at in self.world.grid.where_the_ground_is_doing_something() {
+            if self
+                .world
+                .grid
+                .get_tile(&at)
+                .is_some_and(|tile| tile.soil.ready_to_sprout())
+            {
+                came_up.push(at);
             }
         }
 
@@ -280,11 +286,9 @@ impl Simulation {
             .collect();
 
         for (position, waste) in leavings {
+            // Not just litter: a midden also has a smell and seeds in it.
             let here = Position::new(position.0, position.1);
-            if let Some(tile) = self.world.grid.get_tile_mut(&here) {
-                // Not just litter: a midden also has a smell and seeds in it.
-                tile.soil.somebody_voided_here(waste);
-            }
+            self.world.grid.somebody_voided_on(&here, waste);
         }
 
         // And what the dead leave where they fell
@@ -295,16 +299,15 @@ impl Simulation {
             if let Some(tile) = self.world.grid.get_tile_mut(&here) {
                 tile.soil.add_leaf_litter(soft);
                 tile.soil.add_woody_litter(bone);
-
-                // And it fouls the ground it fell on, which is the whole
-                // reason a body is a thing you want to be away from. Until
-                // now a corpse was a nutrient deposit and nothing else -
-                // agents walked over their own dead with no more consequence
-                // than walking over leaf mould.
-                tile.soil.somebody_voided_here(
-                    soft * Self::HOW_MUCH_OF_A_BODY_IS_FOULING,
-                );
             }
+
+            // And it fouls the ground it fell on, which is the whole reason a
+            // body is a thing you want to be away from. Until now a corpse was
+            // a nutrient deposit and nothing else - agents walked over their
+            // own dead with no more consequence than walking over leaf mould.
+            self.world
+                .grid
+                .somebody_voided_on(&here, soft * Self::HOW_MUCH_OF_A_BODY_IS_FOULING);
         }
 
         self.what_the_dead_left_behind();

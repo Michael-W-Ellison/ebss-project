@@ -183,18 +183,22 @@ impl Simulation {
         // this is the smell of it. It reaches further than a berry does and
         // nowhere near as far as a cooking fire, which is about right for
         // something you notice when you are nearly standing in it.
-        for (y, row) in self.world.grid.tiles.iter().enumerate() {
-            for (x, tile) in row.iter().enumerate() {
-                if !tile.soil.is_foul() {
-                    continue;
-                }
+        // The ground that has something on it, rather than every tile in the
+        // world - see `Grid::note_something_on`. Muck only ever arrives
+        // through `somebody_voided_here`, which notes the tile as it lands.
+        for at in self.world.grid.where_the_ground_is_doing_something() {
+            let Some(tile) = self.world.grid.get_tile(&at) else {
+                continue;
+            };
 
-                let here = (x as i32, y as i32, 0);
-                let strength = (tile.soil.fouling
-                    / crate::world::soil::Soil::AS_FOUL_AS_IT_GETS)
-                    .clamp(0.0, 1.0);
-                sources.push((here, ScentType::Decay, strength));
+            if !tile.soil.is_foul() {
+                continue;
             }
+
+            let strength = (tile.soil.fouling
+                / crate::world::soil::Soil::AS_FOUL_AS_IT_GETS)
+                .clamp(0.0, 1.0);
+            sources.push(((at.x, at.y, 0), ScentType::Decay, strength));
         }
 
         // A lit fire with food in it: the strongest smell there is, and the one

@@ -8105,6 +8105,55 @@ breeding crowding term is a headcount per patch standing in for the food that
 should be doing the work. The ecology is now self-sufficient; what sets the
 size of its fauna is still a constant rather than the land. Filed.
 
+### 128. A tick that cost what the map was, not what was happening on it
+
+The next thing asked for is a hundred square kilometres of country. A `Tile`
+is forty bytes, so a square metre a cell puts a hundred million tiles and four
+gigabytes on the heap before anything happens in it; ten metres a cell is a
+thousand by a thousand, forty megabytes, and is the right unit anyway - the
+model's own distances are in tens of metres, and `FORAGE_RADIUS` of 25 is a
+quarter-kilometre walk.
+
+A thousand by a thousand was not affordable. Two of the sweeps in a tick
+walked every tile in the world to find the handful with anything on them:
+the sprouting pass looking for seed, and the scent pass looking for muck.
+Measured, per tick:
+
+| map | world | simulation |
+|---|---:|---:|
+| 50x50 | 0.012 ms | 0.045 ms |
+| 1000x1000, before | 9.270 ms | **47.233 ms** |
+| 1000x1000, after | 0.461 ms | **1.259 ms** |
+
+A world-year is 4,320 ticks: three and a half minutes before, five and a half
+seconds after.
+
+`Grid` now keeps a register of the ground somebody has left something on, and
+those two sweeps walk the register instead of the map. What counts is what
+`Soil::has_somebody_left_something_here` says: fouling and dropped seed, which
+only ever arrive through one door. Litter deliberately is **not** in it -
+`Soil::for_terrain` gives every tile in the world some leaf litter to begin
+with, so a register of tiles-with-litter is a register of the whole map, which
+costs a million inserts a tick and saves nothing. What rots litter still
+sweeps, once in ten ticks, for about half a millisecond.
+
+The interesting part is the guard. A register is a second representation of
+something the map already says, and this document has a standing entry about
+two representations that drift. The first cut let any caller reach through
+`get_tile_mut` and foul a tile directly; three tests went red, all of them
+fixtures that built a midden that way, and the failure mode in a live run
+would have been a midden that never smells, never comes up in food and never
+breaks down - nothing that shows as a crash. So `Grid::somebody_voided_on` is
+now the only door onto fouling for anything holding a grid, and
+`ecology_tests::the_ground_register_and_the_map_agree` walks the whole map
+after thirty days of a live settlement and asks the register about every tile
+it finds muck on, in both directions.
+
+Fingerprints over five seeds and 1,200 ticks are identical to before the
+change.
+
+---
+
 ---
 
 ## Recently fixed

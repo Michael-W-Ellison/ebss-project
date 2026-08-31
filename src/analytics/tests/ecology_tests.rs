@@ -269,3 +269,68 @@ fn what_lives_in(world: &World) -> BTreeSet<String> {
         .map(|animal| animal.species_id.clone())
         .collect()
 }
+
+// --- the ground worth visiting ----------------------------------------------
+
+/// Every piece of foul ground is on the list of ground worth visiting.
+///
+/// The register in `Grid` is a second representation of something the map
+/// already says, and two representations of one fact drift apart. This is the
+/// test that says they have not. It walks the whole map and asks the register
+/// about every tile it finds muck on: a tile fouled behind the register's back
+/// would be a midden that never smells, never comes up in food, and never
+/// breaks down, and none of that would show as a crash.
+#[test]
+fn the_ground_register_and_the_map_agree() {
+    use crate::world::Position;
+
+    crate::core::dice::seed(11);
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    for _ in 0..12 {
+        population.spawn_agent(crate::agents::AgentConfig::default());
+    }
+    let mut simulation = Simulation::new(world, population);
+
+    // Long enough for people to have voided on the ground and for some of
+    // them to have died on it.
+    for _ in 0..TICKS_PER_DAY * 30 {
+        simulation.tick();
+    }
+
+    let noted: BTreeSet<(i32, i32)> = simulation
+        .world
+        .grid
+        .where_the_ground_is_doing_something()
+        .into_iter()
+        .map(|at| (at.x, at.y))
+        .collect();
+
+    let mut missed = Vec::new();
+    for y in 0..simulation.world.grid.height {
+        for x in 0..simulation.world.grid.width {
+            let at = Position::new(x as i32, y as i32);
+            let Some(tile) = simulation.world.grid.get_tile(&at) else {
+                continue;
+            };
+            if tile.soil.has_somebody_left_something_here() && !noted.contains(&(at.x, at.y)) {
+                missed.push((at.x, at.y, tile.soil.fouling, tile.soil.seeds_dropped));
+            }
+        }
+    }
+
+    assert!(
+        missed.is_empty(),
+        "ground with muck on it that nothing will ever visit: {missed:?}"
+    );
+
+    // And the other way about, so that the register is not simply the whole
+    // map: a world of fifty by fifty has two and a half thousand tiles in it
+    // and a dozen people do not foul all of them.
+    assert!(
+        noted.len() < simulation.world.grid.width * simulation.world.grid.height / 2,
+        "the register holds {} of {} tiles, which is not a register",
+        noted.len(),
+        simulation.world.grid.width * simulation.world.grid.height
+    );
+}

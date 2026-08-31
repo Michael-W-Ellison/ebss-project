@@ -67,6 +67,24 @@ pub struct Grid {
     pub width: usize,
     pub height: usize,
     pub tiles: Vec<Vec<Tile>>,
+
+    /// The ground somebody has left something on.
+    ///
+    /// Muck, and the seed in it. Two phases of the tick used to look for
+    /// these by walking every tile in the world, which made a tick cost what
+    /// the map *is* rather than what is happening on it. See
+    /// `Soil::has_somebody_left_something_here` and ISSUES_FOUND.md #128.
+    ///
+    /// A superset on purpose. Anything that puts something on the ground says
+    /// so, and may say so when nothing came of it; the pruning pass drops what
+    /// turns out to be bare. Over-noting costs one visit and under-noting
+    /// would leave litter lying for ever, so the sites err towards noting.
+    /// Held as (row, column) so that walking it in order walks the map the
+    /// same way the old sweeps did - top to bottom, left to right. Anything
+    /// downstream that depends on the order things are visited in then sees
+    /// exactly what it saw before.
+    #[serde(default)]
+    ground_with_something_on_it: std::collections::BTreeSet<(usize, usize)>,
 }
 
 impl Grid {
@@ -74,6 +92,7 @@ impl Grid {
         let tiles = vec![vec![Tile::default(); width]; height];
 
         Self {
+            ground_with_something_on_it: std::collections::BTreeSet::new(),
             width,
             height,
             tiles,
@@ -323,6 +342,74 @@ impl Grid {
     fn simple_noise(&self, x: f32, y: f32) -> f32 {
         let value = (x.sin() * 43758.5453 + y.cos() * 12345.6789).sin();
         (value + 1.0) / 2.0 // Normalize to 0-1
+    }
+
+    /// Somebody has left muck on this ground, so it is worth visiting.
+    ///
+    /// The register answers `Soil::has_somebody_left_something_here`, which is
+    /// fouling and dropped seed and nothing else. Litter is deliberately not
+    /// in it: every tile in the world is born with leaf litter on it, so a
+    /// register of tiles-with-litter is a register of every tile, which costs
+    /// a million set inserts a tick and saves nothing. What rots litter still
+    /// sweeps the whole grid.
+    ///
+    /// Cheap and deliberately generous: it costs a set insert, and a tile that
+    /// turns out to have gained nothing is dropped again by
+    /// `forget_bare_ground`. The expensive mistake is the other one - a tile
+    /// left off the list sits there for ever.
+    /// Somebody has left muck on this ground.
+    ///
+    /// The one way to foul a tile. `Soil::somebody_voided_here` is the low
+    /// level of it and knows nothing about the map it sits in, so reaching
+    /// through `get_tile_mut` to call it leaves the tile off the register and
+    /// it sits there smelling of nothing for ever. Anything that has a grid in
+    /// its hand calls this instead.
+    pub fn somebody_voided_on(&mut self, at: &Position, how_much: f32) {
+        self.note_something_on(at);
+        if let Some(tile) = self.get_tile_mut(at) {
+            tile.soil.somebody_voided_here(how_much);
+        }
+    }
+
+    pub fn note_something_on(&mut self, at: &Position) {
+        if at.x < 0 || at.y < 0 {
+            return;
+        }
+        let (x, y) = (at.x as usize, at.y as usize);
+        if x < self.width && y < self.height {
+            self.ground_with_something_on_it.insert((y, x));
+        }
+    }
+
+    /// The ground somebody has left something on, in a fixed order.
+    ///
+    /// May carry a tile that has just gone bare - the pruning happens once a
+    /// tick rather than on every read - so anything walking this still asks
+    /// its own question of each tile.
+    pub fn where_the_ground_is_doing_something(&self) -> Vec<Position> {
+        self.ground_with_something_on_it
+            .iter()
+            .map(|(y, x)| Position::new(*x as i32, *y as i32))
+            .collect()
+    }
+
+    /// Drop the tiles that have nothing on them any more.
+    pub fn forget_bare_ground(&mut self) {
+        let noted = std::mem::take(&mut self.ground_with_something_on_it);
+        self.ground_with_something_on_it = noted
+            .into_iter()
+            .filter(|(y, x)| {
+                self.tiles
+                    .get(*y)
+                    .and_then(|row| row.get(*x))
+                    .is_some_and(|tile| tile.soil.has_somebody_left_something_here())
+            })
+            .collect();
+    }
+
+    /// How much ground is worth visiting, which is what a tick costs.
+    pub fn how_much_ground_is_doing_something(&self) -> usize {
+        self.ground_with_something_on_it.len()
     }
 
     pub fn get_tile(&self, pos: &Position) -> Option<&Tile> {

@@ -1015,6 +1015,7 @@ impl World {
         // The ground under the terrain that was just generated
         world.grid.settle_soil();
 
+
         // Place initial resources
         world.generate_resources(&config.initial_resources);
 
@@ -1924,6 +1925,12 @@ impl World {
 
         // Remove depleted resources
         self.remove_depleted_resources();
+
+        // And drop the ground that has gone bare again off the visiting list.
+        // Once a tick rather than on every read, so a reader may see a tile
+        // that has just finished - which is why every reader asks its own
+        // question of the tile as well.
+        self.grid.forget_bare_ground();
     }
 
     /// Regenerate renewable resources based on climate and weather conditions
@@ -1942,6 +1949,13 @@ impl World {
         // One pass every ten ticks, so each pass stands for ten ticks of rot
         const TICKS_PER_PASS: f32 = 10.0;
 
+        // Every tile in the world, because every tile in the world has litter
+        // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
+        // 0.02, and rot never quite takes the last of it. There is nothing to
+        // narrow here and the register would hold the whole map. One pass in
+        // ten ticks over a million tiles is about half a millisecond, which is
+        // a twentieth of what the two sweeps that *could* be narrowed were
+        // costing. See ISSUES_FOUND.md #128.
         for row in &mut self.grid.tiles {
             for tile in row.iter_mut() {
                 if tile.soil.litter() <= 0.0 {
