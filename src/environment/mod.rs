@@ -49,7 +49,7 @@ pub use flora::{PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize
 pub use fauna::{
     AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize,
     Animal, AnimalState, AnimalManager, AnimalDrop, AnimalProduct,
-    AnimalSpawnConfig, terrain_to_climate_zone,
+    AnimalSpawnConfig, GrazingWeather, terrain_to_climate_zone,
 };
 pub use biome::{BiomeType, Biome};
 pub use weather::{Weather, WeatherType, WeatherGenerator, PrecipitationType};

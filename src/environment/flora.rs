@@ -1461,6 +1461,30 @@ pub struct Plant {
     pub regrow_timer: u32,
     pub planted_by: Option<Uuid>, // Agent who planted it (for farming)
     pub is_cultivated: bool, // Whether it's a farm plant vs wild
+
+    /// The tick this plant has been grown up to.
+    ///
+    /// Vegetation is not worked out every tick any more - most of it waits
+    /// for its zone's turn, and only the ground somebody is standing on is
+    /// asked oftener than that (see `PlantManager::grow_a_zone` and
+    /// `grow_where_somebody_is`). So there are two paths that can grow the
+    /// same plant, and the one thing they must not do is disagree about how
+    /// long it has been growing. Neither of them is told how many ticks to
+    /// stand for: each works it out from here and writes it back, so a plant
+    /// grows exactly once for each tick that has passed however it is
+    /// reached.
+    #[serde(default)]
+    pub grown_up_to: u32,
+
+    /// What was standing over this plant when its zone last came round.
+    ///
+    /// Worked out fresh for the whole band on a zone pass and remembered
+    /// here, so that a plant something is standing on can be brought up to
+    /// date on its own without gathering the canopy for the whole map again.
+    /// It is at most one zone pass out of date, and shade is a number that
+    /// moves on the timescale of a tree growing.
+    #[serde(default)]
+    pub shade_on_it: f32,
 }
 
 /// What a plant has to work with where it is standing.
@@ -1533,6 +1557,8 @@ impl Plant {
             regrow_timer: 0,
             planted_by: None,
             is_cultivated: false,
+            grown_up_to: 0,
+            shade_on_it: 0.0,
         }
     }
 
@@ -1603,19 +1629,35 @@ impl Plant {
         let stage_duration = self.stage_duration(species);
         self.growth_progress += share * ticks / stage_duration as f32;
 
-        if self.growth_progress >= 1.0 {
-            // Advance to next stage
-            self.growth_progress = 0.0;
+        // As many stages as the time it stands for is worth, not one.
+        //
+        // A pass used to be ten ticks and could never carry a plant through
+        // more than one stage, so advancing one and throwing the remainder
+        // away cost nothing. A pass is up to fourteen hundred and forty ticks
+        // now - see `PlantManager::grow_a_zone` - which is several stages for
+        // anything quick, and discarding the rest would leave a grass stuck
+        // one step short of bearing for ever.
+        let mut fully_grown = false;
+        while self.growth_progress >= 1.0 {
+            self.growth_progress -= 1.0;
             match self.growth_stage {
                 GrowthStage::Seedling => self.growth_stage = GrowthStage::Growing,
                 GrowthStage::Growing => self.growth_stage = GrowthStage::Mature,
                 GrowthStage::Mature => self.growth_stage = GrowthStage::Flowering,
                 GrowthStage::Flowering => self.growth_stage = GrowthStage::Fruiting,
                 GrowthStage::Fruiting => {
+                    // The end of the ladder. What is left over is not growth
+                    // any more, so it is dropped here rather than spun on.
+                    self.growth_progress = 0.0;
                     self.is_harvestable = true;
-                    return true; // Fully grown
+                    fully_grown = true;
+                    break;
                 }
             }
+        }
+
+        if fully_grown {
+            return true;
         }
 
         // Check if harvestable at current stage
@@ -1717,7 +1759,14 @@ impl PlantLedger {
 pub struct Seed {
     pub species_id: String,
     pub position: (i32, i32),
-    pub age_ticks: u32,
+
+    /// The tick it fell on.
+    ///
+    /// How old it is, is `now` less this. It was an `age_ticks` that
+    /// something had to remember to wind on, which is a second clock to keep
+    /// in step with the first, and seed is only looked at when its zone comes
+    /// round - see `PlantManager::grow_a_zone`.
+    pub dropped_at: u32,
 }
 
 /// Manages plant population and growth
@@ -1790,15 +1839,31 @@ impl PlantManager {
 
 
     /// Spawn a plant at a position
-    pub fn spawn_plant(&mut self, species_id: String, position: (i32, i32)) -> Option<Uuid> {
+    /// Put a plant on the ground, as of `now`.
+    ///
+    /// `now` is not decoration. A plant carries the tick it has been grown up
+    /// to, and its zone works out how long a pass stands for by subtracting
+    /// that from the tick it is asked about - so a plant that comes up in year
+    /// twelve with a clock still reading nought is a plant that ages twelve
+    /// years the first time its zone comes round, which for a grass is six
+    /// times over its whole life. Every grass and herb on a hundred and twenty
+    /// by a hundred and twenty was gone by year fifteen and every bush by year
+    /// forty-five, with the trees left standing because a tree can afford it.
+    /// So the tick is a parameter and every caller has to say which one.
+    pub fn spawn_plant(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+        now: u32,
+    ) -> Option<Uuid> {
         if self.plants.len() >= self.max_population {
             return None;
         }
 
         let species = self.registry.as_ref()?.get(&species_id)?;
 
-        let plant = Plant::new(species_id.clone(), position)
-            .with_species(species);
+        let mut plant = Plant::new(species_id.clone(), position).with_species(species);
+        plant.grown_up_to = now;
 
         let id = plant.id;
         self.plants.push(plant);
@@ -1806,16 +1871,23 @@ impl PlantManager {
     }
 
     /// Spawn a cultivated plant (farmed)
-    pub fn plant_crop(&mut self, species_id: String, position: (i32, i32), planter_id: Uuid) -> Option<Uuid> {
+    pub fn plant_crop(
+        &mut self,
+        species_id: String,
+        position: (i32, i32),
+        planter_id: Uuid,
+        now: u32,
+    ) -> Option<Uuid> {
         if self.plants.len() >= self.max_population {
             return None;
         }
 
         let species = self.registry.as_ref()?.get(&species_id)?;
 
-        let plant = Plant::new(species_id.clone(), position)
+        let mut plant = Plant::new(species_id.clone(), position)
             .with_species(species)
             .cultivated(planter_id);
+        plant.grown_up_to = now;
 
         let id = plant.id;
         self.plants.push(plant);
@@ -1823,7 +1895,14 @@ impl PlantManager {
     }
 
     /// Spawn multiple plants in an area (forest, field, etc.)
-    pub fn spawn_patch(&mut self, species_id: String, center: (i32, i32), radius: u32, density: f32) -> Vec<Uuid> {
+    pub fn spawn_patch(
+        &mut self,
+        species_id: String,
+        center: (i32, i32),
+        radius: u32,
+        density: f32,
+        now: u32,
+    ) -> Vec<Uuid> {
         let mut spawned = Vec::new();
         let count = ((radius * radius) as f32 * density) as u32;
 
@@ -1833,7 +1912,7 @@ impl PlantManager {
 
             let pos = (center.0 + offset_x, center.1 + offset_y);
 
-            if let Some(id) = self.spawn_plant(species_id.clone(), pos) {
+            if let Some(id) = self.spawn_plant(species_id.clone(), pos, now) {
                 spawned.push(id);
             }
         }
@@ -2004,7 +2083,7 @@ impl PlantManager {
 
                 let how_old = rng.gen::<f32>();
 
-                if self.spawn_plant(species_id, (x as i32, y as i32)).is_some() {
+                if self.spawn_plant(species_id, (x as i32, y as i32), 0).is_some() {
                     // A world does not start as bare seedlings: what is
                     // standing has been standing a while.
                     //
@@ -2088,7 +2167,10 @@ impl PlantManager {
         }
     }
 
-    /// Grow everything standing, on what the ground and sky actually give it.
+    /// How many zones the map is cut into for growing.
+    pub const HOW_MANY_ZONES: usize = 24;
+
+    /// Grow one zone of what is standing, on what the ground and sky give it.
     ///
     /// This is where the vegetation and the soil meet. Each plant takes its
     /// water from the country and the weather, its light from whatever is
@@ -2097,14 +2179,25 @@ impl PlantManager {
     /// nutrient. A wood feeds itself. A hedgerow stripped bare on thin ground
     /// does not.
     ///
-    /// Runs one pass per `ticks` ticks rather than every tick: plants take
-    /// thousands of ticks to grow and the world has hundreds of them.
-    pub fn tick_in_world(
+    /// One zone in twenty-four, so a plant is worked out once in fourteen
+    /// hundred and forty ticks - four months - unless something is standing on
+    /// it, in which case `catch_up_one` brings it up to date between mouthfuls.
+    /// Nothing a plant does on its own happens faster than four months. What
+    /// this buys is that a hundred square kilometres carries a quarter of a
+    /// million plants and only about ten thousand of them are looked at in any
+    /// pass, one zone at a time so that no single tick carries the lot.
+    ///
+    /// No caller says how many ticks the pass stands for. Each plant carries
+    /// the tick it has been grown up to and works out its own span, which is
+    /// the only thing that makes it safe for the same plant to be reached by a
+    /// zone pass and by something grazing it.
+    pub fn grow_a_zone(
         &mut self,
         grid: &mut crate::world::Grid,
         precipitation: f32,
-        ticks: f32,
+        now: u32,
         season: crate::environment::Season,
+        zone: usize,
     ) {
         use crate::world::soil::Soil;
         use crate::world::Position;
@@ -2125,6 +2218,18 @@ impl PlantManager {
                 true
             }
         });
+
+        // The rows this zone is. Bands of rows rather than blocks, because a
+        // band is one comparison per plant to test and it covers the map
+        // exactly however the height divides.
+        let band = Self::what_rows_a_zone_is(grid.height, zone);
+        if band.is_empty() {
+            return;
+        }
+
+        // And the rows whose plants can throw shade into it, which is the band
+        // and one row either side.
+        let shading = band.start.saturating_sub(1)..(band.end + 1).min(grid.height);
 
         // What is standing over each tile, gathered once. Doing this per plant
         // would be a comparison against every other plant in the world.
@@ -2147,6 +2252,10 @@ impl PlantManager {
         };
 
         for plant in &self.plants {
+            if !Self::is_in(&shading, plant.position.1) {
+                continue;
+            }
+
             let species = match registry.get(&plant.species_id) {
                 Some(species) => species,
                 None => continue,
@@ -2175,7 +2284,24 @@ impl PlantManager {
             }
         }
 
+        // Before the growing loop, because it reads each plant's own span off
+        // a clock that loop is about to wind on.
+        self.what_bore_seed_this_pass(&registry, now, &band);
+
         for plant in &mut self.plants {
+            if !Self::is_in(&band, plant.position.1) {
+                continue;
+            }
+
+            // How long it is since this plant was last grown, which is what
+            // this pass stands for. Nought means something has already brought
+            // it up to date this tick.
+            let ticks = now.saturating_sub(plant.grown_up_to) as f32;
+            plant.grown_up_to = now;
+            if ticks <= 0.0 {
+                continue;
+            }
+
             let species = match registry.get(&plant.species_id) {
                 Some(species) => species,
                 None => continue,
@@ -2219,6 +2345,10 @@ impl PlantManager {
             let daylight = season.day_length() / 15.0;
             let light = ((1.0 - (over_it - own).max(0.0)) * daylight).clamp(0.05, 1.0);
 
+            // Remembered so that something standing on this plant can bring it
+            // up to date without the canopy having to be gathered again.
+            plant.shade_on_it = (over_it - own).max(0.0);
+
             // Nutrient: what is in the ground, and how readily this plant can
             // get at it. Broken ground is worked, weeded and watered, so a crop
             // on it takes up far more of what is there - it does not grow
@@ -2245,10 +2375,7 @@ impl PlantManager {
             // depends on how far short the ground is falling.
             let living = conditions.growth_share();
             if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-                let short = (Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN - living)
-                    / Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN;
-                plant.current_health -=
-                    plant.max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * ticks;
+                plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
             } else {
                 // What it puts back on is what the ground and the sky give it,
                 // so a plant on poor ground comes back slowly and one in a
@@ -2291,9 +2418,117 @@ impl PlantManager {
                 .add_leaf_litter(Self::what_a_plant_sheds_for_what_it_drew(drawn, keeps_some_of_it));
         }
 
-        self.what_bore_seed_this_pass(&registry, ticks);
-        self.what_came_up_and_what_rotted(grid, &registry, &canopy, ticks);
+        self.what_came_up_and_what_rotted(grid, &registry, &canopy, now, &band);
         self.what_died(grid, &registry);
+    }
+
+    /// The rows of the map a given zone stands for.
+    ///
+    /// Bands rather than blocks, and worked out from the height every time
+    /// rather than stored, so that the twenty-four of them tile the map
+    /// exactly whatever its size and there is no second answer to which zone
+    /// a row is in.
+    fn what_rows_a_zone_is(height: usize, zone: usize) -> std::ops::Range<usize> {
+        let zone = zone % Self::HOW_MANY_ZONES;
+        let from = height * zone / Self::HOW_MANY_ZONES;
+        let to = height * (zone + 1) / Self::HOW_MANY_ZONES;
+        from..to
+    }
+
+    /// Whether a row, as a plant holds it, falls inside a band.
+    fn is_in(band: &std::ops::Range<usize>, y: i32) -> bool {
+        y >= 0 && band.contains(&(y as usize))
+    }
+
+    /// Bring one plant up to now, because something is standing on it.
+    ///
+    /// A plant waits for its zone, which is four months. Something grazing it
+    /// takes a bite every ten ticks, so without this a grazed plant would lose
+    /// condition a hundred and forty-four times for every time it gained any,
+    /// and the first patch of ground a herd stood on would be the last.
+    ///
+    /// What it cannot do on its own is gather the canopy, so it uses the shade
+    /// the plant remembers from its last zone pass - see `Plant::shade_on_it`.
+    /// Everything else it needs is on the tile in front of it.
+    pub fn catch_up_one(
+        &mut self,
+        which: usize,
+        grid: &mut crate::world::Grid,
+        precipitation: f32,
+        now: u32,
+        season: crate::environment::Season,
+    ) {
+        use crate::world::soil::Soil;
+        use crate::world::Position;
+
+        let Some(registry) = self.registry.clone() else {
+            return;
+        };
+        let Some(plant) = self.plants.get_mut(which) else {
+            return;
+        };
+
+        let ticks = now.saturating_sub(plant.grown_up_to) as f32;
+        if ticks <= 0.0 {
+            return;
+        }
+        plant.grown_up_to = now;
+
+        let Some(species) = registry.get(&plant.species_id) else {
+            return;
+        };
+
+        let here = Position::new(plant.position.0, plant.position.1);
+        let Some(tile) = grid.get_tile_mut(&here) else {
+            return;
+        };
+
+        let terrain = tile.terrain.terrain_type;
+        let water = Soil::humidity(terrain, precipitation);
+
+        let own = if matches!(
+            plant.growth_stage,
+            GrowthStage::Mature | GrowthStage::Flowering | GrowthStage::Fruiting
+        ) {
+            Self::canopy_of(species.size, species.is_tree)
+        } else {
+            0.0
+        };
+        let daylight = season.day_length() / 15.0;
+        let light =
+            ((1.0 - (plant.shade_on_it - own).max(0.0)) * daylight).clamp(0.05, 1.0);
+
+        let uptake = if tile.terrain.is_cultivated() { 2.5 } else { 1.0 };
+
+        let conditions = GrowingConditions {
+            water,
+            light,
+            nutrients: tile.soil.fertility(),
+            uptake,
+        };
+
+        plant.grow_in(species, conditions, ticks);
+
+        let living = conditions.growth_share();
+        if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
+            plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
+        } else {
+            plant.current_health = (plant.current_health
+                + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                .min(plant.max_health);
+        }
+
+        let drawn = conditions.draw_per_tick() * ticks;
+        if drawn > 0.0 {
+            tile.soil.draw(drawn);
+        }
+
+        let still_growing = matches!(
+            plant.growth_stage,
+            GrowthStage::Seedling | GrowthStage::Growing
+        );
+        tile.soil
+            .add_leaf_litter(Self::what_a_plant_sheds_for_what_it_drew(drawn, still_growing));
     }
 
     /// What a plant leaves on the ground when it finally goes over.
@@ -2334,6 +2569,18 @@ impl PlantManager {
     /// away under it. Two thousand ticks, half a year, from full to gone.
     const HOW_FAST_A_PLANT_GOES_BACK: f32 = 0.0005;
 
+    /// And the most it can lose in any one pass, however long the pass is.
+    ///
+    /// A pass reads the water, the light and the soil once and then applies
+    /// that reading for as long as the pass stands for. At ten or twenty ticks
+    /// that is a fair account of the weather; at fourteen hundred and forty it
+    /// is four months of drought inferred from one wet afternoon or one dry
+    /// one, and without a limit a plant caught on a bad reading loses
+    /// seven-tenths of itself between one look and the next. Three bad passes
+    /// in a row - a year of them - still kills it, which is about what a year
+    /// of the wrong ground should do.
+    const THE_MOST_A_PLANT_LOSES_IN_ONE_PASS: f32 = 1.0 / 3.0;
+
     /// And how fast it puts condition back on, per tick, at its best pace.
     ///
     /// A plant cropped to nothing is back to full in about a month given
@@ -2352,6 +2599,19 @@ impl PlantManager {
     /// which is the case this number has to be right for. It is too fast for
     /// an oak, and nothing crops an oak.
     const HOW_FAST_A_PLANT_COMES_BACK: f32 = 0.003;
+
+    /// What a pass on ground that will not keep a plant takes off it.
+    ///
+    /// Held to `THE_MOST_A_PLANT_LOSES_IN_ONE_PASS` however long the pass is,
+    /// because the conditions it is working from are one reading and not an
+    /// average of the span.
+    fn what_a_bad_pass_costs(max_health: f32, living: f32, ticks: f32) -> f32 {
+        let short = (Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN - living)
+            / Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN;
+
+        (max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * ticks)
+            .min(max_health * Self::THE_MOST_A_PLANT_LOSES_IN_ONE_PASS)
+    }
 
     /// Everything that has come to the end of its life, and what it leaves.
     ///
@@ -2412,7 +2672,12 @@ impl PlantManager {
     /// has just been picked has had its seed taken. Where it falls is within
     /// `HOW_FAR_A_SEED_FALLS` of the parent, which is under it and a little
     /// beyond.
-    fn what_bore_seed_this_pass(&mut self, registry: &FloraRegistry, ticks: f32) {
+    fn what_bore_seed_this_pass(
+        &mut self,
+        registry: &FloraRegistry,
+        now: u32,
+        band: &std::ops::Range<usize>,
+    ) {
         use rand::Rng;
 
         let room = self.how_much_seed_the_ground_holds();
@@ -2421,11 +2686,23 @@ impl PlantManager {
         }
 
         let mut rng = crate::core::dice::roll();
-        let pass = ticks / 10.0;
 
         let mut fell = Vec::new();
 
         for plant in &self.plants {
+            if !Self::is_in(band, plant.position.1) {
+                continue;
+            }
+
+            // Each plant's own span, taken before the growing loop winds its
+            // clock on - which is why this runs first. A plant that comes into
+            // bearing during the span seeds from the next pass rather than
+            // this one, which over four months is neither here nor there.
+            let pass = now.saturating_sub(plant.grown_up_to) as f32 / 10.0;
+            if pass <= 0.0 {
+                continue;
+            }
+
             if !matches!(
                 plant.growth_stage,
                 GrowthStage::Flowering | GrowthStage::Fruiting
@@ -2441,21 +2718,34 @@ impl PlantManager {
                 continue;
             };
 
-            if rng.gen::<f32>() >= (species.seeds_per_pass() * pass).clamp(0.0, 1.0) {
-                continue;
+            // How much seed this plant put out over the span, as a count
+            // rather than a coin. A pass used to be ten ticks and a chance
+            // under one; a pass now stands for up to fourteen hundred and
+            // forty, and a chance clamped to one would have a grass drop a
+            // single seed where it should have dropped eight.
+            let expected = species.seeds_per_pass() * pass;
+            let mut how_many = expected.floor() as u32;
+            if rng.gen::<f32>() < expected.fract() {
+                how_many += 1;
             }
 
-            self.ledger.seed_dropped[PlantLedger::which_class(species)] += 1;
-
             let reach = Self::HOW_FAR_A_SEED_FALLS;
-            fell.push(Seed {
-                species_id: plant.species_id.clone(),
-                position: (
-                    plant.position.0 + rng.gen_range(-reach..=reach),
-                    plant.position.1 + rng.gen_range(-reach..=reach),
-                ),
-                age_ticks: 0,
-            });
+            for _ in 0..how_many {
+                self.ledger.seed_dropped[PlantLedger::which_class(species)] += 1;
+
+                fell.push(Seed {
+                    species_id: plant.species_id.clone(),
+                    position: (
+                        plant.position.0 + rng.gen_range(-reach..=reach),
+                        plant.position.1 + rng.gen_range(-reach..=reach),
+                    ),
+                    dropped_at: now,
+                });
+
+                if self.seeds.len() + fell.len() >= room {
+                    break;
+                }
+            }
 
             if self.seeds.len() + fell.len() >= room {
                 break;
@@ -2480,7 +2770,8 @@ impl PlantManager {
         grid: &mut crate::world::Grid,
         registry: &FloraRegistry,
         canopy: &[f32],
-        ticks: f32,
+        now: u32,
+        band: &std::ops::Range<usize>,
     ) {
         use crate::world::Position;
         use rand::Rng;
@@ -2501,6 +2792,9 @@ impl PlantManager {
             if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
                 continue;
             }
+            if !Self::is_in(band, y) {
+                continue;
+            }
             let claim = registry
                 .get(&plant.species_id)
                 .map(|species| species.how_much_ground_it_claims() + 1)
@@ -2510,7 +2804,6 @@ impl PlantManager {
         }
 
         let mut rng = crate::core::dice::roll();
-        let older_by = ticks.max(0.0) as u32;
         let mut coming_up = Vec::new();
         let mut rotted = Vec::new();
         let mut shaded_out = Vec::new();
@@ -2520,7 +2813,11 @@ impl PlantManager {
         let mut tally = self.ledger.clone();
 
         self.seeds.retain_mut(|seed| {
-            seed.age_ticks = seed.age_ticks.saturating_add(older_by);
+            // Only the seed lying in the band this pass is about; the rest
+            // waits for its own zone, and how old it is, is when it fell.
+            if !Self::is_in(band, seed.position.1) {
+                return true;
+            }
 
             let Some(species) = registry.get(&seed.species_id) else {
                 return false;
@@ -2580,7 +2877,7 @@ impl PlantManager {
             // On ground of a kind it cannot live on it never comes up at all,
             // and it does not sit there for ever either: it keeps for its
             // season or two and then it has rotted.
-            if seed.age_ticks >= species.seed_keeps_for_ticks() {
+            if now.saturating_sub(seed.dropped_at) >= species.seed_keeps_for_ticks() {
                 rotted.push((seed.position, Self::WHAT_A_SEED_IS_WORTH));
                 tally.seed_rotted_on_wrong_ground[PlantLedger::which_class(species)] += 1;
                 return false;
@@ -2625,7 +2922,7 @@ impl PlantManager {
         }
 
         for (species_id, at) in coming_up {
-            self.spawn_plant(species_id, at);
+            self.spawn_plant(species_id, at, now);
         }
 
         for (at, worth) in rotted {
@@ -2889,16 +3186,18 @@ fn a_plant_that_has_had_its_years_goes_over() {
     grid.settle_soil();
 
     let mut plants = PlantManager::new(100);
-    plants.spawn_plant("grass".to_string(), (5, 5));
+    plants.spawn_plant("grass".to_string(), (5, 5), 0);
 
     let litter_before = grid
         .get_tile(&Position::new(5, 5))
         .map(|tile| tile.soil.litter())
         .unwrap_or(0.0);
 
-    // A grass lives two years. Three of them is well past it.
-    for _ in 0..(3 * TICKS_PER_YEAR / 10) {
-        plants.tick_in_world(&mut grid, 40.0, 10.0, Season::Summer);
+    // A grass lives two years. Three of them is well past it. Every zone in
+    // its turn, because the plant is only looked at when its own comes round.
+    for tick in (0..(3 * TICKS_PER_YEAR)).step_by(60) {
+        let zone = (tick / 60) as usize % PlantManager::HOW_MANY_ZONES;
+        plants.grow_a_zone(&mut grid, 40.0, tick, Season::Summer, zone);
     }
 
     assert!(
@@ -2935,7 +3234,7 @@ fn seed_on_the_wrong_ground_rots_instead_of_waiting_for_ever() {
     let mut plants = PlantManager::new(400);
 
     // A cactus, standing where a cactus cannot live, still sheds.
-    plants.spawn_plant("cactus".to_string(), (10, 10));
+    plants.spawn_plant("cactus".to_string(), (10, 10), 0);
     if let Some(plant) = plants.all_plants_mut().last_mut() {
         plant.growth_stage = GrowthStage::Fruiting;
     }
@@ -2944,9 +3243,10 @@ fn seed_on_the_wrong_ground_rots_instead_of_waiting_for_ever() {
     let cactus = registry.get("cactus").unwrap();
 
     // Long enough for seed to have fallen and for the first of it to be gone.
-    let passes = cactus.seed_keeps_for_ticks() / 10 * 3;
-    for _ in 0..passes {
-        plants.tick_in_world(&mut grid, 40.0, 10.0, Season::Summer);
+    let ticks = cactus.seed_keeps_for_ticks() * 3;
+    for tick in (0..ticks).step_by(60) {
+        let zone = (tick / 60) as usize % PlantManager::HOW_MANY_ZONES;
+        plants.grow_a_zone(&mut grid, 40.0, tick, Season::Summer, zone);
     }
 
     let ledger = plants.what_has_been_happening();
@@ -2966,6 +3266,131 @@ fn seed_on_the_wrong_ground_rots_instead_of_waiting_for_ever() {
     );
 
     let _ = Position::new(0, 0);
+}
+
+
+// --- growing a zone at a time ------------------------------------------------
+
+/// The twenty-four zones tile the map exactly: every row in one, none in two.
+#[test]
+fn every_row_of_the_map_is_in_exactly_one_zone() {
+    for height in [1usize, 23, 24, 25, 50, 120, 1000] {
+        let mut covered = vec![0u32; height];
+
+        for zone in 0..PlantManager::HOW_MANY_ZONES {
+            for row in PlantManager::what_rows_a_zone_is(height, zone) {
+                covered[row] += 1;
+            }
+        }
+
+        assert!(
+            covered.iter().all(|&n| n == 1),
+            "a map {height} rows deep: {:?}",
+            covered
+                .iter()
+                .enumerate()
+                .filter(|(_, &n)| n != 1)
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+/// A plant that comes up in year twelve is twelve years old, not nought.
+///
+/// A plant works out how long a pass stands for by subtracting the tick it
+/// was last grown up to from the tick it is asked about. Something that comes
+/// up mid-run with that clock still reading nought ages the whole run the
+/// first time its zone comes round - which for a grass is six times its own
+/// lifetime, so it is dead before it has grown. Every grass and herb on a
+/// hundred and twenty by a hundred and twenty was gone by year fifteen.
+#[test]
+fn a_plant_that_comes_up_late_is_not_born_old() {
+    let mut plants = PlantManager::new(16);
+
+    let a_long_way_in = 12 * crate::environment::seasons::TICKS_PER_YEAR;
+    plants.spawn_plant("grass".to_string(), (3, 3), a_long_way_in);
+
+    let planted = plants.all_plants().last().expect("it was planted");
+    assert_eq!(
+        planted.grown_up_to, a_long_way_in,
+        "a plant put down at tick {a_long_way_in} thinks it was grown up to \
+         {}",
+        planted.grown_up_to
+    );
+}
+
+/// Growing in one long stride ends up near where many short ones would.
+///
+/// The whole of what the zones buy is that a plant is worked out once in
+/// fourteen hundred and forty ticks instead of once in ten. That is only
+/// sound if the long stride and the short ones agree, and there are two
+/// places they might not: a stage the plant would have passed through and out
+/// the other side of, and seed it would have shed on the way.
+#[test]
+fn one_long_stride_gets_to_much_the_same_place_as_many_short_ones() {
+    let registry = FloraRegistry::new();
+    let grass = registry.get("grass").expect("there is grass");
+
+    let ideal = GrowingConditions::ideal();
+    let span = 1440.0;
+
+    let mut in_one_go = Plant::new("grass".to_string(), (0, 0)).with_species(grass);
+    in_one_go.grow_in(grass, ideal, span);
+
+    let mut step_by_step = Plant::new("grass".to_string(), (0, 0)).with_species(grass);
+    for _ in 0..144 {
+        step_by_step.grow_in(grass, ideal, 10.0);
+    }
+
+    assert_eq!(
+        in_one_go.age_ticks, step_by_step.age_ticks,
+        "one stride aged it {} and a hundred and forty-four aged it {}",
+        in_one_go.age_ticks, step_by_step.age_ticks
+    );
+    assert_eq!(
+        in_one_go.growth_stage, step_by_step.growth_stage,
+        "one stride left it {:?} and a hundred and forty-four left it {:?}",
+        in_one_go.growth_stage, step_by_step.growth_stage
+    );
+}
+
+/// A plant something is standing on does not wait four months for its zone.
+#[test]
+fn ground_somebody_is_standing_on_is_brought_up_to_date() {
+    use crate::world::{Grid, Terrain, TerrainType};
+
+    // Ground that will actually keep a plant, so that what is being measured
+    // is the catching up and not the tile.
+    let mut grid = Grid::new(8, 8);
+    for row in grid.tiles.iter_mut() {
+        for tile in row.iter_mut() {
+            tile.terrain = Terrain::new(TerrainType::Meadow);
+        }
+    }
+    grid.settle_soil();
+
+    let mut plants = PlantManager::new(8);
+    plants.spawn_plant("grass".to_string(), (4, 4), 0);
+
+    // Cropped to nothing, the way something grazing would leave it.
+    plants.all_plants_mut()[0].current_health = 0.5;
+    let cropped = plants.all_plants()[0].current_health;
+
+    // Half a zone's turn later - too soon for its own pass to have come round.
+    plants.catch_up_one(0, &mut grid, 60.0, 700, Season::Summer);
+
+    let after = plants.all_plants()[0].current_health;
+    assert!(
+        after > cropped,
+        "a cropped plant with something standing on it put nothing back in \
+         seven hundred ticks: {cropped:.3} then {after:.3}"
+    );
+
+    assert_eq!(
+        plants.all_plants()[0].grown_up_to,
+        700,
+        "and it did not write down when it was brought up to"
+    );
 }
 
 }

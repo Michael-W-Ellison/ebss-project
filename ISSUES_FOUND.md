@@ -8477,6 +8477,112 @@ assertion, which is #228.
 
 ---
 
+### 134. A quarter of a million plants, all of them asked every pass
+
+Vegetation was worked out for the whole map at once. It had been every ten
+ticks, then every twenty, and at a hundred square kilometres carrying 247,419
+plants it was still the most expensive thing in a tick by a wide margin - four
+milliseconds of eleven, and every one of those plants asked whether anything
+had happened to it, three-quarters of the time to be told no.
+
+The map is cut into twenty-four bands of rows and one band is grown every
+sixty ticks, so a plant is worked out once in 1,440 ticks - four months - and
+no single tick carries more than a twenty-fourth of the map. Ground something
+is standing on does not wait: `AnimalManager` calls `PlantManager::catch_up_one`
+on a plant before it takes a bite out of it, which is what "unless there is
+something within interaction range" comes to.
+
+| | simulation | a world-year |
+|---|---:|---:|
+| every twenty ticks, whole map | 11.353 ms | 49.0 s |
+| one band in twenty-four, every sixty | **3.705 ms** | **16.0 s** |
+
+The vegetation went from 4.02 ms a tick to 0.518. A living hundred square
+kilometres now costs less per tick than the same map cost when nothing on it
+was alive (5.693 ms, #129), and a fifteenth of what it cost at the start of
+this work.
+
+**The thing that made it safe was giving every plant one clock.** Two paths
+can now grow the same plant - its band's turn, and something standing on it -
+and neither is told how many ticks to stand for. Each subtracts
+`Plant::grown_up_to` from the tick it is asked about and writes the new one
+back, so a plant grows exactly once for every tick that has passed however it
+is reached. A `Seed` carries `dropped_at` for the same reason: how old it is,
+is now less when it fell, rather than a second counter something has to
+remember to wind.
+
+**Three things were only ever right because a pass was short.**
+
+- Growth advanced one stage per call and threw the remainder away. Ten ticks
+  could never carry a plant through more than one stage; 1,440 is several for
+  anything quick, so a grass would have stuck one step short of bearing for
+  ever. It loops now.
+- Seeding was a coin whose chance was clamped to one. Over 1,440 ticks a grass
+  should shed eight and would have shed one. It draws a count now.
+- A plant on ground that will not keep it lost `HOW_FAST_A_PLANT_GOES_BACK`
+  per tick, from conditions read once at the top of the pass. Over four months
+  that is seven-tenths of the plant inferred from a single wet afternoon or
+  dry one, so a pass can now take at most a third of it, and three bad passes
+  in a row - a year - still kill it. `Soil::draw` is bounded the same way and
+  for the same reason: a straight line drawn from the opening rate runs ahead
+  of the true curve, which tapers as the ground empties.
+
+**And one thing was plainly wrong the moment plants stopped being immortal.**
+`spawn_plant` left the clock at nought, so anything that came up mid-run aged
+the whole run the first time its band came round - for a grass, six times its
+own lifetime, so it was dead before it had grown. Every grass and herb on a
+hundred and twenty by a hundred and twenty was gone by year fifteen and every
+bush by year forty-five, with only the trees left standing because a tree can
+afford it. `spawn_plant`, `plant_crop` and `spawn_patch` all take the tick
+now, so no caller can forget to say which one.
+
+**What it costs in fidelity.** The country settles thinner than it did under
+twenty-tick passes. At year 100 on a hundred and twenty by a hundred and
+twenty with nobody on it:
+
+| | trees | bushes | small | animals |
+|---|---:|---:|---:|---:|
+| every twenty ticks | 865 | 136 | 4,382 | 1,229 |
+| one band in twenty-four | 749 | 29 | 1,508 | 339 |
+
+Most of that is recruitment. A seed gets one throw, and under the old cadence
+it got it within ten ticks of landing; now it waits up to four months for its
+band, and by then the tile it fell on is more often taken. That is a real cost
+of stepping coarsely and it is the price of the fifteenfold. Thirty-two
+worlds, 4,320 ticks: mean last-alive tick 4,062 -> 3,976 and mean peak store
+101.1 -> 120.1, so settlements are unmoved either way.
+
+The bush decline is **not** from this change: at the commit before it, the
+same run takes 524 bushes to 71 over a hundred and fifty years. It came in
+with the denser starting vegetation of #133, where the balance was checked at
+the old density and not the new one. Filed as #135.
+
+One more test moved, and it is the family #132 names:
+`longevity_tests::the_young_are_kept_warm_by_the_adults_around_them` builds an
+unseeded world and fails with a mean of `inf` - a mean over an empty group,
+which is a settlement that died out, not a thermal fault.
+
+### 135. Shrubs go out of a country that nobody is managing
+
+Left alone for a hundred and fifty years, a hundred and twenty by a hundred
+and twenty takes its bushes from 524 to 71 and keeps going down, while its
+trees hold and its grass holds. Woody middling growth - `PlantSize::Medium`
+and not a tree, which is the hazel, the bramble, the berry bush - is squeezed
+from both sides: it sheds a fiftieth of the seed a grass does because it lives
+thirty times as long, and it is the best browse on the map, so what does come
+up is eaten. Neither of those is wrong on its own and the two together are too
+much.
+
+It arrived with the denser starting vegetation of #133: the seed-per-lifetime
+figure was fixed against a map that opened with 145 bushes and the map now
+opens with 524, so the share of the seed rain a bush gets is four times
+thinner against a grass population that grew by the same factor. What it
+probably wants is for browsing pressure to fall off as the browse gets scarce,
+which is the one feedback the grazer does not have - it takes what is in reach
+and does not care how little is left. Filed.
+
+---
+
 ---
 
 ## Recently fixed

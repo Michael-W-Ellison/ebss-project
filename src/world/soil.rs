@@ -370,7 +370,26 @@ impl Soil {
     /// Take nutrient out of the ground, returning how much was actually there
     /// to take
     pub fn draw(&mut self, wanted: f32) -> f32 {
-        let taken = wanted.min(self.nutrients).max(0.0);
+        /// The most any one pass may take, as a share of what is there.
+        ///
+        /// A caller works out what it wants from a reading of this soil and
+        /// then asks for that rate over the whole span its pass stands for.
+        /// Taken in small steps that is fine, because the rate falls as the
+        /// ground empties; taken in one lump over four months it is not,
+        /// because it is the opening rate applied to ground that would have
+        /// been getting poorer all the way through. The straight-line answer
+        /// runs ahead of the true one, and a growing pass that stands for
+        /// fourteen hundred and forty ticks strips ground that fine steps
+        /// would only have thinned - see `PlantManager::grow_a_zone`.
+        ///
+        /// Half is the round number that keeps the error bounded without
+        /// pretending to integrate anything: whatever the span, the ground
+        /// still has half of what it started the pass with.
+        const THE_MOST_ONE_PASS_TAKES: f32 = 0.5;
+
+        let taken = wanted
+            .min(self.nutrients * THE_MOST_ONE_PASS_TAKES)
+            .max(0.0);
         self.nutrients -= taken;
         taken
     }

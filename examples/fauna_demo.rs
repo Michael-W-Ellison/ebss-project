@@ -410,8 +410,17 @@ fn main() {
     let mut growing = ebss::environment::PlantManager::new(500);
     growing.spawn_naturalistic(&ground);
 
-    for _ in 0..100 {
-        manager.tick_in_world(&mut ground, &mut growing, 10.0);
+    for pass in 0..100u32 {
+        manager.tick_in_world(
+            &mut ground,
+            &mut growing,
+            10.0,
+            ebss::environment::GrazingWeather {
+                precipitation: 40.0,
+                now: pass * 10,
+                season: ebss::environment::Season::Summer,
+            },
+        );
     }
 
     println!("After 100 ticks:");

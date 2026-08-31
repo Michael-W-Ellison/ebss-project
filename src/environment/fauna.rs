@@ -41,6 +41,18 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
 /// take.
 const BREEDING_INTERVAL_SCALE: f32 = 3.0;
 
+/// What the sky is doing, for the plants a grazing animal brings up to date.
+///
+/// Three loose arguments threaded through two calls that have nothing else to
+/// do with the weather, so they travel together and are named for why they are
+/// here.
+#[derive(Debug, Clone, Copy)]
+pub struct GrazingWeather {
+    pub precipitation: f32,
+    pub now: u32,
+    pub season: crate::environment::Season,
+}
+
 /// Configuration for naturalistic animal spawning during world generation
 #[derive(Debug, Clone)]
 pub struct AnimalSpawnConfig {
@@ -2165,6 +2177,7 @@ impl AnimalManager {
         grid: &mut crate::world::Grid,
         plants: &mut crate::environment::PlantManager,
         grazing_ticks: f32,
+        weather: GrazingWeather,
     ) {
         if self.registry.is_none() {
             return;
@@ -2234,7 +2247,7 @@ impl AnimalManager {
 
         // Fifth pass: Herbivore feeding - what is taken off the ground, and
         // what goes back onto it
-        self.what_the_grazers_took(grid, plants, grazing_ticks);
+        self.what_the_grazers_took(grid, plants, grazing_ticks, weather);
 
         // Sixth pass: AI behavior (needs fresh registry borrow)
         let animals_data: Vec<(usize, String, AnimalBehavior, bool, bool)> = {
@@ -2780,6 +2793,7 @@ impl AnimalManager {
         grid: &mut crate::world::Grid,
         plants: &mut crate::environment::PlantManager,
         grazing_ticks: f32,
+        weather: GrazingWeather,
     ) {
         use crate::world::Position;
 
@@ -2858,6 +2872,23 @@ impl AnimalManager {
                 let Some(kind) = flora.get(&plant.species_id) else {
                     continue;
                 };
+
+                // Bring it up to now before taking anything off it. Most of
+                // the vegetation waits four months for its zone to come round
+                // - see `PlantManager::grow_a_zone` - and a plant something is
+                // standing on cannot wait that long, or it would lose
+                // condition a hundred and forty-four times for every time it
+                // gained any. This is the whole of what "unless there is
+                // something within reach of it" means.
+                plants.catch_up_one(
+                    index,
+                    grid,
+                    weather.precipitation,
+                    weather.now,
+                    weather.season,
+                );
+
+                let plant = &plants.all_plants()[index];
 
                 let already = cropped.get(&index).copied().unwrap_or(0.0);
                 let standing = plant.current_health - already;
@@ -3585,7 +3616,16 @@ mod tests {
         manager.spawn_animal("rabbit".to_string(), (0, 0));
 
         let initial_age = manager.animals[0].age;
-        manager.tick_in_world(&mut grid, &mut plants, 10.0);
+        manager.tick_in_world(
+            &mut grid,
+            &mut plants,
+            10.0,
+            GrazingWeather {
+                precipitation: 40.0,
+                now: 10,
+                season: crate::environment::Season::Summer,
+            },
+        );
 
         // Animal should have aged
         assert!(manager.animals[0].age > initial_age);

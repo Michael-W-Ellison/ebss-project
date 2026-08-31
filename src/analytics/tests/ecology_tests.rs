@@ -337,6 +337,16 @@ fn the_ground_register_and_the_map_agree() {
 
 // --- what the grazers take, and what they give back --------------------------
 
+/// The sky, on the pass'th grazing pass. Ten ticks apart, which is the
+/// cadence a live world grazes on.
+fn grazing_weather(pass: u32) -> crate::environment::GrazingWeather {
+    crate::environment::GrazingWeather {
+        precipitation: 40.0,
+        now: pass * 10,
+        season: crate::environment::Season::Summer,
+    }
+}
+
 /// A world with one plant and one animal standing on it.
 fn a_beast_on_a_plant(
     beast: &str,
@@ -358,7 +368,7 @@ fn a_beast_on_a_plant(
     grid.settle_soil();
 
     let mut plants = PlantManager::new(64);
-    plants.spawn_plant(plant.to_string(), (8, 8));
+    plants.spawn_plant(plant.to_string(), (8, 8), 0);
 
     let mut animals = AnimalManager::new(16);
     animals.spawn_animal(beast.to_string(), (8, 8));
@@ -382,8 +392,8 @@ fn a_grazing_animal_takes_the_plant_down_with_it() {
     let before = plants.all_plants()[0].current_health;
     assert!(before > 0.0, "the fixture has no plant standing in it");
 
-    for _ in 0..20 {
-        animals.tick_in_world(&mut grid, &mut plants, 10.0);
+    for pass in 0..20u32 {
+        animals.tick_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
     }
 
     let after = plants
@@ -416,8 +426,8 @@ fn what_an_animal_passes_goes_back_into_the_ground() {
         .map(|tile| tile.soil.litter())
         .unwrap_or(0.0);
 
-    for _ in 0..20 {
-        animals.tick_in_world(&mut grid, &mut plants, 10.0);
+    for pass in 0..20u32 {
+        animals.tick_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
     }
 
     let after = grid
@@ -440,9 +450,14 @@ fn what_is_dug_up_does_not_come_back() {
     let (mut grid, mut plants, mut bears) = a_beast_on_a_plant("bear", "potato");
     let (mut deer_ground, mut deer_plants, mut deer) = a_beast_on_a_plant("deer", "potato");
 
-    for _ in 0..3 {
-        bears.tick_in_world(&mut grid, &mut plants, 10.0);
-        deer.tick_in_world(&mut deer_ground, &mut deer_plants, 10.0);
+    for pass in 0..3u32 {
+        bears.tick_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
+        deer.tick_in_world(
+            &mut deer_ground,
+            &mut deer_plants,
+            10.0,
+            grazing_weather(pass),
+        );
     }
 
     let dug = plants.all_plants()[0].current_health;
