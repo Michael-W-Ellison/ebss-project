@@ -1515,3 +1515,150 @@ fn somebody_who_has_never_been_shown_can_still_put_food_by() {
         dried.message
     );
 }
+
+// --------------------------------------------------------------------------
+// What nobody can carry
+// --------------------------------------------------------------------------
+
+/// A pack cannot hold more than a pack holds, and until now one routinely did.
+///
+/// `add_item` refuses what will not fit, so a load can never be *put* over the
+/// limit. It got there the other way: `max_weight` is worked out fresh every
+/// turn from what the body can lift, and a body that goes hungry lifts less
+/// than it did. A man loaded up in his strong summer woke in November
+/// carrying more than he could hold, and because a pack already over its limit
+/// refuses everything, the load was frozen there for the rest of his life. He
+/// could never pick up food again. See ISSUES_FOUND.md #126.
+#[test]
+fn a_body_that_weakens_sets_down_what_it_can_no_longer_carry() {
+    let mut simulation = a_digger();
+
+    // A load he can manage today
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("wood".to_string(), 8, 2.0));
+
+    let carried = simulation.population.agents[0].inventory.current_weight;
+    assert!(carried > 0.0, "he is carrying something");
+
+    // And a pack that will not take it any more
+    simulation.population.agents[0].inventory.max_weight = carried / 2.0;
+    assert!(
+        simulation.population.agents[0].how_much_too_much_i_am_carrying() > 0.0,
+        "he is over his limit"
+    );
+
+    simulation.what_nobody_can_carry_any_more();
+
+    assert_eq!(
+        simulation.population.agents[0].how_much_too_much_i_am_carrying(),
+        0.0,
+        "he put down what he could not hold: {:.1} against {:.1}",
+        simulation.population.agents[0].inventory.current_weight,
+        simulation.population.agents[0].inventory.max_weight,
+    );
+}
+
+/// And it is set down, not destroyed. Somebody can come back for it.
+#[test]
+fn what_is_set_down_is_still_there_to_be_picked_up() {
+    let mut simulation = a_digger();
+    let here = Position::new(25, 25);
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("wood".to_string(), 8, 2.0));
+    simulation.population.agents[0].inventory.max_weight = 1.0;
+
+    simulation.what_nobody_can_carry_any_more();
+
+    let on_the_ground: u32 = simulation
+        .world
+        .what_is_lying_at(&here)
+        .iter()
+        .filter(|dropped| dropped.item.item_id == "wood")
+        .map(|dropped| dropped.item.quantity)
+        .sum();
+
+    assert!(
+        on_the_ground > 0,
+        "it went on the grass where he stood, not out of the world"
+    );
+}
+
+/// The pack goes last, and the tool in his hand and his supper before it.
+///
+/// A man walking under a load he cannot manage puts the stone down, not the
+/// axe he is working with and not the food he is going to eat.
+#[test]
+fn the_axe_and_the_supper_are_the_last_things_anybody_puts_down() {
+    let mut simulation = a_digger();
+
+    // `a_digger` already gave him a handaxe
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("stone".to_string(), 6, 5.0));
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(4, 0));
+
+    // Far too much for him
+    simulation.population.agents[0].inventory.max_weight = 3.0;
+
+    simulation.what_nobody_can_carry_any_more();
+
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        agent.how_many_i_have("stone"),
+        0,
+        "the stone is what goes"
+    );
+    assert!(agent.how_many_i_have("handaxe") > 0, "not the axe he works with");
+    assert!(agent.how_many_i_have("food") > 0, "and not his supper");
+}
+
+/// What goes down is only as much as the shortfall wants.
+///
+/// A man who tips his whole bundle of firewood on the grass to carry home a
+/// handful of berries has to go and cut more tomorrow, and one who puts three
+/// sticks down does not.
+#[test]
+fn only_as_much_goes_down_as_the_shortfall_wants() {
+    let mut simulation = a_digger();
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("wood".to_string(), 20, 2.0));
+
+    let carried = simulation.population.agents[0].inventory.current_weight;
+    // A hair under what he is carrying: one stick's worth of shortfall, plus
+    // the day's food the reckoning leaves room for.
+    simulation.population.agents[0].inventory.max_weight = carried - 1.0;
+
+    simulation.what_nobody_can_carry_any_more();
+
+    let left = simulation.population.agents[0].how_many_i_have("wood");
+    assert!(
+        left > 0 && left < 20,
+        "he set some of it down and kept the rest: {left} sticks"
+    );
+}
+
+/// A pack inside its limit is not touched at all.
+#[test]
+fn nobody_puts_anything_down_who_does_not_have_to() {
+    let mut simulation = a_digger();
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("wood".to_string(), 2, 2.0));
+    let before = simulation.population.agents[0].how_many_i_have("wood");
+
+    simulation.what_nobody_can_carry_any_more();
+
+    assert_eq!(
+        simulation.population.agents[0].how_many_i_have("wood"),
+        before,
+        "there was room for it"
+    );
+}

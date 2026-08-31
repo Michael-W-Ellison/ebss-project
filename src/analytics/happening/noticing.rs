@@ -131,6 +131,83 @@ impl Simulation {
     /// Not far. The point is to step off the midden, not to leave the country.
     pub(in crate::analytics) const OFF_THE_MIDDEN: i32 = 3;
 
+    /// What nobody can carry any more goes on the ground.
+    ///
+    /// A pack refuses what will not fit, so a load can never be *put* over
+    /// the limit. It gets there the other way: `max_weight` is worked out
+    /// fresh every turn from what the body can lift and what it has to carry
+    /// things in, and both fall. A man loads up in his strong summer, goes
+    /// hungry, weakens, and wakes carrying more than he can hold - and
+    /// nothing in this model ever noticed. Measured across eight worlds, an
+    /// autumn pack held **38.9 units against a capacity of 26.0**, and
+    /// because a pack that is already over its limit refuses everything, the
+    /// load was frozen there for the rest of the man's life. He could never
+    /// pick up food again: **97% of autumn agent-ticks had not room for a
+    /// single handful**, and 27,968 units of food a year went back on the
+    /// bush while six thousand stood ripe on the ground.
+    ///
+    /// So this is an invariant rather than a decision. What a person cannot
+    /// carry is not carried, and it is not destroyed either - it stays where
+    /// they were standing, to be picked up by them or by anybody else. The
+    /// heaviest thing goes first, and food goes last of all: a man walking
+    /// under a load he cannot manage puts the stone down before the supper.
+    /// See ISSUES_FOUND.md #126.
+    pub(in crate::analytics) fn what_nobody_can_carry_any_more(&mut self) {
+        use crate::world::Position;
+
+        let now = self.current_tick;
+
+        for index in 0..self.population.agents.len() {
+            if !self.population.agents[index].state.is_alive {
+                continue;
+            }
+
+            if self.population.agents[index].how_much_too_much_i_am_carrying() <= 0.0 {
+                continue;
+            }
+
+            let here = {
+                let at = self.population.agents[index].state.position;
+                Position::new(at.0, at.1)
+            };
+
+            // Each pass takes the heaviest thing that is not food, a tool in
+            // use or the pack itself, and only as much of it as the shortfall
+            // wants. A stack is rarely enough on its own - a body half as
+            // much again over its limit is not put right by three sticks -
+            // so the next pass takes the next heaviest, and it ends when
+            // there is room or when there is nothing left that anybody would
+            // put down.
+            while self.population.agents[index].how_much_too_much_i_am_carrying() > 0.0 {
+                let Some(what) = self.population.agents[index].what_i_would_set_down() else {
+                    break;
+                };
+
+                let how_many = self.population.agents[index]
+                    .how_much_of_this_i_would_set_down(&what);
+
+                let Some(mut down) = self.population.agents[index]
+                    .inventory
+                    .get_item(&what)
+                    .cloned()
+                else {
+                    break;
+                };
+                down.quantity = how_many;
+
+                self.population.agents[index]
+                    .inventory
+                    .remove_item(&what, how_many);
+                self.world.somebody_left_this(down, here, now);
+
+                debug!(
+                    "Agent {} could not carry {how_many} {what} and set it down",
+                    self.population.agents[index].id
+                );
+            }
+        }
+    }
+
     /// Whoever is near enough to a question they left open goes and looks.
     ///
     /// This is the half of "what happens if" that no other kind of curiosity

@@ -127,6 +127,12 @@ impl Simulation {
         // be about to find out what a fire does to clay
         self.what_the_embers_did();
 
+        // And whoever has weakened under a load they could carry last month
+        // sets down what they can no longer hold. Before the turn, so that
+        // somebody who wakes overloaded has room to gather with by the time
+        // they choose to.
+        self.what_nobody_can_carry_any_more();
+
 
 
         debug!("=== Tick {} ===", self.current_tick);

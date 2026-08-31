@@ -1711,6 +1711,93 @@ impl Agent {
             .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
     }
 
+    /// How much more weight this pack is holding than its owner can carry.
+    ///
+    /// Not `weight_capacity_remaining`, which is clamped at nought and so says
+    /// the same thing about a pack that is exactly full and one that is half
+    /// as much again over its limit. Both happen: a body that weakens carries
+    /// less than it did, and until now nothing took the load off it when it
+    /// did.
+    ///
+    /// Down to the limit and not a pound further. The first cut shed down to
+    /// the limit *less a day's food*, on the reasoning that a forager loaded
+    /// to the last ounce cannot pick anything up - which is true, and cost
+    /// **five per cent of the settlement's person-days** against shedding to
+    /// the limit alone, measured over 160 worlds. What a person is willing to
+    /// walk about carrying is a decision, and dressing one up as a law made it
+    /// worse. This is only the law: what cannot be carried is not carried.
+    pub fn how_much_too_much_i_am_carrying(&self) -> f32 {
+        (self.inventory.current_weight - self.inventory.effective_max_weight()).max(0.0)
+    }
+
+    /// What a person sets down when the pack will not take any more food.
+    ///
+    /// Nothing in this model ever put a load down. An agent picked up wood
+    /// for a fire, iron because it glittered and stone out of a hole it dug,
+    /// and carried all of it for the rest of its life - so measured across
+    /// eight worlds an autumn pack held **38.9 units against a capacity of
+    /// 26.0**, half as much again as it could take, and **97% of autumn
+    /// agent-ticks had not room in it for a single handful of food**. Twenty
+    /// eight thousand units of food a year went back on the bush for want of
+    /// anywhere to put them, against two and a half thousand carried home.
+    ///
+    /// What goes down is the heaviest thing that is none of: food, a tool
+    /// this one works with, or the thing it carries its load in. Weight
+    /// rather than count, because the question is room and a stack of forty
+    /// berries is not a stack of forty logs. The first cut of this filtered
+    /// on `ENOUGH_TO_HAND`, which is a count, and it never fired once: wood
+    /// weighs two a stick, so the ten units of firewood filling every pack in
+    /// the world were five sticks and five is not more than six. A reserve
+    /// counted in things cannot answer a question asked in weight.
+    pub fn what_i_would_set_down(&self) -> Option<String> {
+        use crate::environment::making;
+
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
+            .filter(|(name, _)| {
+                !making::EVERY_TOOL.iter().any(|tool| tool.called == name.as_str())
+            })
+            .filter(|(name, _)| {
+                !Self::WHAT_CARRIES.iter().any(|(called, _)| *called == name.as_str())
+            })
+            .max_by(|a, b| {
+                let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
+                load(a.1)
+                    .partial_cmp(&load(b.1))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(name, _)| name.clone())
+    }
+
+    /// How much of this one goes on the grass, once it has been decided that
+    /// some of it should.
+    ///
+    /// Enough to bring the load back inside the limit and not a stick more. A
+    /// man who tips his whole bundle of firewood on the grass because he is
+    /// carrying three sticks too many has to go and cut more tomorrow.
+    ///
+    /// Derived from the shortfall rather than from a reserve, so it answers
+    /// the question that was actually asked. Where one stack is not enough -
+    /// a pack half as much again over its limit is not emptied by three
+    /// sticks - what is left is still short, and the next turn sets down the
+    /// next heaviest thing.
+    pub fn how_much_of_this_i_would_set_down(&self, what: &str) -> u32 {
+        let Some(item) = self.inventory.get_item(what) else {
+            return 0;
+        };
+
+        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        if each <= 0.0 {
+            return item.quantity;
+        }
+
+        let wanted = (self.how_much_too_much_i_am_carrying() / each).ceil() as u32;
+        wanted.clamp(1, item.quantity)
+    }
+
     /// Food this agent has more of than it is going to eat.
     ///
     /// Deliberately separate from `what_i_can_spare`, which excludes anything

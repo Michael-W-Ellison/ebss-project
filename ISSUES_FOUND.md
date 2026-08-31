@@ -7841,6 +7841,143 @@ pack that holds forty-odd.
 
 ---
 
+### 126. Every pack in the world was half as much again over its own limit, so no food would go in one
+
+#241 asked what caps the winter store, and named drying as the suspect: it was
+a discovery an agent had to watch, it wants a clear sky, it wants the food cut
+rather than whole, and it works one stack at a time. #125 removed the first of
+those. This entry measures the rest and finds that none of them was the
+constraint.
+
+**Where an autumn goes.** Eight worlds, 7,568 agent-ticks of autumn a world:
+
+| | a world |
+|---|---:|
+| Gather | 2,743 |
+| Eat | 2,331 |
+| Excavate | 206 (of which **205 refused**) |
+| **Dry** | **4.5** |
+| **Cover** | **2.2** |
+
+So a settlement buries twice an autumn. It is not the drive: Preparedness is
+the most urgent thing on 26.6% of autumn agent-ticks, more than any need but
+Reproduction. It is not the land: **6,004 units of food stand ripe on the
+ground** in autumn across 248 live patches. It is not the decision, which says
+yes 886 times an autumn.
+
+**It is that nobody is carrying anything.** Of autumn agent-ticks:
+
+| | |
+|---|---:|
+| had food to spare | 1.91% |
+| had something worth drying | 0.48% |
+| **carrying no food at all** | **96.99%** |
+| mean food in the pack | **0.10 units** |
+
+Against `WHAT_A_BODY_EATS_IN_A_DAY` of 11.52. There is nothing to dry because
+there is nothing in the pack.
+
+**And the pack is over its own limit.**
+
+| | a world |
+|---|---:|
+| pack capacity | 26.01 |
+| weight carried | **38.86** |
+| room left | 0.22 |
+| **no room for one handful** | **97.29%** |
+
+Half as much again as it can hold. What fills it is **firewood 10.3, iron 3.7,
+handaxe 2.0, tinder 1.0, stone 0.8** - a tenth of it is supper and the rest is
+ballast.
+
+**How a load gets over the limit, when `add_item` refuses what will not fit.**
+It cannot be *put* there. It gets there the other way round: `max_weight` is
+worked out fresh every turn by `update_inventory_capacity_from_transport`, off
+what the body can lift and what it has to carry things in, and both fall. A man
+loads up in his strong summer, goes hungry, weakens, and wakes in November
+carrying more than he can hold. And because a pack already over its limit
+refuses *everything*, the load is frozen there for the rest of his life. He can
+never pick up food again.
+
+Nothing in this model had ever put a load down. `Agent::what_i_would_put_away`
+looks only at what is in the hands and fires only when a job wants one free;
+the single `PutDown` in the decision layer is a curiosity experiment.
+
+**What it costs.** Counting every unit of food a trip brings back:
+
+| | a world a year |
+|---|---:|
+| into packs | 2,543 |
+| **back on the bush** | **27,968** |
+
+Eleven thrown back for every one kept, with six thousand standing ripe.
+
+**The fix is an invariant, not a decision.** `what_nobody_can_carry_any_more`
+runs before each turn: what a person cannot carry is not carried, and it is not
+destroyed either - it stays where they were standing, for them or anybody else
+to pick up. `Agent::what_i_would_set_down` is the one owner of what goes: the
+heaviest thing that is none of food, a tool this one works with, or the pack
+itself. `how_much_of_this_i_would_set_down` is the one owner of how much, taken
+off `how_much_too_much_i_am_carrying` so the decision and the amount cannot
+drift.
+
+**Weight, not count.** The first cut filtered on `ENOUGH_TO_HAND`, and never
+fired once: wood weighs two a stick, so the ten units of firewood filling every
+pack in the world were five sticks, and five is not more than six. A reserve
+counted in things cannot answer a question asked in weight.
+
+**What it did to the pack and the store.** Eight worlds:
+
+| | before | after |
+|---|---:|---:|
+| weight carried | 38.86 | **30.99** |
+| firewood in the pack | 10.30 | **5.30** |
+| no room for a handful | 97.3% | **88.7%** |
+| meals in the pack | 0.03 | **0.31** |
+| `Dry` an autumn | 4.5 | **29.4** |
+| `Cover` an autumn | 2.2 | **9.9** |
+| units in the ground, winter | 101.0 | **127.9** |
+| dried in the ground, year end | 26.5 | **36.8** |
+
+Six times as much drying, four times as much burying, and a store a quarter
+deeper through the stretch the land gives nothing.
+
+**And it did not save anybody.** Five paired seed blocks, 160 worlds:
+**11,660 to 11,646 person-days**, which is flat. Worlds emptied went the wrong
+way, **118 of 160 to 129**, and that one is not scatter: three separate
+variants of this change all came back at exactly 129 against the control's 118.
+The likely mechanism is the obvious one - firewood is the heaviest thing in
+every pack, so it is the first thing set down, and a man with no wood does not
+light a fire in February. Filed.
+
+**Two negative results, both worth keeping.**
+
+*A decision to make room, on top of the invariant.* `make_room_for` rewrote a
+trip out for food into a `PutDown` when the pack could not take the load, on
+the `free_a_hand_for` pattern. It fired 41.6 times an autumn and moved nothing:
+**11,652 person-days with it against 11,657 without**. Removed. The invariant
+already covers it, and two places deciding to set a load down is the drift this
+document keeps naming.
+
+*Shedding down to the limit less a day's food.* A forager loaded to the last
+ounce cannot pick anything up, so shedding to exactly the limit looks like it
+buys nothing - and shedding further buys a bigger store: winter 235.5 against
+127.9, dried at year end 67.4 against 36.8. It also cost **five per cent of the
+settlement's person-days**, 11,076 against 11,646. What a person is willing to
+walk about carrying is a decision, and dressing one up as a law made it worse.
+The invariant sheds to the limit and no further.
+
+**What is still in the way.** `Excavate` is refused **205 times of 206** an
+autumn, every one of them "Nothing in hand that is any use for Mining": the
+verb matrix says `AToolFor(SkillType::Mining)` and the executor is written to
+let a man dig with his fingers at a cost, with a comment saying in as many
+words that "a settlement that cannot dig cheaply cannot keep a larder". Two
+owners of one precondition, disagreeing, and the matrix wins - so a settlement
+has 3.5 pits a year and burns two hundred turns an autumn failing to dig more.
+That is the same defect `HUNT` had, and it is filed.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in
