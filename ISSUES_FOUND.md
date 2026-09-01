@@ -9454,6 +9454,85 @@ like a bug in the model rather than in the instrument.
 
 ---
 
+### 151. Twenty-six thousand rabbits become a number, and the tick falls fourfold
+
+The stock existed (#149) and the way in for agents existed (#150), so the
+records the stock stands for could go. `AnimalSpecies::
+is_stood_for_by_the_small_life` names them - rabbit, squirrel, goose, duck,
+chicken, fox, arctic fox, stoat, snake, adder - and world-generation and the
+migration that refills a depleted country stop dealing them out.
+
+**They stay in the registry.** A rabbit still has a mass, a temperament, a
+diet and a place in the food web, and `spawn_animal` will still put one on
+the map if something explicitly asks. What stops is the world stocking them,
+because there is already a population of them: counting the same animal twice,
+once as a number on a hunting ground and once as a thing standing in a field,
+would be worse than either.
+
+Two years on a hundred square kilometres, nobody in the world, same seed:
+
+```
+                        HEAD          now
+  head                29,773        2,347
+  ms/tick, mean        47.12        11.77      4.0x
+  ms/tick, last qr    108.90        14.57      7.5x
+```
+
+And the shape changed as much as the size. At HEAD the head count ran away -
+1,614, 2,175, 4,551, 10,850, 15,243, 20,363, 23,850, 29,773 by quarters, with
+the tick following it. It now goes 1,169, 1,303, 1,312, 1,485, 1,657, 1,737,
+1,898, 2,091: a country filling up rather than a country exploding.
+
+**It costs the agents nothing.** Six worlds over a year: **24,022 person-days
+against 23,733 at HEAD**, twenty-eight alive at the end against thirty. The
+rabbits agents used to hunt are the rabbits they now trap, and the trapline
+(#150) carries it.
+
+Two things had to be fixed alongside it, and one of them mattered a great
+deal:
+
+- **The spawn gate asks whether a predator's prey is present.** That gate
+  exists for a good reason - drawn independently it put foxes into worlds of
+  cattle, where they never found a meal in eight thousand ticks - but it reads
+  the *records* on the map. The moment rabbits stopped being records it said
+  "your dinner is not here" of a country thick with rabbits, and a hundred
+  square kilometres came out with **no hawk, no owl, no eagle and no boar on
+  it at all**. The small life is prey: a species whose named prey is one of
+  the abstracted ones is fed by the abstracted layer, and boar came back at 95
+  head.
+- **A country was empty of rabbits on the morning it was made.** The stock was
+  only settled by the first tick, so anything that asked what lived on a piece
+  of ground before then was told nothing did. `stock_the_small_life` runs at
+  generation, through the same pass, so there is one answer to what belongs on
+  a ground rather than two.
+
+**What is still missing is missing from before this.** Hawk, owl, crow,
+kestrel, heron, kingfisher, parrot, otter, monkey and the fish record do not
+appear on a generated map, and did not at HEAD either - the two-year census
+before any of this had one eagle and nothing else of that guild. That is
+#137, not this.
+
+**And the small life spreads.** A worked ground used to come back only off its
+own floor - "there are always a few about" - which is animals from nowhere and
+says nothing about what surrounds it. `let_them_spread` moves grazers between
+neighbouring hunting grounds down the gradient of *crowding* rather than of
+head count, so a rich block does not drain into a barren one and nothing
+crosses onto a salt flat. Each unordered pair is visited once and the flow is
+subtracted from one side and added to the other, so head is conserved exactly
+- an exchange written as "move towards the average of my neighbours" is not
+symmetric and quietly invents animals every tick.
+
+Two tests changed their premise rather than their expectation, which is the
+honest thing when a fact moves rather than breaks: `a_country_holds_more_small
+_things_than_large_ones` counts the population instead of the records, and
+`predators_can_live_off_what_the_world_holds` counts the abstracted layer as
+food. Two more were the #132 family and were seeded or widened to a block:
+`population_feeds_itself_over_a_long_run` had kept seed 4,200's people through
+months of changes and lost them here, in a run where six worlds measured
+together went *up*.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

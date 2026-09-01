@@ -265,6 +265,14 @@ fn a_cold_agent_ends_up_dressed() {
     let mut simulation = Simulation::new(world, population);
     simulation.population.agents[0].inventory.max_weight = 500.0;
 
+    // Seeded here rather than at the top, because building the world and the
+    // agent draws: seeding first and then constructing them means the run
+    // still moves whenever anything upstream changes how many numbers the
+    // fixture takes. Whether a beginner ruins his first four bundles of flax
+    // is a coin, and this test is about whether a cold man dresses himself.
+    // See ISSUES_FOUND.md #132.
+    crate::core::dice::seed(9_140);
+
     // Flax both in the pack and growing next door. A random world does not
     // always let an agent reach the patch it can see - it may be across water
     // - and this test is about what an agent does with material, not about

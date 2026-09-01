@@ -162,6 +162,44 @@ pub enum DietType {
 }
 
 impl AnimalSpecies {
+    /// Whether the abstracted lower tiers already stand for this species, so
+    /// the world should not also stock it as individual records.
+    ///
+    /// `SmallLife` holds two guilds a hunting ground at a time - **grazers**
+    /// (rabbits, voles, squirrels: what a snare catches and what a stoat
+    /// lives on) and **hunters** (foxes, stoats, weasels: what catches them,
+    /// and what robs a snare). This names the species those two guilds *are*,
+    /// so that the same animal is not counted twice - once as a number and
+    /// once as a record standing in a field.
+    ///
+    /// The species stays in the registry. It has a mass, a temperament, a
+    /// diet and a place in the food web, and `spawn_animal` will still put
+    /// one on the map if something explicitly asks for one. What changes is
+    /// that world-generation and the migration that refills a depleted
+    /// country no longer deal these out, because there is already a
+    /// population of them.
+    ///
+    /// **Why these and not everything small.** Measured over two years on a
+    /// hundred square kilometres with nobody in the world: 28,718 head, of
+    /// which 26,276 rabbits and 1,515 geese, against three wolves and three
+    /// arctic foxes - and the tick going from 17.57 ms in the first quarter
+    /// to 108.90 in the eighth. A fast-breeding animal held as discrete
+    /// records is a random walk with an absorbing barrier at nought, so it
+    /// finds either the barrier or the array. The eagle, the hawk, the owl,
+    /// the heron, the kingfisher, the crow, the otter and the monkey are
+    /// small too and stay: they are few, they cost nothing, and a country
+    /// with nothing in the sky over it is worse than a country with an
+    /// approximate number of rabbits in it.
+    pub fn is_stood_for_by_the_small_life(&self) -> bool {
+        matches!(
+            self.id.as_str(),
+            // The grazers a snare is set for
+            "rabbit" | "squirrel" | "goose" | "duck" | "chicken"
+            // And what lives on them, and on what a snare catches
+            | "fox" | "arctic_fox" | "stoat" | "snake" | "adder"
+        )
+    }
+
     /// What this one can do to get away, and to follow - see
     /// [`WhatItCanDo`]. `None` for a species this table has never heard of,
     /// which `every_animal_says_what_it_can_do` makes sure is none of them.
@@ -3364,6 +3402,20 @@ impl AnimalManager {
     /// eight hundred metres square and terrain does not change every cell, so
     /// one sample stands for the block - and sampling every cell of every
     /// block would cost more than the whole rest of the fauna.
+    /// Stock every hunting ground at what it will carry, for a country that
+    /// has just been made.
+    ///
+    /// The same pass as the tick, and `tick_a_ground` settles an unseen
+    /// ground at full stock, so this is one call rather than a second way of
+    /// working out what belongs where.
+    pub fn stock_the_small_life(
+        &mut self,
+        grid: &crate::world::Grid,
+        season: crate::environment::Season,
+    ) {
+        self.tick_the_small_life(grid, season);
+    }
+
     fn tick_the_small_life(
         &mut self,
         grid: &crate::world::Grid,
@@ -3398,6 +3450,12 @@ impl AnimalManager {
                 self.small_life.tick_a_ground((gx, gy), would_carry, 1.0);
             }
         }
+
+        // And let them work outwards, now that every ground is up to date.
+        // Separate pass because a ground's neighbours have to have grown
+        // before anything moves between them, or which way an animal walks
+        // depends on the order the grounds were visited in.
+        self.small_life.let_them_spread(1.0);
     }
 
     /// Process predator hunting - carnivores/omnivores hunt prey
@@ -3879,6 +3937,17 @@ impl AnimalManager {
             .filter(|(species_id, peak)| {
                 let here = present.get(*species_id).copied().unwrap_or(0) as f32;
                 here < (**peak as f32) * DEPLETED_SHARE
+            })
+            // And nothing the small life already stands for. A country whose
+            // rabbits are a number cannot be short of rabbit *records*, and
+            // walking some in would put them back on the map beside the
+            // population that is already there.
+            .filter(|(species_id, _)| {
+                self.registry
+                    .as_ref()
+                    .and_then(|registry| registry.get(species_id))
+                    .map(|species| !species.is_stood_for_by_the_small_life())
+                    .unwrap_or(true)
             })
             .map(|(species_id, _)| species_id.clone())
             .collect();
@@ -5061,14 +5130,21 @@ impl AnimalManager {
         };
 
         // Categorize species by diet for balanced spawning
+        // Not the species the small life already stands for. There is
+        // already a population of rabbits and foxes on every hunting ground -
+        // see `AnimalSpecies::is_stood_for_by_the_small_life` - and dealing
+        // records of them out beside it counts the same animal twice, once
+        // as a number and once as a thing standing in a field.
         let herbivores: Vec<_> = registry.all_species()
             .into_iter()
             .filter(|s| s.diet == DietType::Herbivore)
+            .filter(|s| !s.is_stood_for_by_the_small_life())
             .collect();
         let predators: Vec<_> = registry.all_species()
             .into_iter()
             .filter(|s| s.diet == DietType::Carnivore || s.diet == DietType::Omnivore)
             .filter(|s| !s.prey_species.is_empty())
+            .filter(|s| !s.is_stood_for_by_the_small_life())
             .collect();
 
         if herbivores.is_empty() {
@@ -5213,6 +5289,24 @@ impl AnimalManager {
         // thousand ticks, their hunger climbed in a straight line from birth
         // to death, and the herds they should have been holding down ran to
         // the population cap unopposed.
+        // And the small life is prey. A hawk lives on rabbits, and the
+        // rabbits are still there - they are a number on every hunting
+        // ground rather than a thousand records standing in fields, and
+        // `what_the_small_life_gives` feeds anything the right size for
+        // them. Without this the gate reads "your dinner is not on the map"
+        // of a country thick with it, and the whole small-predator guild
+        // stops being spawned the moment its prey is abstracted: measured,
+        // a hundred square kilometres came out with no hawk, no owl, no
+        // eagle and no boar on it at all.
+        let the_small_life_feeds_it = |species: &AnimalSpecies| -> bool {
+            species.prey_species.iter().any(|prey| {
+                registry
+                    .get(prey)
+                    .map(|prey| prey.is_stood_for_by_the_small_life())
+                    .unwrap_or(false)
+            })
+        };
+
         let feedable: Vec<_> = predators
             .iter()
             .filter(|species| {
@@ -5220,6 +5314,7 @@ impl AnimalManager {
                     .prey_species
                     .iter()
                     .any(|prey| prey_present.contains(prey))
+                    || the_small_life_feeds_it(species)
             })
             .collect();
 

@@ -52,10 +52,19 @@ fn predators_can_live_off_what_the_world_holds() {
         worlds_with_predators += 1;
 
         if predators.iter().all(|species| {
-            species
-                .prey_species
-                .iter()
-                .any(|prey| present.contains(prey))
+            species.prey_species.iter().any(|prey| {
+                // Either its dinner is standing on the map...
+                present.contains(prey)
+                    // ...or its dinner is the abstracted lower tier, which
+                    // is on every hunting ground as a number. A hawk lives
+                    // on rabbits and the rabbits are still there; what
+                    // changed is that they are counted rather than placed.
+                    || world
+                        .animals
+                        .get_species(prey)
+                        .map(|prey| prey.is_stood_for_by_the_small_life())
+                        .unwrap_or(false)
+            })
         }) {
             fed_predators += 1;
         }

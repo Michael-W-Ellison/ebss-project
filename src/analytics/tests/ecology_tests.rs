@@ -683,7 +683,7 @@ fn a_country_holds_more_small_things_than_large_ones() {
 
     let registry = FaunaRegistry::new();
 
-    let mut small = 0usize;
+    let mut small = 0.0f32;
     let mut large = 0usize;
 
     // Over a block of seeds: a handful of herds on one map is a small sample
@@ -692,12 +692,23 @@ fn a_country_holds_more_small_things_than_large_ones() {
         crate::core::dice::seed(seed);
         let world = World::new(WorldConfig::default());
 
+        // The small end of the pyramid is a population now rather than a
+        // heap of records - see `SmallLife` - so this is where that claim
+        // lives. It is the same claim: a country is mostly small things.
+        // What changed is that counting them meant twenty-six thousand
+        // rabbit records and a tick that went to a tenth of a second.
+        small += world.animals.small_life.how_many_grazers();
+        small += world.animals.small_life.how_many_hunters();
+
         for animal in world.animals.get_all() {
             let Some(species) = registry.get(&animal.species_id) else {
                 continue;
             };
+            // Anything small still standing on the map as a record counts
+            // too - the eagles and the otters, which stay records because
+            // they are few and worth seeing.
             match species.size {
-                AnimalSize::Tiny | AnimalSize::Small => small += 1,
+                AnimalSize::Tiny | AnimalSize::Small => small += 1.0,
                 AnimalSize::Medium => {}
                 AnimalSize::Large | AnimalSize::Huge => large += 1,
             }
@@ -705,8 +716,8 @@ fn a_country_holds_more_small_things_than_large_ones() {
     }
 
     assert!(
-        small > large,
-        "eight quarter-kilometres carry {small} small animals against {large} \
+        small > large as f32,
+        "eight quarter-kilometres carry {small:.0} small animals against {large} \
          large ones, which is a country made of cattle and mammoths"
     );
 }
@@ -1067,4 +1078,127 @@ fn a_settlement_runs_a_trapline_and_lives() {
         .filter(|agent| agent.state.is_alive)
         .count();
     assert!(alive > 0, "the settlement trapped itself to death");
+}
+
+// --- what the abstraction replaced ----------------------------------------
+
+/// The world does not stock as records the species the small life stands for.
+///
+/// Counting the same animal twice - once as a number on a hunting ground and
+/// once as a thing standing in a field - would be worse than either on its
+/// own. The species is still in the registry, still has a mass and a
+/// temperament and a place in the food web, and `spawn_animal` will still put
+/// one down if a test asks; what stops is world-generation dealing them out.
+#[test]
+fn a_country_does_not_stock_what_the_small_life_already_is() {
+    use crate::environment::FaunaRegistry;
+    use crate::world::WorldConfig;
+
+    crate::core::dice::seed(77);
+    let world = World::new(WorldConfig::default().with_size(240, 240));
+    let registry = FaunaRegistry::new();
+
+    for animal in world.animals.get_all().iter().filter(|a| a.is_alive()) {
+        let species = registry
+            .get(&animal.species_id)
+            .unwrap_or_else(|| panic!("{} is not in the registry", animal.species_id));
+        assert!(
+            !species.is_stood_for_by_the_small_life(),
+            "the country was stocked with {} as a record, and there is \
+             already a population of them",
+            species.id
+        );
+    }
+
+    // And they are there, as the thing they now are.
+    assert!(
+        world.animals.small_life.how_many_grazers() > 0.0,
+        "no records and no population either: the rabbits are simply gone"
+    );
+
+    // The registry still knows what one is.
+    let rabbit = registry.get("rabbit").expect("a rabbit is still a species");
+    assert!(rabbit.is_stood_for_by_the_small_life());
+    assert_eq!(rabbit.mass_kg, 2.0, "and still weighs what a rabbit weighs");
+}
+
+/// A hawk still gets a country to live in when its dinner becomes a number.
+///
+/// The spawn gate asks whether a predator's prey is present before putting
+/// one down - drawn independently it put foxes into worlds of cattle, where
+/// they never found a meal. Once rabbits stopped being records that gate read
+/// "your dinner is not on the map" of a country thick with rabbits, and a
+/// hundred square kilometres came out with no hawk, no owl, no eagle and no
+/// boar on it at all.
+#[test]
+fn what_lives_on_the_small_life_still_gets_a_country() {
+    use crate::environment::FaunaRegistry;
+
+    let registry = FaunaRegistry::new();
+    let boar = registry.get("boar").expect("boars exist");
+
+    assert!(
+        !boar.is_stood_for_by_the_small_life(),
+        "a boar is eighty kilogrammes and stays a record"
+    );
+    assert!(
+        boar.prey_species.iter().any(|prey| registry
+            .get(prey)
+            .map(|prey| prey.is_stood_for_by_the_small_life())
+            .unwrap_or(false)),
+        "and the fixture wants something whose dinner is now a number"
+    );
+}
+
+/// The small life works outwards into ground that is emptier than where it
+/// is, and no head is invented or lost doing it.
+#[test]
+fn the_small_life_spreads_into_emptier_ground_without_inventing_any() {
+    use crate::environment::SmallLife;
+
+    let mut country = SmallLife::default();
+    let worked = (0, 0);
+    let untouched = (1, 0);
+    let would_carry = 500.0;
+
+    country.settle(worked, would_carry);
+    country.settle(untouched, would_carry);
+    country.tick_a_ground(worked, would_carry, 1.0);
+    country.tick_a_ground(untouched, would_carry, 1.0);
+
+    // Trap one of them out and leave it.
+    let there = country.here(worked).grazers;
+    country.take(worked, there * 0.95);
+
+    let before = country.how_many_grazers();
+    for _ in 0..(crate::environment::seasons::TICKS_PER_YEAR / 4) {
+        country.let_them_spread(1.0);
+    }
+    let after = country.how_many_grazers();
+
+    assert!(
+        (before - after).abs() < 0.5,
+        "spreading is a move, not a birth or a death: {before:.1} became {after:.1}"
+    );
+    assert!(
+        country.here(worked).grazers > there * 0.05 * 2.0,
+        "the worked ground should be drawing on the one beside it: {:.1}",
+        country.here(worked).grazers
+    );
+    assert!(
+        country.here(untouched).grazers < would_carry,
+        "and the one beside it should be down on where it was: {:.1}",
+        country.here(untouched).grazers
+    );
+
+    // Nothing crosses onto ground that will carry nothing. A wood beside a
+    // salt flat does not empty into it.
+    let salt_flat = (0, 1);
+    country.tick_a_ground(salt_flat, 0.0, 1.0);
+    let flat_before = country.here(salt_flat).grazers;
+    country.let_them_spread(1.0);
+    assert!(
+        country.here(salt_flat).grazers <= flat_before,
+        "nothing spreads onto a salt flat"
+    );
 }

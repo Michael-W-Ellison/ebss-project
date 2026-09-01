@@ -318,6 +318,89 @@ impl SmallLife {
             .max(0.0);
     }
 
+    /// How much of the difference between two neighbouring grounds crosses
+    /// between them in a tick.
+    ///
+    /// Slow. This is animals working outwards into ground that is emptier
+    /// than the ground they are on, not a herd migrating: at this rate a
+    /// wholly trapped-out block is drawing meaningfully on its neighbours
+    /// within a season and is not refilled overnight by them.
+    pub const HOW_FAST_THEY_SPREAD: f32 = 0.002;
+
+    /// Let the small life work outwards into ground that is emptier than
+    /// where it is.
+    ///
+    /// A trapped-out wood used to come back only off its own floor - "there
+    /// are always a few about" - which is a source of animals from nowhere
+    /// and says nothing about what is around it. What actually refills a
+    /// worked ground is the ground next door, and having that means the
+    /// country is joined up: a settlement that traps one block hard draws on
+    /// the blocks around it, and a block surrounded by worked ground stays
+    /// thin however long it is left.
+    ///
+    /// It moves on **crowding rather than head count** - the share of what
+    /// each ground carries, not how many are on it - so a rich block does
+    /// not drain into a barren one just because the barren one is emptier in
+    /// absolute terms. Nothing lives on a salt flat however many rabbits are
+    /// in the wood beside it.
+    ///
+    /// Each unordered pair is visited once and the flow is subtracted from
+    /// one side and added to the other, so head is conserved exactly. That
+    /// matters: an exchange written as "move towards the average of my
+    /// neighbours" is not symmetric, and quietly invents or destroys animals
+    /// every tick.
+    pub fn let_them_spread(&mut self, ticks: f32) {
+        let grounds: Vec<(i32, i32)> = self.grounds.keys().copied().collect();
+        let mut moves: Vec<((i32, i32), (i32, i32), f32)> = Vec::new();
+
+        for &(gx, gy) in &grounds {
+            let here = self.here((gx, gy));
+            if here.would_carry <= 0.0 {
+                continue;
+            }
+
+            // East and south only, which is how each unordered pair is
+            // reached exactly once.
+            for (dx, dy) in [(1, 0), (0, 1)] {
+                let over_there = (gx + dx, gy + dy);
+                let Some(there) = self.grounds.get(&over_there).copied() else {
+                    continue;
+                };
+                if there.would_carry <= 0.0 {
+                    continue;
+                }
+
+                let crowding_here = here.how_thick_it_is();
+                let crowding_there = there.how_thick_it_is();
+                let across = Self::HOW_FAST_THEY_SPREAD
+                    * (crowding_here - crowding_there)
+                    * here.would_carry.min(there.would_carry)
+                    * ticks;
+
+                if across.abs() > f32::EPSILON {
+                    moves.push(((gx, gy), over_there, across));
+                }
+            }
+        }
+
+        for (from, to, across) in moves {
+            // Never move more than is actually standing there, whichever way
+            // it is going.
+            let there_to_move = if across > 0.0 {
+                across.min(self.here(from).grazers)
+            } else {
+                -((-across).min(self.here(to).grazers))
+            };
+
+            if let Some(here) = self.grounds.get_mut(&from) {
+                here.grazers = (here.grazers - there_to_move).max(0.0);
+            }
+            if let Some(there) = self.grounds.get_mut(&to) {
+                there.grazers = (there.grazers + there_to_move).max(0.0);
+            }
+        }
+    }
+
     /// Every ground this country has looked at, for measuring and for tests.
     pub fn all_grounds(&self) -> impl Iterator<Item = (&(i32, i32), &TheSmallLifeHere)> {
         self.grounds.iter()

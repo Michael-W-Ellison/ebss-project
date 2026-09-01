@@ -1135,6 +1135,15 @@ impl World {
         let spawn_config = AnimalSpawnConfig::default();
         world.animals.spawn_naturalistic(&world.grid, &spawn_config);
 
+        // And stock the lower tiers, which are a population rather than
+        // records - see `SmallLife`. A country is not empty of rabbits on the
+        // morning it is made, and until this ran a world had none until its
+        // first tick: anything that asked what was living on a piece of
+        // ground before then was told nothing was.
+        world
+            .animals
+            .stock_the_small_life(&world.grid, world.climate.current_season());
+
         world
     }
 
