@@ -475,3 +475,85 @@ fn a_hunter_reckons_ground_by_what_it_feeds_not_by_who_is_on_it() {
         "of two equally stocked grounds, the one with fewer hunters on it"
     );
 }
+
+// --- the winter half of what a burrow is for -------------------------------
+
+/// A rabbit in a bank pays a third of what a deer standing out in it pays.
+///
+/// "The burrows would offer shelter from weather, predators, and places to
+/// hibernate in the winter." The predator half was already in - a hole is the
+/// whole of a rabbit's answer to a wolf - and this is the winter half, which
+/// is what decides who a hard year takes.
+#[test]
+fn what_can_lie_up_gets_through_a_winter_cheaper() {
+    use crate::environment::fauna::{what_this_ground_offers, AnimalManager, FaunaRegistry};
+    use crate::environment::Season;
+    use crate::world::TerrainType;
+
+    let registry = FaunaRegistry::new();
+    let diggable = what_this_ground_offers(TerrainType::Plains);
+
+    let winter_for = |id: &str| {
+        let species = registry.get(id).unwrap_or_else(|| panic!("{id} exists"));
+        AnimalManager::what_a_winter_costs(species, diggable, Season::Winter)
+    };
+
+    assert!(
+        winter_for("rabbit") < 1.0,
+        "a rabbit can dig itself in: {}",
+        winter_for("rabbit")
+    );
+    assert!(
+        winter_for("bear") < 1.0,
+        "and a bear dens: {}",
+        winter_for("bear")
+    );
+    assert_eq!(
+        winter_for("deer"),
+        1.0,
+        "a deer stands out in it and pays for it"
+    );
+    assert_eq!(
+        winter_for("wolf"),
+        1.0,
+        "and a wolf's winter is a wolf's winter"
+    );
+}
+
+/// A rabbit on bare rock has no more hole than a deer does, and nobody lies
+/// up in July.
+///
+/// Both of these are the difference between a rule about the world and a flag
+/// on a species. A burrow is somewhere an animal is standing, not something
+/// it carries about with it.
+#[test]
+fn lying_up_wants_the_right_ground_and_the_right_season() {
+    use crate::environment::fauna::{what_this_ground_offers, AnimalManager, FaunaRegistry};
+    use crate::environment::Season;
+    use crate::world::TerrainType;
+
+    let registry = FaunaRegistry::new();
+    let rabbit = registry.get("rabbit").expect("rabbits exist");
+
+    let bare_rock = what_this_ground_offers(TerrainType::Mountain);
+    let diggable = what_this_ground_offers(TerrainType::Plains);
+
+    assert!(
+        !bare_rock.can_be_dug,
+        "the fixture wants ground a rabbit cannot get into"
+    );
+    assert_eq!(
+        AnimalManager::what_a_winter_costs(rabbit, bare_rock, Season::Winter),
+        1.0,
+        "no hole, no shelter"
+    );
+    assert_eq!(
+        AnimalManager::what_a_winter_costs(rabbit, diggable, Season::Summer),
+        1.0,
+        "and nobody hibernates in July"
+    );
+    assert!(
+        AnimalManager::what_a_winter_costs(rabbit, diggable, Season::Winter) < 1.0,
+        "the right ground in the right season, and only then"
+    );
+}

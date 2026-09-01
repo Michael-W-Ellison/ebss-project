@@ -2604,11 +2604,22 @@ impl Animal {
 
     /// Increase hunger by the animal's hunger rate
     pub fn tick_hunger(&mut self) {
+        self.tick_hunger_burning(1.0);
+    }
+
+    /// The same, for a beast that is burning some share of its ordinary rate.
+    ///
+    /// The share is one number and it comes from one place -
+    /// `what_a_winter_costs` - so that "this animal is lying up" is a fact
+    /// about where it is standing and what sort it is, rather than a flag
+    /// somebody has to remember to set and clear.
+    pub fn tick_hunger_burning(&mut self, share_of_its_rate: f32) {
         if !self.is_alive() {
             return;
         }
 
-        self.hunger = (self.hunger + self.hunger_rate).min(self.max_hunger * 1.5);
+        self.hunger =
+            (self.hunger + self.hunger_rate * share_of_its_rate).min(self.max_hunger * 1.5);
 
         // Check starvation threshold
         if self.hunger >= self.max_hunger {
@@ -2901,6 +2912,37 @@ impl AnimalManager {
             return;
         }
 
+        // What each beast is paying to get through this tick, which in
+        // winter is not the same for all of them - see `what_a_winter_costs`.
+        //
+        // Worked out in a read-only pass and only in winter, because it wants
+        // the registry and the ground under each animal and the loop below
+        // holds them all mutably. Three seasons in four this is an empty
+        // vector and a season comparison.
+        let burning: Vec<f32> = if weather.season == crate::environment::Season::Winter {
+            let registry = self.registry.as_ref();
+            self.animals
+                .iter()
+                .map(|animal| {
+                    let Some(species) =
+                        registry.and_then(|r| r.get(&animal.species_id))
+                    else {
+                        return 1.0;
+                    };
+                    let ground = grid
+                        .get_tile(&crate::world::Position::new(
+                            animal.position.0,
+                            animal.position.1,
+                        ))
+                        .map(|tile| what_this_ground_offers(tile.terrain.terrain_type))
+                        .unwrap_or_else(|| what_this_ground_offers(TerrainType::Plains));
+                    Self::what_a_winter_costs(species, ground, weather.season)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         // First pass: basic updates and lifecycle
         let mut deaths_from_age = Vec::new();
         let mut starved = 0u64;
@@ -2920,7 +2962,7 @@ impl AnimalManager {
 
             // Hunger system
             let stood_up_to_it = animal.is_alive();
-            animal.tick_hunger();
+            animal.tick_hunger_burning(burning.get(idx).copied().unwrap_or(1.0));
             if stood_up_to_it && !animal.is_alive() {
                 starved += 1;
             }
@@ -4227,6 +4269,74 @@ impl AnimalManager {
     /// three over a hundred times the area. Four square kilometres came out
     /// with seven hundred and twenty-one of them.
     const HOW_BIG_A_HUNTING_GROUND_IS: i32 = 80;
+
+    /// What share of its ordinary burn a beast is paying, where it is standing,
+    /// in the season it is standing there.
+    ///
+    /// "The burrows would offer shelter from weather, predators, and places to
+    /// hibernate in the winter." The predator half of that was already in -
+    /// see `what_a_hunt_comes_to`, where a hole is what a rabbit's answer to
+    /// a wolf is. This is the winter half, and it is the half that decides
+    /// which animals a hard year takes: a rabbit that can lie up in a bank
+    /// pays a fraction of what a deer standing out in it pays, on the same
+    /// bare ground.
+    ///
+    /// A burrower needs ground it can actually dig - a rabbit on bare rock
+    /// has no more hole than a deer does - and a bear needs nothing, because
+    /// a bear dens wherever it finds a den. Nothing else gets anything: a
+    /// wolf's winter is a wolf's winter.
+    ///
+    /// The weather half of the specification has nothing to answer yet.
+    /// Nothing in this model kills an animal with cold directly; winter bites
+    /// through the forage going off the map, which is why lying up is
+    /// expressed as burning less rather than as taking less damage.
+    pub fn what_a_winter_costs(
+        species: &AnimalSpecies,
+        ground: WhatTheGroundOffers,
+        season: crate::environment::Season,
+    ) -> f32 {
+        if season != crate::environment::Season::Winter {
+            return 1.0;
+        }
+
+        let can = match species.what_it_can_do() {
+            Some(can) => can,
+            None => return 1.0,
+        };
+
+        // A bear is asleep. A rabbit is not: it is out of the wind, and that
+        // is a different and much smaller thing.
+        if species.id == "bear" {
+            Self::WHAT_A_WINTER_ASLEEP_COSTS
+        } else if can.burrows && ground.can_be_dug {
+            Self::WHAT_A_WINTER_UNDER_COVER_COSTS
+        } else {
+            1.0
+        }
+    }
+
+    /// What a winter spent asleep costs, against one spent out in it.
+    ///
+    /// Not nought. A hibernating animal is not a stopped clock - it lives off
+    /// what it put on in the autumn and it can still run out - and a beast
+    /// that paid nothing all winter would be an animal the season could not
+    /// touch, which is the opposite of what the season is for.
+    pub const WHAT_A_WINTER_ASLEEP_COSTS: f32 = 0.3;
+
+    /// And what one spent in a burrow costs, which is a far smaller thing.
+    ///
+    /// **This number was measured, and the first guess at it was badly
+    /// wrong.** Giving every burrower the sleeping rate - three tenths, for a
+    /// quarter of the year, while it goes on feeding normally - took a
+    /// hundred and twenty by a hundred and twenty from 682 head at the end of
+    /// its first year to **2,533**, and the tick from 1.9 ms to 10.9 the
+    /// following year as the country tried to carry them. That is not a
+    /// burrow; that is a rabbit the winter cannot reach.
+    ///
+    /// A rabbit in a bank is out of the wind and nothing more. It is awake,
+    /// it is eating, and what it saves is the part of its burn that goes on
+    /// keeping warm.
+    pub const WHAT_A_WINTER_UNDER_COVER_COSTS: f32 = 0.85;
 
     /// What a piece of country is worth to one more hunter: the game on it,
     /// divided between the hunters that would then be on it.

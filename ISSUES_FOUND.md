@@ -9264,6 +9264,50 @@ no predator-on-predator pressure to model.
 
 ---
 
+### 148. A burrow was proof against wolves and not against February
+
+"The burrows would offer shelter from weather, predators, and places to
+hibernate in the winter." Only the middle one was in. `what_a_hunt_comes_to`
+has had a hole as the whole of a rabbit's answer to a wolf since the refuges
+went in. Winter did not know burrows existed: every animal on the map paid the
+same upkeep in February as in June, so the season could only reach an animal
+through the forage going off the ground, and it reached every animal the same
+way.
+
+`what_a_winter_costs(species, ground, season)` is the winter half, and it has
+two rates because there are two different things here. A bear is **asleep** -
+`WHAT_A_WINTER_ASLEEP_COSTS`, three tenths. A rabbit in a bank is **out of the
+wind** - `WHAT_A_WINTER_UNDER_COVER_COSTS`, 0.85 - because it is awake, it is
+still eating, and what it saves is the part of its burn that goes on keeping
+warm. Everything else pays in full, which is the point: a rabbit and a deer on
+the same bare ground are now two different animals in December.
+
+Both conditions are about the world rather than the species, so they are read
+fresh each tick rather than kept as a flag. A rabbit on bare rock has no more
+hole than a deer does, and nobody hibernates in July.
+
+**The first cut of this was badly wrong and the measurement caught it.**
+Giving every burrower the sleeping rate - three tenths of its burn for a
+quarter of the year, while it went on feeding normally - is not a burrow, it
+is a rabbit the winter cannot reach. A hundred and twenty by a hundred and
+twenty went from **682 head at the end of its first year to 2,533**, and the
+following year cost **10.94 ms a tick against 1.9** as the country tried to
+carry them; the ecology test that walks that world five years stopped
+finishing. At 0.85 the same run gives 858 head against 682, collapses on the
+same curve afterwards, and costs 1.91 ms against 1.89. That is a shelter.
+
+**The weather third of the specification has nothing to answer yet.** Nothing
+in this model kills an animal with cold directly - winter bites through the
+forage - which is why lying up is expressed as burning less rather than as
+taking less damage. If cold is ever given teeth of its own, this is where the
+burrow answers it, and the shape is already right.
+
+The cost is one read-only pass over the animals, in winter only: it wants the
+registry and the ground under each beast, and the upkeep loop holds both
+mutably. Three seasons in four it is a season comparison and an empty vector.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in
