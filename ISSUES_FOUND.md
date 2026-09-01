@@ -9184,6 +9184,47 @@ asked for.
 
 ---
 
+### 146. Fear about a need had nowhere to go
+
+The specification asks for fear to feed the other drives, and gives the case:
+"'I do not have enough food' equals an increased fear drive". Half of it was
+in - `calculate_survival_drive_emotion` weighs a need that has gone unanswered
+against how fast it would kill, and that is the model's one reading of dread -
+but it only ever produced a *feeling*. The fear **drive** could not see it.
+`DriveType::Safety` read the threat appraisal and nothing else, so a man six
+days from starving in an empty field had a fear drive of nought.
+
+Two things had to be settled to wire it up, and both of them the wrong way
+round would be worse than leaving it alone.
+
+**How much it is worth.** `WHAT_DREAD_IS_WORTH` is 0.4 against a Safety
+threshold of 0.5, so dread at its absolute worst cannot carry the drive on its
+own: it takes a bare larder *and* something else - the dark, a wound, a thing
+in the field. That is deliberate and it is the lesson of the cut before this
+one, which folded the whole of what an agent stood to lose into the drive:
+fear beat hunger every tick and a settlement of eight starved inside four
+thousand ticks with full bushes round it. Fear about a need must press in the
+same direction as the need, never in front of it.
+
+**What it comes out as.** A drive that rises has to end in an action, and the
+obvious action is wrong: if fear of running short comes out as running or
+hiding then a hungry settlement spends its days getting behind trees. So
+`what_i_dread` now returns *which* need it is about as well as how much, and
+when there is nothing in the field to run from, the Safety branch offers
+whatever that need offers - the food action when the dread is hunger, the
+water action when it is thirst. Delegated, not duplicated: there is still one
+place in this project that knows how to look for food. `Safety` has no death
+clock of its own, so the fear drive can never end up pointed at its own tail.
+
+**It changes nothing, and that is the result.** Sixteen worlds on one seed
+block, four thousand three hundred ticks: 2426 person-days against 2437, the
+same twelve worlds emptied, the same 8.81 alive at midsummer. A term that
+pushes the same way the need already pushes should not move the outcome, and
+it does not. What it buys is that the fear is now *in the drive* rather than
+only in the feeling, which is where the rest of the model can read it.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

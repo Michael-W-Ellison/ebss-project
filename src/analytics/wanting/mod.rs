@@ -643,6 +643,13 @@ impl Simulation {
     /// doing for one of those never eats.
     pub(in crate::analytics) const A_FRIGHT_WORTH_THE_NAME: f32 = 0.25;
 
+    /// And how much dread has to be on a need before fear of it is worth a
+    /// turn of its own.
+    ///
+    /// Below this an agent is merely a bit short, and being a bit short is
+    /// the ordinary condition of everybody in this world.
+    pub(in crate::analytics) const WORTH_DREADING: f32 = 0.3;
+
     pub(in crate::analytics) fn what_this_drive_offers(
         &self,
         drive_type: DriveType,
@@ -722,6 +729,27 @@ impl Simulation {
                     && !agent.surroundings.could_face_it;
 
                 if !worth_running_from && !agent.surroundings.recently_hurt {
+                    // Nothing in the field. But this drive also rises on the
+                    // fear with no adversary in it - being a week off
+                    // starving - and a drive that rises has to end in an
+                    // action. What a man does about that fear is answer the
+                    // need it is about, so the offer here is whatever that
+                    // need offers.
+                    //
+                    // Delegated rather than written out, which is the whole
+                    // point: fear pushes in the same direction as the need
+                    // instead of building a second, competing way to look for
+                    // food. `what_i_dread` can only name a need with a death
+                    // clock on it, and Safety has none, so this cannot come
+                    // back round to itself.
+                    let (dread, about) = agent.what_i_dread();
+
+                    if dread >= Self::WORTH_DREADING {
+                        if let Some(need) = about {
+                            return self.what_this_drive_offers(need, agent, agent_position);
+                        }
+                    }
+
                     return None;
                 }
 

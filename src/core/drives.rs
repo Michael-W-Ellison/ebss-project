@@ -175,6 +175,16 @@ impl DriveType {
     /// "sufficient stockpiled food, tools, materials", "sufficient tool variety
     /// stored" - so each of them needs a number for what sufficient means.
     const ENOUGH_FOOD: f32 = 20.0;
+
+    /// The most that dreading a need can add to the fear drive.
+    ///
+    /// Under [`DriveType::default_threshold`] for Safety, which is 0.5, so
+    /// dread alone never carries the drive: it takes a bad larder *and*
+    /// something else - the dark, a wound, a thing in the field - to make a
+    /// frightened man of somebody who is merely running short. That is the
+    /// point. Fear about a need has to press in the same direction as the
+    /// need, not in front of it.
+    const WHAT_DREAD_IS_WORTH: f32 = 0.4;
     const ENOUGH_MATERIALS: f32 = 30.0;
     const ENOUGH_TOOLS: f32 = 3.0;
     const ENOUGH_FINERY: f32 = 2.0;
@@ -248,7 +258,23 @@ impl DriveType {
                     + yes(ctx.around.night, 0.35);
 
                 let cover = yes(ctx.around.under_shelter, 0.5) + yes(ctx.armed, 0.5);
-                (the_thing + his_own_cornered + about) * (1.0 - cover.min(0.9))
+
+                // And the thing with nothing to round on. A worked-out field
+                // and a hard winter prevent a man answering a need exactly as
+                // a wolf does, and being a week off starving is frightening.
+                // It is deliberately not under `cover`: a roof over your head
+                // is no answer at all to an empty larder.
+                //
+                // Held below the threshold on its own - dread at its very
+                // worst comes to less than half of what carries this drive -
+                // because fear of running short must not outbid the need it
+                // is about. An earlier cut folded the whole of what an agent
+                // stood to lose in here, fear beat hunger every tick, and a
+                // settlement of eight starved inside four thousand ticks with
+                // full bushes around it.
+                let running_short = ctx.dread.clamp(0.0, 1.0) * Self::WHAT_DREAD_IS_WORTH;
+
+                (the_thing + his_own_cornered + about) * (1.0 - cover.min(0.9)) + running_short
             }
 
             // The anger drive, off the same appraisal read the other way.
@@ -601,6 +627,17 @@ pub struct DriveContext {
     /// This is the specification's "drive synergy": what one drive wants can
     /// raise another.
     pub shelter_pressing: f32,
+    /// How much this agent dreads a need it is being prevented from
+    /// answering, 0.0 to 1.0, and which need that is.
+    ///
+    /// The other half of the specification's drive synergy, and the half that
+    /// runs the other way: "'I do not have enough food' equals an increased
+    /// fear drive". Filled from `Agent::what_i_dread`, which is the one place
+    /// in this project that weighs an unanswered need against how long it has
+    /// gone unanswered and how fast it would kill - so this is that reading
+    /// carried, not a second one taken.
+    pub dread: f32,
+    pub dread_of: Option<DriveType>,
     /// Nothing more pressing on. Several drives are specified to rise on
     /// "idle time", which is this.
     pub at_leisure: bool,

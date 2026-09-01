@@ -526,3 +526,98 @@ fn anger_ends_in_going_at_it() {
          anger {angry:.2}, fear {afraid:.2}"
     );
 }
+
+// --- fear about a need pushes the same way the need does -------------------
+
+/// A man frightened of an empty belly reaches for food, not for the horizon.
+///
+/// The specification asks for fear to feed the other drives - "'I do not have
+/// enough food' equals an increased fear drive" - and a drive that rises has
+/// to end in an action. The obvious way to write that is wrong: if fear of
+/// running short comes out as running or hiding then a hungry settlement
+/// spends its days getting behind trees, which is how a man starves with a
+/// full bush in front of him.
+///
+/// So when there is nothing in the field to be afraid of, the fear drive
+/// offers whatever the *dreaded need* offers. It does not build a second way
+/// of looking for food; it delegates to the first one.
+#[test]
+fn fear_of_running_short_comes_out_as_answering_the_need() {
+    use crate::agents::InventoryItem;
+
+    let mut simulation = one_person(an_empty_country());
+    simulation.world.buildings.clear();
+
+    // Nothing whatever in the field - so the only thing this man has to be
+    // afraid of is his own belly.
+    simulation.read_the_situation();
+
+    let agent = &mut simulation.population.agents[0];
+    assert!(
+        agent.surroundings.what_is_on_me < Simulation::A_FRIGHT_WORTH_THE_NAME,
+        "the fixture is meant to have nothing in it"
+    );
+
+    // Starving, and the need has been asking a long while without being
+    // answered, which is what `what_i_dread` reads.
+    agent.nutrition.energy_reserves = 0.0;
+    agent.state.energy = 10.0;
+    agent.state.health = 40.0;
+    // The reserve is the death clock `ticks_before_this_kills_me` reads, and
+    // it is what "days from starving" actually means in this model.
+    agent.state.physiology.reserve = 0.0;
+    agent.state.physiology.stomach.clear();
+    agent.state.physiology.gut.clear();
+    if let Some(hunger) = agent.drives.get_mut(crate::core::DriveType::Hunger) {
+        hunger.denied_ticks = 200;
+        hunger.value = 0.95;
+    }
+
+    let (dread, about) = agent.what_i_dread();
+    assert!(
+        dread >= Simulation::WORTH_DREADING,
+        "a starving man who has not eaten in days should dread it: {dread}"
+    );
+    assert_eq!(
+        about,
+        Some(crate::core::DriveType::Hunger),
+        "and should dread the thing that is actually going to kill him"
+    );
+
+    // Something to reach for, so the delegation has a visible answer rather
+    // than the empty-country fallthrough
+    let _ = agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("food".to_string(), 4, 0.5));
+
+    let position = agent.state.position;
+    let agent = simulation.population.agents[0].clone();
+
+    let out_of_fear = simulation.what_this_drive_offers(
+        crate::core::DriveType::Safety,
+        &agent,
+        position,
+    );
+    let out_of_hunger = simulation.what_this_drive_offers(
+        crate::core::DriveType::Hunger,
+        &agent,
+        position,
+    );
+
+    assert!(
+        out_of_fear.is_some(),
+        "fear about a need must end in something"
+    );
+    assert!(
+        !matches!(
+            out_of_fear,
+            Some(Action::FleeFrom { .. }) | Some(Action::SeekShelter)
+        ),
+        "and it must not be running from nothing: {out_of_fear:?}"
+    );
+    assert_eq!(
+        format!("{out_of_fear:?}"),
+        format!("{out_of_hunger:?}"),
+        "fear pushes the same way the need does, by asking the need"
+    );
+}

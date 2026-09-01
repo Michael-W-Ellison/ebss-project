@@ -87,6 +87,8 @@ fn a_drive_with_every_reason_climbs() {
         exposed: true,
         chilly: true,
         shelter_pressing: 1.0,
+        dread: 1.0,
+        dread_of: Some(DriveType::Hunger),
         at_leisure: true,
     };
 
@@ -434,4 +436,72 @@ fn anger_does_not_keep_anything_back() {
 
     let gone = DriveContext::default();
     assert_eq!(settles_at(DriveType::Aggression, &gone), 0.0);
+}
+
+/// "I do not have enough food" raises the fear drive, and not past the need.
+///
+/// The specification asks for fear to integrate into the other drives, and
+/// gives this as the example. The two halves of it are both here, and the
+/// second is the one that matters: dread at its very worst has to leave the
+/// fear drive under its own threshold, because if fear of running short
+/// outbids the need to eat then a settlement stands about being frightened
+/// with full bushes around it - which is exactly what an earlier cut at this
+/// did, and it starved eight people inside four thousand ticks.
+#[test]
+fn running_short_frightens_a_man_without_outbidding_his_hunger() {
+    let bare_larder = |dread: f32| DriveContext {
+        dread,
+        dread_of: Some(DriveType::Hunger),
+        ..DriveContext::default()
+    };
+
+    let calm = DriveType::Safety.demand(&bare_larder(0.0)).unwrap();
+    let a_week_off_starving = DriveType::Safety.demand(&bare_larder(1.0)).unwrap();
+
+    assert_eq!(calm, 0.0, "nothing wrong is nothing to be afraid of");
+    assert!(
+        a_week_off_starving > calm,
+        "a bare larder is a thing to be afraid of: {a_week_off_starving} against {calm}"
+    );
+    assert!(
+        a_week_off_starving < DriveType::Safety.default_threshold(),
+        "and never enough on its own to outbid the need it is about: \
+         {a_week_off_starving} against a threshold of {}",
+        DriveType::Safety.default_threshold()
+    );
+}
+
+/// Dread and a thing in the field are different fears and they add up.
+///
+/// A man a week off starving who is also being stalked is worse off than
+/// either alone, and the drive has to say so - otherwise the wolf would
+/// swallow the hunger or the hunger the wolf.
+#[test]
+fn a_hungry_man_being_stalked_is_afraid_of_both() {
+    let stalked = Surroundings {
+        what_is_on_me: 0.6,
+        could_face_it: false,
+        ..Surroundings::default()
+    };
+
+    let wolf_only = DriveType::Safety
+        .demand(&DriveContext {
+            around: stalked.clone(),
+            ..DriveContext::default()
+        })
+        .unwrap();
+
+    let wolf_and_an_empty_pack = DriveType::Safety
+        .demand(&DriveContext {
+            around: stalked,
+            dread: 0.8,
+            dread_of: Some(DriveType::Hunger),
+            ..DriveContext::default()
+        })
+        .unwrap();
+
+    assert!(
+        wolf_and_an_empty_pack > wolf_only,
+        "the two fears add: {wolf_and_an_empty_pack} against {wolf_only}"
+    );
 }

@@ -1652,6 +1652,10 @@ impl Agent {
             .filter(|item| item.equipment_type.is_tool())
             .count() as u32;
 
+        // What this agent is afraid of that has nothing to round on, and
+        // which need it is about. See `what_i_dread`.
+        let (dread, dread_of) = self.what_i_dread();
+
         DriveContext {
             around: self.surroundings.clone(),
             food_put_by: self.food_put_by(),
@@ -1665,6 +1669,8 @@ impl Agent {
             chilly: self.body_temperature.current
                 < self.body_temperature.ideal - self.body_temperature.tolerance * 0.4,
             shelter_pressing: 0.0,
+            dread,
+            dread_of,
             at_leisure: false,
         }
     }
@@ -6841,7 +6847,28 @@ impl Agent {
     /// is not being prevented from anything. `denied_ticks` counts only the
     /// ticks it asked and got nothing.
     fn calculate_survival_drive_emotion(&self) -> f32 {
+        self.what_i_dread().0
+    }
+
+    /// The same reading, and *which need* it is about.
+    ///
+    /// The name matters as much as the number. "I do not have enough food"
+    /// raising fear is only half of what the specification asks for; the
+    /// other half is that the fear then helps motivate the drive that would
+    /// answer it, and a bare magnitude cannot say which drive that is. So
+    /// this returns both, and `DriveType::Safety` carries them: the fear
+    /// drive rises on the dread, and when there is nothing in the field to
+    /// run from, what it offers to do about it is whatever the dreaded need
+    /// offers - which is going for food when the dread is hunger and going
+    /// for water when it is thirst. Fear does not displace the need it is
+    /// about; it pushes in the same direction.
+    ///
+    /// Only the needs with a death clock can be dreaded, and
+    /// `ticks_before_this_kills_me` answers `None` for Safety itself, so the
+    /// fear drive can never end up pointed at its own tail.
+    pub fn what_i_dread(&self) -> (f32, Option<crate::core::DriveType>) {
         let mut worst: f32 = 0.0;
+        let mut about = None;
 
         for drive_type in crate::core::DriveType::all() {
             let Some(drive) = self.drives.get(drive_type) else {
@@ -6863,10 +6890,15 @@ impl Agent {
             let how_long = (drive.denied_ticks() as f32 / Self::LONG_ENOUGH_TO_FRIGHTEN)
                 .clamp(0.0, 1.0);
 
-            worst = worst.max(stakes * how_long);
+            let this_one = stakes * how_long;
+
+            if this_one > worst {
+                worst = this_one;
+                about = Some(drive_type);
+            }
         }
 
-        worst.min(1.0)
+        (worst.min(1.0), about)
     }
 
     /// Calculate sadness from social drive deprivation
