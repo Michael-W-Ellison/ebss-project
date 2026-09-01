@@ -302,13 +302,15 @@ impl AnimalSpecies {
     /// bulk and what the animal can do about being rushed, and both are
     /// already on the species.
     pub fn how_much_hunter_it_takes(&self) -> f32 {
-        let for_its_bulk = match self.size {
-            AnimalSize::Tiny => 0.15,
-            AnimalSize::Small => 0.45,
-            AnimalSize::Medium => 1.20,
-            AnimalSize::Large => 3.00,
-            AnimalSize::Huge => 8.00,
-        };
+        // The root of its mass, and again not mass itself: what makes an
+        // animal hard to pull down is reach and footing and how hard it can
+        // hit back, and those go up a good deal more slowly than weight does.
+        // A cow is three hundred rabbits by mass and is not three hundred
+        // times the job. Anchored on the same sixty-kilo sheep the old five
+        // buckets were built around, so the hunt balance is where it was.
+        const WHAT_A_SIXTY_KILO_SHEEP_TAKES: f32 = 1.20;
+        let for_its_bulk =
+            WHAT_A_SIXTY_KILO_SHEEP_TAKES * (self.mass_kg.max(0.001) / 60.0).sqrt();
 
         for_its_bulk * (1.0 + self.defense / 10.0)
     }
@@ -624,6 +626,15 @@ pub struct AnimalSpecies {
     pub diet: DietType,
     pub size: AnimalSize,
 
+    /// What one of them weighs, in kilograms.
+    ///
+    /// `size` is five buckets and answers "is this bigger than that"; mass
+    /// answers "how much of it is there", and the two are not the same
+    /// question. What an animal eats, and what it takes to bring one down,
+    /// follow mass - a cow and a mammoth are both above `AnimalSize::Large`
+    /// and one of them is ten times the other.
+    pub mass_kg: f32,
+
     /// Habitat
     pub primary_biomes: Vec<ClimateZone>,
     pub secondary_biomes: Vec<ClimateZone>,
@@ -838,6 +849,7 @@ fn stoat() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.3,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 2),
@@ -872,6 +884,7 @@ fn kestrel() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.2,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (1, 2),
@@ -907,6 +920,7 @@ fn kingfisher() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.05,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (1, 2),
@@ -939,6 +953,7 @@ fn adder() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Carnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.15,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (1, 2),
@@ -971,6 +986,7 @@ fn heron() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 1.5,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (1, 3),
@@ -1003,6 +1019,7 @@ fn rabbit() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
+        mass_kg: 2.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (1, 3),
@@ -1040,6 +1057,7 @@ fn squirrel() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.5,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
@@ -1075,6 +1093,7 @@ fn chicken() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 2.5,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
         secondary_biomes: vec![],
         group_size: (3, 8),
@@ -1120,6 +1139,7 @@ fn fox() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 7.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 2),
@@ -1156,6 +1176,7 @@ fn wolf() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 40.0,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (3, 7),
@@ -1197,6 +1218,7 @@ fn deer() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 70.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (2, 6),
@@ -1233,6 +1255,7 @@ fn sheep() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 60.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![],
         group_size: (4, 12),
@@ -1275,6 +1298,7 @@ fn goat() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 50.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (3, 8),
@@ -1321,6 +1345,7 @@ fn boar() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Omnivore,
         size: AnimalSize::Medium,
+        mass_kg: 80.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (1, 4),
@@ -1358,6 +1383,7 @@ fn cow() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
+        mass_kg: 600.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (2, 8),
@@ -1404,6 +1430,7 @@ fn bear() -> AnimalSpecies {
         behavior: AnimalBehavior::Territorial,
         diet: DietType::Omnivore,
         size: AnimalSize::Large,
+        mass_kg: 300.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
@@ -1442,6 +1469,7 @@ fn lion() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 190.0,
         primary_biomes: vec![ClimateZone::Desert],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (3, 8),
@@ -1483,6 +1511,7 @@ fn arctic_fox() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 4.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (1, 2),
@@ -1519,6 +1548,7 @@ fn camel() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
+        mass_kg: 500.0,
         primary_biomes: vec![ClimateZone::Desert],
         secondary_biomes: vec![],
         group_size: (2, 6),
@@ -1562,6 +1592,7 @@ fn mammoth() -> AnimalSpecies {
         behavior: AnimalBehavior::Territorial,
         diet: DietType::Herbivore,
         size: AnimalSize::Huge,
+        mass_kg: 6000.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (2, 8),
@@ -1604,6 +1635,7 @@ fn duck() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 1.2,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (4, 10),
@@ -1645,6 +1677,7 @@ fn goose() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
+        mass_kg: 4.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![],
         group_size: (5, 12),
@@ -1686,6 +1719,7 @@ fn pig() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Omnivore,
         size: AnimalSize::Medium,
+        mass_kg: 100.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (3, 8),
@@ -1725,6 +1759,7 @@ fn crow() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.5,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert, ClimateZone::Arctic],
         group_size: (3, 15),
@@ -1760,6 +1795,7 @@ fn eagle() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 5.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert, ClimateZone::Arctic],
         group_size: (1, 2),
@@ -1796,6 +1832,7 @@ fn hawk() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 1.0,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Desert],
         secondary_biomes: vec![],
         group_size: (1, 2),
@@ -1831,6 +1868,7 @@ fn owl() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 1.5,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
@@ -1866,6 +1904,7 @@ fn parrot() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 1.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![],
         group_size: (2, 8),
@@ -1905,6 +1944,7 @@ fn snake() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 1.0,
         primary_biomes: vec![ClimateZone::Desert, ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Temperate],
         group_size: (1, 1),
@@ -1941,6 +1981,7 @@ fn tiger() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 220.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Temperate],
         group_size: (1, 1),
@@ -1978,6 +2019,7 @@ fn crocodile() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 400.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (1, 3),
@@ -2015,6 +2057,7 @@ fn polar_bear() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 450.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (1, 1),
@@ -2056,6 +2099,7 @@ fn elk_animal() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
+        mass_kg: 350.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (3, 10),
@@ -2092,6 +2136,7 @@ fn reindeer_animal() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 120.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (5, 20),
@@ -2133,6 +2178,7 @@ fn monkey() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Omnivore,
         size: AnimalSize::Small,
+        mass_kg: 8.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![],
         group_size: (5, 15),
@@ -2172,6 +2218,7 @@ fn fish() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Carnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 2.0,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (10, 50),
@@ -2206,6 +2253,7 @@ fn otter() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 10.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (2, 6),
@@ -2241,6 +2289,7 @@ fn seal() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Carnivore,
         size: AnimalSize::Medium,
+        mass_kg: 150.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (3, 12),
@@ -3950,18 +3999,29 @@ impl AnimalManager {
     /// condition on and get to breeding; on ground that will not give it that
     /// much it takes what there is and stays hungry.
     fn what_it_reaches_for(species: &AnimalSpecies) -> f32 {
-        let by_bulk = match species.size {
-            AnimalSize::Tiny => 0.02,
-            AnimalSize::Small => 0.06,
-            AnimalSize::Medium => 0.18,
-            AnimalSize::Large => 0.35,
-            AnimalSize::Huge => 0.70,
-        };
+        // Mass to the three quarters, which is how much of a thing there is
+        // to feed.
+        //
+        // Not mass itself: a cow is three hundred times a rabbit and does not
+        // eat three hundred times the grass, because what an animal burns
+        // rises more slowly than its bulk does. Three quarters is the exponent
+        // the biology uses and it is the difference between a herd of cattle
+        // being ten times a herd of sheep and being a hundred times it.
+        //
+        // This was five size buckets, which is the same statement made in five
+        // steps: it said a cow and a mammoth eat the same as each other within
+        // a factor of two, when one of them is ten times the other. Anchored
+        // so that a sixty-kilo sheep eats exactly what it ate before, because
+        // the plant balance was measured against that number and there is no
+        // reason to move it.
+        const WHAT_A_SIXTY_KILO_SHEEP_TAKES: f32 = 0.18;
+        let by_mass = WHAT_A_SIXTY_KILO_SHEEP_TAKES
+            * (species.mass_kg.max(0.001) / 60.0).powf(0.75);
 
         // And by how many of them the record stands for, which is one for
         // everything but the colonies - see
         // `AnimalSpecies::how_many_it_stands_for`.
-        by_bulk * species.how_many_it_stands_for()
+        by_mass * species.how_many_it_stands_for()
     }
 
     /// What one unit of forage is worth to this animal, on its own hunger

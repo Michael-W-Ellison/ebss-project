@@ -8988,6 +8988,45 @@ whether an animal is finding food rather than how full it happens to be.
 
 ---
 
+### 142. What an animal eats was five buckets, and a cow and a mammoth were in the same one
+
+`what_it_reaches_for` read what an animal takes off the ground out of
+`AnimalSize`, which has five steps in it. So a cow at six hundred kilograms
+and a mammoth at six thousand differed by a factor of two, a rabbit and a
+goose were identical, and the whole span from a stoat to a mammoth - four
+orders of magnitude of animal - came out as thirty-five to one.
+
+Species carry a `mass_kg` now and what they eat follows it, at mass to the
+three quarters. Not mass itself: what an animal burns rises more slowly than
+its bulk, which is why a cow eats ten times a sheep and not ten times a
+sheep per kilogram. Anchored on a sixty-kilo sheep at the number the plant
+balance was already measured against, so nothing that was tuned moves.
+
+The same five buckets were also standing in for how hard an animal is to
+bring down, and that is off the same field now, at the root of mass - reach
+and footing and how hard a thing can hit back go up a great deal more slowly
+than weight does, and a cow is three hundred rabbits by mass and nowhere near
+three hundred times the job.
+
+**It settled two of the three guards that #141 left red.** A hundred square
+kilometres was already stocked the same and costs slightly less to run
+(11.14 ms a tick against 12.25), so this is not a trade. What moved is which
+animals a country ends up made of: four square kilometres at year eight used
+to come out as a hundred and ninety-six geese and almost nothing else, and now
+comes out with thirty-one geese, a hundred and thirty-three squirrels,
+thirty-three rabbits, four cattle, eight goats and a pair of owls. Geese ran
+away with the map because a goose record ate what a rabbit record ate and
+weighed eight times as much; against mass they no longer do.
+
+`ecology_tests::a_herd_settles_at_what_the_ground_will_feed` and
+`ecology_tests::the_hedgerows_are_no_thinner_a_few_years_on` are green again.
+The third, `drive_emotion_feedback_tests::test_high_hunger_causes_fear`, is
+nothing to do with the ecology and is its own piece of work.
+
+What this does not touch is the thing #141 names: nothing but a hunter
+disperses, so a country still eats a patch bare and overshoots on it while
+ground three hundred metres off is untouched.
+
 ---
 
 ## Recently fixed
