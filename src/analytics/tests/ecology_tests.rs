@@ -750,3 +750,171 @@ fn the_top_of_the_chain_needs_country_to_put_it_in() {
         "a hundred square kilometres has nothing at the top of its chain"
     );
 }
+
+// --- the lower tiers, held as a population rather than as records ----------
+
+/// What a hunting ground carries follows from the ground, the climate and the
+/// season, and nothing else.
+///
+/// The specification: "the climate and area could dictate the carrying
+/// capacity of the animals". Area is a hunting ground, which is one size
+/// everywhere; the rest is what grows there and how hard the year is.
+#[test]
+fn what_the_small_life_settles_at_comes_from_the_land() {
+    use crate::environment::seasons::Season;
+    use crate::environment::{ClimateZone, SmallLife};
+
+    let across = 80;
+    let carries = |cover: f32, climate: ClimateZone, season: Season| {
+        SmallLife::what_this_ground_will_carry(cover, climate, season, across)
+    };
+
+    let wood_in_june = carries(0.60, ClimateZone::Temperate, Season::Summer);
+    let plain_in_june = carries(0.15, ClimateZone::Temperate, Season::Summer);
+    let wood_in_february = carries(0.60, ClimateZone::Temperate, Season::Winter);
+    let tundra_in_june = carries(0.60, ClimateZone::Arctic, Season::Summer);
+    let salt_flat = carries(0.0, ClimateZone::Desert, Season::Summer);
+
+    assert!(
+        wood_in_june > plain_in_june,
+        "a wood carries more than open plain: {wood_in_june:.0} against {plain_in_june:.0}"
+    );
+    assert!(
+        wood_in_february < wood_in_june,
+        "and less of it in February: {wood_in_february:.0} against {wood_in_june:.0}"
+    );
+    assert!(
+        wood_in_february > 0.0,
+        "but not none - a country that empties every winter is a worse lie \
+         than one with no seasons in it"
+    );
+    assert!(
+        tundra_in_june < wood_in_june * 0.5,
+        "the same cover on the tundra is a different living: \
+         {tundra_in_june:.0} against {wood_in_june:.0}"
+    );
+    assert_eq!(salt_flat, 0.0, "nothing lives on a salt flat");
+
+    // Sixty-four hectares, which is what eighty cells of ten metres comes to.
+    assert_eq!(SmallLife::hectares_in_a_hunting_ground(across), 64.0);
+}
+
+/// A ground that is trapped out comes back, and one that is left alone does
+/// not run away.
+///
+/// Both halves matter and they are the two failures a record-based rabbit
+/// has. Records go to nought and stay there, because nothing breeds from
+/// nothing; or they go to twenty-six thousand, because nothing stops them.
+#[test]
+fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
+    use crate::environment::SmallLife;
+
+    let ground = (0, 0);
+    let would_carry = 500.0;
+
+    // Left alone at full stock, it stays there
+    let mut untouched = SmallLife::default();
+    untouched.settle(ground, would_carry);
+    for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
+        untouched.tick_a_ground(ground, would_carry, 1.0);
+    }
+    let held = untouched.here(ground).grazers;
+    assert!(
+        (held - would_carry).abs() < 1.0,
+        "a full ground left alone should hold at what it carries: {held:.0}"
+    );
+
+    // Trapped down to nothing at all, it comes back inside a year or two
+    let mut worked = SmallLife::default();
+    worked.settle(ground, would_carry);
+    let taken = worked.take(ground, would_carry * 2.0);
+    assert!(
+        (taken - would_carry).abs() < 1.0,
+        "you cannot take more than is there: asked for double, got {taken:.0}"
+    );
+    assert_eq!(worked.here(ground).grazers, 0.0, "and it is empty now");
+
+    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
+        worked.tick_a_ground(ground, would_carry, 1.0);
+    }
+    let back = worked.here(ground).grazers;
+    assert!(
+        back > would_carry * 0.5,
+        "an emptied ground has to be able to come back - a logistic curve \
+         through nought never leaves it, which is the rabbit-as-record \
+         failure in another form: {back:.0} of {would_carry:.0}"
+    );
+}
+
+/// The hunters follow the game, up and down, and never oscillate.
+///
+/// "In general, the population is balanced between predator and prey, but
+/// agents could tip the scale." A proper predator-prey pair swings, and a
+/// swing empties a ground of foxes every few years by arithmetic rather than
+/// by anything that happened - which is the thing taking the small life out
+/// of records was meant to stop. So the hunters track a share of the grazers
+/// with a lag instead.
+#[test]
+fn the_small_hunters_follow_the_game_they_live_on() {
+    use crate::environment::SmallLife;
+
+    let ground = (0, 0);
+    let would_carry = 500.0;
+
+    let mut country = SmallLife::default();
+    country.settle(ground, would_carry);
+    for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
+        country.tick_a_ground(ground, would_carry, 1.0);
+    }
+    let with_game = country.here(ground).hunters;
+    assert!(with_game > 0.0, "a full ground keeps hunters: {with_game:.1}");
+
+    // Now trap it out and hold it there, the way a settlement working one
+    // wood would, and the hunters go with it.
+    for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
+        country.tick_a_ground(ground, would_carry, 1.0);
+        let there = country.here(ground).grazers;
+        country.take(ground, there * 0.95);
+    }
+    let after = country.here(ground).hunters;
+    assert!(
+        after < with_game * 0.5,
+        "trap the game out and the foxes go: {after:.2} against {with_game:.2}"
+    );
+}
+
+/// A world ticks its lower tiers without anybody asking it to, and they
+/// settle rather than running away or emptying.
+#[test]
+fn a_country_stocks_its_own_lower_tiers() {
+    use crate::world::WorldConfig;
+
+    crate::core::dice::seed(31);
+    let mut world = World::new(WorldConfig::default().with_size(240, 240));
+
+    for _ in 0..(crate::environment::seasons::TICKS_PER_YEAR / 2) {
+        world.tick();
+    }
+
+    let small = &world.animals.small_life;
+    let grounds = small.all_grounds().count();
+    assert!(grounds > 0, "the country never looked at its own ground");
+    assert!(
+        small.how_many_grazers() > 0.0,
+        "and it has no rabbits in it at all"
+    );
+    assert!(
+        small.how_many_hunters() > 0.0,
+        "nor anything living off them"
+    );
+
+    // Every ground is somewhere between empty and full, which is what having
+    // a carrying capacity means.
+    for (where_it_is, here) in small.all_grounds() {
+        let thick = here.how_thick_it_is();
+        assert!(
+            (0.0..=1.0).contains(&thick),
+            "ground {where_it_is:?} is at {thick} of what it carries"
+        );
+    }
+}

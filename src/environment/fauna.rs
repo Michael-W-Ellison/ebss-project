@@ -2718,6 +2718,11 @@ pub struct AnimalManager {
     /// What carried the dead off - see [`WhatCarriedThemOff`].
     #[serde(default, skip)]
     pub carried_off: WhatCarriedThemOff,
+
+    /// The lower tiers of the food web, as a population rather than as
+    /// records - see [`crate::environment::SmallLife`].
+    #[serde(default)]
+    pub small_life: crate::environment::SmallLife,
 }
 
 impl AnimalManager {
@@ -2728,6 +2733,7 @@ impl AnimalManager {
             mouths_fed: 0,
             mouths_that_tried: 0,
             carried_off: WhatCarriedThemOff::default(),
+            small_life: crate::environment::SmallLife::default(),
             groups: BTreeMap::new(),
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
@@ -3007,6 +3013,9 @@ impl AnimalManager {
         self.process_breeding();
 
         // Fourth pass: Predator hunting
+        // Bring the lower tiers on before anything draws from them.
+        self.tick_the_small_life(grid, weather.season);
+
         self.process_predation(grid);
 
         // Animals from beyond the edge of the map, for species that have been
@@ -3342,6 +3351,55 @@ impl AnimalManager {
         }
     }
 
+    /// Bring every hunting ground's small life on by a tick.
+    ///
+    /// A country of a hundred square kilometres is about a hundred and
+    /// seventy hunting grounds, so this is a hundred and seventy float
+    /// updates and one terrain lookup each against a tick that already walks
+    /// every animal and a share of a quarter of a million plants. It is the
+    /// cheapest thing in the pass, and that is the argument for holding the
+    /// lower tiers this way rather than as several thousand more records.
+    ///
+    /// The ground is read at the middle of each block. A hunting ground is
+    /// eight hundred metres square and terrain does not change every cell, so
+    /// one sample stands for the block - and sampling every cell of every
+    /// block would cost more than the whole rest of the fauna.
+    fn tick_the_small_life(
+        &mut self,
+        grid: &crate::world::Grid,
+        season: crate::environment::Season,
+    ) {
+        let across = Self::HOW_BIG_A_HUNTING_GROUND_IS;
+        let grounds_x = (grid.width as i32).div_euclid(across) + 1;
+        let grounds_y = (grid.height as i32).div_euclid(across) + 1;
+
+        for gy in 0..grounds_y {
+            for gx in 0..grounds_x {
+                let middle = (
+                    (gx * across + across / 2).min(grid.width as i32 - 1),
+                    (gy * across + across / 2).min(grid.height as i32 - 1),
+                );
+
+                let Some(tile) =
+                    grid.get_tile(&crate::world::Position::new(middle.0, middle.1))
+                else {
+                    continue;
+                };
+
+                let ground = what_this_ground_offers(tile.terrain.terrain_type);
+                let climate = terrain_to_climate_zone(tile.terrain.terrain_type);
+                let would_carry = crate::environment::SmallLife::what_this_ground_will_carry(
+                    ground.cover,
+                    climate,
+                    season,
+                    across,
+                );
+
+                self.small_life.tick_a_ground((gx, gy), would_carry, 1.0);
+            }
+        }
+    }
+
     /// Process predator hunting - carnivores/omnivores hunt prey
     fn process_predation(&mut self, grid: &crate::world::Grid) {
         use rand::Rng;
@@ -3501,8 +3559,26 @@ impl AnimalManager {
                     .unwrap_or_else(|| what_this_ground_offers(TerrainType::Plains));
 
                 let sharing_it = hunters_in.get(&this_ground).copied().unwrap_or(1);
-                let got = Self::what_the_small_life_gives(hunter, ground, sharing_it);
+
+                // What the ground would give if it were carrying all it can,
+                // and then what is actually on it. The second half is the
+                // whole point of holding the small life as a stock: a wood
+                // that has been trapped out feeds a stoat worse than a wood
+                // that has not, and until there was a number behind it there
+                // was no such thing as a trapped-out wood.
+                let at_full_stock = Self::what_the_small_life_gives(hunter, ground, sharing_it);
+                let thick = self.small_life.here(this_ground).how_thick_it_is();
+                let got = at_full_stock * thick;
+
                 if got > 0.0 {
+                    // And it comes off the ground. A hundred and seventy
+                    // grounds each carrying five hundred odd head against a
+                    // handful of small predators means this is a light touch
+                    // by itself - which is right, and is why an agent working
+                    // one ground with a trapline is the thing that can
+                    // actually thin it.
+                    self.small_life
+                        .take(this_ground, got * Self::HEAD_A_UNIT_OF_FORAGE_COMES_TO);
                     foraged.push((pred_idx, got));
                 }
 
@@ -4337,6 +4413,16 @@ impl AnimalManager {
     /// it is eating, and what it saves is the part of its burn that goes on
     /// keeping warm.
     pub const WHAT_A_WINTER_UNDER_COVER_COSTS: f32 = 0.85;
+
+    /// How many head of small life one unit of foraging comes off the ground.
+    ///
+    /// A stoat's `hunger_rate` is 0.10 and the best ground yields 0.35 a tick
+    /// to something its size, so at this rate a stoat with a wood to itself
+    /// takes about a head and a half a day. That is a stoat, and it is what
+    /// ties `what_the_small_life_gives` - which is an energy - to
+    /// `SmallLife`, which is a head count, without either of them having to
+    /// know the other's units.
+    const HEAD_A_UNIT_OF_FORAGE_COMES_TO: f32 = 0.4;
 
     /// What a piece of country is worth to one more hunter: the game on it,
     /// divided between the hunters that would then be on it.

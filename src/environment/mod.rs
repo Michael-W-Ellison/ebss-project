@@ -30,6 +30,7 @@ pub mod smelting;
 pub mod clothing_recipes;
 pub mod flora;
 pub mod fauna;
+pub mod small_life;
 pub mod biome;
 pub mod weather;
 pub mod exposure;
@@ -51,6 +52,7 @@ pub use fauna::{
     Animal, AnimalState, AnimalManager, AnimalDrop, AnimalProduct,
     AnimalSpawnConfig, GrazingWeather, TrophicRole, terrain_to_climate_zone,
 };
+pub use small_life::{SmallLife, TheSmallLifeHere};
 pub use biome::{BiomeType, Biome};
 pub use weather::{Weather, WeatherType, WeatherGenerator, PrecipitationType};
 pub use exposure::{ExposureType, ExposureStatus, ExposureProtection};

@@ -9308,6 +9308,80 @@ mutably. Three seasons in four it is a season comparison and an empty vector.
 
 ---
 
+### 149. Twenty-six thousand rabbits, and three wolves to eat them
+
+Two years on a hundred square kilometres, nobody in the world:
+
+```
+  28,718 head        of which     26,276 rabbits
+                                   1,515 geese
+                                     315 goats
+                                       3 wolves
+                                       3 arctic foxes
+  under 10 kg: 27,804 of 28,718  (97%)
+```
+
+The tick over those two years went **17.57 ms in the first quarter to 108.90
+in the eighth**, and 47.12 ms averaged over the run. Ninety-one per cent of
+what the model was spending its time on was rabbits.
+
+And on a small map the same species does the opposite. A hundred and forty-
+four hectares over five years runs 165, 858, 67, 27, 19, 7 head; on the big
+map rabbits went 3.5, 60.5, 21, 2, 4 between years before the herds took hold.
+That is the signature of the representation, not of any parameter in it: a
+fast-breeding animal held as discrete records is a random walk with an
+absorbing barrier at nought, so it either finds the barrier or it finds the
+array.
+
+**The other half of the same mistake was already here.** The small life a
+stoat lives on - mice, voles, the things assumed rather than counted - was
+`what_the_small_life_gives`: `cover x size-fit / hunters-sharing-it`, a
+constant. It could not be drawn down, could not boom, could not crash, and
+nothing an agent did could touch it. So the model held records where a record
+is least reliable and an abstraction where the abstraction could not respond
+to anything.
+
+`SmallLife` is the abstraction with a stock behind it. Each hunting ground -
+eighty cells square, which at ten metres a cell is sixty-four hectares -
+carries a head of **grazers** (rabbits, voles, squirrels) and a head of
+**hunters** (foxes, stoats, weasels), and what it carries comes from the
+cover, the climate and the season. On a hundred square kilometres that is a
+hundred and sixty-nine grounds: a hundred and sixty-nine float updates and one
+terrain sample each, against a tick that already walks every animal and a
+share of a quarter of a million plants.
+
+Measured over the same two years, same seed: **45.42 ms a tick against 47.12**.
+Free, within noise, and the country now runs a seasonal cycle instead of a
+straight line - 11,700 head of grazers in autumn, 5,400 in February, back to
+11,700 by the following autumn, with the hunters trailing a season behind at
+82, 66, 76. That is what "in general the population is balanced between
+predator and prey" looks like when it is a number rather than twenty-six
+thousand records.
+
+Two things it is deliberately not:
+
+- **The hunters do not oscillate.** They track a share of the grazers with a
+  lag rather than making a proper predator-prey pair with them. A swinging
+  model empties a ground of foxes every few years by arithmetic rather than by
+  anything that happened, which is the thing taking the small life out of
+  records was meant to stop.
+- **A ground trapped out is not a dead ground.** A logistic curve through
+  nought never leaves it - the rabbit-as-record failure in another form - so
+  there is a floor of a head or two, which is what "there are always a few
+  about" comes to when the ground next door is not modelled.
+
+`what_the_small_life_gives` now returns what the ground would give at full
+stock, multiplied by how thick it actually is, and takes the head off. Until
+there was a number behind it there was no such thing as a trapped-out wood.
+
+Still to come, and the reason this went in first: the records for the
+under-ten-kilogramme species are still being spawned alongside the stock that
+now stands for them. Taking them out is where the 97% goes, and it cannot be
+done before agents have a way of getting at the abstracted layer - which is
+trapping, and does not exist yet.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in
