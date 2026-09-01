@@ -8742,7 +8742,16 @@ primary consumer. That is what the data supports and it is not far wrong for
 what the model uses fish for, but the specification asks for predatory fish as
 a real guild and there is nowhere for one to go.
 
-### 138. Now that the chain runs, it eats itself out
+### 138. Now that the chain runs, it eats itself out - and it was not that
+
+**Superseded by #139, and left here because the mistake is the instructive
+part.** Everything below reasons from head counts to a cause, and names
+predation. A tally of what actually kills was built afterwards and says four
+animals were taken by predators in ten years, against five hundred and five
+starved and three hundred and fifteen dead of old age. The die-off is real;
+the reading of it was wrong, and the wrongness came from inferring a mechanism
+from a population curve instead of counting.
+
 
 Putting small herbivores on the map (#136) gave every predator below a wolf
 something it can actually eat, and the food chain started running for the
@@ -8786,6 +8795,196 @@ consistently finds nothing to move rather than to starve where it stands.
 quarter to state what the model actually does, and it now guards the head as
 well as the roll call so that a country reduced to one rabbit of every kind
 does not read as a country that kept its species. Filed.
+
+### 139. It was never the wolves: what actually empties a country
+
+#138 said the food chain was eating itself out, and it was wrong. That entry
+inferred the cause from head counts, which is how it came to name predation;
+so the first thing built here was a tally of what actually kills - `AnimalManager::what_carried_them_off`
+- and the answer is not close. Ten years, four square kilometres, nobody on
+the map:
+
+| | deaths in ten years |
+|---|---:|
+| starvation | 505 |
+| old age | 315 |
+| **taken by something that eats** | **4** |
+
+Four animals in a decade. Predation is not a brake on anything in this model
+and never has been. Behind that reading were five separate faults.
+
+**Every animal in a new world was born on the same morning.** `Animal::new`
+sets `age: 0`, so a country's whole fauna was one cohort: nothing could breed
+until the first maturity age had passed, and then - between years two and
+seven, which is what these lifespans come to - the entire founding stock died
+of old age within a season or two of each other. 161 head at the start, 395 by
+year two, 149 by year three, 34 by year five, with never more than eighteen of
+them starving at once. The flora had exactly this and it was fixed there; the
+fauna had never been looked at. `spawn_naturalistic` spreads the founding
+cohort across each animal's own span now.
+
+**What was born did not depend on how many were breeding.** `process_breeding`
+gated the whole world behind one roll in a hundred and then `break`ed after a
+single pregnancy *per species*, so three rabbits and three thousand rabbits
+recruited at the same absolute rate - about forty litters a species a year
+however many there were of it. Predation is per-predator and therefore
+proportional to the herd; recruitment was a constant. That is not a balance
+that can be tuned: a constant birth rate against a proportional death rate has
+one outcome whatever the constants are. Every fit pair with a mate by it now
+takes its own chance, and what paces a species is its own cooldown and
+gestation, which is where that belongs.
+
+**A mouse ate thirteen times what a mammoth ate.** `what_it_reaches_for` was
+`hunger_rate * 3`. `hunger_rate` is a rate on the animal's *own* scale - how
+fast its own belly empties against its own `max_hunger` - and it runs the
+other way from size, 0.20 for a mouse and 0.015 for a mammoth. Read as forage
+off the ground it says the mouse eats more. Two different quantities were
+being read off one number: how much grass an animal removes, which is bulk,
+and how much good that does it, which is metabolism. They are split now -
+`what_it_reaches_for` by size, `what_a_mouthful_is_worth_to` by the animal -
+and the net energy balance is unchanged for a middling grazer, which is the
+part that had been measured and tuned.
+
+**A hunt was a speed ratio and nothing else.** `(pred_speed / prey_speed) *
+0.4`, and nothing about the ground, the herd, or what the quarry could do
+about it. So a lone wolf took a cow out of the middle of a herd at the same
+rate it took a hare in an open field, a rabbit's burrow was worth nothing, and
+no hunter ever came off worse for trying. Four things bear on it now: a way
+out this ground offers that the hunter cannot follow (down a hole, up a trunk,
+into the air, into the water - and whether the hunter digs, climbs, flies or
+swims in its turn); cover, which helps whichever of the two is smaller, so a
+wood shelters a hare from a fox and shelters a wolf coming up on a deer; what
+it takes to bring the quarry down against what the hunters bring, cubed, so
+that a lone wolf against five cattle standing together brings a twelfth of
+what it needs and a twelfth cubed is not a hunt; and what the quarry does back,
+for anything with the bulk to turn round.
+
+**And the food web was three hand-written names a species.** A country stocked
+with thirty-four geese and nine rabbits fed eighteen predators on the nine,
+because no list said "goose". A hunter takes what it can bring down now -
+anything up to the size of the largest thing it is named as taking - and the
+names say how big that is rather than exhausting the menu. It is also the only
+way "many bird species hunt for fish as well as rodents" can be true without
+writing out every pairing.
+
+### 140. The mice were right and unaffordable, so the small life is assumed
+
+The bottom of the chain was missing (#137) and it was put in: mice, voles,
+songbirds and frogs as records, with stoats, kestrels, kingfishers, adders and
+herons living on them. The measurement is worth keeping because it settles the
+question for good.
+
+Modelled one for one, rodents are **food-limited, not predator-limited**. The
+grass on four square kilometres carries sixteen thousand of them - about four
+thousand to the square kilometre, which is less than a real vole year - and
+they sit there in permanent boom and starve, sixty-five thousand starvation
+deaths in the first year. A hundred square kilometres would want four hundred
+thousand records against a tick budget that is the constraint this whole line
+of work is written under.
+
+So the small life is assumed, the same standing decision the specification
+already makes about decomposers and pollinators. A piece of ground has a
+small-game yield - `what_the_small_life_gives` - and three things fall out of
+it worth having:
+
+- A stoat, a kestrel or an adder can live somewhere without a herd of anything
+  being on the map, which is what a small predator does.
+- It is worth having only to something small. A wolf cannot live on voles and
+  now does not.
+- It is **shared**. What a piece of ground grows is what it grows however many
+  are working it, so two hunters on one hunting ground each get half of it and
+  the second starves off it. That is what a territory is in a model that
+  cannot draw a line on a map, and a hunting ground is sixty-four hectares
+  rather than the eighty-metre block a hunt is resolved in - sharing the small
+  game out over hunt blocks said a hunting ground held two stoats where it
+  should hold three over a hundred times the area, and four square kilometres
+  came out with seven hundred and twenty-one of them.
+
+A carnivore with an empty prey list is the honest way to say "lives on what
+this world does not count", and it is what now puts a species among the small
+predators. That also fixes `fish`, which #137 filed as misclassified.
+
+### 141. The country still does not settle, and it is not for want of looking
+
+**Filed open.** With everything in #139 and #140 done, four square kilometres
+left alone still does not come to rest. What it does instead, over four years
+from 196 head: 426, 498, 333, 225 - and by year four the country is a hundred
+and ninety-six geese, fifteen goats, and one or two predators of any kind.
+
+Two things are visible in that and neither is fixed:
+
+- **Predation is still not a brake.** Eleven animals taken in four years. The
+  hunt model in #139 is a better *description* of a hunt, and it did not make
+  hunting frequent enough to hold anything down. A predator hunts on one tick
+  in twenty and a rush that comes off takes one bite out of the quarry; the
+  arithmetic never reaches the scale of what a herd breeds.
+- **Nothing disperses.** Herbivores move only when there is nothing within
+  reach underfoot, so they eat a patch out and overshoot on it while ground a
+  few hundred metres away is untouched. Predator dispersal was added here and
+  is crude: hunters that cannot make a living on their ground step towards a
+  less crowded one, a few of them a tick. The first cut of it moved every
+  hunter on a ground the same way, so they travelled as a clump, piled into a
+  corner, and made predation quadratic - a four-year run went from three
+  minutes to over ten. Scattering the step fixed the cost and not much else.
+
+- **Breeding is gated on a stock, not a flow, so a slow animal never stops.**
+  `can_breed` asks for `hunger < max_hunger * 0.4`, which is how full the
+  animal is rather than whether it is finding anything. The snake has
+  `max_hunger: 200` against a `hunger_rate` of 0.02, so it is four thousand
+  ticks of eating *nothing* away from being unable to breed - and it lays up
+  to twenty eggs with no gestation. Under the old one-pair-per-species rule
+  that never showed; with recruitment proportional to the population (#139) a
+  quarter of a square kilometre came out with nine hundred and seventy-one
+  snakes on it. What ought to gate breeding is whether an animal is actually
+  finding food, which is a rate, and nothing in the model measures one.
+
+Two things were fixed in passing because they were making the measurements
+impossible rather than merely wrong:
+
+- **Nothing has ever killed a young animal.** Everything born or hatched was a
+  full record from its first tick, subject only to starvation, old age and
+  being eaten, so a clutch of twenty eggs was twenty snakes. A thing lays
+  twenty eggs *because* almost none of them make it, and
+  `how_many_of_a_litter_come_through` is a coarse stand-in for the nest
+  predation, cold snaps, disease and failure to thrive the model does not
+  have. It is applied at birth rather than played out, because playing it out
+  means holding records for animals whose whole purpose is to die.
+- **A hunt looked over every animal standing in the nine blocks around it**,
+  which on ground that had filled up is every predator against every animal
+  again - the thing blocking the map was supposed to prevent. A quarter of a
+  square kilometre that ran away to five hundred and sixty head took a
+  five-year run from three seconds to over two hundred, and hung the test
+  suite. A hunter looks over eight animals a block now, which is also the
+  truer statement: it goes for what is in front of it, not for the best of a
+  full census.
+
+The thinning is applied only to the part of a clutch above four, which leaves
+every mammal in the registry as it was and bites on the egg-layers. Flat, it
+took the snakes from nine hundred and seventy-one to four hundred and eleven
+and took everything else on a quarter of a square kilometre down with them, to
+two head in five years; targeted, three of the five guards this work broke
+come back - `a_world_with_nobody_in_it_does_not_empty_of_animals`,
+`most_of_what_lived_here_still_lives_here` and
+`survival_loop_tests::population_feeds_itself_over_a_long_run`. The snake
+still runs away on some seeds and that is the fasting-tolerance point above,
+not the litter.
+
+**Three guards are still red and this is filed as unfinished work**, against
+twenty failures on the commit before it: `the_hedgerows_are_no_thinner_a_few_years_on`
+and `a_herd_settles_at_what_the_ground_will_feed`, both real consequences -
+there is more grazing on the map than there was, and a herd no longer settles
+where the grass alone would put it - and
+`clothing_tests::a_cold_agent_ends_up_dressed`, which is the family #132
+names, an unseeded settlement test that has flipped both ways twice in this
+work alone. The suite also takes 504 seconds against 223, and that is the
+snake: the ecology tests spend their time ticking a world with four hundred
+of them on it.
+
+The honest summary is that the *mechanisms* are now right and the *rates* are
+not, and that six rounds of tuning did not converge. What it wants next, in
+order: a hunt that happens often enough to be a brake at all; dispersal for
+everything rather than for hunters only; and a breeding gate that reads
+whether an animal is finding food rather than how full it happens to be.
 
 ---
 
