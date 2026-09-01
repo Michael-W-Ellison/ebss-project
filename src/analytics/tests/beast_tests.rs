@@ -309,10 +309,13 @@ fn a_deer_with_a_wolf_on_it_runs() {
 /// to face a thing is what makes it anger rather than fear. Every one of its
 /// own kind standing near it counts towards what it brings.
 ///
-/// Sheep rather than cattle, because a wolf never reads a cow as food in the
-/// first place - its prey tops out at `AnimalSize::Medium` and a cow is
-/// Large, which is the model's way of saying a lone wolf does not take
-/// cattle. Sheep are on the menu, so the herd is what decides it.
+/// Goats, for two reasons. A wolf never reads a cow as food in the first
+/// place - its prey tops out at `AnimalSize::Medium` and a cow is Large,
+/// which is this model's way of saying a lone wolf does not take cattle. And
+/// a sheep is `AnimalBehavior::Passive`, which is nought nerve: a passive
+/// thing never turns round however many of it there are, which is the point
+/// of `a_rabbit_never_stands_its_ground`. A goat is Defensive and on the
+/// menu, so what decides it here is the flock.
 #[test]
 fn a_flock_standing_together_turns_on_what_one_of_them_runs_from() {
     use crate::environment::{AnimalState, GrazingWeather, Season};
@@ -323,22 +326,22 @@ fn a_flock_standing_together_turns_on_what_one_of_them_runs_from() {
 
         for i in 0..how_many {
             world
-                .spawn_animal("sheep".to_string(), (30 + i as i32 % 2, 30))
-                .expect("a sheep");
+                .spawn_animal("goat".to_string(), (30 + i as i32 % 2, 30))
+                .expect("a goat");
         }
         world.spawn_animal("wolf".to_string(), (33, 30)).expect("a wolf");
 
         let weather = GrazingWeather { precipitation: 1.0, now: 0, season: Season::Summer };
         world.animals.tick_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
 
-        let sheep = world
+        let goat = world
             .animals
             .get_all()
             .iter()
-            .find(|a| a.species_id == "sheep")
-            .expect("a sheep should still be there")
+            .find(|a| a.species_id == "goat")
+            .expect("a goat should still be there")
             .clone();
-        (sheep.could_face_it, sheep.state)
+        (goat.could_face_it, goat.state)
     };
 
     let (alone_could, alone_does) = how_they_take_it(1);
@@ -346,7 +349,7 @@ fn a_flock_standing_together_turns_on_what_one_of_them_runs_from() {
 
     assert!(
         !alone_could,
-        "one sheep should not reckon it can see off a wolf"
+        "one goat should not reckon it can see off a wolf"
     );
     assert!(
         matches!(alone_does, AnimalState::Fleeing { .. }),
@@ -361,4 +364,48 @@ fn a_flock_standing_together_turns_on_what_one_of_them_runs_from() {
         matches!(together_does, AnimalState::Attacking { .. }),
         "so the flock should turn on it, not {together_does:?}"
     );
+}
+
+/// A rabbit never turns round, whatever the arithmetic says.
+///
+/// Temperament is the per-species baseline, and at the bottom of it
+/// `AnimalBehavior::Passive` is nought: a passive thing brings nothing to a
+/// stand-off, so `could_face_it` cannot come out true for one however small
+/// the thing in front of it is. A rabbit that fights a wolf is not a rabbit.
+#[test]
+fn a_rabbit_never_stands_its_ground() {
+    use crate::environment::{FaunaRegistry, GrazingWeather, Season};
+
+    let registry = FaunaRegistry::new();
+    assert_eq!(
+        registry.get("rabbit").expect("a rabbit").behavior,
+        AnimalBehavior::Passive,
+        "this test is about what Passive means"
+    );
+
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+
+    // A whole warren of them, so the herd bonus is as generous as it gets.
+    for i in 0..8 {
+        world
+            .spawn_animal("rabbit".to_string(), (30 + i % 2, 30))
+            .expect("a rabbit");
+    }
+    world.spawn_animal("stoat".to_string(), (32, 30)).expect("a stoat");
+
+    let weather = GrazingWeather { precipitation: 1.0, now: 0, season: Season::Summer };
+    world.animals.tick_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
+
+    for rabbit in world.animals.get_all().iter().filter(|a| a.species_id == "rabbit") {
+        assert!(
+            !rabbit.could_face_it,
+            "a rabbit reckoned it could take a stoat"
+        );
+        assert!(
+            !matches!(rabbit.state, AnimalState::Attacking { .. }),
+            "and went for it: {:?}",
+            rabbit.state
+        );
+    }
 }

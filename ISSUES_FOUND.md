@@ -9147,6 +9147,43 @@ Two smaller things went in beside it:
 
 ---
 
+### 145. Six hundred kilogrammes of Passive
+
+The specification asks for a per-species behavioural baseline, and one already
+existed: `AnimalBehavior::how_readily_it_stands_its_ground` - Passive 0.0,
+Neutral 0.6, Defensive 0.9, Aggressive 1.2, Territorial 1.3 - which is what
+`beasts.rs` reads to decide how an animal takes a *person*. It was not read
+when animals appraised each other, so between beasts every species had the
+same nerve, and a rabbit that happened to out-weigh what was in front of it
+would turn round and fight it.
+
+It is one number in one place now: `what_each_animal_is_facing` multiplies
+what an animal brings to a stand-off by its temperament, the same way
+`beasts.rs` does. It matters most at the bottom of the scale, because Passive
+is nought: a rabbit never stands its ground however the arithmetic comes out,
+which is the point - a rabbit that fights a wolf is not a rabbit.
+
+Making it load-bearing exposed the data underneath it. **Cattle were
+`Passive`.** So were sheep, deer, reindeer and pigs, which is right; a cow is
+not. With temperament multiplying into the stand-off, a Passive cow is a cow
+that stands and takes whatever arrives, which is the exact opposite of what
+"cattle and other large herbivores should be capable of defending themselves"
+asks for. Cow is `Defensive` now, which puts it with the rest of the large
+herbivores - camel, elk, goat and goose are Defensive, bear and mammoth
+Territorial - and cattle were the only outlier in the whole list of
+thirty-eight.
+
+The agent side of the same requirement - "animals could receive the same
+baseline whereas agents could receive their baseline with minor deviations" -
+was already there and needed nothing: `DriveState::with_random_weights` gives
+every agent a per-drive multiplier drawn around 1.0, and the Brave and Anxious
+traits move `own_strength` in the threat appraisal, so two agents meeting the
+same wolf do not necessarily reach the same answer. Animals take the species
+baseline flat, with no per-individual draw, which is the asymmetry that was
+asked for.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

@@ -1380,7 +1380,12 @@ fn cow() -> AnimalSpecies {
         attack_damage: 8.0,
         defense: 3.0,
         speed: 0.9,
-        behavior: AnimalBehavior::Passive,
+        // Defensive, not Passive. Six hundred kilogrammes of cattle is
+        // not something a wolf walks up to, and a herd of them is not
+        // something a lone wolf touches at all. Temperament is now read
+        // when an animal decides whether to run or turn round, so
+        // Passive here would have meant a cow that stands and takes it.
+        behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
         mass_kg: 600.0,
@@ -4538,8 +4543,19 @@ impl AnimalManager {
             let against = crate::agents::ThreatAssessment::a_pack_of(coming);
 
             // What this one brings: its own punch, in the condition it is
-            // actually in, and every one of its kind standing with it.
+            // actually in, every one of its kind standing with it, and how
+            // readily its sort stands its ground at all.
+            //
+            // That last is the per-species baseline the specification asks
+            // for, and it already existed - `how_readily_it_stands_its_ground`
+            // is what `beasts.rs` reads to decide how an animal takes a
+            // person, and reading it here too means temperament is one number
+            // in one place rather than two that drift. It matters most at the
+            // bottom: a Passive thing is nought, so a rabbit never turns round
+            // however the arithmetic comes out, and a rabbit that fights a
+            // wolf is not a rabbit.
             let mine_brings = mine.what_one_of_these_brings()
+                * mine.behavior.how_readily_it_stands_its_ground()
                 * prey.health_percentage().max(0.1)
                 * (1.0 + its_own as f32 * Self::WHAT_ANOTHER_OF_ITS_KIND_ADDS);
 
