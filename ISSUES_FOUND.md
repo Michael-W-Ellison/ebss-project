@@ -8906,7 +8906,12 @@ predators. That also fixes `fish`, which #137 filed as misclassified.
 
 ### 141. The country still does not settle, and it is not for want of looking
 
-**Filed open.** With everything in #139 and #140 done, four square kilometres
+**Mostly fixed - see #153, which found what it actually was.** The top and
+middle tiers now hold; the smallest specialists still do not. What follows is
+the original filing, kept because the reasoning in it is where the answer came
+from.
+
+**Was filed open.** With everything in #139 and #140 done, four square kilometres
 left alone still does not come to rest. What it does instead, over four years
 from 196 head: 426, 498, 333, 225 - and by year four the country is a hundred
 and ninety-six geese, fifteen goats, and one or two predators of any kind.
@@ -9649,6 +9654,110 @@ predator tier thins, uniformly, which is what makes it one problem and not
 this one: a species that can only exist at low density cannot recruit, because
 two of them never meet. That is the country not settling, and it is filed
 where it belongs.
+
+---
+
+### 153. Not one animal was ever taken by a predator
+
+#141 said predation was not a brake and guessed at why. It was six things,
+and the first of them settles it: over two years on a hundred square
+kilometres, with fourteen wolves, ten lions, four bears and better than a
+thousand sheep on the map, **the tally of animals taken by a predator was
+nought.** Every hunter in the country starved while its dinner grazed past it
+- wolf born 23 and starved 32, eagle 13 and 25, heron 26 and 47 - and the
+whole predator tier aged out.
+
+Made findable by making `carried_off` a per-species tally rather than three
+totals, and by adding `WhatTheHuntingCameTo`, which counts the four places a
+hunt can die. Inferring which from a head count is what got #141 wrong: a
+country whose predators all starve looks the same whether they never met
+their dinner, never rushed it, or rushed it and missed.
+
+**A hunt that came off took a bite.** `what_a_hunt_comes_to` weighs the cover,
+the refuge, how many of the quarry's kind stand with it, how many of the
+hunter's hunt together, and the force ratio, and answers whether the rush
+succeeded. Then `attack_damage` was applied to the quarry as though the answer
+had been "they had a scuffle": a wolf's blow is some fifteen of a sheep's
+eighty and the sheep heals a tenth a tick, so a wolf had to catch **the same
+sheep six times** to eat once. Two answers to one question. The odds are the
+answer, and a hunt that comes off takes the animal.
+
+**A flock of sheep defended itself like a herd of cattle.** The herd term
+counted heads without asking whether that sort stands its ground - the same
+defect `what_each_animal_is_facing` had, in a second place. Herbivores are
+dealt out in fours to twelves and stay in blocks, so eight of their own beside
+them is the ordinary case, and eight sheep took a lone wolf from **0.3456 to
+0.0028**, one rush in three hundred and fifty, tried one tick in twenty. Sheep
+are `Passive`, which is nought, and what they do when a wolf comes is scatter.
+Cattle are `Defensive` and a mammoth `Territorial`, and those are what "a lone
+wolf should not be capable of killing a herd of cattle" was about.
+
+**Nothing ever walked a hungry hunter towards prey it could see.** The hunt
+asked "is there something within eighty metres of me, right now", and if there
+was not, the tick was over: 176,125 hunts went looking, 4,379 had something in
+the nine blocks around them worth trying for, and **thirteen** were close
+enough to rush. A wolf ranges tens of kilometres in a day; this one stood in a
+field waiting for a deer to walk into it. It stalks now, two cells a tick
+towards the nearest thing it would try for.
+
+**A hunter that could not keep itself where it stood took a step every fifty
+ticks.** The fiftieth was set to stop an earlier cut from moving every hunter
+on a ground in lockstep into a corner; what actually fixed that was scattering
+the step and choosing ground by the living it offers, both of which are still
+here. A bird of prey blown onto open plain - where the small life pays it half
+what it burns - was dead long before it reached a wood.
+
+**The small life was shared by head count.** A bear standing in a wood halved
+what a kestrel got out of it, when a bear turning over a log takes six
+hundredths of what a kestrel takes. What shares a layer is the demand on it,
+and `what_a_head_of_it_is_worth_to` is already the model's statement of how
+much of that layer each sort can use.
+
+**Open water was priced as barren, for a fish.** `cover` on a water tile is a
+statement about how much a *land* hunter can find to turn over there. Read for
+a fish it prices its own element as a desert: 121 at generation, 3,953 born
+over a year and 4,031 starved.
+
+**And nothing kept a herd or a pack together.** Animals are dealt out in
+groups and from the first tick every one random-walks on its own account - two
+cells a move, four thousand three hundred ticks to the year - so a group is
+spread over a hundred and thirty cells inside a year, and a mate is looked for
+within ten. Fourteen wolves became fourteen lone wolves that never met again.
+`they_keep_together` closes up what the registry already calls a group
+(`group_size.1 >= 3`: a wolf is (3, 7), a hawk (1, 2)), and it is gated on
+that because packing solitary hunters onto shared ground would divide the
+small life between them and starve the lot. What a **solitary** animal does
+instead is range for a mate - six hundred metres rather than a hundred - which
+is most of what a rut is, and is the only thing standing between a bear at
+`group_size: (1, 1)` and never breeding at all.
+
+**Where it lands**, two years on a hundred square kilometres, against the
+same run before:
+
+```
+                     was          now
+  wolf            14 -> 0     14 -> 15   (50 born)
+  lion            10 -> 4     10 -> 10
+  bear             4 -> 1      4 -> 5    (was 0 born, now 4)
+  boar            23 -> 58    23 -> 44   (21 taken - held down at last)
+  hawk            10 -> 0     10 -> 7
+  hunts rushed         13          825
+  hunts that came off   5          126
+  taken                 0         real
+```
+
+13.16 ms a tick against 11.29, and 21,327 person-days over six settlements
+against 22,470 with twenty-nine alive against twenty-three. The tick and the
+person-days are what a country with predators in it costs: they eat what the
+people would have trapped, and they move about doing it.
+
+**What is still not fixed.** The specialists at the bottom - heron, kestrel,
+otter, owl, kingfisher and the fish - still go to nought. They breed
+(kestrel born 76) and they starve (112), which is a population sitting at a
+ceiling of about nought: their only food is the abstracted small life, and a
+sixty-four hectare wood pays two of them. Whether that wants a richer layer, a
+smaller appetite, or those species abstracted as well is the next question,
+and it is a different one from this.
 
 ---
 

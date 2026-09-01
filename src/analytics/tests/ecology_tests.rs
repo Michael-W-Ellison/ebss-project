@@ -1302,9 +1302,9 @@ fn a_hawk_can_make_a_living_in_a_wood_and_not_on_a_plain() {
 
     for id in ["hawk", "owl", "eagle", "heron", "kestrel"] {
         let species = registry.get(id).unwrap_or_else(|| panic!("{id} exists"));
-        let alone_in_a_wood = AnimalManager::what_the_small_life_gives(species, wood, 1);
-        let three_to_a_wood = AnimalManager::what_the_small_life_gives(species, wood, 3);
-        let on_the_plain = AnimalManager::what_the_small_life_gives(species, plain, 1);
+        let alone_in_a_wood = AnimalManager::what_the_small_life_gives(species, wood, 1.0);
+        let three_to_a_wood = AnimalManager::what_the_small_life_gives(species, wood, 3.0);
+        let on_the_plain = AnimalManager::what_the_small_life_gives(species, plain, 1.0);
 
         assert!(
             alone_in_a_wood > species.hunger_rate,
@@ -1364,4 +1364,158 @@ fn a_country_is_stocked_with_small_predators() {
             "nothing of the {tier:?} tier was put on this country: {of_each_tier:?}"
         );
     }
+}
+
+// --- the predator tiers hold -----------------------------------------------
+
+/// A hunt that comes off takes the animal, rather than nibbling it.
+///
+/// `what_a_hunt_comes_to` weighs the cover, the refuge, the herd, the pack
+/// and the force ratio and answers whether the rush succeeded - and then
+/// `attack_damage` was applied to the quarry as though the answer had been
+/// "they had a scuffle". A wolf's blow is fifteen of a sheep's eighty and the
+/// sheep heals, so a wolf had to catch the same sheep six times to eat once.
+/// Two answers to one question; the odds are the answer.
+#[test]
+fn a_hunt_that_comes_off_takes_the_animal() {
+    use crate::environment::fauna::{what_this_ground_offers, AnimalManager};
+    use crate::environment::FaunaRegistry;
+    use crate::world::TerrainType;
+
+    let registry = FaunaRegistry::new();
+    let wolf = registry.get("wolf").expect("wolves exist");
+    let sheep = registry.get("sheep").expect("sheep exist");
+    let plain = what_this_ground_offers(TerrainType::Plains);
+
+    let alone = AnimalManager::what_a_hunt_comes_to(wolf, sheep, plain, 1, 0);
+    assert!(
+        alone.comes_off > 0.1,
+        "a wolf on a lone sheep in the open should have a real chance: {}",
+        alone.comes_off
+    );
+
+    // And what it costs to miss is still a thing, so this is not a free hunt.
+    assert!(
+        alone.what_it_costs > 0.0,
+        "a sheep is Medium, so missing one costs the wolf something"
+    );
+}
+
+/// A flock of sheep is not a phalanx, and a herd of cattle is.
+///
+/// The herd term counted heads without asking whether that sort stands its
+/// ground at all - the same defect `what_each_animal_is_facing` had, in a
+/// second place. Herbivores are dealt out in herds of four to twelve and stay
+/// in blocks, so eight of their own kind beside them is the ordinary case:
+/// a flock of eight took a lone wolf's odds from 0.3456 to **0.0028**, and
+/// not one animal was taken by a predator in two years on a hundred square
+/// kilometres.
+#[test]
+fn a_flock_of_sheep_is_not_a_herd_of_cattle() {
+    use crate::environment::fauna::{
+        what_this_ground_offers, AnimalBehavior, AnimalManager,
+    };
+    use crate::environment::FaunaRegistry;
+    use crate::world::TerrainType;
+
+    let registry = FaunaRegistry::new();
+    let wolf = registry.get("wolf").expect("wolves exist");
+    let sheep = registry.get("sheep").expect("sheep exist");
+    let goat = registry.get("goat").expect("goats exist");
+    let plain = what_this_ground_offers(TerrainType::Plains);
+
+    assert_eq!(
+        sheep.behavior,
+        AnimalBehavior::Passive,
+        "the fixture wants something that scatters"
+    );
+    assert_eq!(
+        goat.behavior,
+        AnimalBehavior::Defensive,
+        "and something that closes up"
+    );
+
+    let sheep_alone = AnimalManager::what_a_hunt_comes_to(wolf, sheep, plain, 1, 0);
+    let sheep_in_a_flock = AnimalManager::what_a_hunt_comes_to(wolf, sheep, plain, 1, 8);
+    let goat_alone = AnimalManager::what_a_hunt_comes_to(wolf, goat, plain, 1, 0);
+    let goat_in_a_herd = AnimalManager::what_a_hunt_comes_to(wolf, goat, plain, 1, 8);
+
+    assert!(
+        (sheep_in_a_flock.comes_off - sheep_alone.comes_off).abs() < 1e-4,
+        "eight sheep together are eight sheep: {} against {}",
+        sheep_in_a_flock.comes_off,
+        sheep_alone.comes_off
+    );
+    assert!(
+        goat_in_a_herd.comes_off < goat_alone.comes_off * 0.2,
+        "eight goats together do close up: {} against {}",
+        goat_in_a_herd.comes_off,
+        goat_alone.comes_off
+    );
+
+    // And a pack gets through what one of them cannot.
+    let a_pack = AnimalManager::what_a_hunt_comes_to(wolf, goat, plain, 3, 8);
+    assert!(
+        a_pack.comes_off > goat_in_a_herd.comes_off * 3.0,
+        "three wolves should do far better against a herd than one: {} against {}",
+        a_pack.comes_off,
+        goat_in_a_herd.comes_off
+    );
+}
+
+/// The predator tiers are still there after two years.
+///
+/// The whole of ISSUES #141. What a country used to do was place its hunters
+/// and then starve every one of them: over two years on a hundred square
+/// kilometres, wolves went from fourteen to nought, lions ten to four, bears
+/// four to one with **no births at all**, and eagles, hawks, owls, herons,
+/// otters and kestrels to nought.
+#[test]
+fn the_predator_tiers_are_still_there_two_years_on() {
+    use crate::environment::{FaunaRegistry, TrophicRole};
+    use crate::world::WorldConfig;
+
+    crate::core::dice::seed(7000);
+    let mut world = World::new(WorldConfig::default().with_size(500, 500));
+    let registry = FaunaRegistry::new();
+
+    let of_each_tier = |world: &World| -> std::collections::BTreeMap<TrophicRole, usize> {
+        let mut n = std::collections::BTreeMap::new();
+        for animal in world.animals.get_all().iter().filter(|a| a.is_alive()) {
+            let Some(species) = registry.get(&animal.species_id) else {
+                continue;
+            };
+            *n.entry(species.where_it_sits()).or_insert(0) += 1;
+        }
+        n
+    };
+
+    let at_the_start = of_each_tier(&world);
+    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
+        world.tick();
+    }
+    let after_two_years = of_each_tier(&world);
+
+    // Every tier that was there at the start is still there. Not at the same
+    // strength - a country that opens over-stocked is meant to shed - but
+    // present, which is what "the tiers persist" means and what they did not
+    // do.
+    for tier in TrophicRole::EVERY_ONE {
+        if at_the_start.get(&tier).copied().unwrap_or(0) == 0 {
+            continue;
+        }
+        assert!(
+            after_two_years.get(&tier).copied().unwrap_or(0) > 0,
+            "the {tier:?} tier is gone after two years: {at_the_start:?} became \
+             {after_two_years:?}"
+        );
+    }
+
+    // And something was actually eaten, which is the mechanism. Two years of
+    // this country used to pass with a tally of nought.
+    let taken = world.animals.what_carried_them_off().taken;
+    assert!(
+        taken > 0,
+        "not one animal was taken by a predator in two years"
+    );
 }
