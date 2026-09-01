@@ -9029,6 +9029,73 @@ ground three hundred metres off is untouched.
 
 ---
 
+### 143. Running away and turning round were the same want
+
+`Action::Attack`, `Action::Fight`, `Action::FleeFrom`, `Action::Freeze` and
+`Action::SeekShelter` all answered `DriveType::Safety`. So an agent that ran
+and an agent that stood had satisfied the same drive, and nothing downstream
+could tell the two apart - not the learning, not the drive that was supposed
+to be pressing, not the record of what happened. No appraisal, however good,
+could change which of them an agent did, because the thing choosing did not
+have two options to choose between.
+
+There is now a second drive. `Safety` is the fear drive - which is what it
+always was; a drive is a need and fear is the feeling that names it - and
+`Aggression` is the anger drive. **Both read one appraisal**, and that is the
+whole design: `Surroundings::what_is_on_me` says how much is on the agent and
+`could_face_it` says whether it can be met, and the same reading becomes fear
+when it cannot and anger when it can. Nothing converts one into the other,
+because there is nothing to convert: a change in what the agent makes of the
+situation moves the demand across in the tick it changes. `Aggression` has an
+accumulation rate of nought for the same reason - it keeps no reservoir, so
+when the thing goes the demand goes with it.
+
+**Fear had no answer of its own.** `what_this_drive_offers(Safety)` returned
+`SeekShelter` when a roof was within reach and `None` otherwise, so a
+frightened agent in open country could have fear as its strongest drive, win
+the tick with it, and produce no behaviour at all. The specification says
+drives result in actions and this was the drive where it failed. Fear runs
+first now, makes for a roof second, and moves off the ground it is standing on
+failing both; anger goes at the thing, through the fight-or-flee tree that was
+already there rather than a second copy of it.
+
+**A parent stands while there is still time to buy.** The specification is
+explicit and it is not the obvious way round: if the young can still get clear
+then standing over them buys the time to do it, and that is anger; if the
+thing is already on top of them, standing buys nothing and what is left is
+fear. This replaces a deliberate older decision - the tree used to have a
+parent fight *whatever the odds were*, described in its own comment as "the
+one place in the model where an agent knowingly takes the worse of two
+options". That is now conditional on there being something to be gained.
+
+Three things had to be fixed on the way, and the second is the interesting
+one:
+
+- **The appraisal saturated.** `what_i_stand_to_lose` was folded into the
+  drive reading as well as the feeling, which pushed it to its ceiling
+  whenever anything at all was about; a settlement of eight starved inside
+  four thousand ticks because fear outranked hunger every tick of every day.
+  What a man stands to lose belongs to how much he minds, not to how much is
+  there.
+- **An agent fled from a rabbit.** `predator_near` is true of anything with an
+  `attack_damage` above nought, which is a rabbit, and now that fear always
+  offers *something* the flag spent the turn instead of falling through to
+  eating. Running is worth a turn only against something that cannot be faced.
+- Both the threat reading and what to run from now weigh distance. A wolf at
+  the edge of sight is not a wolf at your elbow.
+
+**What it costs.** Nothing measurable, and establishing that took more work
+than the change did. Eight people, four thousand ticks, thirty-two worlds a
+block: this branch gave 25, 44 and 35 survivors on three different seed
+blocks, against 35 for the same measurement before it. The spread between
+blocks is several times any difference the change could be making, and
+seed-for-seed comparison is invalid anyway - a sixteenth drive means
+`Agent::new` draws one more random number, so the same seed is no longer the
+same world. Four tests moved for exactly that reason and are seeded now; five
+more were counting drives and now ask the enum.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

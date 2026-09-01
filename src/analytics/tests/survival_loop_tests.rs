@@ -183,6 +183,16 @@ fn emptied_renewable_resources_are_not_deleted() {
 /// within ~800 ticks, whatever food the world held.
 #[test]
 fn population_feeds_itself_over_a_long_run() {
+    // Seeded, because whether any of eight people are still standing after
+    // four thousand ticks is a coin this model does not weight heavily.
+    // Measured over thirty-two worlds at three different seed blocks: 14, 24
+    // and 20 of them still had somebody alive, and the same measurement
+    // before the fear and anger drives gave 19. The spread between blocks is
+    // far wider than anything a change is likely to move, so unseeded this
+    // test reports which block it drew rather than whether the model works.
+    // See ISSUES_FOUND.md #132.
+    crate::core::dice::seed(4_200);
+
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
     for _ in 0..8 {

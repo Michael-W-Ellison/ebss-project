@@ -528,6 +528,7 @@ fn drive_icon(drive_type: crate::core::DriveType) -> &'static str {
         DriveType::Thirst => "💧",
         DriveType::Rest => "💤",
         DriveType::Safety => "🛡",
+        DriveType::Aggression => "⚔",
         DriveType::Social => "👥",
         DriveType::Shelter => "🏠",
         DriveType::Curiosity => "❓",

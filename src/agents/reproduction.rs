@@ -583,6 +583,11 @@ mod tests {
     /// births in 308,000 turns.
     #[test]
     fn any_two_grown_people_can_pair() {
+        // Seeded: `Agent::new` draws a random weight per drive, so how many
+        // drives there are decides what personality these two get, and the
+        // pairing rules read personality. See ISSUES_FOUND.md #132.
+        crate::core::dice::seed(4_300);
+
         let mut agent1 = Agent::new(AgentConfig::default());
         let mut agent2 = Agent::new(AgentConfig::default());
 
@@ -614,6 +619,11 @@ mod tests {
     /// And nobody already carrying one starts another.
     #[test]
     fn nobody_already_carrying_starts_another() {
+        // Seeded: `Agent::new` draws a random weight per drive, so how many
+        // drives there are decides what personality these two get, and the
+        // pairing rules read personality. See ISSUES_FOUND.md #132.
+        crate::core::dice::seed(4_300);
+
         let mut agent1 = Agent::new(AgentConfig::default());
         let mut agent2 = Agent::new(AgentConfig::default());
         agent1.state.now_this_many_years_old(30);

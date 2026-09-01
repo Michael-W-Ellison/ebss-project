@@ -414,7 +414,7 @@ mod tests {
         let data = AgentInspectorData::from_agent(&agent);
 
         assert_eq!(data.id, agent.id);
-        assert_eq!(data.drives.len(), 15); // 15 core drives, Thirst and Protection among them
+        assert_eq!(data.drives.len(), crate::core::DriveType::all().len());
         assert!(data.health > 0.0);
     }
 
@@ -424,7 +424,7 @@ mod tests {
         let data = AgentInspectorData::from_agent(&agent);
 
         let sorted = data.drives_by_urgency();
-        assert_eq!(sorted.len(), 15);
+        assert_eq!(sorted.len(), crate::core::DriveType::all().len());
 
         // Verify sorted by urgency (descending)
         for i in 1..sorted.len() {

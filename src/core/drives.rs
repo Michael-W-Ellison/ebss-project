@@ -21,8 +21,32 @@ pub enum DriveType {
     Rest,
     /// Need for protective structure
     Shelter,
-    /// Need for safety from threats
+    /// Need for safety from threats: the fear drive.
+    ///
+    /// Fear is what this is, and `Safety` is what fear is *for* - a drive is a
+    /// need and fear is the feeling that names it. It rises on what the agent
+    /// cannot face and is answered by getting away from it or behind
+    /// something. Its opposite number is [`DriveType::Aggression`], and the
+    /// two read the same appraisal: see [`Surroundings::what_is_on_me`].
     Safety,
+
+    /// Need to drive off what threatens: the anger drive.
+    ///
+    /// The other half of `Safety`, and the reason it is a separate drive
+    /// rather than a flag on that one: running away and turning round are
+    /// different behaviours answering different needs, and until now they were
+    /// the same drive. `Action::Attack`, `Action::Fight`, `Action::FleeFrom`
+    /// and `Action::Freeze` all answered `Safety`, so nothing in the model
+    /// could tell fleeing from fighting - an agent that ran and an agent that
+    /// stood satisfied the same want, and no appraisal however good could
+    /// change which one happened.
+    ///
+    /// It rises on a threat the agent reckons it *can* face, and on threats to
+    /// its own that still have room to get clear. Because both drives read one
+    /// appraisal, a change in what the agent makes of the situation moves the
+    /// demand from one to the other in the same tick, with nothing in between
+    /// to convert.
+    Aggression,
     /// Need for resource stockpiles
     Preparedness,
     /// Need to gather and process materials
@@ -47,13 +71,14 @@ pub enum DriveType {
 
 impl DriveType {
     /// Get all drive types
-    pub fn all() -> [DriveType; 15] {
+    pub fn all() -> [DriveType; 16] {
         [
             DriveType::Hunger,
             DriveType::Thirst,
             DriveType::Rest,
             DriveType::Shelter,
             DriveType::Safety,
+            DriveType::Aggression,
             DriveType::Preparedness,
             DriveType::Industry,
             DriveType::Sustenance,
@@ -75,6 +100,11 @@ impl DriveType {
             DriveType::Rest => 0.6,
             DriveType::Shelter => 0.5,
             DriveType::Safety => 0.8,
+            // Lower than Safety on purpose. Running away can be thought about
+            // for a moment; turning round is something done at once or not at
+            // all, and a threshold above the demand a single beast can raise
+            // would mean it never was.
+            DriveType::Aggression => 0.5,
             DriveType::Preparedness => 0.4,
             DriveType::Industry => 0.3,
             DriveType::Sustenance => 0.3,
@@ -118,6 +148,12 @@ impl DriveType {
             DriveType::Rest => 0.008,
             DriveType::Shelter => 0.005,
             DriveType::Safety => 0.02,  // Spikes with threats
+            // Nothing at all on the clock. Nobody grows angrier for time
+            // passing quietly; anger is entirely a reading of what is in front
+            // of the agent, and when the thing goes the demand goes with it.
+            // This is what makes the switch between the two drives instant:
+            // there is no reservoir to drain.
+            DriveType::Aggression => 0.0,
             DriveType::Preparedness => 0.002,
             DriveType::Industry => 0.003,
             DriveType::Sustenance => 0.003,
@@ -188,12 +224,53 @@ impl DriveType {
             // "being in shelter, possessing weapons or armor". This is the one
             // the old code claimed in a comment - `Safety => 0.02, // Spikes
             // with threats` - and did not do.
+            // The fear drive. What the agent cannot face, and what it is out
+            // in the middle of.
             DriveType::Safety => {
-                let threat = yes(ctx.around.predator_near, 0.7)
-                    + yes(ctx.around.recently_hurt, 0.5)
+                // The thing itself, but only the part of it that cannot be
+                // met. A wolf a man reckons he can see off does not frighten
+                // him; it makes him angry, and that is the other drive.
+                let cannot_be_met = if ctx.around.could_face_it { 0.0 } else { 1.0 };
+                let the_thing = ctx.around.what_is_on_me * cannot_be_met;
+
+                // And one of his own in front of it with nowhere to go, which
+                // is the worst thing in this model and the one case where
+                // fear wins over a threat that could otherwise be fought.
+                let his_own_cornered = yes(
+                    ctx.around.one_of_mine_in_the_way && !ctx.around.they_could_get_clear,
+                    0.8,
+                );
+
+                // No separate term for something being about: `what_is_on_me`
+                // *is* that, weighed rather than counted, and having both was
+                // the same fact twice.
+                let about = yes(ctx.around.recently_hurt, 0.5)
                     + yes(ctx.around.night, 0.35);
+
                 let cover = yes(ctx.around.under_shelter, 0.5) + yes(ctx.armed, 0.5);
-                threat * (1.0 - cover.min(0.9))
+                (the_thing + his_own_cornered + about) * (1.0 - cover.min(0.9))
+            }
+
+            // The anger drive, off the same appraisal read the other way.
+            DriveType::Aggression => {
+                let can_be_met = if ctx.around.could_face_it { 1.0 } else { 0.0 };
+
+                // What a man will turn round on for his own sake.
+                let for_himself = ctx.around.what_is_on_me * can_be_met;
+
+                // And what he will turn round on for somebody else's, which
+                // is a good deal more - so long as there is still something
+                // to be bought by it. Being hurt recently is in here and not
+                // only in fear: what has already bitten you is the thing you
+                // are angriest at.
+                let for_his_own = yes(
+                    ctx.around.one_of_mine_in_the_way && ctx.around.they_could_get_clear,
+                    0.9,
+                ) * can_be_met;
+
+                let a_grudge = yes(ctx.around.recently_hurt, 0.3) * can_be_met;
+
+                (for_himself + for_his_own + a_grudge).clamp(0.0, 1.0)
             }
 
             // "Tool count zero, missing materials in storage", answered by
@@ -292,7 +369,8 @@ impl DriveType {
             DriveType::Hunger
             | DriveType::Thirst
             | DriveType::Rest
-            | DriveType::Safety => DriveRank::Primary,
+            | DriveType::Safety
+            | DriveType::Aggression => DriveRank::Primary,
 
             // These decide whether there is anybody here in ten years
             DriveType::Sustenance
@@ -338,6 +416,7 @@ impl DriveType {
             | DriveType::Thirst
             | DriveType::Rest
             | DriveType::Safety
+            | DriveType::Aggression
             | DriveType::Curiosity
             | DriveType::Social => &[],
 
@@ -412,6 +491,7 @@ impl DriveType {
             DriveType::Rest => "Sleeping in bed",
             DriveType::Shelter => "Being inside shelter structure",
             DriveType::Safety => "Being in shelter, possessing weapons",
+            DriveType::Aggression => "Driving off what threatens",
             DriveType::Preparedness => "Stockpiling resources and tools",
             DriveType::Industry => "Mining, smelting, processing materials",
             DriveType::Sustenance => "Farming, harvesting, producing food",
@@ -464,6 +544,33 @@ pub struct Surroundings {
     pub children_to_mind: u32,
     /// One of them has strayed, or something is stalking it
     pub child_astray: bool,
+
+    /// How much the worst thing within reach has about it, nought to one.
+    ///
+    /// This and the two below it are one appraisal, and they are what make
+    /// fear and anger the same reading seen from two sides - see
+    /// [`DriveType::Safety`] and [`DriveType::Aggression`]. It is filled from
+    /// `ThreatAssessment`, which is the model's one judgement of what a thing
+    /// is worth being afraid of, so nothing here is a second opinion.
+    pub what_is_on_me: f32,
+
+    /// Whether the agent reckons it could face that thing.
+    ///
+    /// The whole of the switch. The same `what_is_on_me` becomes fear when
+    /// this is false and anger when it is true, so a change in what the agent
+    /// makes of the situation moves the demand from one drive to the other in
+    /// the tick it changes, with nothing in between to convert.
+    pub could_face_it: bool,
+
+    /// One of this agent's own is between the thing and open ground, and
+    /// whether they still have room to get clear of it.
+    ///
+    /// Both raise the stakes and they do not raise the same drive. If the
+    /// young can still get away it is worth standing to buy them the time,
+    /// and that is anger; if they cannot get away at all then standing buys
+    /// nothing and what is left is fear.
+    pub one_of_mine_in_the_way: bool,
+    pub they_could_get_clear: bool,
     /// Anybody else within talking distance
     pub company: bool,
 }
@@ -1120,7 +1227,7 @@ mod tests {
     #[test]
     fn test_drive_state_creation() {
         let state = DriveState::new();
-        assert_eq!(state.drives.len(), 15);
+        assert_eq!(state.drives.len(), DriveType::all().len());
     }
 
     #[test]

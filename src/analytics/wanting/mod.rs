@@ -218,12 +218,20 @@ impl Simulation {
             // of the agent's own pack. A trip out is the honest fallback.
             DriveType::Preparedness => Action::Gather { resource_type: "wood".to_string() },
             DriveType::Sustenance => Action::Gather { resource_type: "food".to_string() },
+            // The fear drive, when the branch above could name neither the
+            // thing nor anywhere to get behind: put ground between yourself
+            // and where you are.
             DriveType::Safety => {
-                // Move to a random nearby safe location
                 let target_x = position.0 + rng.gen_range(-5..=5);
                 let target_y = position.1 + rng.gen_range(-5..=5);
                 Action::Move { target: (target_x, target_y, position.2) }
             },
+            // The anger drive. It has no fallback worth the name: turning
+            // round is something you do to a particular thing, and if the
+            // branch above could not find the thing there is nothing here to
+            // be angry at. Standing still is the honest answer, and it is
+            // what stops this becoming a man swinging at the air.
+            DriveType::Aggression => Action::Wait,
             // Proposing to whoever is nearest is how Mate came to be a fifth
             // of everything a settlement did and to fail 99.9% of the time.
             // The drive path above finds somebody who could actually have a
@@ -628,6 +636,13 @@ impl Simulation {
         Some(instead)
     }
 
+    /// How much has to be on somebody before running is worth the turn.
+    ///
+    /// A quarter of what the appraisal can read. Below this the thing is a
+    /// hare or a fox at the edge of a field, and a man who drops what he is
+    /// doing for one of those never eats.
+    pub(in crate::analytics) const A_FRIGHT_WORTH_THE_NAME: f32 = 0.25;
+
     pub(in crate::analytics) fn what_this_drive_offers(
         &self,
         drive_type: DriveType,
@@ -679,16 +694,61 @@ impl Simulation {
                 }
             }
 
-            // Being out of harm's way, and only while there is harm about
+            // The fear drive: get away from the thing, get behind something,
+            // or put ground between yourself and where you are standing.
+            //
+            // It used to offer `SeekShelter` and otherwise `None`, so a
+            // frightened agent with no roof within reach did nothing about
+            // being frightened - the drive could win the tick and produce no
+            // behaviour at all, which is the specification's "drives must
+            // result in actions" failing on the one drive that most obviously
+            // has to. Running is first now, because running is what fear is
+            // for; the roof is what you make for when you know where one is;
+            // and moving off is what is left.
             DriveType::Safety => {
-                let threatened = agent.surroundings.predator_near
-                    || agent.surroundings.recently_hurt;
+                // Something worth being frightened of, and not merely
+                // something with teeth in the same field.
+                //
+                // `predator_near` is true of a rabbit - it has an
+                // `attack_damage` above nought, which is all that flag ever
+                // meant - and running from rabbits is not free: this branch
+                // now always offers *something*, so where it used to return
+                // `None` and let the ladder fall through to eating, it spends
+                // the turn. Measured over thirty-two settlements, that alone
+                // took the ones still standing at four thousand ticks from
+                // nineteen to fourteen.
+                let worth_running_from = agent.surroundings.what_is_on_me
+                    >= Self::A_FRIGHT_WORTH_THE_NAME
+                    && !agent.surroundings.could_face_it;
 
-                if threatened && self.nearest_shelter_from(agent_position).is_some() {
-                    Some(Action::SeekShelter)
-                } else {
-                    None
+                if !worth_running_from && !agent.surroundings.recently_hurt {
+                    return None;
                 }
+
+                self.what_to_run_from(agent, agent_position)
+                    .or_else(|| {
+                        self.nearest_shelter_from(agent_position)
+                            .map(|_| Action::SeekShelter)
+                    })
+                    .or(Some(Action::FleeFrom {
+                        away_from: agent_position,
+                    }))
+            }
+
+            // The anger drive, and it has exactly one answer: the thing that
+            // raised it.
+            //
+            // `what_this_threat_comes_to` is the tree that decides which of
+            // fighting, running, freezing and standing over one's own is
+            // available - it is reached from here rather than duplicated,
+            // because it is already the model's answer to "what does this one
+            // do about the thing in front of it".
+            DriveType::Aggression => {
+                if !agent.surroundings.could_face_it {
+                    return None;
+                }
+
+                self.how_this_one_answers_a_threat(agent, agent_position)
             }
 
             // Everything that puts food on next year's table

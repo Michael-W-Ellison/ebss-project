@@ -68,6 +68,10 @@ impl DriveProgression {
             DriveType::Rest => Self::rest_tiers(),
             DriveType::Shelter => Self::shelter_tiers(),
             DriveType::Safety => Self::safety_tiers(),
+            // No ladder either. There is no better and worse way to drive a
+            // thing off - it goes or it does not - so this is answered
+            // outright rather than by degrees.
+            DriveType::Aggression => Vec::new(),
             DriveType::Preparedness => Self::preparedness_tiers(),
             DriveType::Industry => Self::industry_tiers(),
             DriveType::Sustenance => Self::sustenance_tiers(),

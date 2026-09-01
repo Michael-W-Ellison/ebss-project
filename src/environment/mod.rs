@@ -322,9 +322,14 @@ impl Action {
             Action::Mate { .. } => Some(DriveType::Reproduction), // Mating satisfies reproduction drive
             Action::Mount { .. } => Some(DriveType::Utility), // Mounting provides travel utility
             Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
-            Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
+            // Turning round on a thing answers the anger drive, and running
+            // from it answers the fear drive. They were both `Safety`, which
+            // meant an agent that ran and an agent that stood had satisfied
+            // the same want - so nothing downstream could tell the two apart,
+            // and neither drive could learn anything from what happened.
+            Action::Attack { .. } => Some(DriveType::Aggression),
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
-            Action::Fight { .. } => Some(DriveType::Safety), // Driving a thing off, not eating it
+            Action::Fight { .. } => Some(DriveType::Aggression), // Driving a thing off, not eating it
             Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering

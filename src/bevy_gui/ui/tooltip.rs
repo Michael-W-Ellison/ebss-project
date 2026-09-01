@@ -48,6 +48,7 @@ pub fn drive_color(drive: DriveType) -> Color32 {
         DriveType::Thirst => Color32::from_rgb(0, 191, 255),
         DriveType::Rest => Color32::from_rgb(138, 43, 226),
         DriveType::Safety => Color32::from_rgb(255, 0, 0),
+        DriveType::Aggression => Color32::from_rgb(200, 40, 0),
         DriveType::Social => Color32::from_rgb(255, 105, 180),
         DriveType::Shelter => Color32::from_rgb(139, 90, 43),
         DriveType::Curiosity => Color32::from_rgb(255, 255, 0),

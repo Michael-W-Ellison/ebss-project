@@ -131,12 +131,18 @@ fn a_drive_with_every_reason_climbs() {
 }
 
 /// Safety spikes with threats, which is what its comment always claimed.
+///
+/// What it reads is the appraisal rather than the `predator_near` flag: that
+/// flag is true of a rabbit, and a drive that spikes on rabbits is no better
+/// than one on a clock. See `Surroundings::what_is_on_me`.
 #[test]
 fn safety_answers_a_threat_and_not_a_clock() {
     let quiet = DriveContext::default();
     let hunted = DriveContext {
         around: Surroundings {
             predator_near: true,
+            what_is_on_me: 0.7,
+            could_face_it: false,
             ..Surroundings::default()
         },
         ..DriveContext::default()
@@ -168,6 +174,8 @@ fn cover_and_a_weapon_answer_the_same_threat() {
     let exposed = DriveContext {
         around: Surroundings {
             predator_near: true,
+            what_is_on_me: 0.7,
+            could_face_it: false,
             ..Surroundings::default()
         },
         ..DriveContext::default()
@@ -175,6 +183,8 @@ fn cover_and_a_weapon_answer_the_same_threat() {
     let covered = DriveContext {
         around: Surroundings {
             predator_near: true,
+            what_is_on_me: 0.7,
+            could_face_it: false,
             under_shelter: true,
             ..Surroundings::default()
         },
@@ -314,4 +324,114 @@ fn the_needs_of_the_body_still_run_on_the_clock() {
             drive.value
         );
     }
+}
+
+// --- one appraisal, two drives ------------------------------------------
+
+/// A wolf, and the only thing that changes is whether the man thinks he can
+/// take it.
+///
+/// This is the whole of the fear-anger switch. The same threat, the same
+/// distance, the same everything else: `could_face_it` decides which of the
+/// two drives the demand lands in, and because they read one appraisal there
+/// is nothing in between for it to pass through. A perception that changes
+/// mid-tick moves the demand in that tick.
+#[test]
+fn the_same_thing_is_fear_or_anger_by_whether_it_can_be_faced() {
+    let wolf_at_the_door = |could_face_it: bool| DriveContext {
+        around: Surroundings {
+            predator_near: true,
+            what_is_on_me: 0.8,
+            could_face_it,
+            ..Surroundings::default()
+        },
+        ..DriveContext::default()
+    };
+
+    let cannot = wolf_at_the_door(false);
+    let can = wolf_at_the_door(true);
+
+    let fear_of_it = DriveType::Safety.demand(&cannot).unwrap_or(0.0);
+    let anger_at_it = DriveType::Aggression.demand(&cannot).unwrap_or(0.0);
+    assert!(
+        fear_of_it > anger_at_it,
+        "a thing he cannot face should frighten him more than it angers him: \
+         fear {fear_of_it:.2}, anger {anger_at_it:.2}"
+    );
+
+    let fear_of_it = DriveType::Safety.demand(&can).unwrap_or(0.0);
+    let anger_at_it = DriveType::Aggression.demand(&can).unwrap_or(0.0);
+    assert!(
+        anger_at_it > fear_of_it,
+        "and one he can face should anger him more than it frightens him: \
+         fear {fear_of_it:.2}, anger {anger_at_it:.2}"
+    );
+}
+
+/// And a thing that turns out to be no threat at all is neither.
+#[test]
+fn what_is_not_a_threat_raises_neither_of_them() {
+    let nothing_much = DriveContext {
+        around: Surroundings {
+            what_is_on_me: 0.0,
+            could_face_it: true,
+            ..Surroundings::default()
+        },
+        ..DriveContext::default()
+    };
+
+    assert_eq!(DriveType::Aggression.demand(&nothing_much), Some(0.0));
+    assert_eq!(DriveType::Safety.demand(&nothing_much), Some(0.0));
+}
+
+/// A man stands over his child while the child still has somewhere to go, and
+/// runs when it has not.
+///
+/// The specification is explicit and it is not the obvious way round: if the
+/// young can still get clear then standing buys them the time to do it, and
+/// that is worth doing; if the thing is already on top of them, standing buys
+/// nothing at all. So the same threat to the same child is anger at arm's
+/// length and fear when it is too late.
+#[test]
+fn a_parent_stands_while_there_is_still_time_to_buy() {
+    let over_the_child = |they_could_get_clear: bool| DriveContext {
+        around: Surroundings {
+            predator_near: true,
+            what_is_on_me: 0.5,
+            // He could take it - so what decides this is not the odds
+            could_face_it: true,
+            children_to_mind: 1,
+            one_of_mine_in_the_way: true,
+            they_could_get_clear,
+            ..Surroundings::default()
+        },
+        ..DriveContext::default()
+    };
+
+    let in_time = over_the_child(true);
+    assert!(
+        DriveType::Aggression.demand(&in_time).unwrap_or(0.0)
+            > DriveType::Safety.demand(&in_time).unwrap_or(0.0),
+        "with room left for the child, he stands"
+    );
+
+    let too_late = over_the_child(false);
+    assert!(
+        DriveType::Safety.demand(&too_late).unwrap_or(0.0)
+            > DriveType::Aggression.demand(&too_late).unwrap_or(0.0),
+        "with none, he does not"
+    );
+}
+
+/// Anger keeps no reservoir, so when the thing goes the demand goes with it.
+///
+/// This is what makes the switch instant rather than something that drains:
+/// `Aggression` has no accumulation on the clock at all, so it is only ever
+/// worth what the situation is worth this tick.
+#[test]
+fn anger_does_not_keep_anything_back() {
+    assert_eq!(DriveType::Aggression.base_accumulation_rate(), 0.0);
+
+    let gone = DriveContext::default();
+    assert_eq!(settles_at(DriveType::Aggression, &gone), 0.0);
 }

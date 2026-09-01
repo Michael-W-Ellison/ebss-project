@@ -59,6 +59,12 @@ fn blows_to_put_it_down(with_a_spear: bool) -> f32 {
 
     let mut blows = 0u32;
     for seed in 0..HOW_MANY_FIGHTS {
+        // Seeded before the fixture as well as after it. Building the man
+        // draws a random weight per drive, so the *number of drives* decides
+        // what man this is; seeding only the fight left the fighter himself
+        // riding on whatever the stream happened to hold.
+        crate::core::dice::seed(8_000 + seed);
+
         let (mut simulation, which) = a_man_and_a_wolf();
         if with_a_spear {
             give_him_a_spear(&mut simulation);

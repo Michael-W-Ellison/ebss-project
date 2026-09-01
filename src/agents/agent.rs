@@ -4561,8 +4561,8 @@ impl Agent {
             DriveType::Preparedness => Some(JobCategory::Labor),
             // Survival drives don't map to happiness-influenced jobs
             DriveType::Hunger | DriveType::Thirst | DriveType::Rest |
-            DriveType::Safety | DriveType::Shelter | DriveType::Reproduction |
-            DriveType::Protection | DriveType::Luxury => None,
+            DriveType::Safety | DriveType::Aggression | DriveType::Shelter |
+            DriveType::Reproduction | DriveType::Protection | DriveType::Luxury => None,
         }
     }
 
@@ -5317,10 +5317,19 @@ impl Agent {
                 selector.add_child(BehaviorNode::new(NodeType::Action("harvest".to_string())));
                 selector
             }
+            // The fear drive: get away from it, get behind something, or
+            // failing both arm yourself against the next time.
             DriveType::Safety => {
                 let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("flee".to_string())));
                 selector.add_child(BehaviorNode::new(NodeType::Action("seek_shelter".to_string())));
                 selector.add_child(BehaviorNode::new(NodeType::Action("craft_weapon".to_string())));
+                selector
+            }
+            // And the anger drive, which has one answer.
+            DriveType::Aggression => {
+                let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("attack".to_string())));
                 selector
             }
             DriveType::Reproduction => {

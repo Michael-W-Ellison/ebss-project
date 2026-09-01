@@ -233,6 +233,53 @@ impl Simulation {
         self.what_this_threat_comes_to(agent, agent_position).1
     }
 
+    /// The thing to get away from, and where it is.
+    ///
+    /// The fear drive needs this and the fight-or-flee tree did not provide
+    /// it: that tree runs off what the agent has *named* in its emotions, and
+    /// an agent can be plainly frightened - something with teeth eight paces
+    /// off - without having named anything yet. So fear had nothing to run
+    /// from and offered `SeekShelter` or nothing at all.
+    ///
+    /// Nearest rather than worst, because what you run from is what is close.
+    pub(in crate::analytics) fn what_to_run_from(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let here = (agent_position.0, agent_position.1);
+
+        let closest = self
+            .world
+            .animals
+            .get_in_radius(here, Self::HOW_FAR_A_FRIGHT_CARRIES)
+            .into_iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated)
+            .filter(|animal| {
+                // Only what this one could not face. A hare has an
+                // `attack_damage` above nought and is not a reason to run.
+                self.world
+                    .animals
+                    .get_species(&animal.species_id)
+                    .map(|species| {
+                        species.attack_damage > 0.0
+                            && !agent.could_i_fight_at_all(species.attack_damage)
+                    })
+                    .unwrap_or(false)
+            })
+            .min_by_key(|animal| {
+                (animal.position.0 - here.0).abs() + (animal.position.1 - here.1).abs()
+            })?;
+
+        Some(Action::FleeFrom {
+            away_from: (closest.position.0, closest.position.1, agent_position.2),
+        })
+    }
+
+    /// How far off something has to be before it stops being worth running
+    /// from.
+    pub(in crate::analytics) const HOW_FAR_A_FRIGHT_CARRIES: f32 = 12.0;
+
     /// What this one has to hand for a fight, by name.
     ///
     /// From `environment::making`, which is the vocabulary the model actually

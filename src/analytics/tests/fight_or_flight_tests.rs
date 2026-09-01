@@ -445,3 +445,84 @@ fn a_fight_needs_something_within_arms_reach() {
         outcome.message
     );
 }
+
+// --- a drive that wins the tick has to come out as something ---------------
+
+/// Fear, with nowhere to hide, still does something about itself.
+///
+/// `what_this_drive_offers(Safety)` offered `SeekShelter` when there was a
+/// roof within reach and `None` otherwise - so an agent frightened in open
+/// country could have fear as its strongest drive, win the tick with it, and
+/// produce no behaviour at all. The specification is that drives result in
+/// actions, and this is the drive where that matters most.
+#[test]
+fn fear_in_open_country_still_ends_in_something() {
+    let mut world = an_empty_country();
+    world.buildings.clear();
+    world
+        .spawn_animal("bear".to_string(), (33, 30))
+        .expect("a bear should spawn");
+    let mut simulation = one_person(world);
+
+    // No weapon, no roof, and a bear three paces off: this one is afraid.
+    simulation.read_the_situation();
+
+    let position = simulation.population.agents[0].state.position;
+    let agent = simulation.population.agents[0].clone();
+
+    let doing = simulation.what_this_drive_offers(
+        crate::core::DriveType::Safety,
+        &agent,
+        position,
+    );
+
+    assert!(
+        matches!(
+            doing,
+            Some(Action::FleeFrom { .. }) | Some(Action::SeekShelter) | Some(Action::Move { .. })
+        ),
+        "fear should come out as getting away or getting behind something, got {doing:?}"
+    );
+}
+
+/// And anger comes out as going at the thing.
+#[test]
+fn anger_ends_in_going_at_it() {
+    let mut world = an_empty_country();
+    world
+        .spawn_animal("rabbit".to_string(), (31, 30))
+        .expect("a rabbit should spawn");
+    let mut simulation = one_person(world);
+
+    // Armed, grown, healthy, and what is in front of him is a rabbit: this is
+    // the side of the appraisal that comes out as anger rather than fear.
+    simulation.population.agents[0]
+        .skills
+        .set_skill_level(SkillType::MeleeCombat, 8);
+    simulation.population.agents[0]
+        .inventory
+        .add_item(crate::agents::InventoryItem::new_with_durability(
+            "spear".to_string(),
+            1,
+            25.0,
+            crate::agents::Quality::Basic,
+        ));
+
+    simulation.read_the_situation();
+
+    assert!(
+        simulation.population.agents[0].surroundings.could_face_it,
+        "a spearman should reckon he can face a rabbit"
+    );
+
+    let agent = simulation.population.agents[0].clone();
+    let asking = agent.what_the_situation_asks();
+    let angry = crate::core::DriveType::Aggression.demand(&asking).unwrap_or(0.0);
+    let afraid = crate::core::DriveType::Safety.demand(&asking).unwrap_or(0.0);
+
+    assert!(
+        angry >= afraid,
+        "a thing he can face should not frighten him more than it angers him: \
+         anger {angry:.2}, fear {afraid:.2}"
+    );
+}

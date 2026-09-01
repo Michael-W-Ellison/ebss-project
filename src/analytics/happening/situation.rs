@@ -167,20 +167,25 @@ impl Simulation {
             || self.world.climate.weather.effective_wind_speed() > 8.0;
 
         // Where the predators are, and where anybody is building
-        let hunters: Vec<(i32, i32)> = self
+        // Where the dangerous animals are and how hard each of them hits.
+        //
+        // The weight was not carried before, so every threat in the model was
+        // the same size to an agent standing near it: a fox and a bear both
+        // came out as `predator_near: true`. Fear and anger are both readings
+        // of *how much* is on you, so both need it.
+        let hunters: Vec<((i32, i32), f32)> = self
             .world
             .animals
             .get_all()
             .iter()
             .filter(|animal| animal.is_alive() && !animal.is_domesticated)
-            .filter(|animal| {
-                self.world
-                    .animals
-                    .get_species(&animal.species_id)
-                    .map(|species| species.attack_damage > 0.0)
-                    .unwrap_or(false)
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                if species.attack_damage <= 0.0 {
+                    return None;
+                }
+                Some(((animal.position.0, animal.position.1), species.attack_damage))
             })
-            .map(|animal| (animal.position.0, animal.position.1))
             .collect();
 
         let building_sites: Vec<(i32, i32)> = self
@@ -261,11 +266,73 @@ impl Simulation {
             let child_astray = mine.iter().any(|(_, child)| {
                 let strayed = (child.0 - position.0).abs().max((child.1 - position.1).abs())
                     > Self::CHILD_LEASH;
-                let stalked = hunters.iter().any(|hunter| {
+                let stalked = hunters.iter().any(|(hunter, _)| {
                     (hunter.0 - child.0).abs().max((hunter.1 - child.1).abs())
                         <= Self::DANGER_TO_A_CHILD
                 });
                 strayed || stalked
+            });
+
+            // What is on this one, and whether it could be faced.
+            //
+            // Everything within reach rather than the worst single thing:
+            // `ThreatAssessment::a_pack_of` is what says four wolves are worse
+            // than one and not four times worse, and it is already the model's
+            // answer to that question.
+            // Weighted by how close each one is. A wolf at the edge of sight
+            // is not a wolf at your elbow, and counting everything within
+            // reach at its full weight made a man as frightened of the far
+            // side of a field as of the thing in front of him - which came
+            // out as a settlement permanently too frightened to go and eat.
+            let on_me: Vec<f32> = hunters
+                .iter()
+                .filter(|(spot, _)| near(spot, Self::A_THREAT_NEARBY))
+                .map(|(spot, hits)| {
+                    let paces = (spot.0 - position.0).abs().max((spot.1 - position.1).abs());
+                    let nearness = 1.0
+                        - (paces as f32 / Self::A_THREAT_NEARBY as f32).clamp(0.0, 1.0);
+                    hits * nearness
+                })
+                .collect();
+
+            let coming = crate::agents::ThreatAssessment::a_pack_of(&on_me);
+
+            // Plainly, without what the agent stands to lose folded in.
+            //
+            // `what_i_stand_to_lose` belongs to the *feeling* - how much a man
+            // minds - and multiplying the drive by it as well pushed the
+            // reading to its ceiling whenever anything at all was about, so
+            // fear outranked hunger every tick of every day and a settlement
+            // of eight starved inside four thousand ticks.
+            let judged = crate::agents::ThreatAssessment::assess(
+                agent.own_strength(),
+                coming,
+                crate::agents::EmotionSource::Creature("what is about".to_string()),
+            );
+
+            // One of this agent's own standing between the thing and open
+            // ground - and whether the child has anywhere to go.
+            //
+            // A child has room if the thing is further from it than it is
+            // from its parent: there is time to reach it and time to run. If
+            // the thing is on top of the child, standing over it buys nothing.
+            let one_of_mine_in_the_way = mine.iter().any(|(_, child)| {
+                hunters.iter().any(|(hunter, _)| {
+                    (hunter.0 - child.0).abs().max((hunter.1 - child.1).abs())
+                        <= Self::DANGER_TO_A_CHILD
+                })
+            });
+
+            let they_could_get_clear = mine.iter().any(|(_, child)| {
+                let to_the_parent =
+                    (child.0 - position.0).abs().max((child.1 - position.1).abs());
+                hunters.iter().any(|(hunter, _)| {
+                    let to_the_thing =
+                        (hunter.0 - child.0).abs().max((hunter.1 - child.1).abs());
+                    to_the_thing <= Self::DANGER_TO_A_CHILD
+                        && to_the_thing > Self::NO_ROOM_LEFT
+                        && to_the_thing >= to_the_parent
+                })
             });
 
             let here = Position::new(position.0, position.1);
@@ -277,7 +344,11 @@ impl Simulation {
                 .unwrap_or(TerrainType::Plains);
 
             readings.push(Some(crate::core::Surroundings {
-                predator_near: hunters.iter().any(|spot| near(spot, Self::A_THREAT_NEARBY)),
+                predator_near: !on_me.is_empty(),
+                what_is_on_me: judged.threat_level,
+                could_face_it: judged.can_overcome && agent.could_i_fight_at_all(coming),
+                one_of_mine_in_the_way,
+                they_could_get_clear,
                 night,
                 foul_weather,
                 under_shelter: self
@@ -309,6 +380,13 @@ impl Simulation {
 
     /// How close a predator has to be to a child before its parent runs
     pub(in crate::analytics) const DANGER_TO_A_CHILD: i32 = 10;
+
+    /// And how close before there is no getting away from it at all.
+    ///
+    /// Inside this the child has nowhere to go, so a parent standing over it
+    /// buys nothing and what wins is fear rather than anger. Outside it there
+    /// is still time to be bought, which is what a parent stands there for.
+    pub(in crate::analytics) const NO_ROOM_LEFT: i32 = 2;
 
     /// What each agent makes of its own provisions against the winter coming.
     ///
