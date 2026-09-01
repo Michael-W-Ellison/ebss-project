@@ -9225,6 +9225,45 @@ only in the feeling, which is where the rest of the model can read it.
 
 ---
 
+### 147. A hunting ground was a queue, not a living
+
+Predators turning on each other was already in - a hunter takes another
+hunter it outranks when the ground is `crowded` or it is nearly starving - but
+`crowded` was a flat count: more than three hunters on a block of country,
+whatever was on that country. So the pressure came from how many hunters
+happened to be standing about and never from the game running out. Winter
+could not cause it. A good year could not relieve it. A hard year and an easy
+one looked identical, which is the opposite of what the specification asks
+for: "as prey species decrease in number, this should cause predators to
+attack each other for food".
+
+It is game against hunters now, through one function asked from both ends.
+`AnimalManager::how_good_a_living(game, hunters)` is what a piece of country
+is worth to one more hunter, and `is_the_ground_crowded` is that against
+`WHAT_A_HUNTER_WANTS_UNDER_IT` - ten head to a hunter on sixty-four hectares.
+Ten wolves over plenty of deer are neighbours; two on ground that has been
+eaten out are rivals, which a crowd rule calls quiet.
+
+The same number fixes where a hunter goes when it gives up on its ground.
+That used to pick the neighbouring ground with the fewest rivals on it, and
+the ground with no rivals is very often the ground with nothing on it at all -
+a hunter walking off a crowded field to an empty moor has swapped competition
+for famine. It now picks by the living, counting itself in over there, which
+is the same question about a different piece of country and is why it is one
+function rather than two.
+
+**What could not be measured, and why.** Two worlds over five years, same
+seed, before and after: 27 head against 24.5 across the eight species that
+survived at all. That is not a result. The whole map carries a couple of dozen
+animals on a hundred square kilometres and single species swing further than
+that between years on their own - rabbits went 3.5, 60.5, 21, 2, 4 across the
+run - so nothing at this stocking can be told from noise. The rule is right
+and it is tested directly; whether it *tells* on the ecology cannot be known
+until #141 is fixed, because a model where predators are down to one stoat has
+no predator-on-predator pressure to model.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

@@ -409,3 +409,69 @@ fn a_rabbit_never_stands_its_ground() {
         );
     }
 }
+
+// --- a hunting ground is a living, not a queue -----------------------------
+
+/// Two wolves on ground thick with deer are neighbours; two on ground that
+/// has been eaten out are rivals.
+///
+/// "Predators should have ranges and hunting grounds which they defend
+/// against other predators. As prey species decrease in number, this should
+/// cause predators to attack each other for food." The second sentence is the
+/// one the model kept getting wrong: crowding was a flat count of hunters -
+/// three to a ground, whatever was on it - so the pressure came from how many
+/// hunters happened to be standing about and never from the game running out.
+/// Winter could not cause it, a good year could not relieve it, and a hard
+/// year and an easy one looked identical.
+#[test]
+fn what_makes_a_hunting_ground_crowded_is_the_game_on_it() {
+    use crate::environment::fauna::AnimalManager;
+
+    let per_hunter = AnimalManager::WHAT_A_HUNTER_WANTS_UNDER_IT as usize;
+
+    // Thick with game, and a good many hunters
+    assert!(
+        !AnimalManager::is_the_ground_crowded(per_hunter * 20, 6),
+        "six hunters over plenty of game are not in each other's way"
+    );
+
+    // The same six, after the game has gone
+    assert!(
+        AnimalManager::is_the_ground_crowded(per_hunter, 6),
+        "and the same six on a picked-over ground are"
+    );
+
+    // Two on an empty moor: the fewest possible rivals, and the worst
+    // possible living. A crowd rule would call this quiet.
+    assert!(
+        AnimalManager::is_the_ground_crowded(0, 2),
+        "an eaten-out ground is crowded at two, which is the whole point"
+    );
+}
+
+/// A hunter leaving bad ground goes where the living is better, not where the
+/// rivals are fewest.
+///
+/// Those come apart exactly where it matters. The ground with no rivals on it
+/// is very often the ground with nothing on it at all, and a hunter that walks
+/// to one has swapped competition for famine.
+#[test]
+fn a_hunter_reckons_ground_by_what_it_feeds_not_by_who_is_on_it() {
+    use crate::environment::fauna::AnimalManager;
+
+    // An empty moor with nobody on it
+    let a_moor = AnimalManager::how_good_a_living(0, 1);
+    // Ground thick with game and four hunters already working it
+    let good_ground = AnimalManager::how_good_a_living(120, 4);
+
+    assert!(
+        good_ground > a_moor,
+        "crowded good ground beats an empty moor: {good_ground} against {a_moor}"
+    );
+
+    // And between two grounds carrying the same game, the emptier one wins
+    assert!(
+        AnimalManager::how_good_a_living(60, 2) > AnimalManager::how_good_a_living(60, 6),
+        "of two equally stocked grounds, the one with fewer hunters on it"
+    );
+}

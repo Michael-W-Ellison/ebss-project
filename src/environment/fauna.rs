@@ -3319,11 +3319,6 @@ impl AnimalManager {
         // otherwise, which is what ties its numbers to the herds.
         const HUNT_ATTEMPT_CHANCE: f32 = 0.05;
 
-        // How many hunters one block of country will carry before they are in
-        // each other's way. A hunting ground is a hunting ground because
-        // something holds it: past this, the hungry ones start looking at each
-        // other.
-        const WHAT_A_HUNTING_GROUND_HOLDS: usize = 3;
 
         /// How often a hunter that is not making a living gives up on the
         /// ground it is standing on and tries the next one.
@@ -3392,16 +3387,31 @@ impl AnimalManager {
                 .push(idx);
         }
 
-        // And how many hunters are standing in each block, which is what
-        // decides whether a hunting ground is crowded.
+        // And how many hunters are standing on each hunting ground, and how
+        // much game is under them.
+        //
+        // Both, because a hunting ground is crowded relative to what it
+        // *feeds*, not to a number written down here. Ten wolves on ground
+        // thick with deer are not in each other's way; two on ground that has
+        // been eaten out are, and that is the specification's "as prey
+        // species decrease in number, this should cause predators to attack
+        // each other for food" - the pressure has to come from the game
+        // running out, or it is just a crowd rule with the seasons taken out
+        // of it.
+        //
+        // One pass, and it is the pass that was already here.
         let mut hunters_in: BTreeMap<(i32, i32), usize> = BTreeMap::new();
+        let mut game_in: BTreeMap<(i32, i32), usize> = BTreeMap::new();
         for animal in self.animals.iter().filter(|a| a.is_alive()) {
             let hunts = registry
                 .get(&animal.species_id)
                 .map(|s| s.where_it_sits() != TrophicRole::PrimaryConsumer)
                 .unwrap_or(false);
+            let ground = Self::whose_ground(animal.position);
             if hunts {
-                *hunters_in.entry(Self::whose_ground(animal.position)).or_insert(0) += 1;
+                *hunters_in.entry(ground).or_insert(0) += 1;
+            } else {
+                *game_in.entry(ground).or_insert(0) += 1;
             }
         }
 
@@ -3473,19 +3483,34 @@ impl AnimalManager {
                 if got < hunter.hunger_rate
                     && rng.gen::<f32>() < HOW_OFTEN_A_HUNTER_GIVES_UP_ON_GROUND
                 {
-                    let mut best = None;
+                    // Where it goes is where the living is better, and
+                    // "better" is game against hunters rather than hunters
+                    // alone. Counting only hunters sent animals to empty
+                    // ground because it was empty of everything - the fewest
+                    // rivals is a moor with nothing on it, and a hunter that
+                    // walks to one has swapped competition for famine.
+                    let here = Self::how_good_a_living(
+                        game_in.get(&this_ground).copied().unwrap_or(0),
+                        sharing_it,
+                    );
+                    let mut best: Option<((i32, i32), f32)> = None;
                     for dy in -1..=1i32 {
                         for dx in -1..=1i32 {
                             if dx == 0 && dy == 0 {
                                 continue;
                             }
                             let over_there = (this_ground.0 + dx, this_ground.1 + dy);
-                            let how_many =
-                                hunters_in.get(&over_there).copied().unwrap_or(0);
-                            if how_many + 1 < sharing_it
-                                && best.map(|(_, n)| how_many < n).unwrap_or(true)
+                            // Counting itself in over there, or every hunter
+                            // on a crowded ground reckons the neighbour by
+                            // what it holds without them and they all go.
+                            let living = Self::how_good_a_living(
+                                game_in.get(&over_there).copied().unwrap_or(0),
+                                hunters_in.get(&over_there).copied().unwrap_or(0) + 1,
+                            );
+                            if living > here
+                                && best.map(|(_, best)| living > best).unwrap_or(true)
                             {
-                                best = Some(((dx, dy), how_many));
+                                best = Some(((dx, dy), living));
                             }
                         }
                     }
@@ -3513,8 +3538,10 @@ impl AnimalManager {
             // territory is, in a model with no way to draw a line on a map, is
             // that the animals holding one turn on each other when there are
             // too many of them for the game that is left.
-            let crowded = hunters_in.get(&this_ground).copied().unwrap_or(0)
-                > WHAT_A_HUNTING_GROUND_HOLDS;
+            let crowded = Self::is_the_ground_crowded(
+                game_in.get(&this_ground).copied().unwrap_or(0),
+                hunters_in.get(&this_ground).copied().unwrap_or(1),
+            );
 
             // How many of its own kind are hunting alongside it. A pack takes
             // what one of them could not.
@@ -4200,6 +4227,42 @@ impl AnimalManager {
     /// three over a hundred times the area. Four square kilometres came out
     /// with seven hundred and twenty-one of them.
     const HOW_BIG_A_HUNTING_GROUND_IS: i32 = 80;
+
+    /// What a piece of country is worth to one more hunter: the game on it,
+    /// divided between the hunters that would then be on it.
+    ///
+    /// One owner for the question, asked from both ends. Whether the ground a
+    /// hunter is standing on is crowded and which way it should go when it
+    /// leaves are the same question about two pieces of country, and having
+    /// two spellings of it is how a hunter ends up leaving good ground for
+    /// bad. It also keeps the arithmetic honest at nought hunters, which the
+    /// caller can produce for a neighbouring ground with nothing on it.
+    pub fn how_good_a_living(game: usize, hunters: usize) -> f32 {
+        game as f32 / hunters.max(1) as f32
+    }
+
+    /// How much game one hunter wants under it before the ground is holding
+    /// all the hunters it will hold.
+    ///
+    /// Sixty-four hectares carrying this much a head is the line. It is not a
+    /// carrying capacity - the ground does not stop them - it is where a
+    /// hunter stops treating another hunter as a neighbour.
+    pub const WHAT_A_HUNTER_WANTS_UNDER_IT: f32 = 10.0;
+
+    /// Whether a piece of country is holding more hunters than the game on it
+    /// will keep apart.
+    ///
+    /// This used to be a flat count - three hunters to a ground, whatever was
+    /// on it - which makes a territory a queue rather than a living. Ten
+    /// wolves on ground thick with deer are not in each other's way and two on
+    /// ground that has been eaten out are, and it is the second of those that
+    /// the specification is about: "as prey species decrease in number, this
+    /// should cause predators to attack each other for food". The pressure has
+    /// to come from the game running out, or the seasons have been taken out
+    /// of it.
+    pub fn is_the_ground_crowded(game: usize, hunters: usize) -> bool {
+        Self::how_good_a_living(game, hunters) < Self::WHAT_A_HUNTER_WANTS_UNDER_IT
+    }
 
     /// Which hunting ground a position falls in.
     fn whose_ground(at: (i32, i32)) -> (i32, i32) {
