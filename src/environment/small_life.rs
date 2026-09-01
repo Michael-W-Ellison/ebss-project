@@ -70,10 +70,31 @@ impl TheSmallLifeHere {
     }
 }
 
+/// What the snares of a country have done, for measuring.
+///
+/// The same pattern as `WhatCarriedThemOff`: a tally nothing reads to make a
+/// decision, kept so that a claim about trapping can be checked rather than
+/// asserted. `caught` against `taken` is the number the specification is
+/// about - how much of what went into the snares the people who set them
+/// actually got.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct WhatTheSnaresDid {
+    /// Went into a snare
+    pub caught: u64,
+    /// And was gone before its owner got back
+    pub robbed: u64,
+    /// And was carried home
+    pub taken: u64,
+}
+
 /// The small life of a whole country, a hunting ground at a time.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SmallLife {
     grounds: BTreeMap<(i32, i32), TheSmallLifeHere>,
+
+    /// See [`WhatTheSnaresDid`].
+    #[serde(default)]
+    pub snare_tally: WhatTheSnaresDid,
 }
 
 impl SmallLife {
@@ -122,6 +143,49 @@ impl SmallLife {
     /// And the hunters, which is slower - they breed once a year and they are
     /// waiting on the grazers besides.
     pub const HOW_FAST_THE_HUNTERS_FOLLOW: f32 = 0.0004;
+
+    /// What a snare on ground carrying all it can takes, in a tick.
+    ///
+    /// Twelve ticks to the day, so this is about a fifth of a chance a day
+    /// and something in the snare inside four or five days. A real line is
+    /// several snares and catches oftener than that; an agent that wants
+    /// oftener sets more of them, which is what a trapline is.
+    pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND: f32 = 0.02;
+
+    /// What a whole hunting ground gives a trapline in a tick, at full stock,
+    /// however many snares are on it.
+    ///
+    /// Set just under what the ground actually grows. A logistic population
+    /// at capacity `K` with growth `r` has a surplus of `rK/4` - here 0.0015
+    /// times five hundred over four, near enough a fifth of a head a tick, or
+    /// two and a quarter a day off sixty-four hectares. This is a shade under
+    /// that, so a full line is *just* sustainable and two settlements working
+    /// one wood are not. That is the specification's "agents could tip the
+    /// scale", and it is a scale rather than a switch.
+    pub const WHAT_A_GROUND_GIVES_A_LINE: f32 = 0.15;
+
+    /// What takes the catch out of a snare in a settled country, in a tick.
+    ///
+    /// Most of a week before something finds it in a country with plenty in
+    /// it, which is what makes a trapline worth keeping at all.
+    ///
+    /// **Measured down from a third of this.** At 0.03 a tick - a couple of
+    /// days - a settlement of twelve caught 213 over a year and carried home
+    /// **28**. Losing seven catches in eight in a full wood is not a pinch,
+    /// it is a trapline that does not work, and it made the whole activity
+    /// pointless in exactly the case it should pay best. The pinch belongs at
+    /// the other end of the scale, where `WHAT_A_HUNGRY_COUNTRY_TAKES` is,
+    /// and the cap does that.
+    pub const WHAT_A_QUIET_COUNTRY_TAKES: f32 = 0.01;
+
+    /// And the most it can ever be, when the game is gone and the foxes are
+    /// not.
+    ///
+    /// Half a chance a tick: a catch left one turn is likely gone. That is
+    /// the pinch the specification asks for - trapping a ground out does not
+    /// only make the snares emptier, it makes the ones that do fill worth
+    /// less, because you have to be standing there.
+    pub const WHAT_A_HUNGRY_COUNTRY_TAKES: f32 = 0.5;
 
     /// What a hunting ground will carry, in head of small grazers.
     ///
@@ -267,5 +331,144 @@ impl SmallLife {
     /// And of small hunters.
     pub fn how_many_hunters(&self) -> f32 {
         self.grounds.values().map(|here| here.hunters).sum()
+    }
+}
+
+/// A snare set in the ground, and whatever has gone into it.
+///
+/// The agent's way into the abstracted tier. Nothing else reaches it: a
+/// person cannot stalk a number, and there is no rabbit record to walk up to
+/// any more, so a settlement that wants small meat sets a line and goes round
+/// it. That is what people actually did, and it is the reason abstracting the
+/// lower tiers does not cost the agents anything.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snare {
+    pub at: (i32, i32),
+    pub set_by: uuid::Uuid,
+    pub set_at: u32,
+    /// The tick something went into it, if anything has.
+    pub caught_at: Option<u32>,
+}
+
+impl Snare {
+    /// Whether there is anything in this one worth walking to.
+    pub fn is_holding_something(&self) -> bool {
+        self.caught_at.is_some()
+    }
+}
+
+impl TheSmallLifeHere {
+    /// The chance, in one tick, that a snare on this ground takes something,
+    /// with `sharing_it` snares set on the same ground.
+    ///
+    /// "The rate of success and speed of catch could be based on the total
+    /// population." Two things bound it, and both had to be there.
+    ///
+    /// The first is how thick the ground is, in straight proportion: a snare
+    /// in a full wood catches inside about four days, one in a wood that has
+    /// been worked all winter catches when it catches.
+    ///
+    /// The second is that **the ground gives what it gives, however much
+    /// string is on it** - the same rule `what_the_small_life_gives` applies
+    /// to hunters sharing a range, for the same reason. Without it a line is
+    /// a multiplier: twelve agents at a dozen snares each put a hundred and
+    /// forty-four on one sixty-four-hectare block, which at a snare's own
+    /// rate is **thirty head a day against a ground whose whole surplus is
+    /// two**. Measured: the camp's ground went to eight thousandths of what
+    /// it carries inside three months and stayed there, every catch was
+    /// robbed before anyone reached it because a ground with no game on it is
+    /// a ground of hungry foxes, and a settlement of twelve took **one**
+    /// rabbit in a year.
+    ///
+    /// So a longer line reaches the ground's yield sooner and more reliably,
+    /// and never exceeds it. That is what a trapline is.
+    pub fn how_likely_a_snare_takes_something(&self, sharing_it: usize) -> f32 {
+        let a_snares_own_rate = SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND;
+        let its_share_of_the_ground =
+            SmallLife::WHAT_A_GROUND_GIVES_A_LINE / sharing_it.max(1) as f32;
+
+        a_snares_own_rate.min(its_share_of_the_ground) * self.how_thick_it_is()
+    }
+
+    /// And the chance, in one tick, that something else gets to the catch
+    /// first.
+    ///
+    /// "A decrease in rabbit population could decrease the time an agent has
+    /// to recover a trapped rabbit before a fox steals the catch." It falls
+    /// out of the lag rather than being written down: the hunters track a
+    /// share of the grazers *behind* them, so when the game is trapped out
+    /// the foxes are still there and there is nothing else for them to eat.
+    /// Hunters-per-head-of-game is that, and at full stock it is exactly
+    /// `WHAT_SHARE_ARE_HUNTERS` - so this reads one against the other and a
+    /// settled country comes out at the quiet rate by construction.
+    pub fn how_likely_the_catch_is_taken(&self) -> f32 {
+        if self.grazers <= 0.0 {
+            return SmallLife::WHAT_A_HUNGRY_COUNTRY_TAKES;
+        }
+
+        let per_head = self.hunters / self.grazers;
+        let against_a_settled_country = per_head / SmallLife::WHAT_SHARE_ARE_HUNTERS;
+
+        (SmallLife::WHAT_A_QUIET_COUNTRY_TAKES * against_a_settled_country)
+            .clamp(0.0, SmallLife::WHAT_A_HUNGRY_COUNTRY_TAKES)
+    }
+}
+
+impl SmallLife {
+    /// Bring every snare in the country on by a tick: what goes into them,
+    /// and what takes it out again before its owner gets back.
+    ///
+    /// The catch comes off the ground it was taken on, so a settlement that
+    /// works one wood hard thins that wood - and thins it for the stoats and
+    /// foxes living there as well, which is "agents could tip the scale".
+    ///
+    /// A snare a person is standing beside is not robbed: the whole point of
+    /// going round the line is being there, and a catch taken in the same
+    /// tick its owner reaches it is a catch he got.
+    pub fn tick_the_snares<F>(
+        &mut self,
+        snares: &mut [Snare],
+        now: u32,
+        whose_ground: F,
+        rng: &mut rand::rngs::StdRng,
+    ) where
+        F: Fn((i32, i32)) -> (i32, i32),
+    {
+        use rand::Rng;
+
+        // How much string is on each piece of ground, which is what decides
+        // a snare's share of what that ground gives.
+        let mut lines_on: BTreeMap<(i32, i32), usize> = BTreeMap::new();
+        for snare in snares.iter() {
+            *lines_on.entry(whose_ground(snare.at)).or_insert(0) += 1;
+        }
+
+        for snare in snares.iter_mut() {
+            let ground = whose_ground(snare.at);
+            let here = self.here(ground);
+            let sharing_it = lines_on.get(&ground).copied().unwrap_or(1);
+
+            match snare.caught_at {
+                None => {
+                    if rng.gen::<f32>() < here.how_likely_a_snare_takes_something(sharing_it) {
+                        // One head, off this ground. A snare takes one thing.
+                        let got = self.take(ground, 1.0);
+                        if got > 0.0 {
+                            snare.caught_at = Some(now);
+                            self.snare_tally.caught += 1;
+                        }
+                    }
+                }
+                Some(_) => {
+                    if rng.gen::<f32>() < here.how_likely_the_catch_is_taken() {
+                        // Something else had it. The head is already off the
+                        // ground - it was caught - so nothing else comes off
+                        // here; what is lost is the agent's morning.
+                        snare.caught_at = None;
+                        self.snare_tally.robbed += 1;
+                    }
+                }
+            }
+        }
     }
 }

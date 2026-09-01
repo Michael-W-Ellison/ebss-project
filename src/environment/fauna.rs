@@ -4461,7 +4461,7 @@ impl AnimalManager {
     }
 
     /// Which hunting ground a position falls in.
-    fn whose_ground(at: (i32, i32)) -> (i32, i32) {
+    pub fn whose_ground(at: (i32, i32)) -> (i32, i32) {
         (
             at.0.div_euclid(Self::HOW_BIG_A_HUNTING_GROUND_IS),
             at.1.div_euclid(Self::HOW_BIG_A_HUNTING_GROUND_IS),

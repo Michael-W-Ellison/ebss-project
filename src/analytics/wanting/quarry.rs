@@ -371,4 +371,180 @@ impl Simulation {
 
     /// How much an agent has to want food before it will go and stand in a river
     pub(in crate::analytics) const WORTH_GETTING_WET: f32 = 0.35;
+
+    /// How pressing a want has to be before it is worth setting string.
+    ///
+    /// Lower than the bar for wading into a river, because a snare is set and
+    /// left: the cost is a turn now and the return comes days later, so it is
+    /// the cheapest thing a hungry man can do about tomorrow.
+    pub(in crate::analytics) const WORTH_SETTING_STRING: f32 = 0.25;
+
+    /// How far an agent will go for a catch it knows is waiting.
+    ///
+    /// A hundred and fifty metres at ten metres a cell. A trapline is set
+    /// round where you live; anything further off is a snare you will come
+    /// across when you come across it.
+    pub(in crate::analytics) const AS_FAR_AS_A_LINE_IS_WORTH_WALKING: i32 = 15;
+
+    /// Trapping: set a line, and go round it.
+    ///
+    /// The way in to the lower tiers of the food web now those are a
+    /// population rather than records - see
+    /// [`crate::environment::SmallLife`]. Three things in order, which is the
+    /// order a trapper does them in: take what is in reach, walk to what is
+    /// waiting, and set another where you are standing.
+    pub(in crate::analytics) fn trapping_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        self.a_catch_waiting(agent, agent_position)
+            .or_else(|| self.lengthening_the_line(agent, agent_position))
+    }
+
+    /// A catch already in a snare: take it, or go to it.
+    ///
+    /// Split out from setting string, and placed *ahead* of ordinary
+    /// foraging, because a catch in a snare is use-it-or-lose-it in a way a
+    /// berry on a bush is not - something else is walking towards it. Behind
+    /// the berries it was worth almost nothing: a settlement of twelve caught
+    /// 213 in a year and carried home 28, because by the time anybody had a
+    /// reason to walk out there the fox had been.
+    pub(in crate::analytics) fn a_catch_waiting(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        self.a_catch_at_my_feet(agent, agent_position)
+            .or_else(|| self.walking_to_a_catch(agent, agent_position))
+    }
+
+    /// A catch in a snare the agent is standing on. Free: no walk, no
+    /// weighing, take it.
+    ///
+    /// This is the half that goes in front of everything else in the hunger
+    /// chain, and it is safe there precisely because it costs nothing. The
+    /// walk is a different question and is answered further down.
+    pub(in crate::analytics) fn a_catch_at_my_feet(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let here = (agent_position.0, agent_position.1);
+
+        self.world
+            .snares
+            .iter()
+            .find(|snare| {
+                snare.set_by == agent.id
+                    && snare.is_holding_something()
+                    && (snare.at.0 - here.0).abs().max((snare.at.1 - here.1).abs())
+                        <= Self::CLOSE_ENOUGH_TO_A_SNARE
+            })
+            .map(|_| Action::CheckSnares)
+    }
+
+    /// A catch further off, and whether it is worth the walk.
+    ///
+    /// **This is the half that has to sit behind ordinary food, and it was
+    /// measured the wrong way round first.** In front of `food_action` a
+    /// hungry man walks across the country for one rabbit instead of eating
+    /// the berry at his feet, and six worlds over a year went from 23,733
+    /// person-days to 14,920 with thirty alive at the end against eleven.
+    /// It is the same defect the larder branch carries a note about: a want
+    /// that is real is not thereby the most pressing thing an agent can do
+    /// with the turn.
+    ///
+    /// So: only what is within a short walk, and only after the ground in
+    /// front of him has been asked.
+    pub(in crate::analytics) fn walking_to_a_catch(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let here = (agent_position.0, agent_position.1);
+        // A catch left where it is gets taken, and the thinner the country
+        // the faster - which is why this is worth a turn at all. But only
+        // what is within a walk: a line is something you keep near where you
+        // live, and one snare the far side of the map is not a reason to
+        // cross it.
+        let waiting = self
+            .world
+            .snares
+            .iter()
+            .filter(|snare| snare.set_by == agent.id && snare.is_holding_something())
+            .filter(|snare| {
+                (snare.at.0 - here.0).abs().max((snare.at.1 - here.1).abs())
+                    <= Self::AS_FAR_AS_A_LINE_IS_WORTH_WALKING
+            })
+            .min_by_key(|snare| {
+                (snare.at.0 - here.0).abs() + (snare.at.1 - here.1).abs()
+            });
+
+        if let Some(snare) = waiting {
+            return Some(Action::Move {
+                target: (snare.at.0, snare.at.1, agent_position.2),
+            });
+        }
+
+        None
+    }
+
+    /// Nothing waiting: set another where you are standing, if there is
+    /// anything pressing and there is room in the line.
+    pub(in crate::analytics) fn lengthening_the_line(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+
+        // Somebody whose snares have come back empty a dozen times stops
+        // setting them. On ground that will not carry anything that is the
+        // right answer, and it is how an agent finds that out. It gates
+        // setting rather than collecting: a catch is a catch whatever you
+        // believe about trapping.
+        if !agent.lessons.worth_trying(Undertaking::Trapping) {
+            return None;
+        }
+
+        let here = (agent_position.0, agent_position.1);
+        let mine = self
+            .world
+            .snares
+            .iter()
+            .filter(|snare| snare.set_by == agent.id)
+            .count();
+
+        let hunger = agent
+            .drives
+            .get(DriveType::Hunger)
+            .map(|drive| drive.urgency())
+            .unwrap_or(0.0);
+        let putting_by = agent
+            .drives
+            .get(DriveType::Preparedness)
+            .map(|drive| drive.urgency())
+            .unwrap_or(0.0);
+
+        if hunger.max(putting_by) < Self::WORTH_SETTING_STRING {
+            return None;
+        }
+
+        if mine >= Self::A_LINE_OF_SNARES {
+            return None;
+        }
+
+        if self.world.snares.iter().any(|snare| snare.at == here) {
+            return None;
+        }
+
+        // And not on ground that carries nothing.
+        let ground = crate::environment::fauna::AnimalManager::whose_ground(here);
+        if self.world.animals.small_life.here(ground).would_carry <= 0.0 {
+            return None;
+        }
+
+        Some(Action::SetSnare)
+    }
 }

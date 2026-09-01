@@ -303,6 +303,10 @@ pub enum Action {
     SpreadMuck,
     /// Take what the run is carrying, from the reach the agent is standing at
     Fish,
+    /// Set a snare on the ground the agent is standing on
+    SetSnare,
+    /// Walk the line and take what has gone into it
+    CheckSnares,
     /// Wait/idle
     Wait,
 }
@@ -333,6 +337,12 @@ impl Action {
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
             Action::Fight { .. } => Some(DriveType::Aggression), // Driving a thing off, not eating it
             Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
+            // Setting a line is putting food by against a want you have not
+            // felt yet, which is what Preparedness is; going round it is a
+            // meal. Two different wants, one activity, and that is the
+            // difference between a trapper and a hungry man.
+            Action::SetSnare => Some(DriveType::Preparedness),
+            Action::CheckSnares => Some(DriveType::Hunger),
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering

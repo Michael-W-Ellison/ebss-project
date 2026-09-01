@@ -809,6 +809,14 @@ impl Simulation {
                 }
             }
             Action::Fish { .. } => SkillType::Fishing,
+            // A trapper is a hunter. There is no `SkillType::Trapping`
+            // because there is nothing a separate one would do that this
+            // does not - what a snare wants is a knowledge of where things
+            // run, which is the same knowledge a stalk wants. The *lesson*
+            // is kept apart (`Undertaking::Trapping`), because whether the
+            // two work out for a given man is a different question from
+            // whether he is practised at them.
+            Action::SetSnare | Action::CheckSnares => SkillType::Hunting,
             Action::Hunt { .. } => SkillType::Hunting,
             Action::Build { .. } => SkillType::Construction,
             _ => return None,

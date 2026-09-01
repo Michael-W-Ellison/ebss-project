@@ -140,6 +140,14 @@ pub struct World {
     #[serde(default)]
     pub dropped: Vec<Dropped>,
 
+    /// Snares set in the ground, and what has gone into them.
+    ///
+    /// The only way anybody reaches the lower tiers of the food web now that
+    /// those are a population rather than records - see
+    /// [`crate::environment::SmallLife`]. You cannot stalk a number.
+    #[serde(default)]
+    pub snares: Vec<crate::environment::small_life::Snare>,
+
     /// Pits dug in the ground, and what is keeping in them.
     ///
     /// A settlement had nowhere to put anything. The storehouse is a single
@@ -1091,6 +1099,7 @@ impl World {
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             dropped: Vec::new(),
+            snares: Vec::new(),
             pits: Vec::new(),
             where_it_was_worked_out: std::collections::BTreeSet::new(),
             what_dried_in_the_sun: Vec::new(),
@@ -2091,6 +2100,21 @@ impl World {
             grazing_ticks,
             weather,
         );
+
+        // And what has gone into the snares, and what has come out of them
+        // again. Taken and put back because the snares are the world's and
+        // the small life is the fauna's, and the pass needs both.
+        if !self.snares.is_empty() {
+            let mut snares = std::mem::take(&mut self.snares);
+            let mut rng = crate::core::dice::roll();
+            self.animals.small_life.tick_the_snares(
+                &mut snares,
+                self.tick,
+                crate::environment::fauna::AnimalManager::whose_ground,
+                &mut rng,
+            );
+            self.snares = snares;
+        }
 
         // Update plants: growth on what the ground and sky give them, and the
         // leaf fall that in time becomes more of it.

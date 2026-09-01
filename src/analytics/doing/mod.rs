@@ -111,6 +111,8 @@ impl Simulation {
             Action::TendField => self.tending_a_field(agent_index, tick_now),
             Action::SpreadMuck => self.spreading_muck(agent_index, tick_now),
             Action::Fish => self.fishing(agent_index, &mut rng, tick_now),
+            Action::SetSnare => self.setting_a_snare(agent_index, tick_now),
+            Action::CheckSnares => self.going_round_the_line(agent_index, tick_now),
             Action::Wait => self.waiting(agent_index, &mut rng),
             Action::Explore { direction } => self.exploring(direction, agent_index, tick_now),
         }

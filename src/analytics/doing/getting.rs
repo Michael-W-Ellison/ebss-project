@@ -1183,4 +1183,163 @@ impl Simulation {
             .with_energy_cost(Self::WHAT_A_THRUST_COSTS)
             .with_message(format!("Took {} fish out of the water", taken))
     }
+
+    /// How many snares one person keeps going.
+    ///
+    /// A line, not a snare. One snare on full ground takes something about
+    /// once in five days, so a man living off one would starve; a dozen is a
+    /// morning's round and a rabbit most days. It is capped because a line is
+    /// only worth what you can walk, and an uncapped one would let a
+    /// settlement carpet the country in string and never go out again.
+    pub(in crate::analytics) const A_LINE_OF_SNARES: usize = 12;
+
+    /// How far from a snare an agent has to be to take what is in it.
+    ///
+    /// Forty metres, not ten. A round is a *round*: a man who stops to look
+    /// at one snare looks at the others he set near it, because that is the
+    /// only reason to set them near each other. At one cell it was not a
+    /// round at all, it was one snare, and a settlement recovered a catch in
+    /// six - the rest robbed while its owner stood two fields away with no
+    /// reason to walk over.
+    ///
+    /// It is not free: the round still costs the turn and
+    /// `WHAT_A_ROUND_COSTS` of energy, whether there are twelve snares in
+    /// reach or one.
+    pub(in crate::analytics) const CLOSE_ENOUGH_TO_A_SNARE: i32 = 4;
+
+    /// What setting one costs.
+    pub(in crate::analytics) const WHAT_SETTING_A_SNARE_COSTS: f32 = 1.5;
+
+    /// And what walking the line costs, which is the walk rather than the work.
+    pub(in crate::analytics) const WHAT_A_ROUND_COSTS: f32 = 3.0;
+
+    /// Set a snare where the agent is standing.
+    ///
+    /// This is the agent's way into the abstracted tier and there is no other:
+    /// the small life is a population, and you cannot stalk a number. It is
+    /// also what people actually did - a stone-age settlement got far more
+    /// meat off a trapline than off spears - so making it the interface costs
+    /// nothing in truthfulness.
+    pub(in crate::analytics) fn setting_a_snare(
+        &mut self,
+        agent_index: usize,
+        tick_now: u32,
+    ) -> ActionResult {
+        let agent_id = self.population.agents[agent_index].id;
+        let at = self.population.agents[agent_index].state.position;
+        let here = (at.0, at.1);
+
+        let mine = self
+            .world
+            .snares
+            .iter()
+            .filter(|snare| snare.set_by == agent_id)
+            .count();
+
+        if mine >= Self::A_LINE_OF_SNARES {
+            return ActionResult::failure("The line is as long as I can walk".to_string());
+        }
+
+        if self.world.snares.iter().any(|snare| snare.at == here) {
+            return ActionResult::failure("There is one here already".to_string());
+        }
+
+        // Ground nothing lives on takes nothing. A snare on a salt flat is a
+        // piece of string in the sand, and an agent that sets one there has
+        // learnt something - which is why this is a failure it can learn
+        // from rather than a refusal it never sees.
+        let ground = crate::environment::fauna::AnimalManager::whose_ground(here);
+        if self.world.animals.small_life.here(ground).would_carry <= 0.0 {
+            return ActionResult::failure("Nothing lives on this ground".to_string())
+                .with_energy_cost(Self::WHAT_SETTING_A_SNARE_COSTS);
+        }
+
+        self.world.snares.push(crate::environment::small_life::Snare {
+            at: here,
+            set_by: agent_id,
+            set_at: tick_now,
+            caught_at: None,
+        });
+
+        let agent = &mut self.population.agents[agent_index];
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Hunting, 6, tick_now);
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.1)
+            .with_energy_cost(Self::WHAT_SETTING_A_SNARE_COSTS)
+            .with_message("Set a snare".to_string())
+    }
+
+    /// Walk the line and take what has gone into it.
+    ///
+    /// What comes back depends on the ground, and that is the whole point of
+    /// the exercise: a wood that has been worked all winter has empty snares
+    /// in it, and a wood that has not is a living. What an agent cannot see
+    /// is the other half - a catch it did not get to in time was taken by
+    /// something, and it never learns which snares those were, only that its
+    /// round came back light.
+    pub(in crate::analytics) fn going_round_the_line(
+        &mut self,
+        agent_index: usize,
+        tick_now: u32,
+    ) -> ActionResult {
+        let agent_id = self.population.agents[agent_index].id;
+        let at = self.population.agents[agent_index].state.position;
+
+        let mut took = 0u32;
+        let mut walked_to = 0u32;
+
+        for snare in self.world.snares.iter_mut() {
+            if snare.set_by != agent_id {
+                continue;
+            }
+
+            let reach = (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs());
+            if reach > Self::CLOSE_ENOUGH_TO_A_SNARE {
+                continue;
+            }
+
+            walked_to += 1;
+            if snare.caught_at.take().is_some() {
+                took += 1;
+            }
+
+        }
+
+        if walked_to == 0 {
+            return ActionResult::failure("No snare of mine within reach".to_string());
+        }
+
+        self.world.animals.small_life.snare_tally.taken += took as u64;
+
+        if took == 0 {
+            let agent = &mut self.population.agents[agent_index];
+            agent
+                .skills
+                .practise(crate::agents::SkillType::Hunting, 3, tick_now);
+            return ActionResult::failure("Empty".to_string())
+                .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
+        }
+
+        let food_data = self
+            .food_database
+            .create_food_data(&crate::world::inventory::ItemType::Meat, self.current_tick);
+
+        let agent = &mut self.population.agents[agent_index];
+        let mut catch =
+            crate::agents::InventoryItem::new_with_weight("meat".to_string(), took, 1.2);
+        catch.food_data = food_data;
+        agent.inventory.add_item(catch);
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Hunting, 12, tick_now);
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Hunger, -0.15)
+            .with_drive_change(DriveType::Sustenance, -0.1)
+            .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
+            .with_message(format!("Took {took} out of the snares"))
+    }
 }

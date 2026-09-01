@@ -5393,6 +5393,8 @@ impl Agent {
             Action::Eat { food_type } => format!("eat:{food_type}"),
             Action::Mate { .. } => "mate".to_string(),
             Action::Fish => "fish".to_string(),
+            Action::SetSnare => "setsnare".to_string(),
+            Action::CheckSnares => "checksnares".to_string(),
             Action::Hunt { .. } => "hunt".to_string(),
             Action::MakeClothing { garment } => format!("makeclothing:{garment}"),
             Action::Cook { .. } => "cook".to_string(),
@@ -5479,6 +5481,7 @@ impl Agent {
             // agent that lived through it did not do so by freezing well
             Action::Freeze => return,
             Action::Fish => Undertaking::Fishing,
+            Action::SetSnare | Action::CheckSnares => Undertaking::Trapping,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
             | Action::SpreadMuck

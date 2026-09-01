@@ -9382,6 +9382,78 @@ trapping, and does not exist yet.
 
 ---
 
+### 150. A trapline, and three ways of making one that ruins a settlement
+
+The lower tiers are a population now (#149), which leaves a hole: **you
+cannot stalk a number.** `Action::Hunt` walks up to a particular animal
+record, so abstracting the small species away would take the small meat with
+it. What people actually did was set a line and go round it, so that is what
+went in - `Action::SetSnare` and `Action::CheckSnares`, `Undertaking::
+Trapping`, and `Snare` on the world.
+
+What a snare does is read off the ground it is set on, which is the point of
+the exercise:
+
+- **How often it fills** is straight proportion to how thick the small life
+  is there - "the rate of success and speed of catch could be based on the
+  total population".
+- **How long a catch waits** is hunters against grazers. That is not a rule
+  written down; it falls out of the hunters tracking the grazers *behind*
+  them. Trap a wood out and its foxes are still on it with nothing else to
+  eat, so the ratio spikes and a catch is gone in a turn or two. In a settled
+  country it comes out at the quiet rate by construction, because at full
+  stock the ratio is exactly `WHAT_SHARE_ARE_HUNTERS`. That is the
+  specification's "a decrease in rabbit population could decrease the time an
+  agent has to recover a trapped rabbit before a fox steals the catch", and
+  nothing had to be written twice to get it.
+
+**Four numbers were wrong first, and each one was found by measuring rather
+than by reading the code.**
+
+1. **A snare's rate was a snare's rate.** Twelve agents at a dozen snares
+   each put a hundred and forty-four on one sixty-four-hectare block, which
+   at 0.02 a tick apiece is **thirty head a day off a ground whose whole
+   surplus is two**. The camp's ground went to eight thousandths of what it
+   carries inside three months, every catch was robbed before anyone reached
+   it - a ground with no game on it is a ground of hungry foxes - and a
+   settlement of twelve took **one** rabbit in a year. The ground gives what
+   it gives however much string is on it, the same rule
+   `what_the_small_life_gives` already applies to hunters sharing a range. A
+   longer line reaches the ground's yield sooner and never exceeds it.
+2. **A catch put ahead of the food at an agent's feet.** It is the only food
+   in this world that walks away if you leave it, so it looked like it
+   belonged first. It does not: a hungry man then crosses the country for one
+   rabbit instead of eating the berry in front of him. Six worlds over a year
+   went from **23,733 person-days to 14,920**, thirty alive at the end
+   against eleven. Only the free case belongs in front - a snare the agent is
+   standing on. The walk sits behind the ground in front of him, and is
+   bounded at a hundred and fifty metres.
+3. **Setting string ahead of storing food.** A man with a surplus in his pack
+   set snares instead of putting the surplus by, and what he does not put by
+   he has not got in February: **20,126 person-days, deaths in the winter
+   quarter**. Setting a snare is the last thing in the Preparedness chain
+   now, which is the honest place for it - a trapline is what you do when
+   there is nothing better to do with the turn.
+4. **A round was one snare.** `CLOSE_ENOUGH_TO_A_SNARE` was one cell, so a
+   man who stopped at a snare ignored the eleven he set beside it, and a
+   settlement recovered one catch in six. Forty metres, and it recovers half
+   of them in a healthy country and a third across a year that ends badly -
+   the difference being the winter, which is the mechanic working.
+
+**Where it ended up: 23,600 person-days against 23,733 at HEAD, and thirty
+alive against thirty.** Cost-neutral, which is the right result for a
+supplement rather than a staple: one hunting ground's whole surplus is about
+two head a day against twelve people's twenty-odd, so a trapline is a tenth
+of a living. It is not meant to be more than that, and a version of it that
+was would have been a number chosen to flatter the feature.
+
+`WhatTheSnaresDid` counts caught, robbed and taken, and a test asserts they
+add up. The first cut of that tally silently counted nothing - a string
+replace that matched no text - and the missing 185 catches looked for a while
+like a bug in the model rather than in the instrument.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

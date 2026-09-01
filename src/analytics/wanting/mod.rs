@@ -668,7 +668,15 @@ impl Simulation {
             // stand in a river or go after an animal
             DriveType::Hunger => {
                 let starving = agent.state.is_starving() || agent.nutrition.is_starving();
-                self.food_action(agent, agent_position, starving)
+
+                // A catch in a snare the agent is standing on comes first
+                // of everything, because it costs nothing: no walk, no
+                // weighing, take it. The *walk* to one further off is a
+                // different question and sits below the ground in front of
+                // him - see `walking_to_a_catch`, which was measured the
+                // wrong way round first and cost a third of every settlement.
+                self.a_catch_at_my_feet(agent, agent_position)
+                    .or_else(|| self.food_action(agent, agent_position, starving))
                     // A store within reach beats a walk out to a berry bush,
                     // which is the whole of what digging one buys.
                     //
@@ -682,6 +690,14 @@ impl Simulation {
                     // somebody a day earlier. Efficiency did not move.
                     // See ISSUES_FOUND #43.
                     .or_else(|| self.something_out_of_the_store(agent, agent_position))
+                    // Then the walk out to a catch. Setting *more* string is
+                    // not here at all: a snare set now feeds you in four
+                    // days, which is no answer to being hungry today, and
+                    // `Action::SetSnare` answers Preparedness for exactly
+                    // that reason. Offering it from the hunger arm as well
+                    // had hungry men spending their turns on string - six
+                    // worlds went from 23,733 person-days to 20,337.
+                    .or_else(|| self.walking_to_a_catch(agent, agent_position))
                     .or_else(|| self.fishing_action(agent, agent_position))
                     .or_else(|| self.hunting_action(agent, agent_position))
             }
@@ -929,7 +945,21 @@ impl Simulation {
                         item_type: what,
                         amount: how_many,
                     })
-                }),
+                })
+                // A line of snares is food put by that you do not have to
+                // carry or keep from spoiling: it stays alive in the wood
+                // until you want it, which is what makes trapping the
+                // stone-age answer to a larder.
+                //
+                // Last, though, and that was measured. In front of storing,
+                // a man with a surplus in his pack sets string instead of
+                // putting the surplus by, and what he does not put by he has
+                // not got in February: six worlds went from 23,733
+                // person-days to 20,126, with the deaths in the winter
+                // quarter. Trapping is what you do when there is nothing
+                // better to do with the turn, and that is the honest place
+                // for it - a supplement, which is what a trapline was.
+                .or_else(|| self.lengthening_the_line(agent, agent_position)),
 
             // Nothing in the world is fine enough to want yet - see
             // ISSUES_FOUND.md #5. Until something is, this need has no answer

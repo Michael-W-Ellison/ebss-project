@@ -392,6 +392,7 @@ impl Simulation {
             Action::PlantCutting => Some(ActionType::Farming),
             Action::SpreadMuck => Some(ActionType::Farming),
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
+            Action::SetSnare | Action::CheckSnares => Some(ActionType::Mining),
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {
                 Some(ActionType::Cooking)

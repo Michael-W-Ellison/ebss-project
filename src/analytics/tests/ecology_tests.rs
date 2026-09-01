@@ -918,3 +918,153 @@ fn a_country_stocks_its_own_lower_tiers() {
         );
     }
 }
+
+// --- trapping: the agent's way into the abstracted tier --------------------
+
+/// A snare fills faster in a full wood than in one that has been worked out.
+///
+/// "When an agent goes out trapping, the rate of success and speed of catch
+/// could be based on the total population."
+#[test]
+fn a_snare_fills_at_the_rate_the_ground_carries() {
+    use crate::environment::{SmallLife, TheSmallLifeHere};
+
+    let full = TheSmallLifeHere { grazers: 500.0, hunters: 4.0, would_carry: 500.0 };
+    let worked_out = TheSmallLifeHere { grazers: 50.0, hunters: 3.0, would_carry: 500.0 };
+    let barren = TheSmallLifeHere { grazers: 0.0, hunters: 0.0, would_carry: 0.0 };
+
+    let one_snare = 1;
+    assert!(
+        full.how_likely_a_snare_takes_something(one_snare)
+            > worked_out.how_likely_a_snare_takes_something(one_snare),
+        "a full wood should fill a snare faster than a worked-out one"
+    );
+    assert_eq!(
+        barren.how_likely_a_snare_takes_something(one_snare),
+        0.0,
+        "and ground that carries nothing catches nothing"
+    );
+
+    // The ground gives what it gives, however much string is on it. Without
+    // this a settlement of twelve at a dozen snares each takes thirty head a
+    // day off a ground whose whole surplus is two.
+    let alone = full.how_likely_a_snare_takes_something(1);
+    let sharing = full.how_likely_a_snare_takes_something(100);
+    assert!(
+        sharing < alone,
+        "a hundred snares on one ground each catch less: {sharing} against {alone}"
+    );
+    assert!(
+        sharing * 100.0 <= SmallLife::WHAT_A_GROUND_GIVES_A_LINE + f32::EPSILON,
+        "and together they never take more than the ground gives: {}",
+        sharing * 100.0
+    );
+}
+
+/// The thinner the game, the less time an agent has to get to its catch.
+///
+/// The specification, in as many words: "a decrease in rabbit population
+/// could decrease the time an agent has to recover a trapped rabbit before a
+/// fox steals the catch." It is not written down as a rule - it falls out of
+/// the hunters tracking the grazers *behind* them, so a ground trapped out
+/// still has its foxes on it and nothing else for them to eat.
+#[test]
+fn a_thin_country_robs_a_snare_sooner_than_a_full_one() {
+    use crate::environment::{SmallLife, TheSmallLifeHere};
+
+    let settled = TheSmallLifeHere {
+        grazers: 500.0,
+        hunters: 500.0 * SmallLife::WHAT_SHARE_ARE_HUNTERS,
+        would_carry: 500.0,
+    };
+    // The same foxes, after the game has been trapped out from under them.
+    let trapped_out = TheSmallLifeHere {
+        hunters: settled.hunters,
+        grazers: 50.0,
+        would_carry: 500.0,
+    };
+
+    let quiet = settled.how_likely_the_catch_is_taken();
+    let hungry = trapped_out.how_likely_the_catch_is_taken();
+
+    assert!(
+        (quiet - SmallLife::WHAT_A_QUIET_COUNTRY_TAKES).abs() < 1e-4,
+        "a settled country should come out at the quiet rate by construction, \
+         not by a number written down twice: {quiet}"
+    );
+    assert!(
+        hungry > quiet * 5.0,
+        "trap the game out and the catch goes fast: {hungry} against {quiet}"
+    );
+    assert!(
+        hungry <= SmallLife::WHAT_A_HUNGRY_COUNTRY_TAKES,
+        "but never past the cap: {hungry}"
+    );
+}
+
+/// A settlement sets a line, catches things in it, and does not thereby
+/// starve.
+///
+/// Both halves are the test. Trapping that nobody does is dead code, and
+/// trapping that costs more turns than it returns is worse than none - which
+/// is what it was, three times over, before it was measured: a catch put
+/// ahead of the food at an agent's feet took six worlds from 23,733
+/// person-days to 14,920, and setting string ahead of storing food took them
+/// to 20,126 with the deaths in the winter quarter.
+#[test]
+fn a_settlement_runs_a_trapline_and_lives() {
+    use crate::agents::{AgentConfig, Population};
+    use crate::analytics::Simulation;
+    use crate::world::WorldConfig;
+
+    crate::core::dice::seed(4242);
+    let world = World::new(WorldConfig::default().with_size(240, 240));
+    let mut population = Population::new();
+    for _ in 0..12 {
+        population.spawn_agent(AgentConfig::default());
+    }
+    let mut simulation = Simulation::new(world, population);
+
+    for _ in 0..(crate::environment::seasons::TICKS_PER_YEAR / 2) {
+        simulation.tick();
+    }
+
+    assert!(
+        !simulation.world.snares.is_empty(),
+        "nobody set a snare all half-year: the whole activity is unreachable"
+    );
+
+    let tally = simulation.world.animals.small_life.snare_tally;
+    assert!(tally.caught > 0, "nothing ever went into one");
+    assert!(
+        tally.taken > 0,
+        "{} caught and none of it carried home - the line feeds foxes",
+        tally.caught
+    );
+
+    // Nothing is lost or invented: everything caught was robbed, taken, or is
+    // still sitting in a snare.
+    let holding = simulation
+        .world
+        .snares
+        .iter()
+        .filter(|snare| snare.is_holding_something())
+        .count() as u64;
+    assert_eq!(
+        tally.caught,
+        tally.robbed + tally.taken + holding,
+        "caught {} against robbed {} + taken {} + holding {}",
+        tally.caught,
+        tally.robbed,
+        tally.taken,
+        holding
+    );
+
+    let alive = simulation
+        .population
+        .agents
+        .iter()
+        .filter(|agent| agent.state.is_alive)
+        .count();
+    assert!(alive > 0, "the settlement trapped itself to death");
+}

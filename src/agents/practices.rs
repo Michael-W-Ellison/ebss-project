@@ -152,6 +152,14 @@ pub enum Undertaking {
     Hunting,
     /// Standing in a river after fish
     Fishing,
+    /// Setting a line of snares and going round it.
+    ///
+    /// Kept apart from `Hunting` on purpose, and it is the same argument that
+    /// keeps `Fleeing` apart from `Fighting`: they are not the same lesson. A
+    /// man who cannot get within a spear's throw of a deer may still be the
+    /// best trapper in the settlement, and folding the two together would
+    /// teach him he cannot feed himself.
+    Trapping,
     /// Standing your ground against something
     Fighting,
     /// Getting away from something. Not the same thing as fighting it, and
