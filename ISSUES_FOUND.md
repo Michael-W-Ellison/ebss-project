@@ -9096,6 +9096,57 @@ more were counting drives and now ask the enum.
 
 ---
 
+### 144. A deer with a wolf standing over it went on grazing
+
+`update_animal_behavior_with_hunger` was a set of dice keyed on
+`AnimalBehavior` and on nothing else. It could not see what was standing next
+to the animal at all, so a deer with a wolf three paces off did exactly what a
+deer alone in a meadow did: rolled for whether to graze, drink or stand about.
+`AnimalState::Fleeing` and `AnimalState::Attacking` were only ever set by
+`shy_away_from`, which is about people - so between beasts, nothing in this
+world had ever run from anything.
+
+Animals now carry the same two numbers an agent carries in
+`core::Surroundings` - `what_is_on_me` and `could_face_it` - off the same
+`ThreatAssessment`, so there is one model of fear and anger in this project
+rather than one for people and another for beasts. What counts as a threat is
+anything that eats this one: a thing whose prey list names its kind, or which
+takes prey of its size. What counts as being able to face it is what it brings
+against what the thing brings, **with every one of its own kind standing near
+it counted in** - which is the herd, and it is why eight sheep together turn
+on a wolf that one sheep runs from.
+
+It also settles the cattle question from the other end. A wolf never reads a
+cow as a threat to begin with, because a wolf's prey tops out at
+`AnimalSize::Medium` and a cow is Large: that is this model's way of saying a
+lone wolf does not take cattle, and it was already true before any of this.
+
+**What it costs is the reacting, not the looking.** A hundred square
+kilometres went from 11.14 ms a tick to 13.69, and almost none of that is the
+appraisal: driving the pass from the hunters instead of from every animal -
+seven times fewer starting points for the same pairs - moved it by one per
+cent, and running it every fourth tick instead of every tick moved it by four.
+The rest is that animals which run *move*, every tick, and a country whose
+beasts scatter when something comes near them costs more to keep track of than
+one whose beasts stand still. That is the feature, and 59 seconds to the
+world-year is what it comes to.
+
+Two smaller things went in beside it:
+
+- **Dread and urgency were sharing a horizon.** `A_LONG_WAY_OFF` is half a day
+  and is the *urgency* clock - how hard a need should press on what an agent
+  does this turn, deliberately tight or everything is an emergency. The fear
+  calculation read the same number, so a man fifteen days without food and six
+  days from dying of it came out **eight per cent frightened**. Dread looks
+  three days ahead now, which is what "I do not have enough food raises fear"
+  has to mean if it is to mean anything.
+- **Being robbed was anger every time, whoever took it.** A man robbed by
+  somebody twice his size came away resolved to do something about it. It is
+  the same appraisal the wolves get, pointed at a person: what was taken
+  decides how much, and who took it decides whether it is anger or fear.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

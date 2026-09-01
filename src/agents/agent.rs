@@ -6809,6 +6809,23 @@ impl Agent {
     /// A missed meal is not frightening. Days of missed meals are.
     const LONG_ENOUGH_TO_FRIGHTEN: f32 = 48.0;
 
+    /// How far ahead dread looks.
+    ///
+    /// Three days. Not the same horizon as `A_LONG_WAY_OFF`, which is half a
+    /// day and is the *urgency* clock - how hard a need should press on what
+    /// an agent does this turn. These are two different questions and they
+    /// were sharing one number: read at half a day, a man fifteen days without
+    /// food and six days from dying of it came out **eight per cent
+    /// frightened**, because six days is twelve times half a day.
+    ///
+    /// Urgency wants a tight horizon or everything is always an emergency -
+    /// that is what the comment on `A_LONG_WAY_OFF` is about. Dread wants a
+    /// long one, because being a week from starving is frightening and is
+    /// meant to be: it is the specification's "I do not have enough food"
+    /// raising fear, and fear is what sends somebody looking further afield
+    /// than the ground they are standing on.
+    const WHAT_DREAD_LOOKS_AHEAD: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 * 3.0;
+
     /// Fear from a need that something has been preventing this agent from
     /// answering.
     ///
@@ -6839,7 +6856,7 @@ impl Agent {
             // cannot kill is a disappointment; one that can is a danger, and
             // the nearer it is the worse.
             let stakes = match self.state.ticks_before_this_kills_me(drive_type) {
-                Some(left) => (Self::A_LONG_WAY_OFF / left.max(1.0)).clamp(0.0, 1.0),
+                Some(left) => (Self::WHAT_DREAD_LOOKS_AHEAD / left.max(1.0)).clamp(0.0, 1.0),
                 None => continue,
             };
 
@@ -8559,6 +8576,7 @@ impl Agent {
         what: &str,
         how_many: u32,
         current_tick: u32,
+        how_strong_they_are: f32,
     ) {
         use super::EmotionSource;
 
@@ -8569,7 +8587,25 @@ impl Agent {
         let share = (how_many as f32 / had as f32).clamp(0.0, 1.0);
         let cost = Self::WHAT_BEING_ROBBED_COSTS_THEM * (0.4 + 0.6 * share);
 
-        self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+        // Anger at somebody who can be faced, and fear of somebody who cannot.
+        //
+        // This was anger every time, whoever took it - so a man robbed by
+        // somebody twice his size came away resolved to do something about it,
+        // which is not what being robbed by somebody twice your size feels
+        // like. It is the same appraisal the wolves get, pointed at a person:
+        // see `ThreatAssessment` and `DriveType::Aggression`. What was taken
+        // decides how much, and who took it decides which.
+        let judged = super::ThreatAssessment::assess(
+            self.own_strength(),
+            how_strong_they_are,
+            EmotionSource::Agent(thief),
+        );
+
+        if judged.can_overcome {
+            self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+        } else {
+            self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+        }
 
         let bond = self
             .relationships

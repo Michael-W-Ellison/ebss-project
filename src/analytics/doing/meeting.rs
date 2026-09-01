@@ -692,10 +692,12 @@ impl Simulation {
         // a fresh item out of the name handed the thief a stack that
         // would never go off - stealing a week-old fish got you a
         // fish that keeps for ever. See ISSUES_FOUND #61.
+        let how_strong_the_thief_is = self.population.agents[agent_index].own_strength();
+
         let taken = {
             let other = &mut self.population.agents[them];
             let taken = other.inventory.remove_item(&theirs.0, took);
-            other.they_took_something_of_mine(me, &theirs.0, took, tick_now);
+            other.they_took_something_of_mine(me, &theirs.0, took, tick_now, how_strong_the_thief_is);
             taken
         };
 
@@ -721,7 +723,13 @@ impl Simulation {
 
             if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
                 self.population.agents[onlooker]
-                    .they_took_something_of_mine(me, &theirs.0, took, tick_now);
+                    .they_took_something_of_mine(
+                        me,
+                        &theirs.0,
+                        took,
+                        tick_now,
+                        how_strong_the_thief_is,
+                    );
             }
         }
 

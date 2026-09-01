@@ -2390,6 +2390,24 @@ pub struct Animal {
 
     /// Living product timers
     pub product_timers: BTreeMap<String, u32>, // material_id -> ticks until production
+
+    /// How much is on this one, and whether it reckons it could face it.
+    ///
+    /// The same two numbers an agent carries in `core::Surroundings`, off the
+    /// same `ThreatAssessment`, so that there is one model of fear and anger
+    /// in this project rather than one for people and another for beasts.
+    /// Animals had neither: `update_animal_behavior_with_hunger` was a set of
+    /// dice keyed on `AnimalBehavior` and nothing else, so a deer with a wolf
+    /// standing over it did exactly what a deer alone in a meadow did.
+    #[serde(default)]
+    pub what_is_on_me: f32,
+    #[serde(default)]
+    pub could_face_it: bool,
+    /// And where it is, which is what there is to run from or turn on.
+    #[serde(default)]
+    pub what_is_on_me_from: Option<(i32, i32)>,
+    #[serde(default)]
+    pub what_is_on_me_id: Option<Uuid>,
 }
 
 impl Animal {
@@ -2433,6 +2451,10 @@ impl Animal {
             hunger_rate: species.hunger_rate,
             is_starving: false,
             product_timers,
+            what_is_on_me: 0.0,
+            could_face_it: false,
+            what_is_on_me_from: None,
+            what_is_on_me_id: None,
         }
     }
 
@@ -2947,6 +2969,17 @@ impl AnimalManager {
         // Fifth pass: Herbivore feeding - what is taken off the ground, and
         // what goes back onto it
         self.what_the_grazers_took(grid, plants, grazing_ticks, weather);
+
+        // What each of them is facing, before any of them acts on it.
+        //
+        // Not every tick. A hunt reaches eight cells and a hunter covers a
+        // cell or two in a tick, so a reading four ticks old is a reading of
+        // very nearly the same field; the readings persist between passes
+        // rather than being cleared, so nothing goes blind in between.
+        const HOW_OFTEN_A_BEAST_LOOKS_UP: u32 = 4;
+        if weather.now % HOW_OFTEN_A_BEAST_LOOKS_UP == 0 {
+            self.what_each_animal_is_facing();
+        }
 
         // Sixth pass: AI behavior (needs fresh registry borrow)
         let animals_data: Vec<(usize, String, AnimalBehavior, bool, bool)> = {
@@ -4362,8 +4395,245 @@ impl AnimalManager {
     }
 
     /// Update animal behavior with hunger consideration
+    /// What each animal is facing, before any of them acts on it.
+    ///
+    /// The same appraisal the agents get, in the same shape and off the same
+    /// `ThreatAssessment` - see `core::Surroundings::what_is_on_me`. A whole
+    /// pass rather than a question each animal asks for itself, because the
+    /// answer depends on where everything else is standing and that must not
+    /// change underneath them while they are deciding.
+    ///
+    /// What counts as a threat to an animal is anything that eats it: a thing
+    /// whose prey list names its kind, or which takes prey of its size. What
+    /// counts as being able to face it is what it brings against what the
+    /// thing brings, with the rest of its own kind standing near it counted in
+    /// - which is why cattle in a herd turn round and a lone cow runs.
+    fn what_each_animal_is_facing(&mut self) {
+        let registry = match &self.registry {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
+        for (idx, animal) in self.animals.iter().enumerate() {
+            if animal.is_alive() {
+                who_is_about
+                    .entry(Self::which_block(animal.position))
+                    .or_default()
+                    .push(idx);
+            }
+        }
+
+        // Driven from the hunters rather than from everything.
+        //
+        // Asking every animal what is near it is a nine-block gather per
+        // animal, and a country has seven times more things being eaten than
+        // things eating: at a hundred square kilometres that cost 28 per cent
+        // of the whole tick. Walking out from the hunters instead touches the
+        // same pairs and visits a ninth as many animals to find them.
+        let mut coming_at: BTreeMap<usize, Vec<f32>> = BTreeMap::new();
+        let mut worst_at: BTreeMap<usize, (f32, (i32, i32), Uuid)> = BTreeMap::new();
+
+        for (hunter_idx, hunter) in self.animals.iter().enumerate() {
+            if !hunter.is_alive() {
+                continue;
+            }
+            let Some(theirs) = registry.get(&hunter.species_id) else {
+                continue;
+            };
+            if theirs.prey_species.is_empty() {
+                continue;
+            }
+
+            let biggest = theirs
+                .prey_species
+                .iter()
+                .filter_map(|prey| registry.get(prey))
+                .map(|prey| prey.size)
+                .max();
+
+            let here = Self::which_block(hunter.position);
+            let nearby: Vec<usize> = [-1, 0, 1]
+                .iter()
+                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+                .filter_map(|(dx, dy)| who_is_about.get(&(here.0 + dx, here.1 + dy)))
+                .flatten()
+                .copied()
+                .collect();
+
+            for prey_idx in nearby {
+                if prey_idx == hunter_idx || !self.animals[prey_idx].is_alive() {
+                    continue;
+                }
+                if self.animals[prey_idx].species_id == hunter.species_id {
+                    continue;
+                }
+                let Some(mine) = registry.get(&self.animals[prey_idx].species_id) else {
+                    continue;
+                };
+
+                // Something that eats this one: it names its kind, or it takes
+                // prey of its size.
+                let eats_me = theirs.prey_species.contains(&mine.id)
+                    || biggest.map(|top| mine.size <= top).unwrap_or(false);
+                if !eats_me {
+                    continue;
+                }
+
+                let paces = (hunter.position.0 - self.animals[prey_idx].position.0)
+                    .abs()
+                    .max((hunter.position.1 - self.animals[prey_idx].position.1).abs());
+                if paces > Self::HOW_FAR_AN_ANIMAL_LOOKS {
+                    continue;
+                }
+
+                // Weighed by nearness, the same way an agent weighs it.
+                let nearness = 1.0
+                    - (paces as f32 / Self::HOW_FAR_AN_ANIMAL_LOOKS as f32).clamp(0.0, 1.0);
+                let brings = theirs.what_one_of_these_brings() * nearness;
+
+                coming_at.entry(prey_idx).or_default().push(brings);
+                let worse = worst_at
+                    .get(&prey_idx)
+                    .map(|(most, _, _)| brings > *most)
+                    .unwrap_or(true);
+                if worse {
+                    worst_at.insert(prey_idx, (brings, hunter.position, hunter.id));
+                }
+            }
+        }
+
+        let mut readings: Vec<(usize, f32, bool, (i32, i32), Uuid)> =
+            Vec::with_capacity(coming_at.len());
+
+        for (prey_idx, coming) in &coming_at {
+            let prey = &self.animals[*prey_idx];
+            let Some(mine) = registry.get(&prey.species_id) else {
+                continue;
+            };
+            let Some((_, where_it_is, which)) = worst_at.get(prey_idx).copied() else {
+                continue;
+            };
+
+            // How many of its own kind are standing with it - counted only for
+            // the few that have something on them, which is why this is not a
+            // pass over the whole country.
+            let here = Self::which_block(prey.position);
+            let its_own = [-1, 0, 1]
+                .iter()
+                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+                .filter_map(|(dx, dy)| who_is_about.get(&(here.0 + dx, here.1 + dy)))
+                .flatten()
+                .filter(|&&other| {
+                    other != *prey_idx
+                        && self.animals[other].is_alive()
+                        && self.animals[other].species_id == prey.species_id
+                        && (self.animals[other].position.0 - prey.position.0)
+                            .abs()
+                            .max((self.animals[other].position.1 - prey.position.1).abs())
+                            <= Self::HOW_FAR_A_HERD_STANDS_TOGETHER
+                })
+                .count();
+
+            let against = crate::agents::ThreatAssessment::a_pack_of(coming);
+
+            // What this one brings: its own punch, in the condition it is
+            // actually in, and every one of its kind standing with it.
+            let mine_brings = mine.what_one_of_these_brings()
+                * prey.health_percentage().max(0.1)
+                * (1.0 + its_own as f32 * Self::WHAT_ANOTHER_OF_ITS_KIND_ADDS);
+
+            let judged = crate::agents::ThreatAssessment::assess(
+                mine_brings,
+                against,
+                crate::agents::EmotionSource::Creature(prey.species_id.clone()),
+            );
+
+            readings.push((
+                *prey_idx,
+                judged.threat_level,
+                judged.can_overcome,
+                where_it_is,
+                which,
+            ));
+        }
+
+        // Everything starts the pass with nothing on it, so a reading does not
+        // outlive the thing that caused it.
+        for animal in self.animals.iter_mut() {
+            animal.what_is_on_me = 0.0;
+            animal.could_face_it = false;
+            animal.what_is_on_me_from = None;
+            animal.what_is_on_me_id = None;
+        }
+
+        for (idx, level, can, from, which) in readings {
+            let animal = &mut self.animals[idx];
+            animal.what_is_on_me = level;
+            animal.could_face_it = can;
+            animal.what_is_on_me_from = Some(from);
+            animal.what_is_on_me_id = Some(which);
+        }
+    }
+
+    /// How far an animal notices something that would eat it.
+    const HOW_FAR_AN_ANIMAL_LOOKS: i32 = 10;
+
+    /// How much has to be on an animal before it stops grazing about it.
+    const WORTH_AN_ANIMAL_LEAVING_OFF: f32 = 0.2;
+
     fn update_animal_behavior_with_hunger(&mut self, animal_idx: usize, behavior: AnimalBehavior, is_wild: bool, is_hungry: bool) {
         let animal = &mut self.animals[animal_idx];
+
+        // Something that eats this one, close enough to matter, comes before
+        // anything else - including the state timer, because a deer that has
+        // just settled down to graze does not go on grazing because it is
+        // partway through a graze. This is the fear and anger split, on the
+        // same appraisal the agents use: run from what cannot be faced, turn
+        // on what can. See `what_each_animal_is_facing`.
+        if animal.what_is_on_me >= Self::WORTH_AN_ANIMAL_LEAVING_OFF {
+            // Already doing the right thing about it, and partway through
+            // doing it. A beast in flight does not stop every tick to
+            // reconsider whether it is in flight.
+            let already = matches!(
+                animal.state,
+                AnimalState::Fleeing { .. } | AnimalState::Attacking { .. }
+            );
+            if already && animal.state_timer > 0 {
+                if let AnimalState::Fleeing { from_position } = animal.state {
+                    let away = (
+                        (animal.position.0 - from_position.0).signum(),
+                        (animal.position.1 - from_position.1).signum(),
+                    );
+                    animal.position.0 += away.0 * 2;
+                    animal.position.1 += away.1 * 2;
+                }
+                return;
+            }
+
+            if animal.could_face_it {
+                if let Some(which) = animal.what_is_on_me_id {
+                    animal.state = AnimalState::Attacking { target_id: which };
+                    animal.state_timer = 6;
+                    return;
+                }
+            }
+
+            if let Some(from) = animal.what_is_on_me_from {
+                animal.state = AnimalState::Fleeing { from_position: from };
+                animal.state_timer = 8;
+
+                // And actually go, rather than standing still in a state
+                // called fleeing.
+                let away = (
+                    (animal.position.0 - from.0).signum(),
+                    (animal.position.1 - from.1).signum(),
+                );
+                animal.position.0 += away.0 * 2;
+                animal.position.1 += away.1 * 2;
+                return;
+            }
+        }
 
         // If state timer is active, continue current behavior
         if animal.state_timer > 0 {

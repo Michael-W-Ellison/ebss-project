@@ -503,3 +503,4 @@ fn test_well_being_considers_both_happiness_and_sadness() {
     assert!(mixed_wellbeing > 0.0, 
             "Well-being should be positive when happiness outweighs sadness");
 }
+

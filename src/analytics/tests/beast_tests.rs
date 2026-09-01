@@ -258,3 +258,107 @@ fn bolting_costs_a_beast_its_wind() {
 
     assert!(after < before, "{after} against {before}");
 }
+
+// --- what a beast makes of what is in front of it -------------------------
+
+/// A deer with a wolf on it runs, and does not go on grazing.
+///
+/// `update_animal_behavior_with_hunger` was dice keyed on `AnimalBehavior` and
+/// nothing else - it could not see what was standing next to the animal at
+/// all, so a deer with a wolf over it did exactly what a deer alone in a
+/// meadow did. Animals read the same appraisal agents do now: see
+/// `AnimalManager::what_each_animal_is_facing`.
+#[test]
+fn a_deer_with_a_wolf_on_it_runs() {
+    use crate::environment::{AnimalState, GrazingWeather, Season};
+
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+
+    world.spawn_animal("deer".to_string(), (30, 30)).expect("a deer");
+    world.spawn_animal("wolf".to_string(), (33, 30)).expect("a wolf");
+
+    let weather = GrazingWeather { precipitation: 1.0, now: 0, season: Season::Summer };
+    world.animals.tick_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
+
+    let deer = world
+        .animals
+        .get_all()
+        .iter()
+        .find(|a| a.species_id == "deer")
+        .expect("the deer should still be there");
+
+    assert!(
+        deer.what_is_on_me > 0.0,
+        "the deer should read the wolf as something on it"
+    );
+    assert!(
+        !deer.could_face_it,
+        "and should not reckon it can take a wolf"
+    );
+    assert!(
+        matches!(deer.state, AnimalState::Fleeing { .. }),
+        "so it should be running, not {:?}",
+        deer.state
+    );
+}
+
+/// And a flock standing together turns round on what one of them runs from.
+///
+/// The other half of the split: the appraisal is one reading, and being able
+/// to face a thing is what makes it anger rather than fear. Every one of its
+/// own kind standing near it counts towards what it brings.
+///
+/// Sheep rather than cattle, because a wolf never reads a cow as food in the
+/// first place - its prey tops out at `AnimalSize::Medium` and a cow is
+/// Large, which is the model's way of saying a lone wolf does not take
+/// cattle. Sheep are on the menu, so the herd is what decides it.
+#[test]
+fn a_flock_standing_together_turns_on_what_one_of_them_runs_from() {
+    use crate::environment::{AnimalState, GrazingWeather, Season};
+
+    let how_they_take_it = |how_many: u32| {
+        let mut world = World::new(WorldConfig::default());
+        world.animals.get_all_mut().clear();
+
+        for i in 0..how_many {
+            world
+                .spawn_animal("sheep".to_string(), (30 + i as i32 % 2, 30))
+                .expect("a sheep");
+        }
+        world.spawn_animal("wolf".to_string(), (33, 30)).expect("a wolf");
+
+        let weather = GrazingWeather { precipitation: 1.0, now: 0, season: Season::Summer };
+        world.animals.tick_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
+
+        let sheep = world
+            .animals
+            .get_all()
+            .iter()
+            .find(|a| a.species_id == "sheep")
+            .expect("a sheep should still be there")
+            .clone();
+        (sheep.could_face_it, sheep.state)
+    };
+
+    let (alone_could, alone_does) = how_they_take_it(1);
+    let (together_could, together_does) = how_they_take_it(8);
+
+    assert!(
+        !alone_could,
+        "one sheep should not reckon it can see off a wolf"
+    );
+    assert!(
+        matches!(alone_does, AnimalState::Fleeing { .. }),
+        "so it should run, not {alone_does:?}"
+    );
+
+    assert!(
+        together_could,
+        "eight of them standing together should"
+    );
+    assert!(
+        matches!(together_does, AnimalState::Attacking { .. }),
+        "so the flock should turn on it, not {together_does:?}"
+    );
+}
