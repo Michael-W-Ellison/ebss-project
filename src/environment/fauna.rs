@@ -162,6 +162,40 @@ pub enum DietType {
 }
 
 impl AnimalSpecies {
+    /// Whether this is the farmyard form of something the registry already
+    /// has wild, so that stocking a country with both would put the same
+    /// animal on the map twice.
+    ///
+    /// The pig's own description is "Domesticated boar", and the boar is
+    /// stocked. It also carries a farmyard sow's `litter_size` of six to
+    /// twelve against a wild ruminant's one or two, which is right for a pig
+    /// and ruinous in a country with no farmer in it: the first world in
+    /// which a pig could be placed at all came out with **3,749 of them out
+    /// of 5,607 head**, and the tick at 18.5 ms against 11.8 without them.
+    ///
+    /// Nothing here says a pig cannot exist. `spawn_animal` will still put
+    /// one down, which is what a settlement that tames one wants, and
+    /// `can_domesticate` is untouched. What it says is that a country made
+    /// before anybody arrives is stocked with wild animals.
+    ///
+    /// The cow is deliberately not on this list. It has no wild form in this
+    /// registry to be counted twice against, it carries a cow's litter of
+    /// one, and it sits at seventy-odd head over two years without help.
+    pub fn is_the_farm_form_of_something_wild(&self) -> bool {
+        matches!(self.id.as_str(), "pig")
+    }
+
+    /// Whether this one cannot leave the water.
+    ///
+    /// Swimming is not the same thing. A bear swims, a deer swims, a seal
+    /// hauls out on a beach and a crocodile basks - `what_it_can_do().swims`
+    /// is about getting away and following, and every one of those belongs on
+    /// land. This is the shorter list of what drowns in air, and the whole of
+    /// what it decides is which tiles a founding population may be put on.
+    pub fn lives_in_the_water(&self) -> bool {
+        matches!(self.id.as_str(), "fish")
+    }
+
     /// Whether the abstracted lower tiers already stand for this species, so
     /// the world should not also stock it as individual records.
     ///
@@ -195,6 +229,15 @@ impl AnimalSpecies {
             self.id.as_str(),
             // The grazers a snare is set for
             "rabbit" | "squirrel" | "goose" | "duck" | "chicken"
+            // And the crow, which is a rabbit in feathers and was only ever
+            // absent from this list because it was absent from the map. It
+            // is half a kilogramme, it breeds like one, and `where_it_sits`
+            // calls it a primary consumer - the same three things that make
+            // a rabbit a bad record. The moment the spawn pools were fixed
+            // and it could be placed at all, a hundred square kilometres
+            // went to **58,682 crows** inside a year, out of 61,558 head,
+            // with the tick at 249 ms. See ISSUES_FOUND.md #152.
+            | "crow"
             // And what lives on them, and on what a snare catches
             | "fox" | "arctic_fox" | "stoat" | "snake" | "adder"
         )
@@ -3635,8 +3678,16 @@ impl AnimalManager {
                     // by itself - which is right, and is why an agent working
                     // one ground with a trapline is the thing that can
                     // actually thin it.
-                    self.small_life
-                        .take(this_ground, got * Self::HEAD_A_UNIT_OF_FORAGE_COMES_TO);
+                    // Divided by what a head is worth to *this* hunter, which
+                    // is the same rung of the same ladder that paid it. A
+                    // hawk gets more out of a rabbit than a stoat does; it
+                    // does not eat more rabbits.
+                    let a_head_to_it =
+                        Self::what_a_head_of_it_is_worth_to(hunter.size).max(0.01);
+                    self.small_life.take(
+                        this_ground,
+                        got * Self::HEAD_A_UNIT_OF_FORAGE_COMES_TO / a_head_to_it,
+                    );
                     foraged.push((pred_idx, got));
                 }
 
@@ -4483,6 +4534,44 @@ impl AnimalManager {
     /// keeping warm.
     pub const WHAT_A_WINTER_UNDER_COVER_COSTS: f32 = 0.85;
 
+    /// What one head of the small life is worth to a hunter of this size, and
+    /// therefore how much of the layer is worth its while at all.
+    ///
+    /// **This ladder was calibrated when the small life meant mice**, and it
+    /// has not meant only mice since the lower tiers became a population:
+    /// rabbits, squirrels, geese, ducks and crows are in it now, and a rabbit
+    /// is a meal for a hawk rather than a scrap. At the old numbers a hawk in
+    /// the best wood in the country, with the wood to itself, got 0.073
+    /// against a burn of 0.070 - four per cent - and a third of what it needs
+    /// if two others worked the same wood, so the whole small-predator guild
+    /// was placed at generation and starved inside a year.
+    ///
+    /// A stoat takes everything in the layer down to a beetle. A hawk or a
+    /// fox cannot live on beetles, but the rabbits and squirrels are most of
+    /// its weight and all of that is theirs. A boar roots up nests and young
+    /// rabbits, which is real and is not a living. A bear turns over a log
+    /// for grubs, which is neither.
+    ///
+    /// **It is one number doing two jobs, and that is deliberate.** It says
+    /// what share of the layer a hunter can take, which is what
+    /// `what_the_small_life_gives` pays it; and it says what a head of that
+    /// layer is worth to it, which is what divides the payment back into head
+    /// when the take comes off the ground. Raising it without the second
+    /// half - which is what the first cut did - says a hawk eats twice as
+    /// many rabbits rather than getting twice as much out of each, and a
+    /// country of hawks then strips the ground the people trap on: six
+    /// settlements went from 24,022 person-days to 21,527, and two of six
+    /// still had anybody in them at four thousand ticks against three.
+    pub fn what_a_head_of_it_is_worth_to(size: AnimalSize) -> f32 {
+        match size {
+            AnimalSize::Tiny => 1.0,
+            AnimalSize::Small => 0.70,
+            AnimalSize::Medium => 0.25,
+            AnimalSize::Large => 0.06,
+            AnimalSize::Huge => 0.0,
+        }
+    }
+
     /// How many head of small life one unit of foraging comes off the ground.
     ///
     /// A stoat's `hunger_rate` is 0.10 and the best ground yields 0.35 a tick
@@ -4492,6 +4581,18 @@ impl AnimalManager {
     /// `SmallLife`, which is a head count, without either of them having to
     /// know the other's units.
     const HEAD_A_UNIT_OF_FORAGE_COMES_TO: f32 = 0.4;
+
+    /// How much cover a piece of ground wants before something that hunts
+    /// can be put down on it.
+    ///
+    /// Derived rather than picked. `what_the_small_life_gives` pays a
+    /// `Small` hunter `WHAT_THE_BEST_GROUND_YIELDS * cover * 0.70`, and the
+    /// hungriest of them burns 0.07 a tick, so the ground has to carry about
+    /// three tenths of cover before a hawk can keep itself on it at all.
+    /// Forest, wetland, riverbank and meadow clear it; open plain, desert,
+    /// beach and salt flat do not, which is a fair statement of where a bird
+    /// of prey lives.
+    pub const WHAT_A_HUNTER_NEEDS_UNDERFOOT: f32 = 0.30;
 
     /// What a piece of country is worth to one more hunter: the game on it,
     /// divided between the hunters that would then be on it.
@@ -4587,7 +4688,7 @@ impl AnimalManager {
     ///   however many are working it, so hunters in each other's way each get
     ///   less - which is what a territory is, in a model that cannot draw a
     ///   line on a map.
-    fn what_the_small_life_gives(
+    pub fn what_the_small_life_gives(
         hunter: &AnimalSpecies,
         ground: WhatTheGroundOffers,
         sharing_it: usize,
@@ -4605,14 +4706,7 @@ impl AnimalManager {
         /// each get less of it.
         const WHAT_THE_BEST_GROUND_YIELDS: f32 = 0.35;
 
-        let worth_it_to = match hunter.size {
-            AnimalSize::Tiny => 1.0,
-            AnimalSize::Small => 0.35,
-            AnimalSize::Medium => 0.12,
-            // A bear turns over a log for grubs and it is not a living.
-            AnimalSize::Large => 0.04,
-            AnimalSize::Huge => 0.0,
-        };
+        let worth_it_to = Self::what_a_head_of_it_is_worth_to(hunter.size);
 
         // Cover stands for how much the ground grows, which is what the small
         // life is living on in its turn: a wood and a reed bed are thick with
@@ -5130,21 +5224,46 @@ impl AnimalManager {
         };
 
         // Categorize species by diet for balanced spawning
-        // Not the species the small life already stands for. There is
-        // already a population of rabbits and foxes on every hunting ground -
-        // see `AnimalSpecies::is_stood_for_by_the_small_life` - and dealing
-        // records of them out beside it counts the same animal twice, once
-        // as a number and once as a thing standing in a field.
-        let herbivores: Vec<_> = registry.all_species()
+        // Which pool a species goes in is `where_it_sits`, and nothing else.
+        //
+        // **It used to be the diet field and the length of the prey list, and
+        // those two disagree with `where_it_sits` about six species.** An
+        // omnivore with an empty prey list - the crow, the parrot, the monkey,
+        // the pig - is a primary consumer by `where_it_sits` and is *not* a
+        // herbivore by diet, so it fell between the two pools and was never
+        // placed on any map at any size. A carnivore with an empty prey list -
+        // the kestrel, the adder, the fish - is deliberately a small predator
+        // by `where_it_sits`, whose own comment says "a carnivore with nothing
+        // on its list still hunts: it hunts the small life the map assumes" -
+        // and `!prey_species.is_empty()` threw all three of them away. That is
+        // this project's own recurring defect exactly: one question, two
+        // places, and the two places disagreeing.
+        //
+        // One owner now. `where_it_sits` is the model's answer to what a
+        // species is, and it decides which pool it is drawn from.
+        let of_the_country: Vec<_> = registry
+            .all_species()
             .into_iter()
-            .filter(|s| s.diet == DietType::Herbivore)
+            // Not the species the small life already stands for. There is
+            // already a population of rabbits and foxes on every hunting
+            // ground - see `AnimalSpecies::is_stood_for_by_the_small_life` -
+            // and dealing records of them out beside it counts the same
+            // animal twice, once as a number and once as a thing standing in
+            // a field.
             .filter(|s| !s.is_stood_for_by_the_small_life())
+            // Nor the farmyard form of something already here wild.
+            .filter(|s| !s.is_the_farm_form_of_something_wild())
             .collect();
-        let predators: Vec<_> = registry.all_species()
-            .into_iter()
-            .filter(|s| s.diet == DietType::Carnivore || s.diet == DietType::Omnivore)
-            .filter(|s| !s.prey_species.is_empty())
-            .filter(|s| !s.is_stood_for_by_the_small_life())
+
+        let herbivores: Vec<_> = of_the_country
+            .iter()
+            .copied()
+            .filter(|s| s.where_it_sits() == TrophicRole::PrimaryConsumer)
+            .collect();
+        let predators: Vec<_> = of_the_country
+            .iter()
+            .copied()
+            .filter(|s| s.where_it_sits() != TrophicRole::PrimaryConsumer)
             .collect();
 
         if herbivores.is_empty() {
@@ -5194,14 +5313,39 @@ impl AnimalManager {
 
         // Collect terrain positions by climate zone
         let mut positions_by_climate: BTreeMap<ClimateZone, Vec<(i32, i32)>> = BTreeMap::new();
+        // And the water, which nothing was ever put in.
+        //
+        // Every tile a fish could live on was skipped as "water, for land
+        // animals", and there was no other list - so a species that cannot
+        // leave the water had nowhere at all to be put and was never placed,
+        // whatever else about it was right. Everything that lives off fish -
+        // the heron, the otter, the kingfisher, the polar bear, the crocodile
+        // - then had no prey on the map either.
+        let mut water_positions: Vec<(i32, i32)> = Vec::new();
+        // And ground thick enough to keep something that hunts.
+        //
+        // A hunter was put down anywhere in a climate it belongs to, and most
+        // of a temperate map is open. What the small life gives is straight
+        // proportion to cover - see `what_the_small_life_gives` - so a hawk
+        // on open plain gets 0.037 against a burn of 0.070 and is dead
+        // whatever else about it is right. Placing it where it can feed is
+        // not a kindness; it is what "this species lives here" means.
+        let mut cover_by_climate: BTreeMap<ClimateZone, Vec<(i32, i32)>> = BTreeMap::new();
         for y in 0..grid.height {
             for x in 0..grid.width {
                 let terrain = grid.tiles[y][x].terrain.terrain_type;
+                let ground = what_this_ground_offers(terrain);
+                if ground.is_water {
+                    water_positions.push((x as i32, y as i32));
+                }
                 // Skip water for land animals
                 if terrain == TerrainType::Water {
                     continue;
                 }
                 let climate = terrain_to_climate_zone(terrain);
+                if ground.cover >= Self::WHAT_A_HUNTER_NEEDS_UNDERFOOT {
+                    cover_by_climate.entry(climate).or_default().push((x as i32, y as i32));
+                }
                 positions_by_climate.entry(climate)
                     .or_insert_with(Vec::new)
                     .push((x as i32, y as i32));
@@ -5307,32 +5451,49 @@ impl AnimalManager {
             })
         };
 
-        let feedable: Vec<_> = predators
-            .iter()
-            .filter(|species| {
-                species
+        // Whether a country like this one will keep this species.
+        //
+        // Three ways, and the first was missing. An empty prey list is not a
+        // species with nothing to eat - `where_it_sits` calls such a thing a
+        // small predator on purpose, because what it eats is the small life
+        // the map assumes and `what_the_small_life_gives` feeds it. Reading
+        // an empty list as "no food here" is the same disagreement that kept
+        // it out of the pool in the first place.
+        let will_keep = |species: &AnimalSpecies, already_here: &std::collections::BTreeSet<String>| -> bool {
+            species.prey_species.is_empty()
+                || species
                     .prey_species
                     .iter()
-                    .any(|prey| prey_present.contains(prey))
-                    || the_small_life_feeds_it(species)
-            })
-            .collect();
+                    .any(|prey| already_here.contains(prey))
+                || the_small_life_feeds_it(species)
+        };
 
-        if config.spawn_predators && !feedable.is_empty() {
-            // Each tier drawn from its own kind, so that thinning the top of
-            // the pyramid does not thin the bottom of it as well. Drawing them
-            // all from one bag meant that a map too small for wolves simply
-            // had fewer foxes.
-            let mut packs = Vec::new();
+        if config.spawn_predators {
+            // Built from the bottom, a tier at a time, so that what is put
+            // down low counts as food for what goes above it.
+            //
+            // Drawing every tier's packs first and placing them afterwards
+            // meant nothing could ever eat anything placed in the same pass:
+            // a heron takes fish, fish are placed among the small predators,
+            // and the heron was judged before a single one was down. So the
+            // heron, the otter and the kingfisher were refused a country
+            // whose rivers were about to be stocked with exactly what they
+            // live on.
+            //
+            // Each tier is still drawn from its own kind, which is what stops
+            // a map too small for wolves from simply having fewer foxes.
+            let mut put_down_of: BTreeMap<TrophicRole, usize> = BTreeMap::new();
+
             for role in TrophicRole::EVERY_ONE {
                 if role == TrophicRole::PrimaryConsumer {
                     continue;
                 }
 
-                let of_this_tier: Vec<_> = feedable
+                let of_this_tier: Vec<_> = predators
                     .iter()
                     .copied()
                     .filter(|species| species.where_it_sits() == role)
+                    .filter(|species| will_keep(species, &prey_present))
                     .filter(|species| !ground_for(species).is_empty())
                     .collect();
 
@@ -5341,37 +5502,52 @@ impl AnimalManager {
                 }
 
                 for _ in 0..how_many_of.get(&role).copied().unwrap_or(0) {
-                    packs.push(of_this_tier[rng.gen_range(0..of_this_tier.len())]);
-                }
-            }
+                    if self.how_many_are_alive() >= self.max_population {
+                        break;
+                    }
 
-            let mut put_down_of: BTreeMap<TrophicRole, usize> = BTreeMap::new();
+                    let already = put_down_of.get(&role).copied().unwrap_or(0);
+                    if already >= room_for(role).max(1) {
+                        break;
+                    }
 
-            for species in packs {
-                if self.how_many_are_alive() >= self.max_population {
-                    break;
-                }
+                    let species = of_this_tier[rng.gen_range(0..of_this_tier.len())];
 
-                let role = species.where_it_sits();
-                let already = put_down_of.get(&role).copied().unwrap_or(0);
-                if already >= room_for(role).max(1) {
-                    continue;
-                }
-
-                // Find a position in an appropriate biome
-                let at_home = ground_for(species);
-                let climate = at_home[rng.gen_range(0..at_home.len())];
-
-                if let Some(positions) = positions_by_climate.get(&climate) {
-                    if !positions.is_empty() {
-                        let pos = positions[rng.gen_range(0..positions.len())];
-                        // Predator packs are typically smaller
-                        let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
-
-                        if let Some(_) = self.spawn_group(species.id.clone(), pos, pack_size) {
-                            spawned += pack_size as usize;
-                            *put_down_of.entry(role).or_insert(0) += pack_size as usize;
+                    // Where it can be put down. Something that cannot leave
+                    // the water goes in the water; everything else goes on a
+                    // sort of ground it lives on that this map actually has.
+                    let where_it_may_go: &[(i32, i32)] = if species.lives_in_the_water() {
+                        &water_positions
+                    } else {
+                        let at_home = ground_for(species);
+                        let climate = at_home[rng.gen_range(0..at_home.len())];
+                        // Ground that will keep it, if this climate has any -
+                        // and the whole of the climate if it has none, which
+                        // is better than refusing to place the species at
+                        // all. A desert fox is a hard living and not an
+                        // impossible one.
+                        match cover_by_climate
+                            .get(&climate)
+                            .filter(|positions| !positions.is_empty())
+                            .or_else(|| positions_by_climate.get(&climate))
+                        {
+                            Some(positions) => positions,
+                            None => continue,
                         }
+                    };
+
+                    if where_it_may_go.is_empty() {
+                        continue;
+                    }
+
+                    let pos = where_it_may_go[rng.gen_range(0..where_it_may_go.len())];
+                    // Predator packs are typically smaller
+                    let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
+
+                    if self.spawn_group(species.id.clone(), pos, pack_size).is_some() {
+                        spawned += pack_size as usize;
+                        *put_down_of.entry(role).or_insert(0) += pack_size as usize;
+                        prey_present.insert(species.id.clone());
                     }
                 }
             }

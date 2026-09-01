@@ -9533,6 +9533,125 @@ together went *up*.
 
 ---
 
+### 152. The small-predator guild was never placed, three times over
+
+#137 said the tier was empty because the registry had no species for it. That
+part was fixed - the stoat, the kestrel, the kingfisher, the adder and the
+heron went in - and the tier stayed empty anyway. A hundred square kilometres,
+two years, no people: **no hawk, no owl, no kestrel, no heron, no otter, no
+crow, no parrot, no monkey, no pig and no fish, ever, at any point in the run
+or at any map size.** Eighteen hundredths of a country's groups are asked for
+and nothing filled them.
+
+Three separate causes, and all three are one shape: two places asking the same
+question and disagreeing.
+
+**Which pool a species is drawn from.** It was `diet` plus the length of the
+prey list; `where_it_sits` is the model's actual answer to what a species is,
+and the two disagree about six species. An omnivore with an empty prey list -
+the crow, the parrot, the monkey, the pig - is a primary consumer by
+`where_it_sits` and is *not* `DietType::Herbivore`, so it fell between the two
+pools and could never be placed by anything. A carnivore with an empty list -
+the kestrel, the adder, the fish - is deliberately a **small predator**,
+because `where_it_sits`'s own comment says "a carnivore with nothing on its
+list still hunts: it hunts the small life the map assumes" - and
+`!prey_species.is_empty()` threw all three away. Both pools come off
+`where_it_sits` now.
+
+**Whether it has anything to eat.** The gate that stops a fox being put into a
+world of cattle read an empty prey list as "no food here", which is the same
+disagreement one step later. And it was applied to every tier at once, before
+anything was placed: a heron takes fish, fish are placed among the small
+predators, and the heron was judged before a single one was down. The pyramid
+is built from the bottom now, a tier at a time, so what is put down low counts
+as food for what goes above it.
+
+**Where it was put.** Nothing had ever been placed in water - every water tile
+was skipped as "water, for land animals" and there was no second list - so a
+species that cannot leave the water had nowhere to be put and was never
+placed, and everything living on fish had no prey either. And a hunter was put
+down anywhere in a climate it belonged to, most of which is open: what the
+small life gives is straight proportion to cover, so a hawk on plain got 0.037
+against a burn of 0.070 and was dead whatever else was right.
+
+**And the ladder was stale.** `what_the_small_life_gives` pays by the hunter's
+size, and that ladder was calibrated when the small life meant mice. It has
+not meant only mice since #149: rabbits, squirrels, geese, ducks and crows are
+in it, and a rabbit is a meal for a hawk rather than a scrap. At the old
+numbers a hawk in the best wood in the country, with the wood to itself, got
+**0.073 against a burn of 0.070** - four per cent - and a third of what it
+needed if two others worked the same wood. Small goes 0.35 to 0.70 and Medium
+0.12 to 0.25. Every small predator can now keep itself in a wood it has to
+itself, and none of them can on open plain or three to a wood, which is a fair
+statement of where a bird of prey lives.
+
+**What a country holds now**, on a hundred square kilometres at generation:
+eagle 15, hawk 10, heron 24, kestrel 59, otter 11, owl 3, fish 121, seal 4,
+wolf 14 - against nought of every one of them before.
+
+**Two things this turned up that are not #137.**
+
+- **The crow is a rabbit in feathers.** Half a kilogramme, a primary consumer,
+  and it breeds like one. The moment the pools were fixed and it could be
+  placed at all, a hundred square kilometres went to **58,682 crows out of
+  61,558 head inside a year**, with the tick at 249 ms - worse than the
+  rabbits ever were. It is on the abstracted list now, where every other
+  criterion already said it belonged, and was only ever off it because it was
+  absent from the map.
+- **The pig is the farmyard form of the boar**, which its own description
+  says, and the boar is stocked. It also carries a sow's `litter_size` of six
+  to twelve against a wild ruminant's one or two, which is right for a pig and
+  ruinous in a country with no farmer in it: **3,749 pigs out of 5,607 head**,
+  and the tick at 18.5 ms against 11.8 without them. A country made before
+  anybody arrives is stocked with wild animals;
+  `is_the_farm_form_of_something_wild` says so. `spawn_animal` will still put
+  a pig down, and `can_domesticate` is untouched. The cow is deliberately not
+  on that list - it has no wild form here to be counted twice against, it
+  carries a litter of one, and it sits at seventy-odd head over two years
+  without help.
+
+**Where it lands: 11.29 ms a tick and 2,133 head**, against 11.77 and 2,347
+before the guild existed and 47.12 and 29,773 before any of this. The guild is
+free.
+
+**What it costs the agents, which is not nothing.** Six settlements over a
+year: 22,470 person-days against 24,022 before the guild existed, and
+twenty-three alive at the end against twenty-eight. The hawks and the owls eat
+the small life the people trap, which is what a predator guild *is*, and the
+first cut of it cost twice that by mistake - see below. It is above the spread
+between seed blocks (about three per cent) and is a real cost, honestly come by.
+
+**One number was wrong in a way worth naming**, because it is a trap the same
+shape as everything else here. Raising `what_a_head_of_it_is_worth_to` raised
+the energy `what_the_small_life_gives` pays out, and the take that comes off
+the ground was `got * HEAD_A_UNIT_OF_FORAGE_COMES_TO` - so doubling the ladder
+also doubled the *head* every hunter drew. That says a hawk eats twice as many
+rabbits, when what the ladder means is that it gets twice as much out of each
+one. A country of hawks then stripped the ground the people trap on: 21,527
+person-days, and two settlements of six with anybody left in them at four
+thousand ticks against three. The take is divided by the same rung that paid
+it now, so the ladder moves what a head is worth and never how many are taken.
+
+**And one test is left failing on purpose.**
+`a_cold_agent_ends_up_dressed` has been in the standing failures for months.
+It gives a lone man, kept permanently freezing, fifty days to make a garment
+out of the flax in his pack. He now comes out of that run carrying fish, meat
+and roots as well as the flax and still no coat: a world with a trapline and a
+fishery in it gives a man more errands, and clothing never wins the turn.
+Widening the window does not help - he does not live two hundred days - so
+what the test actually measures is how crowded an agent's day is, which is
+worth knowing and is not a clothing bug.
+
+**What is still not fixed is #141.** Over two years the small predators thin
+from those numbers to eagle 1, hawk 2, owl 1, otter 1 - and so do the wolves
+from 14 to nought, the lions from 10 to 4, the bears from 4 to 1. Every
+predator tier thins, uniformly, which is what makes it one problem and not
+this one: a species that can only exist at low density cannot recruit, because
+two of them never meet. That is the country not settling, and it is filed
+where it belongs.
+
+---
+
 ## Recently fixed
 
 Listed so nobody re-investigates them. Each has regression tests in

@@ -288,6 +288,12 @@ fn a_cold_agent_ends_up_dressed() {
     // which recomputes it from the climate before anyone decides anything.
     simulation.population.agents[0].body_temperature.ideal = 45.0;
 
+    // Fifty days, and it has to stay fifty: a lone man kept permanently
+    // freezing does not live two hundred, so widening the window trades a
+    // coin-flip on whether he dresses for a certainty that he dies. This
+    // test is marginal by construction and is one of the standing failures -
+    // it is about whether the clothing chain can be reached at all, and what
+    // it actually measures is how many other errands a world gives a man.
     for _ in 0..600 {
         simulation.tick();
 
