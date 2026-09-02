@@ -2998,6 +2998,11 @@ pub struct AnimalManager {
     #[serde(default)]
     pub passive: WhatPassiveHuntingCameTo,
 
+    /// What each hunting ground grows and what climate most of it is in,
+    /// surveyed once - see `survey_the_grounds`.
+    #[serde(default)]
+    how_rich_each_ground_is: BTreeMap<(i32, i32), (f32, ClimateZone)>,
+
     /// The lower tiers of the food web, as a population rather than as
     /// records - see [`crate::environment::SmallLife`].
     #[serde(default)]
@@ -3015,6 +3020,7 @@ impl AnimalManager {
             hunting: WhatTheHuntingCameTo::default(),
             small_life: crate::environment::SmallLife::default(),
             passive: WhatPassiveHuntingCameTo::default(),
+            how_rich_each_ground_is: BTreeMap::new(),
             groups: BTreeMap::new(),
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
@@ -3056,11 +3062,28 @@ impl AnimalManager {
         let species = self.registry.as_ref()?.get(&species_id)?;
 
         for i in 0..count {
-            // Spawn in a circle around center
-            let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
-            let radius = 3.0;
-            let x = center.0 + (angle.cos() * radius) as i32;
-            let y = center.1 + (angle.sin() * radius) as i32;
+            // The first one goes where it was sent, and the rest stand round
+            // it.
+            //
+            // **Every one of them used to be put on a circle of radius three
+            // and not one on the middle**, which quietly threw away the whole
+            // of the work that chose the place. A hunter's ground is picked
+            // for having cover it can feed on, and forest is seven per cent
+            // of a map and patchy, so three cells off it is very nearly a
+            // tile drawn at random: the terrain under a newly placed kestrel
+            // came out at exactly the map's own terrain proportions - two
+            // fifths of them on bare mountain - though every position chosen
+            // for them was forest, wetland or salt marsh.
+            let (x, y) = if i == 0 {
+                center
+            } else {
+                let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
+                let radius = 1.0;
+                (
+                    center.0 + (angle.cos() * radius).round() as i32,
+                    center.1 + (angle.sin() * radius).round() as i32,
+                )
+            };
 
             let mut animal = Animal::new(species_id.clone(), (x, y), species);
             animal.group_id = Some(group_id);
@@ -3903,6 +3926,67 @@ impl AnimalManager {
         self.tick_the_small_life(grid, season);
     }
 
+    /// How far apart the survey samples a hunting ground.
+    ///
+    /// Eighty cells square is six thousand four hundred of them, and walking
+    /// every one of a hundred and sixty-nine grounds is a million lookups.
+    /// Every eighth cell is a hundred samples a ground and seventeen thousand
+    /// altogether, once in a world's life, which is nothing - and a hundred
+    /// samples is a good enough average of what a wood-and-hillside is.
+    const HOW_FAR_APART_THE_SURVEY_LOOKS: i32 = 8;
+
+    /// Walk the country once and record what each hunting ground grows, and
+    /// what climate most of it is.
+    fn survey_the_grounds(
+        &mut self,
+        grid: &crate::world::Grid,
+        grounds_x: i32,
+        grounds_y: i32,
+        across: i32,
+    ) {
+        for gy in 0..grounds_y {
+            for gx in 0..grounds_x {
+                let mut cover = 0.0f32;
+                let mut looked = 0u32;
+                let mut climates: BTreeMap<ClimateZone, u32> = BTreeMap::new();
+
+                let mut y = gy * across;
+                while y < (gy + 1) * across && y < grid.height as i32 {
+                    let mut x = gx * across;
+                    while x < (gx + 1) * across && x < grid.width as i32 {
+                        if let Some(tile) =
+                            grid.get_tile(&crate::world::Position::new(x, y))
+                        {
+                            let terrain = tile.terrain.terrain_type;
+                            cover += what_this_ground_offers(terrain).cover;
+                            *climates.entry(terrain_to_climate_zone(terrain)).or_insert(0) += 1;
+                            looked += 1;
+                        }
+                        x += Self::HOW_FAR_APART_THE_SURVEY_LOOKS;
+                    }
+                    y += Self::HOW_FAR_APART_THE_SURVEY_LOOKS;
+                }
+
+                if looked == 0 {
+                    continue;
+                }
+
+                // The climate most of the ground is in, which decides how
+                // hard its year is. A ground that is half mountain and half
+                // meadow is a temperate ground with a hill in it, not an
+                // arctic one.
+                let climate = climates
+                    .into_iter()
+                    .max_by_key(|&(_, how_many)| how_many)
+                    .map(|(climate, _)| climate)
+                    .unwrap_or(ClimateZone::Temperate);
+
+                self.how_rich_each_ground_is
+                    .insert((gx, gy), (cover / looked as f32, climate));
+            }
+        }
+    }
+
     fn tick_the_small_life(
         &mut self,
         grid: &crate::world::Grid,
@@ -3912,26 +3996,33 @@ impl AnimalManager {
         let grounds_x = (grid.width as i32).div_euclid(across) + 1;
         let grounds_y = (grid.height as i32).div_euclid(across) + 1;
 
+        // What each ground grows, surveyed once.
+        //
+        // **It was the terrain of the ground's middle tile**, which is to say
+        // that sixty-four hectares were priced by one cell picked for no
+        // reason but being in the centre of it. On a map that is two fifths
+        // mountain that put most of the country's hunting grounds at a
+        // carrying capacity of nearly nothing however much wood was standing
+        // in them - and the yield a hunter reads comes off the tile it is
+        // standing on, so a kestrel on forest inside such a ground found at a
+        // wood's rate out of a stock priced as rock. Two answers to "how rich
+        // is this piece of country", on two different scales, and the one
+        // that decided what was there to find was a coin toss.
+        //
+        // Terrain does not change, so this is done once and read for ever
+        // after; only the season moves, and that is applied on top.
+        if self.how_rich_each_ground_is.is_empty() {
+            self.survey_the_grounds(grid, grounds_x, grounds_y, across);
+        }
+
         for gy in 0..grounds_y {
             for gx in 0..grounds_x {
-                let middle = (
-                    (gx * across + across / 2).min(grid.width as i32 - 1),
-                    (gy * across + across / 2).min(grid.height as i32 - 1),
-                );
-
-                let Some(tile) =
-                    grid.get_tile(&crate::world::Position::new(middle.0, middle.1))
-                else {
+                let Some(&(cover, climate)) = self.how_rich_each_ground_is.get(&(gx, gy)) else {
                     continue;
                 };
 
-                let ground = what_this_ground_offers(tile.terrain.terrain_type);
-                let climate = terrain_to_climate_zone(tile.terrain.terrain_type);
                 let would_carry = crate::environment::SmallLife::what_this_ground_will_carry(
-                    ground.cover,
-                    climate,
-                    season,
-                    across,
+                    cover, climate, season, across,
                 );
 
                 self.small_life.tick_a_ground((gx, gy), would_carry, 1.0);
@@ -4064,7 +4155,21 @@ impl AnimalManager {
         // off ground that keeps a kestrel three times over. What shares a
         // layer is the demand on it, which is
         // `how_much_it_leans_on_the_small_life`.
-        let mut demand_on: BTreeMap<(i32, i32), f32> = BTreeMap::new();
+        // **And it is two larders, not one.**
+        //
+        // A hunting ground is sixty-four hectares and can hold a lake and a
+        // wood at once. Counting every hunter on it against one figure says a
+        // fish in the water and a hawk in the trees are taking the same food
+        // from each other, which they are not: measured at the height of a
+        // fish year, five hundred of them in the lakes put the demand on
+        // their grounds at thirty-four, and the hawks and eagles hunting the
+        // woods of those same grounds were reading it - hawk down to half its
+        // keep and eagle to a sixth on ground that would have kept both.
+        //
+        // Which pool a hunter draws from is decided the same way the yield
+        // already decides it: by whether the tile it is standing on is water.
+        // One question, one answer, in the one place.
+        let mut demand_on: BTreeMap<((i32, i32), bool), f32> = BTreeMap::new();
         for animal in self.animals.iter().filter(|a| a.is_alive()) {
             let Some(species) = registry.get(&animal.species_id) else {
                 continue;
@@ -4072,8 +4177,15 @@ impl AnimalManager {
             let hunts = species.where_it_sits() != TrophicRole::PrimaryConsumer;
             let ground = Self::whose_ground(animal.position);
             if hunts {
+                let in_the_water = grid
+                    .get_tile(&crate::world::Position::new(
+                        animal.position.0,
+                        animal.position.1,
+                    ))
+                    .map(|tile| what_this_ground_offers(tile.terrain.terrain_type).is_water)
+                    .unwrap_or(false);
                 *hunters_in.entry(ground).or_insert(0) += 1;
-                *demand_on.entry(ground).or_insert(0.0) +=
+                *demand_on.entry((ground, in_the_water)).or_insert(0.0) +=
                     Self::how_much_it_leans_on_the_small_life(species);
             } else {
                 *game_in.entry(ground).or_insert(0) += 1;
@@ -4134,7 +4246,10 @@ impl AnimalManager {
                     .map(|tile| what_this_ground_offers(tile.terrain.terrain_type))
                     .unwrap_or_else(|| what_this_ground_offers(TerrainType::Plains));
 
-                let sharing_it = demand_on.get(&this_ground).copied().unwrap_or(1.0);
+                let sharing_it = demand_on
+                    .get(&(this_ground, ground.is_water))
+                    .copied()
+                    .unwrap_or(1.0);
 
                 // What the ground would turn up if it were carrying all it
                 // can, and then what is actually on it, a band at a time. The
@@ -4437,7 +4552,12 @@ impl AnimalManager {
                         hunters_in.get(&ground).copied().unwrap_or(0) + counting_itself,
                     ) + leans
                         * Self::WHAT_A_HUNTER_WANTS_UNDER_IT
-                        * self.small_life.here(ground).how_thick_the_small_life_is()
+                        * self
+                            .small_life
+                            .here(ground)
+                            .how_thick_against_the_best_ground_there_could_be(
+                                Self::HOW_BIG_A_HUNTING_GROUND_IS,
+                            )
                 };
 
                 let here = living_on(this_ground, 0);
@@ -6362,6 +6482,10 @@ impl AnimalManager {
         // whatever else about it is right. Placing it where it can feed is
         // not a kindness; it is what "this species lives here" means.
         let mut cover_by_climate: BTreeMap<ClimateZone, Vec<(i32, i32)>> = BTreeMap::new();
+        // The same ground again, gathered by the hunting ground it belongs
+        // to, so that hunters can be dealt out a territory at a time.
+        let mut cover_by_ground: BTreeMap<ClimateZone, BTreeMap<(i32, i32), Vec<(i32, i32)>>> =
+            BTreeMap::new();
         for y in 0..grid.height {
             for x in 0..grid.width {
                 let terrain = grid.tiles[y][x].terrain.terrain_type;
@@ -6376,6 +6500,14 @@ impl AnimalManager {
                 let climate = terrain_to_climate_zone(terrain);
                 if ground.cover >= Self::WHAT_A_HUNTER_NEEDS_UNDERFOOT {
                     cover_by_climate.entry(climate).or_default().push((x as i32, y as i32));
+                    // And the same ground, kept by the hunting ground it
+                    // falls in - see where the predators are dealt out.
+                    cover_by_ground
+                        .entry(climate)
+                        .or_default()
+                        .entry(Self::whose_ground((x as i32, y as i32)))
+                        .or_default()
+                        .push((x as i32, y as i32));
                 }
                 positions_by_climate.entry(climate)
                     .or_insert_with(Vec::new)
@@ -6503,6 +6635,47 @@ impl AnimalManager {
             })
         };
 
+        // And the sorts of ground a *hunter* can make a living on, which is a
+        // different question and was never asked.
+        //
+        // **This is what starved the small-predator guild.** `ground_for`
+        // filters a species' biomes by whether the map has any of that
+        // climate at all, and the placement then falls back to the whole
+        // climate when it has no ground thick enough. Measured on a hundred
+        // square kilometres: Arctic covers four hundred thousand tiles - two
+        // fifths of the map, nearly all of it mountain - and **not one of
+        // them clears `WHAT_A_HUNTER_NEEDS_UNDERFOOT`**; nor does one tile of
+        // the seventy-five thousand of desert. Only Temperate has any, and it
+        // has a hundred and three thousand. So a kestrel whose biomes include
+        // Arctic drew Arctic about as often as not and was put on bare
+        // mountain, where what the ground turns up is a twentieth of what a
+        // wood gives. The mean cover under a kestrel at generation was
+        // **0.23** against a bar of 0.40, and seventy-three of them went to
+        // one inside a year with a hundred and fifty-six starved.
+        //
+        // The climate and the ground have to be chosen on one criterion or
+        // the second silently undoes the first. A hunter with nowhere to hunt
+        // in any of its climates still gets put down - that is what the
+        // fallback is for, and it is a last resort across all of them rather
+        // than a coin flip at each draw.
+        let hunting_ground_for = |species: &AnimalSpecies| -> Vec<ClimateZone> {
+            let where_it_could_feed: Vec<ClimateZone> = ground_for(species)
+                .into_iter()
+                .filter(|climate| {
+                    cover_by_climate
+                        .get(climate)
+                        .map(|ground| !ground.is_empty())
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            if where_it_could_feed.is_empty() {
+                ground_for(species)
+            } else {
+                where_it_could_feed
+            }
+        };
+
         // Whether a country like this one will keep this species.
         //
         // Three ways, and the first was missing. An empty prey list is not a
@@ -6535,6 +6708,9 @@ impl AnimalManager {
             // Each tier is still drawn from its own kind, which is what stops
             // a map too small for wolves from simply having fewer foxes.
             let mut put_down_of: BTreeMap<TrophicRole, usize> = BTreeMap::new();
+            // Which hunting grounds already have a hunter on them.
+            let mut ground_is_held: std::collections::BTreeSet<(i32, i32)> =
+                std::collections::BTreeSet::new();
 
             for role in TrophicRole::EVERY_ONE {
                 if role == TrophicRole::PrimaryConsumer || !may_place(role) {
@@ -6546,7 +6722,7 @@ impl AnimalManager {
                     .copied()
                     .filter(|species| species.where_it_sits() == role)
                     .filter(|species| will_keep(species, &prey_present))
-                    .filter(|species| !ground_for(species).is_empty())
+                    .filter(|species| !hunting_ground_for(species).is_empty())
                     .collect();
 
                 if of_this_tier.is_empty() {
@@ -6568,31 +6744,76 @@ impl AnimalManager {
                     // Where it can be put down. Something that cannot leave
                     // the water goes in the water; everything else goes on a
                     // sort of ground it lives on that this map actually has.
-                    let where_it_may_go: &[(i32, i32)] = if species.lives_in_the_water() {
-                        &water_positions
-                    } else {
-                        let at_home = ground_for(species);
-                        let climate = at_home[rng.gen_range(0..at_home.len())];
-                        // Ground that will keep it, if this climate has any -
-                        // and the whole of the climate if it has none, which
-                        // is better than refusing to place the species at
-                        // all. A desert fox is a hard living and not an
-                        // impossible one.
-                        match cover_by_climate
-                            .get(&climate)
-                            .filter(|positions| !positions.is_empty())
-                            .or_else(|| positions_by_climate.get(&climate))
-                        {
-                            Some(positions) => positions,
-                            None => continue,
+                    // **A hunter is dealt out a territory, not a tile.**
+                    //
+                    // Drawing a position uniformly from every tile in the
+                    // country that has cover on it puts hunters wherever
+                    // cover is *dense*, which is not the same as spreading
+                    // them over the country: measured, a hundred grounds held
+                    // hunters and the ordinary one held four, so each got a
+                    // quarter of what its ground gives and better than half
+                    // the guild was under its keep on the morning the world
+                    // was made. What a hunting ground is for is exactly this
+                    // - it is the unit a hunter holds - so they are dealt out
+                    // one ground at a time, and a ground that has nobody on
+                    // it is taken before one that has.
+                    let mut pos = None;
+                    if !species.lives_in_the_water() {
+                        let at_home = hunting_ground_for(species);
+                        if at_home.is_empty() {
+                            continue;
                         }
-                    };
+                        let climate = at_home[rng.gen_range(0..at_home.len())];
+                        if let Some(grounds) = cover_by_ground.get(&climate) {
+                            let empty: Vec<&(i32, i32)> = grounds
+                                .keys()
+                                .filter(|ground| !ground_is_held.contains(*ground))
+                                .collect();
+                            let choice = if !empty.is_empty() {
+                                Some(*empty[rng.gen_range(0..empty.len())])
+                            } else if !grounds.is_empty() {
+                                grounds.keys().nth(rng.gen_range(0..grounds.len())).copied()
+                            } else {
+                                None
+                            };
 
-                    if where_it_may_go.is_empty() {
-                        continue;
+                            if let Some(ground) = choice {
+                                if let Some(tiles) = grounds.get(&ground) {
+                                    if !tiles.is_empty() {
+                                        ground_is_held.insert(ground);
+                                        pos = Some(tiles[rng.gen_range(0..tiles.len())]);
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    let pos = where_it_may_go[rng.gen_range(0..where_it_may_go.len())];
+                    // A swimmer goes in the water, and anything the country
+                    // has no ground for goes wherever its climate is - which
+                    // is better than refusing to place the species at all. A
+                    // desert fox is a hard living and not an impossible one.
+                    let pos = match pos {
+                        Some(pos) => pos,
+                        None => {
+                            let fallback: &[(i32, i32)] = if species.lives_in_the_water() {
+                                &water_positions
+                            } else {
+                                let at_home = hunting_ground_for(species);
+                                if at_home.is_empty() {
+                                    continue;
+                                }
+                                let climate = at_home[rng.gen_range(0..at_home.len())];
+                                match positions_by_climate.get(&climate) {
+                                    Some(positions) => positions,
+                                    None => continue,
+                                }
+                            };
+                            if fallback.is_empty() {
+                                continue;
+                            }
+                            fallback[rng.gen_range(0..fallback.len())]
+                        }
+                    };
                     // Predator packs are typically smaller
                     let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
 

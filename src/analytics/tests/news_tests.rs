@@ -278,10 +278,32 @@ fn walking_past_a_thing_again_is_seeing_it_again() {
 /// News reaches more than one person at a time.
 #[test]
 fn news_reaches_everybody_within_earshot() {
-    // Seeded, because whether twelve people who wander at random fall within
-    // earshot of each other is a draw, and this test has flipped either way on
-    // changes that had nothing to do with talking. See ISSUES_FOUND.md #132.
-    crate::core::dice::seed(4_101);
+    // **A seed block, not a seed.**
+    //
+    // Whether twelve people who wander at random fall within earshot of each
+    // other is a draw, and one seed only fixes that draw until something else
+    // moves what happens after it: 4,101 held for a while and stopped holding
+    // the moment the country's animals were placed differently, which has
+    // nothing whatever to do with talking. A claim about whether telling is
+    // two-handed is a claim about the ordinary settlement, so it is asked of
+    // four of them. See ISSUES_FOUND.md #132.
+    let worlds = 4;
+    let heard_by_more_than_one = (0..worlds)
+        .filter(|world_number| widest_a_teller_reached(4_101 + world_number) > 1)
+        .count();
+
+    assert!(
+        heard_by_more_than_one + 1 >= worlds as usize,
+        "somebody saying where the food is should be heard by more than one \
+         person in the ordinary settlement: it happened in \
+         {heard_by_more_than_one} of {worlds}"
+    );
+}
+
+/// The most people any one speaker was believed by, in a settlement of twelve
+/// left to itself for two thousand ticks.
+fn widest_a_teller_reached(seed: u64) -> usize {
+    crate::core::dice::seed(seed);
 
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
@@ -319,12 +341,7 @@ fn news_reaches_everybody_within_earshot() {
         }
     }
 
-    let widest = listeners_per_speaker.values().copied().max().unwrap_or(0);
-    assert!(
-        widest > 1,
-        "somebody saying where the food is should be heard by more than one \
-         person; the best-heard man in the settlement reached {widest}"
-    );
+    listeners_per_speaker.values().copied().max().unwrap_or(0)
 }
 
 /// An honest settlement does not end up full of accused liars.

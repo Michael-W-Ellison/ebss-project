@@ -10201,3 +10201,94 @@ that a test can use days where an experiment uses years, and the ordinary
 `World::new` is untouched - a country still arrives whole unless somebody
 asks for it not to.
 
+### 158. Where the specialists were put, and what they were made to share
+
+#154 closed by saying the layer under the small specialists was no longer the
+reason they died - it stands at half stock all year and pays a hawk four or
+five times its keep on ground that suits it - and that what was left was
+placement and competition. It was, and it was four things.
+
+**The ground was chosen for one animal and the animals were put down three
+cells away.** `spawn_group` placed every member of a pack on a circle of
+radius three around the position it was given and **not one of them on the
+position itself**, which quietly threw away the whole of the work that chose
+it. Forest is seven per cent of a map and patchy, so three cells off a wood
+is very nearly a tile drawn at random: measured at generation, every one of
+the forty-five kestrel packs was sent to Forest, Wetland or SaltMarsh, and
+the terrain the kestrels actually stood on came out at **exactly the map's
+own terrain proportions** - two fifths of them on bare mountain. Mean cover
+under a kestrel was 0.23 against a bar of 0.40. The first of a pack now goes
+where it was sent and the rest stand round it.
+
+**The climate was chosen without asking whether it had any ground to hunt
+on.** `ground_for` filters a species' biomes by whether the map has that
+climate at all, and the placement then falls back to the whole climate when
+it finds no ground thick enough. On a hundred square kilometres Arctic covers
+four hundred thousand tiles - two fifths of the map, nearly all mountain -
+and **not one of them clears `WHAT_A_HUNTER_NEEDS_UNDERFOOT`**; nor does one
+tile of the seventy-five thousand of desert. Only Temperate has any. So the
+second question silently undid the first. It is one criterion now, and the
+fallback is a last resort across all of a species' climates rather than a
+coin flip at each draw.
+
+**A hunting ground's stock was priced by the terrain of its middle tile.**
+Sixty-four hectares were valued at whatever one cell happened to be, picked
+for no reason but being in the centre. On a map two fifths mountain that put
+most of the country's hunting grounds at a carrying capacity of nearly
+nothing however much wood stood in them - and the yield a hunter reads comes
+off the tile it is standing on, so a kestrel on forest inside such a ground
+found at a wood's rate out of a stock priced as rock. Two answers to "how
+rich is this piece of country", on two different scales, and the one that
+decided what was there to find was a coin toss. The country is surveyed once
+now, a hundred samples to a ground; terrain does not move, so only the season
+is applied on top.
+
+**A hunter is dealt out a territory, not a tile.** Drawing a position
+uniformly from every tile in the country with cover on it puts hunters
+wherever cover is *dense*, which is not at all the same as spreading them
+over the country: a hundred grounds held hunters and the ordinary one held
+four, so each got a quarter of what its ground gives. What a hunting ground
+is for is exactly this - it is the unit a hunter holds - so they are dealt
+out one ground at a time, and a ground with nobody on it is taken before one
+that has.
+
+**And it is two larders, not one.** A hunting ground can hold a lake and a
+wood at once, and every hunter on it was counted against a single figure -
+saying that a fish in the water and a hawk in the trees take the same food
+from each other. At the height of a fish year five hundred of them put the
+demand on their grounds at thirty-four, and the hawks and eagles hunting the
+woods of those same grounds were reading it. Which pool a hunter draws from
+is now decided the way the yield already decides it: by whether the tile it
+stands on is water.
+
+**What it came to**, at generation and over a year on a hundred square
+kilometres:
+
+| | before | after |
+|---|---|---|
+| mean cover under a kestrel | 0.23 | 0.48 |
+| kestrel intake against its burn | 0.36 | 2.00 |
+| hunting grounds holding a hunter | 103 | 126 |
+| kestrel after a year | 2 | 35 |
+| heron / eagle / otter after a year | 0 / 0 / 0 | 6 / 3 / 2 |
+
+**One test moved with it, and it was not about animals.**
+`news_reaches_everybody_within_earshot` was already seeded, with a comment
+saying it "has flipped either way on changes that had nothing to do with
+talking" - and 4,101 stopped holding the moment the country's animals were
+placed differently. A seed only fixes a draw until something else moves what
+happens after it. It is four settlements now, as
+`population_feeds_itself_over_a_long_run` and
+`the_hedgerows_are_no_thinner_a_few_years_on` already are. Nineteen tests
+failed before this work and nineteen after, with that one going each way
+against `lies_are_told_and_found_out_in_a_settlement`, which now passes.
+
+**Still open: the fish.** A hundred and three at generation, **nine hundred
+and eighty-four** by midsummer, one by the year's end. That is the same shape
+#151 abstracted the rabbits for - small, fast-breeding, numerous, and a
+random walk with an absorbing barrier at nought when held as records - and it
+is now the largest single thing crowding the water. Splitting the larders
+took the birds out of its way; it did not make the fishery behave. Whether
+the fish want abstracting as the rabbits were, or only a check on their
+breeding, is the next question and a different one from this.
+

@@ -111,17 +111,40 @@ impl TheSmallLifeHere {
         self.would_carry + self.would_carry_rodents / SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER
     }
 
-    /// How thick the whole of the small life is here, both bands together.
+    /// How thick the whole of the small life is here, both bands together,
+    /// against what this ground itself would carry.
     ///
-    /// What a hunter deciding whether to stay is actually reading. Asking
-    /// `how_thick_it_is` there is asking after the rabbits alone, which sends
-    /// a kestrel off a field thick with voles.
+    /// A statement about how far the ground has been drawn down, which is
+    /// what the forage wants: a wood at half stock feeds a stoat half what
+    /// the same wood full would.
     pub fn how_thick_the_small_life_is(&self) -> f32 {
         let would = self.would_carry_in_head_of_grazer();
         if would <= 0.0 {
             return 0.0;
         }
         (self.in_head_of_grazer() / would).clamp(0.0, 1.0)
+    }
+
+    /// And how thick it is against the best ground there could be.
+    ///
+    /// **A different question, and the one a hunter choosing where to go is
+    /// asking.** `how_thick_the_small_life_is` is a fraction of each ground's
+    /// own capacity, so a salt flat carrying every last thing it can reads
+    /// 1.0 and a wood that has been worked all winter reads 0.4 - and a
+    /// starving kestrel on bare mountain, comparing its neighbours that way,
+    /// is told the mountain next door is the richest thing in sight and never
+    /// sets off for the wood. What decides where to feed is how much is
+    /// actually there, not what share of a poor ground's little is left.
+    ///
+    /// Against the best ground there could be rather than the best on this
+    /// map, because a constant needs no pass over the country to work out and
+    /// the comparison only has to be consistent.
+    pub fn how_thick_against_the_best_ground_there_could_be(&self, cells_across: i32) -> f32 {
+        let best = SmallLife::what_a_hunting_ground_would_carry_at_its_very_best(cells_across);
+        if best <= 0.0 {
+            return 0.0;
+        }
+        (self.in_head_of_grazer() / best).clamp(0.0, 1.0)
     }
 }
 
@@ -296,6 +319,21 @@ impl SmallLife {
     /// only make the snares emptier, it makes the ones that do fill worth
     /// less, because you have to be standing there.
     pub const WHAT_A_HUNGRY_COUNTRY_TAKES: f32 = 0.5;
+
+    /// What the best hunting ground there could be would carry, in head of
+    /// grazer with the rodents counted at their own worth.
+    ///
+    /// Cover of one, temperate, in summer - which no ground on any map
+    /// actually is, standing timber being six tenths. It is a yardstick
+    /// rather than a place, and it exists so that two grounds can be compared
+    /// on how much is standing on them instead of on what share of their own
+    /// little is left.
+    pub fn what_a_hunting_ground_would_carry_at_its_very_best(cells_across: i32) -> f32 {
+        let grazers = Self::HEAD_A_GOOD_HECTARE_CARRIES * Self::hectares_in_a_hunting_ground(cells_across);
+        grazers
+            + grazers * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND
+                / Self::HOW_MANY_RODENTS_MAKE_A_GRAZER
+    }
 
     /// What a hunting ground will carry, in head of small grazers.
     ///
