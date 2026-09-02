@@ -54,6 +54,14 @@ pub struct ClimateManager {
     weather_gen: WeatherGenerator,
 
     /// Base climate for the world (influences all biomes)
+    /// The humidity the weather generator works from, and the wind and
+    /// temperature a `Climate` needs to exist at all.
+    ///
+    /// **Its temperature is not the world's temperature.** How warm it is
+    /// somewhere depends on what ground it is, which is what `get_biome`
+    /// and `BiomeType::temperature_at` are for; this is the humidity that
+    /// the whole country's weather is drawn against, and the rest of the
+    /// struct comes along with it.
     pub base_climate: Climate,
 
     /// The biome under each kind of ground, as it stands today.
@@ -172,12 +180,20 @@ impl ClimateManager {
             self.weather = self.weather_gen.generate_weather();
         }
 
-        // Update base climate temperature based on season
-        let base_temp = if self.cold_climate { -5.0 } else { 15.0 };
-        let season_mod = self.calendar.current_season().temperature_modifier();
-        let time_mod = self.calendar.time_of_day_temperature_modifier();
-
-        self.base_climate.temperature = base_temp * season_mod * time_mod;
+        // **The world's temperature is not written down here any more.**
+        //
+        // What was here was a third answer to how warm it is: two numbers
+        // for the whole world - fifteen degrees, or minus five if the world
+        // was called cold - multiplied by a season factor and a time-of-day
+        // factor. Multiplied, so in a cold world it worked out summer at
+        // minus six and winter at minus three, and nothing at all read it:
+        // `base_climate.temperature` is written and never looked at, while
+        // every question anybody actually asks goes through `get_biome` and
+        // `Biome::update_climate`.
+        //
+        // A temperature with no place attached to it is not a question this
+        // model can answer, so it is not answered. `BiomeType::
+        // temperature_at` is the one owner - see `base_climate`.
 
         // Update humidity based on weather
         if self.weather.weather_type.precipitation_intensity() > 0.0 {

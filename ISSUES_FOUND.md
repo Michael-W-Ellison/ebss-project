@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `6e2eb70` and the work since.
+**Last verified:** September 2026, against commit `af2c0f6` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -10410,3 +10410,118 @@ reaches the point of telling, or what is told never lands in
 The test is left failing and seeded rather than tuned back to green, because a
 green test that is reading the suite's dice is worse than a red one that is
 reading the model.
+
+### 161. Celsius is not a ratio scale, so three biomes were coldest at noon
+
+The first of the four sections of the sustenance-and-climate specification,
+and the one with a live inversion in it.
+
+`Biome::update_climate` worked a temperature out like this:
+
+```rust
+let mut current_temp = base_temp + (temp_range * 0.3 * (season_factor - 1.0));
+current_temp *= time_factor;   // 1.5 at noon, 0.7 at night
+```
+
+**Multiplying a Celsius reading.** Celsius has an arbitrary zero, so it is an
+interval scale and not a ratio scale: there is no sense in which twice as many
+degrees is twice as warm, and multiplying by 1.5 for noon makes a cold place
+colder. Measured, before:
+
+| biome | winter 2am | winter noon | summer noon | seasonal swing |
+|---|---|---|---|---|
+| Tundra | -11.7 | **-25.1** | -15.6 | 9.5 |
+| Taiga | -4.7 | **-10.0** | -0.6 | 9.4 |
+| Alpine | -6.0 | **-12.9** | -4.8 | 8.1 |
+| TemperateForest | 6.7 | **14.2** | 21.0 | 6.8 |
+| Grassland | 10.1 | **21.8** | 28.5 | 6.8 |
+| Tropical | 18.0 | 38.6 | 42.6 | 4.0 |
+
+The tundra, the taiga and the alpine were **coldest at midday and warmest at
+two in the morning**, every day of the year.
+
+The same multiplication was in two more places. `SeasonalCalendar::
+apply_modifiers` did `base * season_mod * time_mod`, and `ClimateManager::
+tick` did it on a global `-5.0` or `15.0` for the whole world - which in a
+cold world works summer out at minus six and winter at minus three, winter
+being the warmer. Neither was read by anything: the live path is
+`get_biome` -> `Biome::update_climate`, and the weather layer on the end of it
+was already additive, `base_temp + modifier`, which is the correct shape and
+was the odd one out.
+
+**The second thing it did was flatten the year.** The season entered as
+`range * 0.3 * (factor - 1.0)` with the factor spanning 0.6 to 1.2 - between
+minus an eighth and plus a sixteenth of the range - so a year moved the
+thermometer four to ten degrees wherever it was. The specification asks for
+twenty to thirty. Outside the three arctic biomes **nothing on any map ever
+went below zero**: a temperate deciduous forest read +14.2 at winter noon and
++6.7 before dawn. Water never froze, a fish run was never held up by ice, and
+exposure had nothing to bite on, which is why "make winter bite" kept coming
+back.
+
+**What replaces it.** `BiomeType::what_the_year_does_here` gives each biome a
+winter band and a summer band - the shape the specification itself uses,
+"Winter -5C to 5C, Summer 20C to 30C" - because one (min, max) pair cannot
+answer both "how cold does it get" and "how hot does it get" and leaves
+everything between them to be invented. The year moves the two ends of the
+day's band between the two pairs, and the hour moves the reading between those
+ends, on a cosine with its trough before dawn. Both are degrees. Nothing in
+this model multiplies a temperature any more, and `temperature_range` and
+`average_temperature` are derived from the bands rather than written down
+beside them.
+
+Measured, after:
+
+| biome | winter 2am | winter noon | summer noon | seasonal swing |
+|---|---|---|---|---|
+| Tundra | -35.6 | -21.1 | 6.3 | 27.4 |
+| Taiga | -26.3 | -14.3 | 16.3 | 30.6 |
+| Alpine | -17.1 | -7.4 | 14.4 | 21.9 |
+| TemperateForest | -3.5 | 1.3 | 26.3 | 25.0 |
+| Grassland | -16.3 | -4.3 | 29.4 | 33.7 |
+| Tropical | 20.7 | 23.1 | 29.4 | 6.3 |
+
+Every biome is warmer at noon than before dawn, in every season. The steppe
+has the hardest year on the map and the rainforest has next to none, which is
+the shape the specification describes.
+
+**What it cost, and this is the part worth reading.** Winter now bites, and
+the model's people cannot take it. Thirty-two worlds of twelve founders, same
+seeds, run to a year and four days:
+
+| | before | after |
+|---|---|---|
+| reached winter with somebody | 31/32 | 31/32 |
+| came out the other side | 7/31 | 6/31 |
+| people into winter | 174 | 233 |
+| people out of it | 9 | 7 |
+| alive a year on | 7/32 | 6/32 |
+
+The change is small because **the winter was already catastrophic**: nine
+people out of a hundred and seventy-four before, seven out of two hundred and
+thirty-three after - ninety-five per cent mortality against ninety-seven.
+More people reach winter now because summer is genuinely warm for the first
+time (a temperate forest summer reads 21.5 to 26.3, against 9.8 to 21.0), and
+more of them then die in it.
+
+The ecology does not notice. A year on a hundred square kilometres with
+nobody in the world comes out at 1,666 head, 133,246 resource nodes and
+208,894 plants either way, at 17.61 ms a tick against 17.69 - so what winter
+now costs is paid entirely by the people, and the animals and the plants are
+where they were. (An earlier reading of 23 ms against 12.75 was two
+simulations sharing a machine, and is withdrawn.)
+
+So this closes an arithmetic defect and opens an honest one: **a settlement in
+this model cannot survive a real winter, and could not before either.** It was
+hidden by a winter that never went below +6.7. `population_feeds_itself_over_
+a_long_run` is left failing rather than tuned: it asks that at least three of
+six seeded settlements still have somebody after four thousand ticks, and it
+got three before and two after - but measured across thirty-two worlds the
+rate is 22 per cent and then 19, so a six-world block asking for half was
+passing on its draw, which is what its own comment warns about. The threshold
+is not the thing to change; the winter is. That is a piece of work of its own
+and it is #141 and #207's real remainder.
+
+`a_settlement_works_things_out_that_nobody_wrote_down` also moved back into
+the failing set. It is unseeded, it was failing before the fish change,
+passing after it, and failing now: the #132 family again.

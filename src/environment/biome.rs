@@ -35,27 +35,136 @@ pub enum BiomeType {
     Coast,
 }
 
+/// The hour a day is coldest.
+///
+/// Just before dawn, which is when the ground has been giving up its heat
+/// all night and has not yet begun to take any back. Not midnight, which is
+/// what a naive clock would pick.
+const WHEN_A_DAY_IS_COLDEST: f32 = 5.0;
+
+/// Hours in a day, so the turn of the clock is written once.
+const HOURS_IN_A_DAY: f32 = 24.0;
+
+/// How far through the day's warming a given hour stands: nought at the
+/// coldest hour, one twelve hours later.
+///
+/// A cosine rather than a step, because a day does not jump from night to
+/// noon. The warmest hour comes out opposite the coldest, at five in the
+/// afternoon; a real day peaks nearer three, and that asymmetry is not
+/// modelled.
+pub fn how_far_through_the_days_warmth(hour: f32) -> f32 {
+    let turned = (hour - WHEN_A_DAY_IS_COLDEST) / HOURS_IN_A_DAY * std::f32::consts::TAU;
+    (1.0 - turned.cos()) / 2.0
+}
+
+/// What the thermometer does in one place, over a year and over a day.
+///
+/// **Two bands rather than one range, because one pair of numbers cannot
+/// answer two questions.** "How cold does it get here" is about January
+/// night and "how hot does it get here" is about July afternoon, and a
+/// single (min, max) leaves everything in between to be invented by
+/// whatever arithmetic reads it. What was invented was a multiplication -
+/// see `temperature_at` - and it put a temperate forest at fourteen degrees
+/// at winter noon and made the tundra coldest at midday.
+///
+/// The figures are the specification's own, biome by biome: "Temperate
+/// deciduous forest: Winter -5C to 5C, Summer 20C to 30C, four distinct
+/// seasons."
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WhatTheYearDoesHere {
+    /// The coldest and the warmest a winter day gets: before dawn, and in
+    /// the afternoon.
+    pub winter: (Temperature, Temperature),
+    /// And the same two hours of a summer day.
+    pub summer: (Temperature, Temperature),
+}
+
 impl BiomeType {
-    /// Get base temperature range for this biome (min, max in Celsius)
-    pub fn temperature_range(&self) -> (Temperature, Temperature) {
-        match self {
-            BiomeType::Tundra => (-30.0, 5.0),
-            BiomeType::Taiga => (-20.0, 15.0),
-            BiomeType::TemperateForest => (0.0, 25.0),
-            BiomeType::Grassland => (5.0, 30.0),
-            BiomeType::Desert => (10.0, 45.0),
-            BiomeType::Tropical => (20.0, 35.0),
-            BiomeType::Savanna => (15.0, 35.0),
-            BiomeType::Alpine => (-20.0, 10.0),
-            BiomeType::Wetland => (10.0, 30.0),
-            BiomeType::Coast => (5.0, 25.0),
-        }
+    /// What a year and a day come to here - see [`WhatTheYearDoesHere`].
+    ///
+    /// The one statement about how warm a place is. Everything else about
+    /// temperature is derived from it, so a biome cannot be cold for one
+    /// purpose and mild for another.
+    pub fn what_the_year_does_here(&self) -> WhatTheYearDoesHere {
+        let (winter, summer) = match self {
+            // Long very cold winters, very short cool summers.
+            BiomeType::Tundra => ((-40.0, -10.0), (0.0, 10.0)),
+            // Long cold winters, short mild to warm summers.
+            BiomeType::Taiga => ((-30.0, -5.0), (10.0, 20.0)),
+            // Four distinct seasons.
+            BiomeType::TemperateForest => ((-5.0, 5.0), (20.0, 30.0)),
+            // Temperate grassland, prairie and steppe: high seasonal
+            // contrast, hot summers and cold winters.
+            BiomeType::Grassland => ((-20.0, 5.0), (20.0, 35.0)),
+            // Cool season against hot season, and the day-night swing here
+            // is the widest of any ground.
+            BiomeType::Desert => ((5.0, 20.0), (30.0, 45.0)),
+            // Tropical rainforest: little seasonal variation, consistently
+            // warm. The two bands very nearly meet, which is the point.
+            BiomeType::Tropical => ((20.0, 25.0), (25.0, 32.0)),
+            // Savanna: warm year round, and it is the moisture that has a
+            // season rather than the temperature.
+            BiomeType::Savanna => ((15.0, 25.0), (25.0, 35.0)),
+            // Alpine and montane: cold winters, short cool summers.
+            BiomeType::Alpine => ((-20.0, 0.0), (5.0, 20.0)),
+            // Wetland, marsh and riparian: it tracks the region it is in and
+            // the water moderates it. Held to the temperate reading here,
+            // which is what this map's wetlands are.
+            BiomeType::Wetland => ((0.0, 8.0), (15.0, 30.0)),
+            // Temperate marine, whose swings are narrower than anything
+            // inland because there is a sea against it.
+            BiomeType::Coast => ((5.0, 10.0), (15.0, 20.0)),
+        };
+
+        WhatTheYearDoesHere { winter, summer }
     }
 
-    /// Get average temperature for this biome
+    /// The coldest and the warmest this place ever is.
+    ///
+    /// Derived from the bands rather than written down beside them, so the
+    /// two cannot come to disagree - the defect this whole change is about,
+    /// in miniature.
+    pub fn temperature_range(&self) -> (Temperature, Temperature) {
+        let year = self.what_the_year_does_here();
+        (year.winter.0, year.summer.1)
+    }
+
+    /// What it averages over the year, taking the four corners of the two
+    /// bands.
     pub fn average_temperature(&self) -> Temperature {
-        let (min, max) = self.temperature_range();
-        (min + max) / 2.0
+        let year = self.what_the_year_does_here();
+        (year.winter.0 + year.winter.1 + year.summer.0 + year.summer.1) / 4.0
+    }
+
+    /// How warm it is here, in this season, at this hour.
+    ///
+    /// **Additive, and that is the whole of the fix.** What was here
+    /// multiplied a Celsius temperature by a season factor and then by a
+    /// time-of-day factor. Celsius is an interval scale and not a ratio
+    /// scale: there is no sense in which twice as many degrees is twice as
+    /// warm, and multiplying by 1.5 for noon makes a cold place colder.
+    /// Measured before this: the tundra read -11.7 at two in the morning and
+    /// **-25.1 at noon**, and the taiga and the alpine the same way round.
+    ///
+    /// The second thing it did was flatten the year. The season entered as
+    /// `range * 0.3 * (factor - 1.0)` with the factor spanning 0.6 to 1.2,
+    /// which is minus a eighth to plus a sixteenth of the range: seasonal
+    /// swings of four to ten degrees where the specification asks for twenty
+    /// to thirty. A temperate forest read **+14.2 at winter noon** and
+    /// nothing outside the three arctic biomes ever froze, which is why
+    /// "make winter bite" kept coming back.
+    ///
+    /// Now the year moves the two ends of the day's band between the winter
+    /// pair and the summer pair, and the hour moves the reading between
+    /// those two ends. Both are degrees.
+    pub fn temperature_at(&self, season: Season, hour: f32) -> Temperature {
+        let year = self.what_the_year_does_here();
+        let into_the_summer = season.how_far_into_the_year_it_is();
+
+        let by_night = year.winter.0 + (year.summer.0 - year.winter.0) * into_the_summer;
+        let by_day = year.winter.1 + (year.summer.1 - year.winter.1) * into_the_summer;
+
+        by_night + (by_day - by_night) * how_far_through_the_days_warmth(hour)
     }
 
     /// Get average humidity (0.0 to 1.0)
@@ -189,36 +298,13 @@ impl Biome {
     /// Update climate based on time and season
     pub fn update_climate(&mut self, delta_time: f32) {
         // Update time of day (24-hour cycle)
-        self.time_of_day = (self.time_of_day + delta_time) % 24.0;
+        self.time_of_day = (self.time_of_day + delta_time) % HOURS_IN_A_DAY;
 
-        // Temperature variation by time of day
-        let time_factor = if self.time_of_day >= 6.0 && self.time_of_day <= 18.0 {
-            // Daytime (6 AM to 6 PM) - warmer
-            let progress = (self.time_of_day - 6.0) / 12.0;
-            // Peak at noon
-            1.0 + 0.5 * (1.0 - (progress - 0.5).abs() * 2.0)
-        } else {
-            // Nighttime - cooler
-            0.7
-        };
-
-        // Temperature variation by season
-        let season_factor = match self.season {
-            Season::Spring => 0.8, // mild
-            Season::Summer => 1.2, // hot
-            Season::Fall => 0.9,   // cooling
-            Season::Winter => 0.6, // cold
-        };
-
-        let base_temp = self.biome_type.average_temperature();
-        let (min_temp, max_temp) = self.biome_type.temperature_range();
-        let temp_range = max_temp - min_temp;
-
-        // Calculate current temperature
-        let mut current_temp = base_temp + (temp_range * 0.3 * (season_factor - 1.0));
-        current_temp *= time_factor;
-
-        self.current_climate.temperature = current_temp;
+        // One owner for how warm it is - see `BiomeType::temperature_at`.
+        // What was here was a second copy of the season and hour curves,
+        // written multiplicatively, and it disagreed with everything else.
+        self.current_climate.temperature =
+            self.biome_type.temperature_at(self.season, self.time_of_day);
     }
 
     /// Get current effective temperature (with wind chill/heat index)
@@ -259,9 +345,31 @@ mod tests {
     #[test]
     fn test_biome_temperature_ranges() {
         assert!(BiomeType::Tundra.average_temperature() < 0.0);
-        assert!(BiomeType::Desert.average_temperature() > 25.0);
         assert!(BiomeType::TemperateForest.average_temperature() > 0.0);
         assert!(BiomeType::TemperateForest.average_temperature() < 20.0);
+
+        // A desert is hot but it is not the warmest place on the map over a
+        // year: it has cold nights and a cool season, and a rainforest has
+        // neither. The old table said 27.5 for a desert against 27.5 for the
+        // tropics by writing one range for each and reading the middle of
+        // it; with a winter band and a summer band it comes out 25.0 against
+        // 25.5, which is the right way round.
+        //
+        // Ordering rather than a number, because the number is derived from
+        // the bands and a threshold written beside it is a second opinion
+        // waiting to disagree.
+        assert!(
+            BiomeType::Desert.average_temperature()
+                > BiomeType::TemperateForest.average_temperature()
+        );
+        assert!(
+            BiomeType::Desert.average_temperature()
+                < BiomeType::Tropical.average_temperature()
+        );
+        assert!(
+            BiomeType::Tropical.average_temperature() > 25.0,
+            "a rainforest is warm all year and all night"
+        );
     }
 
     #[test]

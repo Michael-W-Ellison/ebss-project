@@ -403,3 +403,201 @@ fn a_settlement_lives_through_a_winter() {
          not one came out of it"
     );
 }
+
+// --- the thermometer ------------------------------------------------------
+
+/// Every biome is warmer at noon than it is before dawn, in every season.
+///
+/// **Three of them were not.** `Biome::update_climate` ended
+/// `current_temp *= time_factor` - 1.5 at noon, 0.7 at night - and Celsius is
+/// an interval scale with an arbitrary zero, so multiplying it turns the sign
+/// of the effect over wherever the reading is below freezing. Measured before
+/// the fix: the tundra read **-11.7 at two in the morning and -25.1 at noon**,
+/// and the taiga and the alpine the same way round.
+///
+/// The same multiplication was in two other places - `SeasonalCalendar::
+/// apply_modifiers` and `ClimateManager::tick` - and both are gone. Nothing
+/// in this model multiplies a temperature any more.
+#[test]
+fn every_biome_is_warmer_at_noon_than_before_dawn() {
+    use crate::environment::biome::BiomeType;
+
+    for biome in EVERY_BIOME {
+        for season in Season::ALL {
+            let before_dawn = biome.temperature_at(season, 4.0);
+            let noon = biome.temperature_at(season, 12.0);
+            assert!(
+                noon > before_dawn,
+                "{biome:?} in {season:?}: {noon} at noon against {before_dawn} before dawn"
+            );
+        }
+    }
+
+    // And the coldest hour really is the small hours rather than midnight,
+    // because the ground goes on giving up heat until the sun comes back.
+    let wood = BiomeType::TemperateForest;
+    assert!(
+        wood.temperature_at(Season::Winter, 5.0) < wood.temperature_at(Season::Winter, 0.0),
+        "five in the morning is colder than midnight"
+    );
+}
+
+/// And summer is warmer than winter everywhere, by the amount the place is
+/// actually continental.
+///
+/// The seasons used to enter as `range * 0.3 * (factor - 1.0)` with the
+/// factor spanning 0.6 to 1.2 - between minus an eighth and plus a sixteenth
+/// of the range - so the year moved the thermometer four to ten degrees
+/// wherever it was. A temperate deciduous forest swings twenty-five.
+#[test]
+fn the_year_swings_as_far_as_the_place_is_continental() {
+    use crate::environment::biome::BiomeType;
+
+    for biome in EVERY_BIOME {
+        let winter = biome.temperature_at(Season::Winter, 12.0);
+        let summer = biome.temperature_at(Season::Summer, 12.0);
+        assert!(
+            summer > winter,
+            "{biome:?}: summer {summer} should beat winter {winter}"
+        );
+    }
+
+    let swing = |b: BiomeType| {
+        b.temperature_at(Season::Summer, 12.0) - b.temperature_at(Season::Winter, 12.0)
+    };
+
+    // A steppe has the hardest year of anything on a map: cold winters and
+    // hot summers, which is what "high seasonal contrast" means.
+    assert!(
+        swing(BiomeType::Grassland) > 25.0,
+        "a steppe swings hard: {}",
+        swing(BiomeType::Grassland)
+    );
+    // A rainforest has almost no year at all.
+    assert!(
+        swing(BiomeType::Tropical) < 10.0,
+        "a rainforest has no season worth the name: {}",
+        swing(BiomeType::Tropical)
+    );
+    // And a coast is held between the two by the sea against it.
+    assert!(
+        swing(BiomeType::Coast) < swing(BiomeType::Grassland),
+        "the sea holds a coast steadier than open steppe"
+    );
+
+    // A desert's day is the widest of anything, which is the other half of
+    // the same statement: what a place swings by is not one number.
+    let by_day = |b: BiomeType| {
+        b.temperature_at(Season::Summer, 17.0) - b.temperature_at(Season::Summer, 5.0)
+    };
+    assert!(
+        by_day(BiomeType::Desert) > by_day(BiomeType::Tropical),
+        "a desert night is a long way below its afternoon: {} against {}",
+        by_day(BiomeType::Desert),
+        by_day(BiomeType::Tropical)
+    );
+}
+
+/// Winter freezes, which is the whole point of the exercise.
+///
+/// Before this, outside the three arctic biomes **nothing on any map ever
+/// went below zero**: a temperate deciduous forest read +14.2 at winter noon
+/// and +6.7 at two in the morning, and a steppe +21.8 and +10.1. Water never
+/// froze, a fish run was never held up by ice, and exposure never had
+/// anything to bite on - which is why "make winter bite" kept coming back.
+#[test]
+fn a_temperate_winter_actually_freezes() {
+    use crate::environment::biome::BiomeType;
+
+    let wood = BiomeType::TemperateForest;
+    let night = wood.temperature_at(Season::Winter, 5.0);
+    let noon = wood.temperature_at(Season::Winter, 12.0);
+
+    assert!(
+        night < 0.0,
+        "a winter night in a deciduous wood is below freezing: {night}"
+    );
+    assert!(
+        noon < 8.0,
+        "and it does not thaw to a spring day by lunchtime: {noon}"
+    );
+
+    // A steppe is harder still, and a rainforest never freezes at all.
+    assert!(BiomeType::Grassland.temperature_at(Season::Winter, 12.0) < 0.0);
+    assert!(BiomeType::Tropical.temperature_at(Season::Winter, 5.0) > 15.0);
+}
+
+/// Every biome reads inside the band the specification gives it.
+///
+/// The bands are the one statement about how warm a place is - see
+/// `BiomeType::what_the_year_does_here` - and everything else is derived from
+/// them, which is what stops a biome being cold for one purpose and mild for
+/// another.
+#[test]
+fn each_biome_keeps_inside_its_own_band() {
+    for biome in EVERY_BIOME {
+        let year = biome.what_the_year_does_here();
+
+        for (season, band) in [(Season::Winter, year.winter), (Season::Summer, year.summer)] {
+            let (coldest, warmest) = band;
+            assert!(
+                coldest < warmest,
+                "{biome:?} in {season:?}: a night is colder than an afternoon"
+            );
+
+            // Sampled right round the clock, nothing leaves the band.
+            for hour in 0..24 {
+                let reading = biome.temperature_at(season, hour as f32);
+                assert!(
+                    reading >= coldest - 0.01 && reading <= warmest + 0.01,
+                    "{biome:?} in {season:?} at {hour}h reads {reading}, outside {coldest}..{warmest}"
+                );
+            }
+        }
+
+        // Spring and autumn fall between the two, and autumn is the warmer
+        // of them because the ground lags the sun.
+        let spring = biome.temperature_at(Season::Spring, 12.0);
+        let fall = biome.temperature_at(Season::Fall, 12.0);
+        let winter = biome.temperature_at(Season::Winter, 12.0);
+        let summer = biome.temperature_at(Season::Summer, 12.0);
+        assert!(
+            spring > winter && spring < summer && fall > spring && fall < summer,
+            "{biome:?}: spring {spring} and autumn {fall} sit between {winter} and {summer}"
+        );
+    }
+}
+
+/// And a live world reads the same way, through the weather and all.
+#[test]
+fn a_world_gets_a_winter_and_a_summer() {
+    use crate::world::TerrainType;
+
+    let mut winter = ClimateManager::default();
+    winter.calendar.day_of_year = Season::Winter.first_day();
+    winter.calendar.time_of_day = 5.0;
+    let cold = winter.get_temperature(Position::new(10, 10), TerrainType::Forest);
+
+    let mut summer = ClimateManager::default();
+    summer.calendar.day_of_year = Season::Summer.first_day();
+    summer.calendar.time_of_day = 15.0;
+    let hot = summer.get_temperature(Position::new(10, 10), TerrainType::Forest);
+
+    assert!(
+        hot - cold > 15.0,
+        "a wood should be a different place in January and July: {cold} against {hot}"
+    );
+    assert!(
+        cold < 5.0,
+        "and January should be cold enough to notice: {cold}"
+    );
+}
+
+/// The ten biomes this test file walks.
+const EVERY_BIOME: [crate::environment::biome::BiomeType; 10] = {
+    use crate::environment::biome::BiomeType as B;
+    [
+        B::Tundra, B::Taiga, B::TemperateForest, B::Grassland, B::Desert,
+        B::Tropical, B::Savanna, B::Alpine, B::Wetland, B::Coast,
+    ]
+};

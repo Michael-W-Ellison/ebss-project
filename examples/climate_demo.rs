@@ -47,7 +47,10 @@ fn main() {
     println!("Seasonal characteristics:");
     for season in [Season::Spring, Season::Summer, Season::Fall, Season::Winter] {
         println!("  {:?}:", season);
-        println!("    Temperature modifier: {:.1}x", season.temperature_modifier());
+        println!(
+            "    How far into the year: {:.2}",
+            season.how_far_into_the_year_it_is()
+        );
         println!("    Day length: {:.1} hours", season.day_length());
         println!("    Plant growth: {:.1}x", season.plant_growth_modifier());
         println!("    Precipitation: {:.1}x", season.precipitation_modifier());
