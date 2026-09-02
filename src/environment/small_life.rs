@@ -54,6 +54,22 @@ pub struct TheSmallLifeHere {
     /// `tick_a_ground` is the one thing that ever writes it, so it is the
     /// tick's output rather than a second opinion about the ground.
     pub would_carry: f32,
+
+    /// Mice, voles and shrews: the band under the rabbits.
+    ///
+    /// The layer that was missing, and its absence is what emptied the sky.
+    /// A kestrel is not a small fox - it does not live on rabbits at all,
+    /// it lives on voles, and an owl the same. Held apart from the grazers
+    /// rather than folded into them because the two behave differently in
+    /// every way that matters: there are two orders of magnitude more of
+    /// them, they come back four times as fast, and a snare is no use
+    /// against them. Fold them together and a trapline is catching mice,
+    /// which is not what a trapline is.
+    #[serde(default)]
+    pub rodents: f32,
+    /// And what the ground would carry of them, this season.
+    #[serde(default)]
+    pub would_carry_rodents: f32,
 }
 
 impl TheSmallLifeHere {
@@ -67,6 +83,45 @@ impl TheSmallLifeHere {
             return 0.0;
         }
         (self.grazers / self.would_carry).clamp(0.0, 1.0)
+    }
+
+    /// And the same for the rodents, which is what a kestrel or an owl is
+    /// actually reading when it looks at a field.
+    pub fn how_thick_the_rodents_are(&self) -> f32 {
+        if self.would_carry_rodents <= 0.0 {
+            return 0.0;
+        }
+        (self.rodents / self.would_carry_rodents).clamp(0.0, 1.0)
+    }
+
+    /// Everything standing on this ground, counted in head of grazer.
+    ///
+    /// One owner for "how much small life is here", so that the two bands
+    /// can be added without anything having to know the exchange rate twice.
+    /// Every rule that was written about the grazers before the rodents
+    /// existed - what keeps the foxes up, how fast a snared rabbit is stolen
+    /// - reads this instead, which is why adding a band under them did not
+    /// silently treble the foxes or empty the traplines.
+    pub fn in_head_of_grazer(&self) -> f32 {
+        self.grazers + self.rodents / SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER
+    }
+
+    /// And what the ground would carry, on the same footing.
+    pub fn would_carry_in_head_of_grazer(&self) -> f32 {
+        self.would_carry + self.would_carry_rodents / SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER
+    }
+
+    /// How thick the whole of the small life is here, both bands together.
+    ///
+    /// What a hunter deciding whether to stay is actually reading. Asking
+    /// `how_thick_it_is` there is asking after the rabbits alone, which sends
+    /// a kestrel off a field thick with voles.
+    pub fn how_thick_the_small_life_is(&self) -> f32 {
+        let would = self.would_carry_in_head_of_grazer();
+        if would <= 0.0 {
+            return 0.0;
+        }
+        (self.in_head_of_grazer() / would).clamp(0.0, 1.0)
     }
 }
 
@@ -122,6 +177,61 @@ impl SmallLife {
         let side = cells_across as f32 * METRES_A_CELL;
         side * side / SQUARE_METRES_IN_A_HECTARE
     }
+
+    /// Head of rodents a hectare of the best ground carries.
+    ///
+    /// Vole and mouse densities run from a few dozen to several hundred a
+    /// hectare and swing by an order of magnitude between years; this is a
+    /// quiet-year figure for all of them together. On ground that was all
+    /// good it would be seven and a half thousand to a hunting ground and
+    /// better than a million on a hundred square kilometres; what a real map
+    /// carries once the cover, the climate and the season have had their say
+    /// was measured at a hundred and fifty-five thousand, against ten
+    /// thousand of grazers beside it. That is the scale the specification is
+    /// about: "if there are tens of thousands of assumed mice across the
+    /// 100km^2 then the hawks should have plenty of prey to hunt".
+    ///
+    /// **This is what was missing, and it is why the sky emptied.** With the
+    /// rabbits alone a hunting ground grew a surplus of about two hundredths
+    /// of a head a tick, and one kestrel eats that much by itself - so
+    /// sixty-four hectares kept about one small predator, and every kestrel,
+    /// heron, owl, eagle and otter on a hundred square kilometres was dead
+    /// inside two years while its fields stood at half stock. The rodents
+    /// are fifteen times the head and come back four times as fast, so the
+    /// surplus under a hawk is nearer sixty times larger - which is the
+    /// order of magnitude it was short by.
+    pub const RODENTS_A_GOOD_HECTARE_CARRIES: f32 = 120.0;
+
+    /// What one head of the grazer layer weighs.
+    ///
+    /// A rabbit, and the same two kilogrammes the rabbit record carried
+    /// before it became a number. It is here rather than in the fauna table
+    /// because the record it came from is gone: this is now the only place
+    /// the model says how big the thing in a snare is, and what decides
+    /// whether a hunter can lift one reads it.
+    pub const WHAT_A_GRAZER_WEIGHS: f32 = 2.0;
+
+    /// How much of a grazer one rodent is worth to something eating it.
+    ///
+    /// From the specification's own arithmetic, which is a better source
+    /// than the weights: "a hawk can eat a rabbit a day, but a rabbit can
+    /// also last two days" and "hawks will also hunt rodents like mice and
+    /// will eat four of them in a day". Two days of hawk against a quarter
+    /// of a day of hawk is eight to one.
+    ///
+    /// Not the ratio of the weights, which is nearer seventy to one. A hawk
+    /// does not eat all of a rabbit and does eat all of a mouse, and this is
+    /// the number about food rather than about carcases.
+    pub const HOW_MANY_RODENTS_MAKE_A_GRAZER: f32 = 8.0;
+
+    /// How fast the rodents come back, a tick at a time.
+    ///
+    /// Four times the grazers. A vole is breeding at three weeks old and a
+    /// good year multiplies them severalfold; a field trapped bare in March
+    /// is back by midsummer. This is what makes the layer under a small
+    /// predator something it can lean on all year rather than something it
+    /// eats once.
+    pub const HOW_FAST_THE_RODENTS_COME_BACK: f32 = 0.006;
 
     /// What share of the grazers the ground will keep hunters for.
     ///
@@ -203,6 +313,38 @@ impl SmallLife {
         season: Season,
         cells_across: i32,
     ) -> f32 {
+        Self::HEAD_A_GOOD_HECTARE_CARRIES
+            * Self::what_a_hectare_of_this_is_worth(cover, climate, season)
+            * Self::hectares_in_a_hunting_ground(cells_across)
+    }
+
+    /// How many rodents a piece of ground carries for every grazer on it.
+    ///
+    /// Derived rather than written down twice. Both bands live on what the
+    /// ground grows, so the same cover, the same climate and the same season
+    /// decide both and only the density differs - which means a ground's
+    /// rodent stock follows from its grazer stock and the two can never come
+    /// to disagree about which month is hard or which field is poor. It is
+    /// also why nothing that ticks a ground has to be told about the rodents
+    /// separately.
+    pub const RODENTS_TO_A_GRAZER_ON_THE_GROUND: f32 =
+        Self::RODENTS_A_GOOD_HECTARE_CARRIES / Self::HEAD_A_GOOD_HECTARE_CARRIES;
+
+    /// And what it will carry of rodents, which is the same ground read for
+    /// a different animal.
+    pub fn what_this_ground_will_carry_of_rodents(
+        cover: f32,
+        climate: ClimateZone,
+        season: Season,
+        cells_across: i32,
+    ) -> f32 {
+        Self::what_this_ground_will_carry(cover, climate, season, cells_across)
+            * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND
+    }
+
+    /// What a hectare of this ground, in this climate, in this season, is
+    /// worth against a hectare of the best of it in summer.
+    fn what_a_hectare_of_this_is_worth(cover: f32, climate: ClimateZone, season: Season) -> f32 {
         let by_climate = match climate {
             ClimateZone::Temperate => 1.0,
             ClimateZone::Tropical => 1.1,
@@ -220,11 +362,7 @@ impl SmallLife {
             Season::Winter => 0.45,
         };
 
-        Self::HEAD_A_GOOD_HECTARE_CARRIES
-            * Self::hectares_in_a_hunting_ground(cells_across)
-            * cover.clamp(0.0, 1.0)
-            * by_climate
-            * by_season
+        cover.clamp(0.0, 1.0) * by_climate * by_season
     }
 
     /// What is on this ground now.
@@ -242,11 +380,31 @@ impl SmallLife {
     /// what it will carry, and after that it grows or is drawn down like
     /// anything else.
     pub fn settle(&mut self, ground: (i32, i32), would_carry: f32) {
+        let rodents = would_carry * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND;
         self.grounds.entry(ground).or_insert(TheSmallLifeHere {
             grazers: would_carry,
-            hunters: would_carry * Self::WHAT_SHARE_ARE_HUNTERS,
+            hunters: (would_carry + rodents / Self::HOW_MANY_RODENTS_MAKE_A_GRAZER)
+                * Self::WHAT_SHARE_ARE_HUNTERS,
             would_carry,
+            rodents,
+            would_carry_rodents: rodents,
         });
+    }
+
+    /// Take up to `wanted` head of rodents off this ground.
+    ///
+    /// Held apart from `take` rather than converted into it, because what
+    /// comes off a ground has to come off the band it was actually taken
+    /// from: an owl working a field all winter thins the voles and leaves
+    /// the rabbits, and a trapline does the reverse.
+    pub fn take_rodents(&mut self, ground: (i32, i32), wanted: f32) -> f32 {
+        let Some(here) = self.grounds.get_mut(&ground) else {
+            return 0.0;
+        };
+
+        let got = wanted.max(0.0).min(here.rodents.max(0.0));
+        here.rodents = (here.rodents - got).max(0.0);
+        got
     }
 
     /// Take up to `wanted` head off this ground, and say what was actually
@@ -282,11 +440,13 @@ impl SmallLife {
         };
 
         here.would_carry = would_carry;
+        here.would_carry_rodents = would_carry * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND;
 
         // Ground that will carry nothing loses what is on it rather than
         // holding it for ever - a salt flat in February is not a larder.
         if would_carry <= 0.0 {
             here.grazers = (here.grazers - here.grazers * 0.01 * ticks).max(0.0);
+            here.rodents = (here.rodents - here.rodents * 0.01 * ticks).max(0.0);
             here.hunters = (here.hunters - here.hunters * 0.01 * ticks).max(0.0);
             return;
         }
@@ -304,7 +464,21 @@ impl SmallLife {
             (here.grazers + here.grazers * Self::HOW_FAST_THE_GRAZERS_COME_BACK * room * ticks)
                 .clamp(0.0, would_carry);
 
-        let hunters_it_will_keep = here.grazers * Self::WHAT_SHARE_ARE_HUNTERS;
+        // And the rodents, on the same curve and four times as fast.
+        here.rodents = here
+            .rodents
+            .max((ALWAYS_A_FEW_ABOUT * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND)
+                .min(here.would_carry_rodents));
+        let room_below = 1.0 - (here.rodents / here.would_carry_rodents).clamp(0.0, 1.0);
+        here.rodents = (here.rodents
+            + here.rodents * Self::HOW_FAST_THE_RODENTS_COME_BACK * room_below * ticks)
+            .clamp(0.0, here.would_carry_rodents);
+
+        // What keeps the foxes up is everything under them, not the rabbits
+        // alone. Reading the grazers by themselves here is how adding a band
+        // beneath them would have quietly emptied the stoats out of a field
+        // full of voles.
+        let hunters_it_will_keep = here.in_head_of_grazer() * Self::WHAT_SHARE_ARE_HUNTERS;
         if hunters_it_will_keep <= 0.0 {
             here.hunters = 0.0;
             return;
@@ -351,7 +525,7 @@ impl SmallLife {
     /// every tick.
     pub fn let_them_spread(&mut self, ticks: f32) {
         let grounds: Vec<(i32, i32)> = self.grounds.keys().copied().collect();
-        let mut moves: Vec<((i32, i32), (i32, i32), f32)> = Vec::new();
+        let mut moves: Vec<((i32, i32), (i32, i32), f32, f32)> = Vec::new();
 
         for &(gx, gy) in &grounds {
             let here = self.here((gx, gy));
@@ -370,33 +544,49 @@ impl SmallLife {
                     continue;
                 }
 
-                let crowding_here = here.how_thick_it_is();
-                let crowding_there = there.how_thick_it_is();
                 let across = Self::HOW_FAST_THEY_SPREAD
-                    * (crowding_here - crowding_there)
+                    * (here.how_thick_it_is() - there.how_thick_it_is())
                     * here.would_carry.min(there.would_carry)
                     * ticks;
 
-                if across.abs() > f32::EPSILON {
-                    moves.push(((gx, gy), over_there, across));
+                // The rodents work outwards on the same rule and their own
+                // crowding. A field thick with voles beside one that has
+                // been hunted out is the same statement as a wood thick with
+                // rabbits beside a trapped one, and the two bands are not
+                // in step: an owl can hunt the voles out of ground whose
+                // rabbits nobody has touched.
+                let below = Self::HOW_FAST_THEY_SPREAD
+                    * (here.how_thick_the_rodents_are() - there.how_thick_the_rodents_are())
+                    * here.would_carry_rodents.min(there.would_carry_rodents)
+                    * ticks;
+
+                if across.abs() > f32::EPSILON || below.abs() > f32::EPSILON {
+                    moves.push(((gx, gy), over_there, across, below));
                 }
             }
         }
 
-        for (from, to, across) in moves {
+        for (from, to, across, below) in moves {
             // Never move more than is actually standing there, whichever way
             // it is going.
-            let there_to_move = if across > 0.0 {
+            let grazers = if across > 0.0 {
                 across.min(self.here(from).grazers)
             } else {
                 -((-across).min(self.here(to).grazers))
             };
+            let rodents = if below > 0.0 {
+                below.min(self.here(from).rodents)
+            } else {
+                -((-below).min(self.here(to).rodents))
+            };
 
             if let Some(here) = self.grounds.get_mut(&from) {
-                here.grazers = (here.grazers - there_to_move).max(0.0);
+                here.grazers = (here.grazers - grazers).max(0.0);
+                here.rodents = (here.rodents - rodents).max(0.0);
             }
             if let Some(there) = self.grounds.get_mut(&to) {
-                there.grazers = (there.grazers + there_to_move).max(0.0);
+                there.grazers = (there.grazers + grazers).max(0.0);
+                there.rodents = (there.rodents + rodents).max(0.0);
             }
         }
     }
@@ -414,6 +604,12 @@ impl SmallLife {
     /// And of small hunters.
     pub fn how_many_hunters(&self) -> f32 {
         self.grounds.values().map(|here| here.hunters).sum()
+    }
+
+    /// And of rodents, which is the biggest number in the model and the one
+    /// the sky is standing on.
+    pub fn how_many_rodents(&self) -> f32 {
+        self.grounds.values().map(|here| here.rodents).sum()
     }
 }
 
@@ -485,11 +681,18 @@ impl TheSmallLifeHere {
     /// `WHAT_SHARE_ARE_HUNTERS` - so this reads one against the other and a
     /// settled country comes out at the quiet rate by construction.
     pub fn how_likely_the_catch_is_taken(&self) -> f32 {
-        if self.grazers <= 0.0 {
+        // Everything under the foxes, on the footing `tick_a_ground` keeps
+        // them on. Reading the rabbits alone here while the foxes are fed by
+        // rabbits *and* voles is the same question answered in two places,
+        // and it would have made a settled country look like a hungry one -
+        // three times the foxes to a head of game, so every catch robbed at
+        // the hungry rate and the trapline pointless in a full wood.
+        let under_them = self.in_head_of_grazer();
+        if under_them <= 0.0 {
             return SmallLife::WHAT_A_HUNGRY_COUNTRY_TAKES;
         }
 
-        let per_head = self.hunters / self.grazers;
+        let per_head = self.hunters / under_them;
         let against_a_settled_country = per_head / SmallLife::WHAT_SHARE_ARE_HUNTERS;
 
         (SmallLife::WHAT_A_QUIET_COUNTRY_TAKES * against_a_settled_country)

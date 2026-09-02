@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `0d11751` and the work since.
+**Last verified:** September 2026, against commit `fe227db` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -9941,3 +9941,246 @@ Listed so nobody re-investigates them. Each has regression tests in
   judgement; nothing had ever asked it about anything but a wound. What
   happened in past fights scales the estimate, so an agent that has been
   beaten runs where one that has won stands.
+
+### 154. The hawk arithmetic: what the sky was standing on, and what was under it
+
+#153 ended with a question it could not answer: the smallest specialists -
+heron, kestrel, otter, owl, kingfisher and the fish - bred and starved at a
+ceiling of about nought, and whether that wanted a richer layer, a smaller
+appetite, or those species abstracted as well was left open.
+
+The specification answered it, with two numbers about one animal: **"a hawk
+can eat a rabbit a day, but a rabbit can also last two days"**, and **"hawks
+will also hunt rodents like mice and will eat four of them in a day"**. Both
+halves were wrong in the model, and each was wrong by about an order of
+magnitude. What follows is that, and the seven other things that came out of
+the same drawer once the layer was being looked at properly.
+
+**The appetite was a size ladder somebody picked.** `what_a_head_of_it_is
+_worth_to` was `Tiny 1.0, Small 0.70, Medium 0.25, Large 0.06, Huge 0.0`, and
+its own comment said it was one number doing two jobs. `AnimalSize` cannot
+carry an appetite at all: **a wolf and a hawk are both `Small` in this
+registry**, at forty kilogrammes and one. It comes off the weight now, and it
+is anchored on the specification's own figures - a rabbit lasts a
+one-kilogramme hunter two days, and the fall-off with weight is fitted to the
+one other end anybody has a number for. The rest of the table was never
+fitted and comes out where it should: a fox about a rabbit a day, a wolf two
+and a fifth, a lion four, a stoat one every three days, an owl four or five
+voles a night.
+
+**There was no rodent band, and the sky is standing on it.** The grazers were
+rabbits, squirrels, geese and crows at eight to the hectare, and once the
+cover, the climate and the season had had their say a hundred square
+kilometres carried about ten thousand of them - a hunting ground's whole
+surplus being some two hundredths of a head a tick, which is what one kestrel
+eats. Sixty-four hectares kept about one small predator, and the country's
+birds died while its fields stood at half stock, which is why a head count
+never gave the answer. `SmallLife` carries a second band now at fifteen times
+the head and four times the growth rate - a hundred and fifty-five thousand
+voles on the same map - and one hunting ground's rodents alone will keep four
+hawks or eight kestrels.
+Both bands come off one statement about the ground - `RODENTS_TO_A_GRAZER_ON
+_THE_GROUND` - so the climate and the season cannot come to mean different
+things to the two of them, and everything written about the grazers before
+the rodents existed reads `in_head_of_grazer` instead, which is why adding a
+band underneath did not treble the foxes or empty the traplines.
+
+**A hunter was charged for what it found rather than for what it ate.** The
+ground was drawn down by the full find every tick whatever state the animal
+was in, and `feed` then threw away everything past full. It also meant the
+find rate could not be set where a hunter could live on it, because raising
+what it could turn up raised what it took by the same amount. Those are
+separate now, and the find rate is where a hawk can actually make a living:
+two rabbits and sixteen voles a day at cover of one, which no ground in the
+world has - the best of it is standing timber at six tenths.
+
+**Passive hunting: a predator catches animals now, one at a time.** What was
+here was a stipend - a smooth trickle of energy every tick, in proportion to
+the ground, that no animal could ever go without and no animal could ever
+have a good day at. The rate is the same rate; it is delivered in whole
+animals, and the period between catches falls out of it exactly as the time a
+snare takes to fill falls out of `how_likely_a_snare_takes_something`.
+
+**Whether a thing drowns in air and whether it feeds in water are two
+questions.** `lives_in_the_water` is about where a founding population may be
+put down and matches only the fish. It was also being read for whether a lake
+is a larder - so a heron, a kingfisher, an otter and a seal, standing on open
+water, were being told their whole territory was barren ground.
+`feeds_in_the_water` is the other question and is derived from what the
+species is written down as hunting.
+
+**A living falls away faster than the cover does.** In straight proportion,
+open plain at fifteen hundredths pays a quarter of what standing timber at
+six tenths does, which is not the difference between where a bird of prey
+lives and where it does not. Bare ground is poor twice over - it grows less
+for the small life to live on and gives it nowhere to be - so it is the cover
+to the power of one and a half, and a plain now pays a seventeenth of the
+best ground there could be.
+
+**And the bar for where a hunter may be put down had to be re-derived with
+it**, which is the sort of thing that is easy to leave behind.
+`WHAT_A_HUNTER_NEEDS_UNDERFOOT` was three tenths of cover because that was
+half of the best ground under the old straight proportion; under the new
+curve it is a sixth of it, so a kestrel put down on riverbank or meadow got
+four fifths of its keep with the ground at half stock and starved - a hundred
+and two of them did. It is four tenths now, which is where the hungriest of
+the small hunters still clears its burn on ground at half stock with nothing
+else on it. Forest and wetland clear that; riverbank, meadow and hills no
+longer do, which is a narrower statement of where a bird of prey lives than
+it was and a truer one.
+
+**Hunger was not a reason to move, and the ground's yield was.** The rule
+asked whether the ground paid less than the animal burnt, which is a question
+about the country rather than about the animal, and it is the wrong one in
+both directions: a fed wolf on ground whose voles will not keep it walked
+anyway, every fourth tick, for ever - a wolf never lives on voles and is not
+supposed to - and a starving one on ground that paid its keep on paper had no
+reason to leave. **"I am hungry and need food. There is no food around me. I
+must move to find food"** is the specification's own sentence, and it is the
+rule now: nothing it could rush, nothing worth walking towards, and a ground
+that will not feed it while it waits.
+
+**Everything mended at a tenth of a point a tick.** Health runs from five on
+a fish to three hundred on a mammoth, sixty-fold, so one absolute rate meant
+a fish mended a quarter of itself in a day and a mammoth four thousandths,
+and neither number was ever chosen. It is a hundredth of the animal a day
+now, which is the specification's figure and is what makes a wound worth
+something - a hundred days from a mortal one to a whole skin.
+
+### 155. Nothing in this world moved at its own speed, and a block was a prefix
+
+Two defects found on the plainest fixture there is - **fourteen wolves and
+two sheep, standing on one cell** - which the specification asks for in as
+many words: "if one wolf takes six attacks to kill a sheep, then 14 wolves
+should be able to kill two sheep nearly instantly". Over a whole day the
+tally was: not one rush, not one kill, and the sheep thirty-five cells away
+and going.
+
+**A hunter looked at the first eight animals in its block, for ever.** The
+nine blocks around a predator are sieved down to eight entries each, which is
+right - a hunter goes for what is in front of it rather than for the best of
+a full census, and without the cap a filled-up ground is every predator
+against every animal again. But `take(8)` is a *prefix*, and a block is in
+the order the animals were created. Fourteen wolves and two sheep on one cell
+is fourteen wolves in the first fourteen slots, so the tally of hunts that
+"saw something" was **nought** while a sheep stood one cell from all fourteen
+of them. Each hunter starts at its own offset now, which costs the same eight
+comparisons and means the block is actually sampled.
+
+**Every animal alive crossed exactly two cells a tick.** `speed` was read by
+the rush and by nothing else, so a wolf at 1.7, a sheep at 1.0 and a
+crocodile at 0.9 all fled at two cells and all stalked at two. A wolf could
+therefore never close on a fleeing sheep - the gap went 1, 5, 9, 15, 21, 35
+cells and stayed there. **"A wolf should be faster than a sheep" is about
+this before it is about the odds of the rush**, and no amount of work on the
+rush would ever have found it. Flight and the stalk both come off
+`how_far_it_gets_in_a_tick` now, which is the species' pace times what the
+animal has left of it.
+
+**And the rush itself had a flat top.** `(hunter.speed / quarry.speed)
+.min(1.0)` says a wolf against a sheep does exactly as well as a wolf against
+a deer, and that a lame sheep is no easier to catch than a sound one: the
+clamp bites at parity and everything past it is the same number. So being
+faster bought a hunter nothing, and **neither injury nor age could be worth
+anything however they were written**, because what they feed into saturated
+before they could reach it. It is a share rather than a ratio now - how much
+of the pace in the chase is the hunter's - which is exactly the old figure
+when the two are evenly matched and goes on rising after that.
+
+**An animal's condition is one number, read from both ends.**
+`how_fast_it_still_is` is what a wound and the years have left of an animal's
+pace: a lamb at half its mother's, level from maturity until six tenths of
+its life is gone, then down to just over half again, and a wound multiplying
+whatever that comes to. The same figure is read for the hunter and for the
+quarry, so "older animals should also slow down, making them easier to catch
+or making it harder for them to hunt" is one rule and not two.
+
+### 156. A herd only ever got bigger, and a bear lived as a hunter
+
+**Nothing ever split a group.** `they_keep_together` walks every animal
+towards the nearest of its own kind and there was no other half to it, so
+what is dealt out as flocks of four to twelve and packs of three to seven
+converged into one mass wherever two of them met - a country's sheep ran to
+better than a thousand head in two years and the largest bunch of them was
+all of it. The registry has said how large a group gets all along:
+`group_size` is the number a herd is dealt out at and is just as much a
+statement of how large one becomes. An animal with more than that many of its
+own within reach peels off instead of closing up.
+
+**Each on its own bearing, and that is the whole of what makes it work.**
+Stepping away from the nearest of its own kind is what the rule wants to say
+and is useless when they are standing on each other: everything picks the
+same direction and forty sheep cross the country in a block for ever, which
+is the same lockstep that spoilt the first cut of predator dispersal. Eight
+bearings dealt out by position in the list scatter them, and closing-up then
+gathers whoever went the same way into a herd of their own.
+
+**A bear is an omnivore and was living as a hunter.** Which state a hungry
+animal went into was decided by its temperament and by nothing else -
+`Aggressive` and `Territorial` went hunting, everything else grazed. The
+bear, the boar, the pig and the monkey are all omnivores and all sit in the
+aggressive half of that table, so **not one of them ever entered `Grazing`
+and therefore not one of them ever ate a plant**, though the grazing pass has
+always been willing to feed anything that is not a carnivore. Two questions
+with one answer again: what an animal eats is its diet, and what it does
+about a threat is its temper. Three quarters of an omnivore's day is
+foraging now, which is about what a brown bear's year is.
+
+**And a boar rooting is not a cow eating a field.** Letting omnivores forage
+at all and paying them a grazer's return took the boar from twenty-three head
+to **seven hundred and seventy** on a hundred square kilometres in two years -
+none of them starving, one of them taken - and carried the tick from 13 ms to
+32 with it. That is a primary consumer's living with a mid-predator's freedom
+and nothing eating it, and until omnivores could forage nothing had ever had
+to say what rooting is worth. It is a third of what the same ground pays
+something that crops it, which leaves a boar a shade over its keep rather
+than at three times it.
+
+**The first cut of that put the number in the wrong half, and made it three
+times worse still - 2,370 boars.** `what_a_mouthful_is_worth_to` is
+`hunger_rate * MORE_THAN_IT_BURNS / what_it_reaches_for`, so an animal that
+finds all it reaches for comes out ahead of its burn by the same multiple
+*whatever the reach is*. Cutting the reach therefore left the boar's living
+exactly where it was and only made it cheaper on the flora, which left more
+grass for the next boar. It is the project's own recurring defect committed
+while fixing an instance of it: one question with two places to answer it,
+and the obvious place had already been normalised away. The factor belongs on
+the gain. A boar still turns over as much ground as its bulk says.
+
+### 157. Letting a country come up instead of arriving whole
+
+The specification asks whether it would help to populate the world gradually:
+foliage first and let it colonise, then the assumed small creatures and the
+small predators, then the medium, then the large herbivores, and the large
+predators last, with the agents introduced only once the rest is stable.
+
+`World::let_the_country_come_up` does that, and what it buys is worth naming
+precisely, because it is not what it looks like.
+
+**It buys a legible failure.** A world stocked all at once and left alone for
+two years tells you its kestrels are gone. It does not tell you whether they
+starved because the layer under them was too thin, because they were put on
+ground that never suited them, or because something ate them first - and
+inferring which from a head count is exactly what got #141 wrong. A tier that
+arrives on its own, onto a country that is already standing still, fails
+visibly and alone. Every one of the eight findings in #154 and #155 above
+took a purpose-built harness to see; several of them would have been obvious
+from a staged run.
+
+**It gives the model a definition of "settled", which it has never had.**
+There is no point at which a world is *ready*. Each stage is admitted onto
+ground that held its numbers through the last one, and `HowATierCameUp` says
+which stages did.
+
+**It is not a fix for a country that will not carry a tier.** If the steady
+state cannot feed a kestrel, this reaches nought kestrels more slowly and
+more legibly, and the arithmetic of what a kestrel eats is still where the
+answer is. That is why it went in after #154 and not before it: built first,
+its first result would have been to tell us at length what #153 already said.
+
+**The cost is simulated time, and it is paid by every test that wants a
+populated world.** The stages are a parameter rather than a fixed length so
+that a test can use days where an experiment uses years, and the ordinary
+`World::new` is untouched - a country still arrives whole unless somebody
+asks for it not to.
+

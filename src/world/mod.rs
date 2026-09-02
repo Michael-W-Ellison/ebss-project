@@ -94,7 +94,24 @@ pub use nutrition::{
     FoodTemplate, FoodDatabase, NutritionalState, EatResult,
 };
 
-use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager, AnimalSpawnConfig};
+use crate::environment::{
+    AnimalManager, AnimalSize, AnimalSpawnConfig, HeatSourceRegistry, PlantManager, TrophicRole,
+};
+
+/// How one stage of a country coming up went - see
+/// [`World::let_the_country_come_up`].
+#[derive(Debug, Clone)]
+pub struct HowATierCameUp {
+    /// What was admitted at this stage.
+    pub tiers: Vec<TrophicRole>,
+    /// And what band of grazers went with it.
+    pub grazers: (AnimalSize, AnimalSize),
+    /// How much of it was actually put down.
+    pub put_down: usize,
+    /// And what the whole country came to by the end of the stage, which is
+    /// the number that says whether it held.
+    pub standing_after: usize,
+}
 
 /// Status of a heat source for smelting
 #[derive(Debug, Clone)]
@@ -1064,6 +1081,15 @@ impl World {
     }
 
     pub fn new(config: WorldConfig) -> Self {
+        Self::made_with(config, Some(AnimalSpawnConfig::default()))
+    }
+
+    /// A world, and what fauna it opens with.
+    ///
+    /// `None` means a country with its foliage and its assumed lower tiers
+    /// and nothing standing on it, which is what
+    /// [`World::let_the_country_come_up`] starts from.
+    fn made_with(config: WorldConfig, fauna: Option<AnimalSpawnConfig>) -> Self {
         let mut grid = Grid::new(config.size.0, config.size.1);
         grid.generate_terrain();
 
@@ -1132,8 +1158,13 @@ impl World {
         world.plants.spawn_naturalistic(&world.grid);
 
         // Spawn initial wildlife based on terrain
-        let spawn_config = AnimalSpawnConfig::default();
-        world.animals.spawn_naturalistic(&world.grid, &spawn_config);
+        if let Some(spawn_config) = fauna {
+            world.animals.spawn_naturalistic(&world.grid, &spawn_config);
+        } else {
+            // A country with nothing on it still has to know how big it is,
+            // which is otherwise `spawn_naturalistic`'s doing.
+            world.animals.knows_how_big_the_world_is(&world.grid);
+        }
 
         // And stock the lower tiers, which are a population rather than
         // records - see `SmallLife`. A country is not empty of rabbits on the
@@ -1145,6 +1176,106 @@ impl World {
             .stock_the_small_life(&world.grid, world.climate.current_season());
 
         world
+    }
+
+    /// The order a country comes up in: what goes on the map at each stage,
+    /// and what band of grazers goes with it.
+    ///
+    /// The chain from the bottom, each tier admitted onto ground that will
+    /// already feed it. The small predators go on first because what they
+    /// live on - the assumed grazers and rodents - is a population on every
+    /// hunting ground from the morning the world is made, so they need
+    /// nothing put down for them. The medium browsers and the middle
+    /// predators go on together, then the large herbivores, and the wolves
+    /// and the lions last, onto a country that has herds in it.
+    /// The size band only bites on a stage that admits `PrimaryConsumer`;
+    /// the other two carry the whole band and are decided by their tier list
+    /// alone, which is clearer than an inverted range doing the work
+    /// silently.
+    pub const THE_ORDER_A_COUNTRY_COMES_UP_IN: [(&'static [TrophicRole], (AnimalSize, AnimalSize)); 4] = [
+        // The small predators, onto the assumed layers and nothing else.
+        (
+            &[TrophicRole::SmallPredator],
+            (AnimalSize::Tiny, AnimalSize::Huge),
+        ),
+        // The browsers up to a deer, and what lives off them and off the
+        // small life.
+        (
+            &[TrophicRole::PrimaryConsumer, TrophicRole::MidPredator],
+            (AnimalSize::Tiny, AnimalSize::Medium),
+        ),
+        // Then the cattle, the elk and the mammoth.
+        (
+            &[TrophicRole::PrimaryConsumer],
+            (AnimalSize::Large, AnimalSize::Huge),
+        ),
+        // And the wolves and the lions, onto a country with herds in it.
+        (
+            &[TrophicRole::TopPredator],
+            (AnimalSize::Tiny, AnimalSize::Huge),
+        ),
+    ];
+
+    /// Let a country come up in the order a country comes up in, instead of
+    /// arriving whole on one morning.
+    ///
+    /// The specification: "start with the foliage and let it spread out,
+    /// colonizing the map. Once it is established, add the assumed small
+    /// creatures and small predators until they get established. Then add
+    /// the medium assumed creatures and predators and let them get
+    /// established before introducing the large herbivores and eventually
+    /// the large predators."
+    ///
+    /// **What this buys is a legible failure, and that is worth more here
+    /// than the realism.** A world stocked all at once and left alone for two
+    /// years tells you that its kestrels are gone; it does not tell you
+    /// whether they starved because the layer under them was too thin,
+    /// because they were put on ground that never suited them, or because
+    /// something ate them first. A tier that arrives on its own, onto a
+    /// country that is already standing still, fails visibly and alone.
+    ///
+    /// It also gives the model a definition of *settled*, which it has never
+    /// had: each stage is admitted onto ground that held its numbers through
+    /// the last one, and the report says which stages did.
+    ///
+    /// It is not a fix for a country that will not carry a tier. If the
+    /// steady state cannot feed a kestrel, this reaches nought kestrels more
+    /// slowly and more legibly, and the arithmetic of what a kestrel eats is
+    /// still where the answer is.
+    pub fn let_the_country_come_up(
+        config: WorldConfig,
+        days_a_tier_gets: usize,
+    ) -> (Self, Vec<HowATierCameUp>) {
+        // The foliage and the assumed layers, and nothing standing on them.
+        let mut world = Self::made_with(config, None);
+        world.let_it_stand(days_a_tier_gets);
+
+        let mut how_it_went = Vec::new();
+        for (tiers, grazers) in Self::THE_ORDER_A_COUNTRY_COMES_UP_IN {
+            let before = world.animals.how_many_are_alive();
+            world
+                .animals
+                .spawn_naturalistic(&world.grid, &AnimalSpawnConfig::only(tiers, grazers));
+            let put_down = world.animals.how_many_are_alive().saturating_sub(before);
+
+            world.let_it_stand(days_a_tier_gets);
+
+            how_it_went.push(HowATierCameUp {
+                tiers: tiers.to_vec(),
+                grazers,
+                put_down,
+                standing_after: world.animals.how_many_are_alive(),
+            });
+        }
+
+        (world, how_it_went)
+    }
+
+    /// Leave the country to itself for a while.
+    fn let_it_stand(&mut self, days: usize) {
+        for _ in 0..days * crate::environment::seasons::TICKS_PER_DAY as usize {
+            self.tick();
+        }
     }
 
     /// The most animals a fifty by fifty map will hold, scaled up from there.

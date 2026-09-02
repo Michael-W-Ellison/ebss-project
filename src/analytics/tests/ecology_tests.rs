@@ -894,12 +894,21 @@ fn the_small_hunters_follow_the_game_they_live_on() {
     let with_game = country.here(ground).hunters;
     assert!(with_game > 0.0, "a full ground keeps hunters: {with_game:.1}");
 
-    // Now trap it out and hold it there, the way a settlement working one
-    // wood would, and the hunters go with it.
+    // Now take the ground out from under them and hold it there, and the
+    // hunters go with it.
+    //
+    // **Both bands.** A trapline takes rabbits and a snare is no use against
+    // a vole, so a settlement working one wood does not do this - and that is
+    // the point of the rodents being a band of their own. A fox on a wood
+    // whose rabbits have been trapped out and whose voles are untouched is
+    // still a fed fox, and it stays. What empties a ground of foxes is the
+    // whole of what is under them going, which is a hard winter or a bad
+    // vole year rather than anything a person does with string.
     for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
         country.tick_a_ground(ground, would_carry, 1.0);
-        let there = country.here(ground).grazers;
-        country.take(ground, there * 0.95);
+        let there = country.here(ground);
+        country.take(ground, there.grazers * 0.95);
+        country.take_rodents(ground, there.rodents * 0.95);
     }
     let after = country.here(ground).hunters;
     assert!(
@@ -954,9 +963,19 @@ fn a_country_stocks_its_own_lower_tiers() {
 fn a_snare_fills_at_the_rate_the_ground_carries() {
     use crate::environment::{SmallLife, TheSmallLifeHere};
 
-    let full = TheSmallLifeHere { grazers: 500.0, hunters: 4.0, would_carry: 500.0 };
-    let worked_out = TheSmallLifeHere { grazers: 50.0, hunters: 3.0, would_carry: 500.0 };
-    let barren = TheSmallLifeHere { grazers: 0.0, hunters: 0.0, would_carry: 0.0 };
+    // Built by the model rather than by hand, so that a band added under the
+    // grazers cannot quietly leave the fixture describing a country that
+    // could not exist.
+    let mut country = SmallLife::default();
+    country.settle((0, 0), 500.0);
+    let full = country.here((0, 0));
+
+    country.settle((1, 0), 500.0);
+    country.take((1, 0), 450.0);
+    let worked_out = country.here((1, 0));
+
+    country.settle((2, 0), 0.0);
+    let barren = country.here((2, 0));
 
     let one_snare = 1;
     assert!(
@@ -997,17 +1016,17 @@ fn a_snare_fills_at_the_rate_the_ground_carries() {
 fn a_thin_country_robs_a_snare_sooner_than_a_full_one() {
     use crate::environment::{SmallLife, TheSmallLifeHere};
 
-    let settled = TheSmallLifeHere {
-        grazers: 500.0,
-        hunters: 500.0 * SmallLife::WHAT_SHARE_ARE_HUNTERS,
-        would_carry: 500.0,
-    };
-    // The same foxes, after the game has been trapped out from under them.
-    let trapped_out = TheSmallLifeHere {
-        hunters: settled.hunters,
-        grazers: 50.0,
-        would_carry: 500.0,
-    };
+    let mut country = SmallLife::default();
+    country.settle((0, 0), 500.0);
+    let settled = country.here((0, 0));
+
+    // The same foxes, after the game has been trapped out from under them -
+    // both bands, because a country whose rabbits are gone and whose voles
+    // are not is not a hungry country for a fox.
+    country.settle((1, 0), 500.0);
+    country.take((1, 0), 450.0);
+    country.take_rodents((1, 0), settled.rodents * 0.9);
+    let trapped_out = country.here((1, 0));
 
     let quiet = settled.how_likely_the_catch_is_taken();
     let hungry = trapped_out.how_likely_the_catch_is_taken();
@@ -1283,13 +1302,19 @@ fn an_empty_prey_list_means_it_lives_on_the_small_life() {
 }
 
 /// A small predator can keep itself on ground that suits it, and cannot on
-/// open plain or three to a wood.
+/// open plain or eight to a wood.
 ///
-/// The `worth_it_to` ladder was calibrated when the small life meant mice,
-/// and has not meant only mice since the lower tiers became a population -
-/// rabbits, squirrels, geese and crows are in it, and a rabbit is a meal for
-/// a hawk rather than a scrap. At the old numbers a hawk in the best wood in
-/// the country, with the wood to itself, got 0.073 against a burn of 0.070.
+/// **Three to a wood is now a living, and that is the fix rather than a
+/// regression.** The old figure held because the layer under a hawk was the
+/// rabbits alone, and sixty-four hectares of rabbits pays about two birds:
+/// every kestrel, heron, owl and eagle on a hundred square kilometres was
+/// dead inside two years. What a hawk actually lives on is voles, four a
+/// day, and the rodents are a band of their own now - so a wood keeps
+/// several birds, which is what a wood does.
+///
+/// What still has to be true is the shape: ground that suits it keeps it,
+/// enough rivals on one wood do not all eat, and open plain is not where a
+/// bird of prey lives.
 #[test]
 fn a_hawk_can_make_a_living_in_a_wood_and_not_on_a_plain() {
     use crate::environment::fauna::{what_this_ground_offers, AnimalManager};
@@ -1303,7 +1328,7 @@ fn a_hawk_can_make_a_living_in_a_wood_and_not_on_a_plain() {
     for id in ["hawk", "owl", "eagle", "heron", "kestrel"] {
         let species = registry.get(id).unwrap_or_else(|| panic!("{id} exists"));
         let alone_in_a_wood = AnimalManager::what_the_small_life_gives(species, wood, 1.0);
-        let three_to_a_wood = AnimalManager::what_the_small_life_gives(species, wood, 3.0);
+        let eight_to_a_wood = AnimalManager::what_the_small_life_gives(species, wood, 8.0);
         let on_the_plain = AnimalManager::what_the_small_life_gives(species, plain, 1.0);
 
         assert!(
@@ -1313,9 +1338,9 @@ fn a_hawk_can_make_a_living_in_a_wood_and_not_on_a_plain() {
             species.hunger_rate
         );
         assert!(
-            three_to_a_wood < species.hunger_rate,
-            "{id} can keep itself three to a wood, so nothing holds the guild \
-             down: {three_to_a_wood} against {}",
+            eight_to_a_wood < species.hunger_rate,
+            "{id} can keep itself eight to a wood, so nothing holds the guild \
+             down: {eight_to_a_wood} against {}",
             species.hunger_rate
         );
         assert!(
@@ -1517,5 +1542,440 @@ fn the_predator_tiers_are_still_there_two_years_on() {
     assert!(
         taken > 0,
         "not one animal was taken by a predator in two years"
+    );
+}
+
+/// What a head of the assumed layers is worth comes from the specification's
+/// own arithmetic, not from a ladder somebody picked.
+///
+/// "A hawk can eat a rabbit a day, but a rabbit can also last two days.
+/// Hawks will also hunt rodents like mice and will eat four of them in a day
+/// to satisfy their hunger." Two numbers about one animal, which is enough to
+/// anchor the whole table - and the rest of it then falls where it should
+/// without being fitted: a fox about a rabbit a day, a wolf two and a half, a
+/// lion four, a stoat one every three days.
+#[test]
+fn a_rabbit_lasts_a_hawk_two_days_and_a_hawk_eats_four_mice() {
+    use crate::environment::AnimalManager;
+
+    let a_hawk = 1.0;
+    assert!(
+        (AnimalManager::days_a_grazer_keeps(a_hawk) - 2.0).abs() < 1e-3,
+        "a rabbit should last a hawk two days: {}",
+        AnimalManager::days_a_grazer_keeps(a_hawk)
+    );
+    assert!(
+        (1.0 / AnimalManager::days_a_rodent_keeps(a_hawk) - 4.0).abs() < 1e-2,
+        "and a hawk should want four mice in a day: {}",
+        1.0 / AnimalManager::days_a_rodent_keeps(a_hawk)
+    );
+
+    // And the animals that were never fitted.
+    let a_day = |kg: f32| 1.0 / AnimalManager::days_a_grazer_keeps(kg);
+    assert!(
+        (0.9..1.3).contains(&a_day(7.0)),
+        "a fox should want about a rabbit a day: {}",
+        a_day(7.0)
+    );
+    assert!(
+        (2.0..2.6).contains(&a_day(40.0)),
+        "a wolf about two and a half: {}",
+        a_day(40.0)
+    );
+    assert!(
+        (3.5..4.6).contains(&a_day(190.0)),
+        "a lion about four: {}",
+        a_day(190.0)
+    );
+}
+
+/// The rodents are the layer the sky stands on, and they are not the rabbits.
+///
+/// A kestrel cannot lift a rabbit and does not try; an owl's night is voles.
+/// Both bands come off one statement about the ground, so the climate and the
+/// season cannot come to mean different things to the two of them.
+#[test]
+fn the_rodents_are_a_band_of_their_own_under_the_grazers() {
+    use crate::environment::{AnimalManager, SmallLife};
+
+    assert!(
+        SmallLife::RODENTS_TO_A_GRAZER_ON_THE_GROUND > 10.0,
+        "there should be an order of magnitude more of them: {}",
+        SmallLife::RODENTS_TO_A_GRAZER_ON_THE_GROUND
+    );
+
+    let reach = AnimalManager::how_much_of_the_grazers_it_can_take;
+    assert!(
+        reach(0.05) < 0.1,
+        "a kingfisher cannot take a rabbit: {}",
+        reach(0.05)
+    );
+    assert!(
+        (reach(7.0) - 1.0).abs() < 1e-6,
+        "a fox certainly can: {}",
+        reach(7.0)
+    );
+
+    // One ground, one climate, one season, two densities.
+    let mut country = SmallLife::default();
+    country.settle((0, 0), 500.0);
+    let here = country.here((0, 0));
+    assert!(
+        (here.would_carry_rodents
+            - here.would_carry * SmallLife::RODENTS_TO_A_GRAZER_ON_THE_GROUND)
+            .abs()
+            < 1e-3,
+        "the two bands must come off one statement about the ground"
+    );
+
+    // And they are drawn down separately: an owl hunting a field out of voles
+    // leaves its rabbits alone.
+    country.take_rodents((0, 0), here.rodents * 0.5);
+    let after = country.here((0, 0));
+    assert!(
+        after.how_thick_the_rodents_are() < 0.6 && after.how_thick_it_is() > 0.99,
+        "the voles should be halved and the rabbits untouched: {} and {}",
+        after.how_thick_the_rodents_are(),
+        after.how_thick_it_is()
+    );
+}
+
+/// A wolf is faster than a sheep, and a hurt or old one is not.
+///
+/// The species table has carried a `speed` all along and the chase has always
+/// read it - a wolf at 1.7 runs down a sheep at 1.0. What nothing read was
+/// the animal: every wolf ran at 1.7 whether it was three days old, whole, or
+/// dying, and every sheep at 1.0. One number from each side settles both
+/// halves of the specification at once - "an injured animal should be slower
+/// than a healthier animal" and "older animals should also slow down, making
+/// them easier to catch or making it harder for them to hunt" - because the
+/// same figure is read for the hunter and for the quarry.
+#[test]
+fn a_hurt_or_old_animal_is_slower_and_easier_to_catch() {
+    use crate::environment::fauna::{what_this_ground_offers, AnimalManager};
+    use crate::environment::FaunaRegistry;
+    use crate::world::TerrainType;
+
+    let registry = FaunaRegistry::new();
+    let wolf = registry.get("wolf").expect("wolves exist");
+    let sheep = registry.get("sheep").expect("sheep exist");
+    let plain = what_this_ground_offers(TerrainType::Plains);
+
+    assert!(wolf.speed > sheep.speed, "a wolf should outrun a sheep");
+
+    let whole = AnimalManager::what_a_hunt_between_these_two_comes_to(
+        wolf, sheep, plain, 1, 0, 1.0, 1.0,
+    );
+    let lame_sheep = AnimalManager::what_a_hunt_between_these_two_comes_to(
+        wolf, sheep, plain, 1, 0, 1.0, 0.5,
+    );
+    let old_wolf = AnimalManager::what_a_hunt_between_these_two_comes_to(
+        wolf, sheep, plain, 1, 0, 0.5, 1.0,
+    );
+
+    assert!(
+        lame_sheep.comes_off > whole.comes_off,
+        "a lame sheep is easier to catch: {} against {}",
+        lame_sheep.comes_off,
+        whole.comes_off
+    );
+    assert!(
+        old_wolf.comes_off < whole.comes_off,
+        "and an old wolf is worse at catching one: {} against {}",
+        old_wolf.comes_off,
+        whole.comes_off
+    );
+
+    // And the species question is the same question with both of them in
+    // their prime, so there are not two answers to it.
+    let by_species = AnimalManager::what_a_hunt_comes_to(wolf, sheep, plain, 1, 0);
+    assert!(
+        (by_species.comes_off - whole.comes_off).abs() < 1e-6,
+        "one implementation, or the two will drift apart"
+    );
+}
+
+/// An animal's pace follows its condition and its years.
+#[test]
+fn a_beast_slows_as_it_is_hurt_and_as_it_ages() {
+    use crate::environment::fauna::Animal;
+    use crate::environment::FaunaRegistry;
+
+    let registry = FaunaRegistry::new();
+    let species = registry.get("deer").expect("deer exist");
+
+    let mut grown = Animal::new("deer".to_string(), (0, 0), species);
+    grown.age = grown.maturity_age.max(1);
+    grown.max_lifespan = 20_000;
+    grown.current_health = grown.max_health;
+    let prime = grown.how_fast_it_still_is();
+    assert!(
+        (prime - 1.0).abs() < 1e-6,
+        "a whole grown deer runs at its own pace: {prime}"
+    );
+
+    let mut calf = grown.clone();
+    calf.age = 0;
+    assert!(
+        calf.how_fast_it_still_is() < prime,
+        "a calf is slower than its mother"
+    );
+
+    let mut old = grown.clone();
+    old.age = old.max_lifespan;
+    assert!(
+        old.how_fast_it_still_is() < prime * 0.7,
+        "and an old one is slower again: {}",
+        old.how_fast_it_still_is()
+    );
+
+    let mut hurt = grown.clone();
+    hurt.current_health = hurt.max_health * 0.2;
+    assert!(
+        hurt.how_fast_it_still_is() < prime * 0.6,
+        "a badly hurt one worse than either: {}",
+        hurt.how_fast_it_still_is()
+    );
+}
+
+/// A wound is worth something because it takes a hundred days to mend.
+///
+/// It was a flat tenth of a point a tick for everything alive, on health that
+/// runs from five on a fish to three hundred on a mammoth - so a fish mended
+/// a quarter of itself in a day and a mammoth four thousandths, and neither
+/// figure was ever chosen. "Healing should be a gradual process, not an
+/// instant process. Perhaps along the lines of 1% per day."
+#[test]
+fn everything_mends_at_the_same_rate_against_itself() {
+    use crate::environment::seasons::TICKS_PER_DAY;
+    use crate::environment::AnimalManager;
+
+    let a_day = AnimalManager::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TICK * TICKS_PER_DAY as f32;
+    assert!(
+        (a_day - 0.01).abs() < 1e-6,
+        "a hundredth of itself in a day: {a_day}"
+    );
+}
+
+/// A pack takes what one of them could not, and takes it quickly.
+///
+/// "If one wolf takes six attacks to kill a sheep, then 14 wolves should be
+/// able to kill two sheep nearly instantly." The six attacks are gone - a
+/// hunt that comes off takes the animal - and this is the other half of it:
+/// fourteen wolves standing over two sheep should be done inside a day, not
+/// inside a season.
+#[test]
+fn fourteen_wolves_take_two_sheep_inside_a_day() {
+    use crate::environment::seasons::TICKS_PER_DAY;
+    use crate::environment::AnimalManager;
+    use crate::world::{World, WorldConfig};
+
+    // A seed block rather than one seed, and counted in sheep rather than in
+    // clean sweeps: a hunt is a roll, and "nearly instantly" is a claim about
+    // how much of the flock is gone by the end of the day rather than a
+    // promise that none of it ever gets away. Measured across six seeds, the
+    // old model took nought of twelve.
+    let mut sheep_taken = 0;
+    let tries = 6;
+    for seed in 0..tries {
+        crate::core::dice::seed(51_000 + seed);
+        let mut world = World::new(WorldConfig::default().with_size(120, 120));
+        world.animals = AnimalManager::new(200);
+
+        for i in 0..14 {
+            world
+                .animals
+                .spawn_animal("wolf".to_string(), (60 + i % 3, 60 + i / 3));
+        }
+        for i in 0..2 {
+            world.animals.spawn_animal("sheep".to_string(), (61, 61 + i));
+        }
+
+        // Hungry enough to hunt, which is what a pack standing over its
+        // dinner is.
+        for animal in world.animals.get_all_mut() {
+            animal.hunger = animal.max_hunger * 0.6;
+        }
+
+        let sheep_left = |world: &World| {
+            world
+                .animals
+                .get_all()
+                .iter()
+                .filter(|a| a.is_alive() && a.species_id == "sheep")
+                .count()
+        };
+
+        for _ in 0..TICKS_PER_DAY {
+            world.tick();
+            if sheep_left(&world) == 0 {
+                break;
+            }
+        }
+
+        sheep_taken += 2 - sheep_left(&world);
+    }
+
+    assert!(
+        sheep_taken * 4 >= (tries as usize) * 2 * 3,
+        "fourteen wolves should have most of two sheep inside a day: \
+         {sheep_taken} of {} over {tries} seeds",
+        tries * 2
+    );
+}
+
+/// A herd that outgrows itself breaks into two.
+///
+/// "If a pack of wolves gets too large, it should split into two packs. If a
+/// herd of sheep gets too large, it should split into two smaller herds."
+/// Nothing said no: every animal walked towards the nearest of its own kind
+/// for ever, so what began as flocks of four to twelve converged into one
+/// mass wherever two of them met.
+#[test]
+fn a_flock_that_outgrows_itself_breaks_up() {
+    use crate::environment::{AnimalManager, FaunaRegistry};
+    use crate::world::{World, WorldConfig};
+
+    crate::core::dice::seed(52_101);
+    let mut world = World::new(WorldConfig::default().with_size(120, 120));
+    world.animals = AnimalManager::new(200);
+
+    // Forty sheep on top of each other, which is three flocks' worth.
+    let all_of_them = 40;
+    for _ in 0..all_of_them {
+        world.animals.spawn_animal("sheep".to_string(), (60, 60));
+    }
+
+    let registry = FaunaRegistry::new();
+    let a_flock = registry.get("sheep").expect("sheep exist").group_size.1 as usize;
+
+    for _ in 0..200 {
+        world.animals.they_keep_together(&world.grid);
+    }
+
+    // The largest bunch still standing together, counted the way the hunt
+    // counts one.
+    let mut biggest = 0usize;
+    let sheep: Vec<(i32, i32)> = world
+        .animals
+        .get_all()
+        .iter()
+        .filter(|a| a.is_alive() && a.species_id == "sheep")
+        .map(|a| a.position)
+        .collect();
+    for one in &sheep {
+        let together = sheep
+            .iter()
+            .filter(|at| {
+                (at.0 - one.0).abs() + (at.1 - one.1).abs()
+                    <= AnimalManager::how_far_a_herd_stands_together()
+            })
+            .count();
+        biggest = biggest.max(together);
+    }
+
+    assert!(
+        biggest < all_of_them,
+        "forty sheep should not all end up in one flock: {biggest}"
+    );
+    assert!(
+        biggest <= a_flock * 2,
+        "and what is left should be about a flock: {biggest} against a flock of {a_flock}"
+    );
+}
+
+/// A bear is an omnivore, and was living as a hunter.
+///
+/// Which state a hungry animal went into was decided by its temper alone, so
+/// every omnivore in the aggressive half of the table - the bear, the boar,
+/// the pig, the monkey - went hunting every time and never once ate a plant,
+/// though the grazing pass has always been willing to feed anything that is
+/// not a carnivore.
+#[test]
+fn a_bear_spends_most_of_its_day_foraging() {
+    use crate::environment::fauna::{AnimalState, DietType};
+    use crate::environment::{AnimalManager, FaunaRegistry};
+    use crate::world::{World, WorldConfig};
+
+    let registry = FaunaRegistry::new();
+    let bear = registry.get("bear").expect("bears exist");
+    assert_eq!(bear.diet, DietType::Omnivore, "a bear is an omnivore");
+
+    crate::core::dice::seed(52_207);
+    let mut world = World::new(WorldConfig::default().with_size(120, 120));
+    world.animals = AnimalManager::new(60);
+    for i in 0..20 {
+        world.animals.spawn_animal("bear".to_string(), (40 + i, 40));
+    }
+
+    let mut grazed = 0;
+    for _ in 0..240 {
+        world.tick();
+        grazed += world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|a| a.is_alive() && a.state == AnimalState::Grazing)
+            .count();
+    }
+
+    assert!(
+        grazed > 0,
+        "a bear should turn over ground for a living, not only hunt"
+    );
+}
+
+/// A country can be let up in stages instead of arriving whole.
+///
+/// "Would it help to gradually populate the world instead of instantly
+/// populating it? Start with the foliage and let it spread out, colonizing
+/// the map. Once it is established, add the assumed small creatures and small
+/// predators until they get established. Then add the medium assumed
+/// creatures and predators and let them get established before introducing
+/// the large herbivores and eventually the large predators."
+///
+/// What it buys is a legible failure: a tier that arrives on its own, onto a
+/// country already standing still, fails visibly and alone instead of as one
+/// line in a mass extinction. See ISSUES_FOUND.md #157.
+#[test]
+fn a_country_can_be_let_up_a_tier_at_a_time() {
+    use crate::environment::{AnimalSize, TrophicRole};
+    use crate::world::{World, WorldConfig};
+
+    crate::core::dice::seed(53_017);
+    // A short stage, because what is being tested is the staging and not how
+    // long a tier takes to settle - an experiment uses years where this uses
+    // days.
+    let (world, how_it_went) =
+        World::let_the_country_come_up(WorldConfig::default().with_size(240, 240), 3);
+
+    assert_eq!(
+        how_it_went.len(),
+        World::THE_ORDER_A_COUNTRY_COMES_UP_IN.len(),
+        "every stage should be reported"
+    );
+
+    // The small predators go on first, onto the assumed layers, with nothing
+    // else on the map: that is the whole point of the order.
+    let first = &how_it_went[0];
+    assert_eq!(first.tiers, vec![TrophicRole::SmallPredator]);
+    assert!(
+        first.put_down > 0,
+        "the small predators should be placed onto the assumed layers alone"
+    );
+
+    // And the large herbivores arrive after the medium ones rather than
+    // beside them, which is what a band rather than a ceiling is for.
+    let large = &how_it_went[2];
+    assert_eq!(large.tiers, vec![TrophicRole::PrimaryConsumer]);
+    assert_eq!(large.grazers.0, AnimalSize::Large);
+    assert!(
+        large.put_down > 0,
+        "the large herbivores should be a stage of their own: {large:?}"
+    );
+
+    assert!(
+        world.animals.how_many_are_alive() > 0,
+        "and the country should have something on it at the end of it"
     );
 }
