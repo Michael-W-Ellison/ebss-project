@@ -52,6 +52,21 @@ pub enum ResourceType {
     /// gathered in the autumn and it is still food in March.
     Nuts,
 
+    /// Beans, peas, lentils, vetch: the pod crops.
+    ///
+    /// **The only thing in this world that gives ground back.** Every other
+    /// crop draws on `Soil::nutrients` and nothing but muck, litter and what
+    /// people leave behind puts any of it back, so a field halves what it
+    /// holds over one summer of cropping - measured, 0.60 down to 0.27 across
+    /// a hundred and twenty days. A legume fixes its own nitrogen out of the
+    /// air, takes nothing from the bank, and leaves the ground better than it
+    /// found it. See `feeds_the_ground`.
+    ///
+    /// That is what makes a rotation a thing worth knowing rather than a
+    /// piece of folklore, and it is the first mechanism here where what you
+    /// do this year pays in a different year.
+    Legumes,
+
     // === Raw Materials (Agricultural) ===
     Grain,      // Wheat, barley, etc. - for flour, bread, beer
     Flax,       // For linen, rope
@@ -317,6 +332,12 @@ impl ResourceType {
             // autumn in a wood worth being in.
             ResourceType::Nuts => Bearing::from((Fall, Early), (Fall, Late)),
 
+            // A pod is later than a leaf and earlier than a harvest, and it
+            // goes on bearing for as long as it is picked, which is what a
+            // bean row does. Sown in spring and picked from midsummer to the
+            // first frosts.
+            ResourceType::Legumes => Bearing::from((Summer, Early), (Fall, Deep)),
+
             // A colony has built something worth robbing by midsummer, and by
             // late autumn it is defended and dwindling
             ResourceType::Honey => Bearing::from((Summer, Deep), (Fall, Early)),
@@ -402,6 +423,29 @@ impl ResourceType {
         matches!(self, ResourceType::Nuts)
     }
 
+    /// Whether growing this leaves the ground better than it found it.
+    ///
+    /// Every other growing thing in this model is a withdrawal.
+    /// `regenerate_in_ground` ends by taking `NUTRIENT_PER_UNIT_GROWN` out of
+    /// the soil for every unit that came up, and the only deposits anywhere
+    /// are muck, litter and what people drop - so a field is a bank account
+    /// that one crop draws on and nothing much pays into. Measured over a
+    /// summer of cropping, the ground under a settlement's fields fell from
+    /// 0.60 to 0.27.
+    ///
+    /// A pod crop is the exception, and it is not a fudge: a legume fixes
+    /// nitrogen out of the air through the bacteria in its roots, so what it
+    /// builds itself out of did not come from the bank, and what is left in
+    /// the ground when it is done is more than was there before. This is the
+    /// one thing that makes rotation worth knowing.
+    ///
+    /// It is a fact about the plant, so it lives on the plant - and it is one
+    /// answer rather than a list repeated at each of the three places that
+    /// asks: the growing pass, the ploughing-in, and the sowing choice.
+    pub fn feeds_the_ground(&self) -> bool {
+        matches!(self, ResourceType::Legumes)
+    }
+
     /// Whether there is anything on it to take, on this day of the year.
     pub fn is_it_bearing(&self, day_of_year: u32) -> bool {
         self.bearing_window().covers(day_of_year)
@@ -416,9 +460,10 @@ impl ResourceType {
     /// day of the year anything is bearing, for one. The exhaustive match in
     /// `every_resource_is_listed` below fails to compile if a variant is added
     /// and not put here, so this cannot quietly fall behind the enum.
-    pub fn all() -> [ResourceType; 44] {
+    pub fn all() -> [ResourceType; 45] {
         [
         ResourceType::Nuts,
+        ResourceType::Legumes,
         ResourceType::Wood,
         ResourceType::Stone,
         ResourceType::Iron,
@@ -535,6 +580,10 @@ impl ResourceType {
             // had never been written. It is `every_food_grows_back` now.
             ResourceType::Nuts => 0.03,
 
+            // A pod row cropped over is picking again in a fortnight, which
+            // is most of why it is worth the ground.
+            ResourceType::Legumes => 0.035,
+
             ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
             ResourceType::Grain => 0.015,     // Wild grain is thin stuff
             ResourceType::Herbs => 0.04,      // Herbs grow quickly
@@ -577,6 +626,7 @@ impl ResourceType {
                 | ResourceType::Greens
                 | ResourceType::Roots
                 | ResourceType::Nuts
+                | ResourceType::Legumes
                 | ResourceType::Fish
                 | ResourceType::Meat
         )
@@ -592,6 +642,7 @@ impl ResourceType {
                 | ResourceType::Greens
                 | ResourceType::Roots
                 | ResourceType::Nuts
+                | ResourceType::Legumes
                 | ResourceType::Herbs
                 | ResourceType::Flax
                 | ResourceType::Cotton
@@ -617,6 +668,7 @@ impl ResourceType {
             ResourceType::StrangePlant => '?',
             ResourceType::Greens => 'v',
             ResourceType::Nuts => '*',
+            ResourceType::Legumes => 'o',
             ResourceType::Roots => 'r',
             ResourceType::Salt => '*',
 
@@ -681,6 +733,7 @@ impl ResourceType {
             ResourceType::StrangePlant => "\x1b[35m",  // Magenta: unknown
             ResourceType::Greens => "\x1b[92m",        // Bright green: new leaf
             ResourceType::Nuts => "\x1b[38;5;130m",     // Husk brown
+            ResourceType::Legumes => "\x1b[38;5;107m",  // Pod green
             ResourceType::Roots => "\x1b[33m",         // Yellow/brown
             ResourceType::Salt => "\x1b[97m",          // Bright white
 
@@ -787,6 +840,7 @@ impl ResourceType {
             ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food | ResourceType::Water => "Basic Resource",
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton => "Agricultural",
             ResourceType::Nuts => "Agricultural",
+            ResourceType::Legumes => "Agricultural",
             ResourceType::Greens | ResourceType::Roots => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",
@@ -1331,6 +1385,8 @@ impl ResourceNode {
             | ResourceType::Grain
             | ResourceType::Greens
             | ResourceType::Roots
+            | ResourceType::Nuts
+            | ResourceType::Legumes
             | ResourceType::Herbs
             | ResourceType::StrangePlant => {
                 // Plants prefer 15-25°C
@@ -1371,6 +1427,8 @@ impl ResourceNode {
             | ResourceType::Grain
             | ResourceType::Greens
             | ResourceType::Roots
+            | ResourceType::Nuts
+            | ResourceType::Legumes
             | ResourceType::Herbs
             | ResourceType::Flax => {
                 // Most crops need moderate precipitation
@@ -1454,7 +1512,16 @@ impl ResourceNode {
         // What grew in the water is a different matter: it takes nothing from
         // the bank and leaves nothing on it.
         if actual_regen > 0 && !self.resource_type.grows_in_water() {
-            soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
+            // A pod crop is the one thing that goes the other way. It builds
+            // itself out of nitrogen it fixed from the air rather than out of
+            // the bank, so it takes nothing, and what its roots leave behind
+            // is a deposit - see `ResourceType::feeds_the_ground` and
+            // `Soil::WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN`.
+            if self.resource_type.feeds_the_ground() {
+                soil.feed(actual_regen as f32 * Soil::WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN);
+            } else {
+                soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
+            }
             soil.add_leaf_litter(actual_regen as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
         }
 
@@ -1543,6 +1610,7 @@ mod all_resources_tests {
             ResourceType::StrangePlant => {}
             ResourceType::Greens => {}
             ResourceType::Nuts => {}
+            ResourceType::Legumes => {}
             ResourceType::Roots => {}
             ResourceType::Grain => {}
             ResourceType::Flax => {}

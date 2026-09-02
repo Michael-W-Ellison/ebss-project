@@ -1476,6 +1476,11 @@ impl World {
         for (what, how_many) in [
             (ResourceType::Greens, config.food_nodes * 3),
             (ResourceType::Roots, config.food_nodes * 2),
+            // Wild vetch and pea. Thin on the ground compared to the leaf -
+            // a wild legume is not a crop until somebody sows it - but there
+            // has to be some of it somewhere for anybody to find out what it
+            // is, which is the same reason there is wild grain.
+            (ResourceType::Legumes, config.food_nodes),
         ] {
             let (thin, heavy) = resource_spawning::TerrainResourceMapper::amount_range(what);
 

@@ -208,6 +208,7 @@ impl Simulation {
                 | ResourceType::Greens
                 | ResourceType::Roots
                 | ResourceType::Nuts
+                | ResourceType::Legumes
                 | ResourceType::Grain
                 | ResourceType::Herbs => {
                     Self::what_a_trip_brings_back(resource_type_enum, today, rng)

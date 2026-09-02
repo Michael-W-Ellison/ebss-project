@@ -694,6 +694,18 @@ impl FoodDatabase {
             default_preparation: PreparationState::Raw,
         });
 
+        // Legumes - the plant protein, and it dries.
+        //
+        // A pod is worth having twice over: it is the only protein in this
+        // table that did not have to be hunted or caught, and dried peas
+        // keep four months, which is most of a winter. Set below a nut on
+        // energy and well above grain on protein, which is what a bean is.
+        self.entries.insert(ItemType::Legumes, FoodTemplate {
+            base_nutrition: NutritionalContent::new(45.0, 35.0, 20.0, 0.08),
+            base_spoilage_ticks: Self::days(120),
+            default_preparation: PreparationState::Raw,
+        });
+
         // === GRAINS (High energy, low protein) ===
 
         // Grain - high energy, low protein, moderate micronutrients
@@ -1155,7 +1167,8 @@ mod one_answer_to_what_is_food {
         // from either side fails here rather than quietly starving somebody.
         for kind in [
             ItemType::Food, ItemType::Meat, ItemType::Fish, ItemType::Greens,
-            ItemType::Roots, ItemType::Nuts, ItemType::Grain, ItemType::Flour,
+            ItemType::Roots, ItemType::Nuts, ItemType::Legumes, ItemType::Grain,
+            ItemType::Flour,
             ItemType::Bread, ItemType::Milk, ItemType::Cheese, ItemType::Honey,
             ItemType::Ale,
         ] {

@@ -196,6 +196,7 @@ impl Marketplace {
             // Worth more than anything else off a hedge, because it is the
             // one thing that will still be food at the far end of a winter.
             ItemType::Nuts => 5,
+            ItemType::Legumes => 4,
 
             // Animal products
             ItemType::Hides | ItemType::Wool | ItemType::Meat |

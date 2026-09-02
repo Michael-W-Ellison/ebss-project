@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `fb2ac04` and the work since.
+**Last verified:** September 2026, against commit `bada9e3` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -10833,3 +10833,123 @@ weeks, which a real one does not. Squirrels and pigs do not compete for it.
 And the mast year is worked out from the calendar year alone, so it is the
 same everywhere and does not run in the streaks a real wood does — a flood
 year exhausts the trees and is followed by lean ones.
+
+---
+
+### 165. Every crop was a withdrawal, so a field was an account nothing paid into
+
+`regenerate_in_ground` ends by taking `NUTRIENT_PER_UNIT_GROWN` out of the
+soil for every unit that came up. The only deposits anywhere in the model are
+muck, litter and what people drop — and muck-spreading is a practice an agent
+has to discover for itself (#41). Everything a settlement grows is a
+withdrawal, and there is no crop that goes the other way.
+
+Measured, eight worlds, sampled every thirty days through the first year — the
+ground under a settlement's own fields:
+
+| day | mean nutrient under a field |
+|---|---|
+| 60 | 0.601 |
+| 90 | 0.610 |
+| 120 | 0.503 |
+| 150 | 0.353 |
+| 180 | 0.265 |
+
+A field halves what it holds over one summer of cropping. The recovery after
+day 180 in that trace is not the ground healing; it is winter, and new fields
+being broken on ground nobody has worked yet pulling the mean back up.
+
+**A legume is the one plant that does not draw on the bank.** It fixes its own
+nitrogen out of the air through the bacteria in its roots, so what it builds
+itself out of never came from the soil, and what is left when it is done is
+more than was there before. That single fact is what makes a rotation worth
+knowing rather than a piece of folklore, and it is the first mechanism in this
+model where what you do this year pays in a different year.
+
+#### What was built
+
+`ResourceType::Legumes` — beans, peas, lentils, vetch — bearing from early
+summer to deep autumn, sowable, gathered, and stored. `ItemType::Legumes` at
+45 energy and 35 protein, the only plant protein in the food database, keeping
+120 days dried.
+
+`ResourceType::feeds_the_ground()` is the one owner of which crops fix
+nitrogen, asked in the three places that need it: the growing pass, the
+ploughing-in, and the sowing choice. `Soil::feed` is the counterpart to
+`Soil::draw` and until now nothing had needed one — every plant was a
+withdrawal and every deposit arrived as litter, which is the slower and
+lossier road (`decay` keeps only `KEPT_FROM_ROT` of it).
+
+`WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN` is set to exactly
+`NUTRIENT_PER_UNIT_GROWN`, so a year of beans and a year of wheat are equal
+and opposite on the ledger. That is the whole of a two-course rotation written
+as one number, and it is checked by a test rather than left as a coincidence.
+
+**Green manure**: `Action::TillSoil` on a tile carrying a standing pod crop
+now turns it under instead of refusing with "Something already grows here".
+What goes in is the crop somebody could have eaten; what comes back is the
+part of the year's growth that would otherwise have walked away in a basket.
+The occupied-tile check had to move *above* `can_be_tilled`, because the
+commonest green manure of all is a pod row in a field somebody broke last
+year and `can_be_tilled` says no to ground that is already a field — asked in
+the other order, ploughing a crop in was possible only on ground that had
+never been farmed, which is the one place a farmer would not be doing it.
+
+#### What it is worth, and what it is not
+
+Paired on seeds 1000–1023, one year, sampled every thirty days:
+
+| | before | after |
+|---|---|---|
+| mean nutrient under a field | 0.469 | 0.497 |
+| fields seen in total | 7,457 | 8,689 |
+| pod fields, summed over samples | 0 | 56 |
+| legumes carried, summed over samples | 0 | 684 |
+
+The ground under a settlement's fields is about six per cent better fed. That
+is a real move and a small one, and the reason is in the third row: **56 pod
+fields against roughly thirty fields a sample.** People gather legumes freely —
+684 units carried — and sow them rarely, because sowing one requires both
+carrying seed and standing on ground the agent reads as tired.
+
+**And the ploughing-in has effectively never happened in play.** Of 600 wild
+pod stands spawned across 24 worlds, **599 were still standing at the end of
+the year.** The path is written, tested and reachable, and a settlement took
+it once. The cause is geometry rather than judgement: 25 wild stands scattered
+over a hundred square kilometres are almost never inside a farmer's walking
+radius, and the ones that are have to be on ground poor enough to be worth
+giving up a meal for. This is the same class as #163 and #191 — a path that
+exists, compiles, is tested in a fixture, and does not run in a settlement —
+and it is named here rather than claimed as working.
+
+#### What is not a rotation
+
+The sowing choice reads the ground: below half fertility a pod row outranks a
+hungry crop, unless the agent's own record of what has worked says otherwise.
+That is a **reading, not a plan.** Nothing connects a bean sown this year to
+the wheat that will do better next year on the same tile — the lessons are
+keyed on the crop and not on the ground, so that chain cannot be learned by an
+agent in this model. What an agent can do is notice that poor ground repays
+beans, which is what a farmer noticing his own field looks like from the
+outside and is close to how most of this was actually found out. Calling it a
+discovered rotation would be a claim the code does not support.
+
+#### Two tests moved, and one of them was hiding something
+
+**`a_deer_at_your_feet_beats_a_berry_patch_a_walk_away`** was unseeded, so the
+founder's personality was whatever the global dice were holding when
+`World::new` finished drawing — and a personality decides how a man weighs a
+walk against a meal. Adding a crop to the world moved the draw and the claim
+stopped holding. It is a seed block now.
+
+**`a_cold_agent_ends_up_dressed`** is worse and more interesting. Its own
+comment said one seed would not survive anything upstream changing, and then
+used one anyway, seeding *after* the fixture so the making was fixed and the
+world was not. Asked of a block of 24 worlds the real rate is **10 of 24**: a
+cold man with flax in his pack and flax growing three paces away ends up
+dressed in about four worlds in ten, and in the other six he spends fifty days
+doing something else while freezing. The test had claimed this always
+happened. One lucky seed had been hiding a coin-flip. The threshold is now a
+third — set under the measurement rather than at it — and what it guards is
+that the chain is reachable at all, which is the most this test was ever able
+to say.

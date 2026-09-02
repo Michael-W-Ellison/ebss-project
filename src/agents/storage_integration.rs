@@ -102,6 +102,7 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         // it, and this one was named at the top of the nutrition scale
         // before anything in the world yielded it.
         "nuts" | "acorns" | "hazelnuts" | "chestnuts" | "walnuts" => Some(ItemType::Nuts),
+        "legumes" | "beans" | "peas" | "lentils" | "chickpeas" | "vetch" => Some(ItemType::Legumes),
 
         // What the flora system drops.
         //

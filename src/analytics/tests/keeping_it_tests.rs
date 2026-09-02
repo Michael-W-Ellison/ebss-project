@@ -228,6 +228,33 @@ fn what_was_dried_is_not_this_afternoons_supper() {
 fn a_deer_at_your_feet_beats_a_berry_patch_a_walk_away() {
     use crate::core::DriveType;
 
+    // **A seed block, not a seed** - see ISSUES_FOUND.md #132.
+    //
+    // `one_person` seeds nothing, so the founder's personality is whatever
+    // the global dice happened to be holding when `World::new` finished
+    // drawing, and a personality decides how a man weighs a walk against a
+    // meal. That made this a claim about one accidental temperament: it held
+    // for a year and stopped holding the moment the world spawned a different
+    // number of things, which has nothing to do with deer. Asked of a block of
+    // founders it is a claim about people rather than about one man.
+    let worlds = 8;
+    let went_for_it = (0..worlds)
+        .filter(|which| a_man_with_a_spear_goes_for_the_deer(5_100 + which))
+        .count();
+
+    assert!(
+        went_for_it * 3 >= worlds as usize * 2,
+        "with a spear, a deer two paces off and nothing else to eat, most \
+         people go for the deer: {went_for_it} of {worlds}"
+    );
+}
+
+/// One founder, one deer, one spear: does he set off after it?
+fn a_man_with_a_spear_goes_for_the_deer(seed: u64) -> bool {
+    use crate::core::DriveType;
+
+    crate::core::dice::seed(seed);
+
     let mut simulation = one_person();
     let here = simulation.population.agents[0].state.position;
 
@@ -249,7 +276,8 @@ fn a_deer_at_your_feet_beats_a_berry_patch_a_walk_away() {
     }
 
     // Empty-handed, the deer is not an answer to anything: walking to it buys
-    // a refusal at the end of the walk.
+    // a refusal at the end of the walk. This half holds for everybody and is
+    // asked of everybody.
     let empty_handed = simulation.food_action(&simulation.population.agents[0], here, false);
     assert!(
         !matches!(empty_handed, Some(Action::Hunt { .. })),
@@ -261,10 +289,7 @@ fn a_deer_at_your_feet_beats_a_berry_patch_a_walk_away() {
     );
 
     let chosen = simulation.food_action(&simulation.population.agents[0], here, false);
-    assert!(
-        matches!(chosen, Some(Action::Hunt { .. }) | Some(Action::Move { .. })),
-        "with a spear, a deer two paces off and nothing else to eat: {chosen:?}"
-    );
+    matches!(chosen, Some(Action::Hunt { .. }) | Some(Action::Move { .. }))
 }
 
 /// And a deer across the valley is not. That is the expedition that does not

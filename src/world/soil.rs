@@ -121,6 +121,21 @@ impl Soil {
     pub const RESIDUE_PER_UNIT_GROWN: f32 =
         Self::NUTRIENT_PER_UNIT_GROWN * 0.5 / Self::KEPT_FROM_ROT;
 
+    /// What a pod crop puts into the ground, per unit of crop.
+    ///
+    /// Exactly what an ordinary crop takes out, so that a year of beans and a
+    /// year of wheat are equal and opposite on the ledger. That is the whole
+    /// of a two-course rotation, written as one number: a field cropped and
+    /// then rested under legumes comes back to where it started, and one
+    /// cropped twice running does not.
+    ///
+    /// A legume also takes nothing out on the way - see
+    /// `ResourceType::feeds_the_ground` - so on top of this it keeps the
+    /// residue every plant leaves, and a field under beans ends the season
+    /// better than it began. That is right: a bean row is not a rest, it is a
+    /// crop that pays rent.
+    pub const WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN: f32 = Self::NUTRIENT_PER_UNIT_GROWN;
+
     /// What one fish is worth to the ground it is buried in.
     ///
     /// This is the number that makes a fishery different in kind from every
@@ -392,6 +407,24 @@ impl Soil {
             .max(0.0);
         self.nutrients -= taken;
         taken
+    }
+
+    /// Put nutrient into the ground, returning how much it actually took.
+    ///
+    /// The counterpart to [`Soil::draw`], and until legumes there was nothing
+    /// that needed one: every plant in the model was a withdrawal and the
+    /// deposits all came in as litter, which is a slower and lossier road -
+    /// `decay` keeps only `KEPT_FROM_ROT` of it. What a pod crop fixes goes
+    /// straight in, because it was fixed in the ground rather than dropped on
+    /// top of it.
+    ///
+    /// Ground already at `MAX_NUTRIENTS` takes nothing, which is what stops a
+    /// settlement turning one tile into an infinite larder by leaving beans on
+    /// it for ten thousand ticks.
+    pub fn feed(&mut self, amount: f32) -> f32 {
+        let before = self.nutrients;
+        self.nutrients = (self.nutrients + amount.max(0.0)).min(Self::MAX_NUTRIENTS);
+        self.nutrients - before
     }
 
     /// Whether somebody has left something on this ground.

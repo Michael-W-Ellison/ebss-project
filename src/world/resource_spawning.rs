@@ -123,6 +123,9 @@ impl TerrainResourceMapper {
             // October, and this is most of why.
             ResourceType::Nuts => vec![TerrainType::Forest, TerrainType::Hills],
 
+            // Wild vetch and pea: rough open ground and the edges of it.
+            ResourceType::Legumes => vec![TerrainType::Meadow, TerrainType::Plains],
+
             // Processed/finished goods don't spawn naturally
             _ => vec![],
         }
@@ -166,6 +169,7 @@ impl TerrainResourceMapper {
             // ground for a few weeks - see `bearing_window` and
             // `how_heavy_the_mast_is`.
             ResourceType::Nuts => (30, 80),
+            ResourceType::Legumes => (25, 60),
 
             // Wild leaf, shoot and the first roots. Thin stuff: a person
             // living on greens has to pick a great many of them, which is

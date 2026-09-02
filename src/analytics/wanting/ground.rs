@@ -17,7 +17,7 @@ impl Simulation {
     /// Seed is not a separate thing an agent carries: a handful of the grain
     /// in the pack is next year's field, which is exactly the choice a hungry
     /// people has to make.
-    pub(in crate::analytics) fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 6] {
+    pub(in crate::analytics) fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 7] {
         use crate::world::ResourceType;
 
         // The flag is whether it is worth breaking ground for when the thing
@@ -27,6 +27,7 @@ impl Simulation {
         [
             ("sproutedgrain", ResourceType::Grain, true),
             ("grain", ResourceType::Grain, true),
+            ("legumes", ResourceType::Legumes, true),
             ("food", ResourceType::Food, true),
             ("flax", ResourceType::Flax, false),
             ("cotton", ResourceType::Cotton, false),
@@ -42,7 +43,10 @@ impl Simulation {
     /// first, and for one that has walked back to a field of berries three
     /// autumns running is emphatically not berries. An agent carrying nothing
     /// sowable puts in what it has been eating, and learns from that too.
-    pub(in crate::analytics) fn what_this_one_would_sow(agent: &crate::agents::Agent) -> crate::world::ResourceType {
+    pub(in crate::analytics) fn what_this_one_would_sow(
+        agent: &crate::agents::Agent,
+        how_good_the_ground_is: f32,
+    ) -> crate::world::ResourceType {
         use crate::world::ResourceType;
 
         let mut best: Option<(ResourceType, f32)> = None;
@@ -60,9 +64,26 @@ impl Simulation {
                 continue;
             }
 
-            let believed = agent
+            let mut believed = agent
                 .lessons
                 .how_likely_to_try_this(&format!("sow:{called}"));
+
+            // And what the ground under this man's feet is worth, which he
+            // can see: thin, pale, hungry-looking stuff that grew a poor
+            // crop last time. On ground like that a pod row is the thing to
+            // put in, and this is as close to a rotation as this model can
+            // honestly get.
+            //
+            // It is a *reading*, not a plan. Nothing here connects a bean
+            // sown this year to the wheat that will do better next year on
+            // the same tile - the lessons are keyed on the crop and not on
+            // the ground, so that chain cannot be learned. What an agent can
+            // do is notice that poor ground repays beans, which is what a
+            // farmer noticing his own field looks like from the outside and
+            // is how most of this was actually found out.
+            if crop.feeds_the_ground() && how_good_the_ground_is < Self::TOO_POOR_FOR_A_HUNGRY_CROP {
+                believed += Self::WHAT_A_POD_ROW_IS_WORTH_ON_TIRED_GROUND;
+            }
 
             if best.map(|(_, so_far)| believed > so_far).unwrap_or(true) {
                 best = Some((crop, believed));
@@ -71,6 +92,22 @@ impl Simulation {
 
         best.map(|(crop, _)| crop).unwrap_or(ResourceType::Food)
     }
+
+    /// How poor ground has to look before a man puts beans in it rather than
+    /// wheat.
+    ///
+    /// Half of what the ground can hold. Above that a field is still worth
+    /// cropping and a hungry people crops it; below it the crop that comes
+    /// off is thin enough that a year of pods is the better bargain, which is
+    /// exactly the trade a two-course rotation is.
+    pub(in crate::analytics) const TOO_POOR_FOR_A_HUNGRY_CROP: f32 = 0.5;
+
+    /// And how much that reading is worth against what he has learned.
+    ///
+    /// Enough to beat an ordinary opinion and not enough to beat a strong
+    /// one: a man who has sown wheat on this ground three years running and
+    /// carried it home each time still sows wheat.
+    pub(in crate::analytics) const WHAT_A_POD_ROW_IS_WORTH_ON_TIRED_GROUND: f32 = 0.3;
 
     /// How much comes up off one tile's worth of seed.
     pub(in crate::analytics) const WHAT_A_MIDDEN_COMES_UP_IN: f32 = 8.0;
@@ -314,6 +351,22 @@ impl Simulation {
             return None;
         }
 
+        // A stand of pods on tired ground is worth turning under before it is
+        // worth breaking fresh ground somewhere else - see
+        // `Simulation::ploughing_a_crop_in`. Asked first, because a man who
+        // would break ground at all is a man who would plough a crop in, and
+        // because the ground he already has is nearer than the ground he has
+        // not.
+        if let Some(under) = self.a_stand_worth_turning_under(agent_position) {
+            if under.x == agent_position.0 && under.y == agent_position.1 {
+                return Some(Action::TillSoil);
+            }
+
+            return Some(Action::Move {
+                target: (under.x, under.y, agent_position.2),
+            });
+        }
+
         let ground = self.ground_to_break(agent_position)?;
 
         if ground.x == agent_position.0 && ground.y == agent_position.1 {
@@ -323,6 +376,51 @@ impl Simulation {
         Some(Action::Move {
             target: (ground.x, ground.y, agent_position.2),
         })
+    }
+
+    /// The nearest stand of a ground-feeding crop standing on ground poor
+    /// enough to be worth giving it to.
+    ///
+    /// Both halves matter. A pod row on good ground is food and should be
+    /// picked; a pod row on ground that will not carry a crop is worth more
+    /// under the plough than in a basket, and that is the whole judgement a
+    /// green manure asks for.
+    pub(in crate::analytics) fn a_stand_worth_turning_under(
+        &self,
+        position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        let from = Position::new(position.0, position.1);
+        let mut best: Option<(Position, u32)> = None;
+
+        for resource in &self.world.resources {
+            if !resource.resource_type.feeds_the_ground() || resource.amount == 0 {
+                continue;
+            }
+
+            let distance = from.distance_to(&resource.position);
+            if distance > Self::FIELD_WALK_RADIUS {
+                continue;
+            }
+
+            let poor = self
+                .world
+                .grid
+                .get_tile(&resource.position)
+                .map(|tile| tile.soil.fertility() < Self::TOO_POOR_FOR_A_HUNGRY_CROP)
+                .unwrap_or(false);
+
+            if !poor {
+                continue;
+            }
+
+            if best.map(|(_, so_far)| distance < so_far).unwrap_or(true) {
+                best = Some((resource.position, distance));
+            }
+        }
+
+        best.map(|(where_it_stands, _)| where_it_stands)
     }
 
     /// How near the camp a plant has to stand before nobody would bother

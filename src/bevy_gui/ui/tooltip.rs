@@ -98,6 +98,7 @@ pub fn resource_color(resource_type: ResourceType) -> Color32 {
         ResourceType::Greens => Color32::from_rgb(124, 205, 124),
         ResourceType::Roots => Color32::from_rgb(205, 133, 63),
         ResourceType::Nuts => Color32::from_rgb(139, 90, 43),
+        ResourceType::Legumes => Color32::from_rgb(124, 152, 90),
         ResourceType::Flax => Color32::from_rgb(245, 245, 220),
         ResourceType::Herbs => Color32::from_rgb(0, 128, 0),
         ResourceType::Cotton => Color32::from_rgb(255, 250, 250),

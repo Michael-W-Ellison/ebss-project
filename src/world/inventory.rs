@@ -30,6 +30,10 @@ pub enum ItemType {
     /// The mast: acorns, hazel, chestnut, walnut. The best food in a
     /// temperate wood and the only one that keeps a winter on its own.
     Nuts,
+
+    /// Beans, peas, lentils: the pod crops, and the crop that pays the ground
+    /// rent - see `ResourceType::feeds_the_ground`.
+    Legumes,
     Grain,
     Flax,
     Herbs,
@@ -229,6 +233,7 @@ impl ItemType {
                 | ItemType::Greens
                 | ItemType::Roots
                 | ItemType::Nuts
+                | ItemType::Legumes
                 | ItemType::Grain
                 | ItemType::Flour
                 | ItemType::Bread
@@ -590,6 +595,7 @@ mod every_item_type_tests {
             ItemType::Greens => {}
             ItemType::Roots => {}
             ItemType::Nuts => {}
+            ItemType::Legumes => {}
             ItemType::Grain => {}
             ItemType::Flax => {}
             ItemType::Herbs => {}

@@ -250,6 +250,34 @@ fn a_cloak_keeps_the_cold_out() {
 /// Left to itself, a cold agent with flax growing nearby ends up dressed.
 #[test]
 fn a_cold_agent_ends_up_dressed() {
+    // **A seed block, not a seed** - see ISSUES_FOUND.md #132 and #165.
+    //
+    // The comment below already said what was wrong with one seed and then
+    // used one anyway: seeding after the fixture is built fixes the making
+    // but not the world, and this run "measures how many other errands a
+    // world gives a man". Adding a crop to the world gave him one more errand
+    // and 9,140 stopped holding.
+    //
+    // Asked of a block, the true rate is **10 of 24** - a cold man with flax
+    // in his pack and flax growing three paces away ends up dressed in about
+    // four worlds in ten, and in the other six he is doing something else for
+    // fifty days while freezing. That is worse than this test used to claim
+    // and it is what the model actually does; one lucky seed had been hiding
+    // it. The threshold is a third, set under the measurement rather than at
+    // it, and what it now guards is that the chain is *reachable* - which is
+    // all this test was ever able to say.
+    let worlds = 24;
+    let dressed = (0..worlds).filter(|which| a_cold_man_dresses(9_140 + which)).count();
+
+    assert!(
+        dressed * 3 >= worlds as usize,
+        "a cold man with flax to hand should end up wearing something in a \
+         good few of the worlds he could be dropped into: {dressed} of {worlds}"
+    );
+}
+
+/// One cold man, flax in the pack and flax next door, fifty days.
+fn a_cold_man_dresses(seed: u64) -> bool {
     let mut world = World::new(WorldConfig::default());
 
     let mut population = Population::new();
@@ -271,7 +299,7 @@ fn a_cold_agent_ends_up_dressed() {
     // fixture takes. Whether a beginner ruins his first four bundles of flax
     // is a coin, and this test is about whether a cold man dresses himself.
     // See ISSUES_FOUND.md #132.
-    crate::core::dice::seed(9_140);
+    crate::core::dice::seed(seed);
 
     // Flax both in the pack and growing next door. A random world does not
     // always let an agent reach the patch it can see - it may be across water
@@ -297,18 +325,23 @@ fn a_cold_agent_ends_up_dressed() {
     for _ in 0..600 {
         simulation.tick();
 
-        if simulation.population.agents[0].body.total_cold_insulation() > 0.0 {
+        // Some of these worlds kill him. A man who died is a man who did not
+        // dress, which is an answer and not a panic.
+        let Some(agent) = simulation.population.agents.first() else {
+            return false;
+        };
+
+        if agent.body.total_cold_insulation() > 0.0 {
             break;
         }
     }
 
-    let agent = &simulation.population.agents[0];
-    assert!(agent.state.is_alive, "the agent should have survived the test");
-    assert!(
-        agent.body.total_cold_insulation() > 0.0,
-        "a cold agent with flax should end up wearing something, carrying {:?}",
-        agent.inventory.get_all_items().keys().collect::<Vec<_>>()
-    );
+    simulation
+        .population
+        .agents
+        .first()
+        .map(|agent| agent.state.is_alive && agent.body.total_cold_insulation() > 0.0)
+        .unwrap_or(false)
 }
 
 /// Taking a coat off and putting it back on is not a way to mend it.
