@@ -27,6 +27,9 @@ pub enum ItemType {
     Greens,
     /// The first roots and pods, which is what summer gives
     Roots,
+    /// The mast: acorns, hazel, chestnut, walnut. The best food in a
+    /// temperate wood and the only one that keeps a winter on its own.
+    Nuts,
     Grain,
     Flax,
     Herbs,
@@ -225,6 +228,7 @@ impl ItemType {
                 | ItemType::Fish
                 | ItemType::Greens
                 | ItemType::Roots
+                | ItemType::Nuts
                 | ItemType::Grain
                 | ItemType::Flour
                 | ItemType::Bread
@@ -585,6 +589,7 @@ mod every_item_type_tests {
             ItemType::Water => {}
             ItemType::Greens => {}
             ItemType::Roots => {}
+            ItemType::Nuts => {}
             ItemType::Grain => {}
             ItemType::Flax => {}
             ItemType::Herbs => {}

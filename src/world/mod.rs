@@ -1497,6 +1497,36 @@ impl World {
             }
         }
 
+        // The mast, under the trees that drop it.
+        //
+        // Fewer stands than there are berry bushes and far heavier ones: a
+        // wood in October is one place where a great deal of food is on the
+        // ground at once, for a few weeks, and how much depends on whether
+        // this is a mast year - see `ResourceType::how_heavy_the_mast_is`.
+        {
+            let (thin, heavy) =
+                resource_spawning::TerrainResourceMapper::amount_range(ResourceType::Nuts);
+            let this_year = self.climate.calendar.year;
+
+            for _ in 0..config.food_nodes {
+                let terrain = if rng.gen::<f32>() < 0.75 {
+                    TerrainType::Forest
+                } else {
+                    TerrainType::Hills
+                };
+                let pos = self.find_random_terrain_position(terrain, taken);
+                self.resources
+                    .push(resource_spawning::what_this_ground_carries_in(
+                        &self.grid,
+                        ResourceType::Nuts,
+                        pos,
+                        rng.gen_range(thin..=heavy),
+                        today,
+                        this_year,
+                    ));
+            }
+        }
+
         // Salt: rare, and in two quite different places.
         //
         // On a flat, where a shallow sea dried up and left what was in it, it
@@ -2345,6 +2375,7 @@ impl World {
     fn regenerate_resources(&mut self) {
         let current_season = self.climate.current_season();
         let today = self.climate.calendar.day_of_year;
+        let this_year = self.climate.calendar.year;
         let season_modifier = current_season.plant_growth_modifier();
         let precipitation = self.climate.weather.wetness_per_tick() * 100.0; // Scale to 0-1 range
 
@@ -2430,6 +2461,16 @@ impl World {
                 cultivated,
                 soil,
             );
+
+            // And how good a year it is, which only the mast asks. A wood
+            // that stood full last autumn stands nearly bare this one, and
+            // that is the first thing in this model that makes one year
+            // different from another - see `how_heavy_the_mast_is`.
+            if resource.resource_type.does_it_have_mast_years() {
+                let mast = ResourceType::how_heavy_the_mast_is(this_year);
+                let this_autumn = ((resource.max_amount as f32 * mast).round() as u32).max(1);
+                resource.amount = resource.amount.min(this_autumn);
+            }
 
             // Debug log significant regeneration
             // if regen_amount > 0 {

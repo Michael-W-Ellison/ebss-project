@@ -97,6 +97,11 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "salt" => Some(ItemType::Salt),
         "greens" => Some(ItemType::Greens),
         "roots" => Some(ItemType::Roots),
+        // The mast, under whatever name the tree that dropped it goes by.
+        // Fifth time this table has had to be told about a vocabulary beside
+        // it, and this one was named at the top of the nutrition scale
+        // before anything in the world yielded it.
+        "nuts" | "acorns" | "hazelnuts" | "chestnuts" | "walnuts" => Some(ItemType::Nuts),
 
         // What the flora system drops.
         //

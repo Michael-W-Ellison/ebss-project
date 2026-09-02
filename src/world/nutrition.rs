@@ -674,6 +674,26 @@ impl FoodDatabase {
             default_preparation: PreparationState::Raw,
         });
 
+        // The mast: acorn, hazel, chestnut, walnut.
+        //
+        // **The top of the scale, and it is the reason the scale had a top.**
+        // `physiology.rs` describes this database as running "from six
+        // (spring greens) to eighty (fat and nuts)" - and until now nothing
+        // in the world yielded one, so the eighty was a figure in a comment.
+        // A nut is a third fat by weight and that is where the energy is.
+        //
+        // What it does that nothing else does is **keep**. Everything else a
+        // settlement puts by has to be dried, salted, smoked or buried, and
+        // the throughput of that is what caps the winter store - #241. A nut
+        // in its shell wants nothing done to it: gathered in October, still
+        // food in March. Two hundred and forty days is eight months, which is
+        // an acorn kept dry and is longer than anything else in this table.
+        self.entries.insert(ItemType::Nuts, FoodTemplate {
+            base_nutrition: NutritionalContent::new(80.0, 20.0, 25.0, 0.05),
+            base_spoilage_ticks: Self::days(240),
+            default_preparation: PreparationState::Raw,
+        });
+
         // === GRAINS (High energy, low protein) ===
 
         // Grain - high energy, low protein, moderate micronutrients
@@ -1131,12 +1151,13 @@ mod one_answer_to_what_is_food {
             );
         }
 
-        // And the twelve the database carries, named, so that dropping one
+        // And the thirteen the database carries, named, so that dropping one
         // from either side fails here rather than quietly starving somebody.
         for kind in [
             ItemType::Food, ItemType::Meat, ItemType::Fish, ItemType::Greens,
-            ItemType::Roots, ItemType::Grain, ItemType::Flour, ItemType::Bread,
-            ItemType::Milk, ItemType::Cheese, ItemType::Honey, ItemType::Ale,
+            ItemType::Roots, ItemType::Nuts, ItemType::Grain, ItemType::Flour,
+            ItemType::Bread, ItemType::Milk, ItemType::Cheese, ItemType::Honey,
+            ItemType::Ale,
         ] {
             assert!(kind.is_it_food(), "{kind:?} should be food");
             assert!(db.is_food(&kind), "{kind:?} should have a template");
@@ -1151,7 +1172,7 @@ mod one_answer_to_what_is_food {
     /// cooking prefix and the cutting suffix alike.
     #[test]
     fn a_cooked_joint_is_still_food_and_a_stone_is_still_not() {
-        for id in ["food", "grain", "greens", "roots", "fish", "meat",
+        for id in ["food", "grain", "greens", "roots", "nuts", "fish", "meat",
                    "bread", "cooked_meat", "meatportions", "fishportions"] {
             assert!(is_this_food(id), "{id} should be food");
         }

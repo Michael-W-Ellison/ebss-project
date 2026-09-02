@@ -623,6 +623,7 @@ impl World {
                     ResourceType::Iron => ItemType::Iron,
                     ResourceType::Food => ItemType::Food,
                     ResourceType::Water => ItemType::Water,
+                    ResourceType::Nuts => ItemType::Nuts,
 
                     // Agricultural
                     ResourceType::Greens => ItemType::Greens,

@@ -399,6 +399,10 @@ fn oak_tree() -> PlantSpecies {
         drops: vec![
             PlantDrop::new("wood".to_string(), 15, 25),
             PlantDrop::new("bark".to_string(), 8, 12),
+            // The mast. An oak was standing timber and nothing else in this
+            // model, which leaves out the single most important thing an oak
+            // wood does for anybody living in it.
+            PlantDrop::new("acorns".to_string(), 20, 60).at_stage(GrowthStage::Fruiting),
         ],
         is_tree: true,
         size: PlantSize::Large,

@@ -36,6 +36,22 @@ pub enum ResourceType {
     /// Better than greens and nothing like a harvest.
     Roots,
 
+    /// The mast: acorns, hazel, chestnut, walnut, whatever the wood drops.
+    ///
+    /// **The top of this model's own energy scale, and there was none of it
+    /// anywhere in the world.** `physiology.rs` prices the nutrition database
+    /// as running "from six (spring greens) to eighty (fat and nuts)" - and
+    /// nothing yielded a nut, no `ItemType` held one and no plant dropped
+    /// one. The best food a temperate forager had was named in a comment and
+    /// existed nowhere else.
+    ///
+    /// What makes it worth having is not the energy alone. A nut keeps.
+    /// Everything else a settlement puts by has to be dried, salted, smoked
+    /// or buried, and the throughput of that is what caps the winter store -
+    /// see ISSUES_FOUND.md #241. Mast wants nothing done to it: it is
+    /// gathered in the autumn and it is still food in March.
+    Nuts,
+
     // === Raw Materials (Agricultural) ===
     Grain,      // Wheat, barley, etc. - for flour, bread, beer
     Flax,       // For linen, rope
@@ -294,6 +310,13 @@ impl ResourceType {
             // A harvest, and everybody knows when it is
             ResourceType::Grain => Bearing::from((Summer, Late), (Fall, Deep)),
 
+            // The mast. Later than the grain and shorter than any of it: the
+            // wood drops in a few weeks and then the pigs and the squirrels
+            // and the deer have it. Whoever is there in those weeks eats all
+            // winter and whoever is not does not - which is what makes an
+            // autumn in a wood worth being in.
+            ResourceType::Nuts => Bearing::from((Fall, Early), (Fall, Late)),
+
             // A colony has built something worth robbing by midsummer, and by
             // late autumn it is defended and dwindling
             ResourceType::Honey => Bearing::from((Summer, Deep), (Fall, Early)),
@@ -313,6 +336,72 @@ impl ResourceType {
         }
     }
 
+    /// How heavy the mast is this year, nought to rather more than one.
+    ///
+    /// **A mast year is a real and famous thing.** An oak wood does not drop
+    /// the same weight of acorns every autumn: it drops next to nothing for
+    /// two or three years and then, all the trees of a district agreeing
+    /// somehow, floods the ground. The pigs, the deer, the squirrels and the
+    /// people all live or do not live on that, and it is the sharpest
+    /// year-to-year swing in a temperate forager's food supply - sharper
+    /// than the weather.
+    ///
+    /// Nothing else in this world varies between years at all. The seasons
+    /// turn, the weather blows, and every autumn is otherwise the same
+    /// autumn; a settlement that got through last winter knows exactly what
+    /// this one holds. A mast year is the first thing in the model that makes
+    /// one year worth more than another, which is what a store is *for*.
+    ///
+    /// Worked out from the year alone and not rolled, so that every wood in a
+    /// country agrees - which is the part that matters, because a district
+    /// where half the woods bore would be no gamble at all. A cheap integer
+    /// hash rather than the dice: it must not depend on how many other things
+    /// have drawn a number this tick, which is ISSUES_FOUND.md #132's whole
+    /// family of trouble.
+    pub fn how_heavy_the_mast_is(year: u32) -> f32 {
+        // A splitmix64 finaliser, which is what it takes to get a
+        // well-spread number out of a small counter. The obvious thing -
+        // Knuth's multiplicative constant and the top bits of the product -
+        // does not work here: over the first twenty years it alternates
+        // 0.000, 0.503, 0.006, 0.510, 0.013, ... because a single multiply
+        // leaves the high bits of a small input linear in it, and the wood
+        // never floods once. The shift-xor-multiply rounds below break that
+        // up; over two hundred years this lands 76 lean, 90 ordinary and 34
+        // mast against the 80/80/40 asked for.
+        let mut spread = (year as u64).wrapping_add(0x9E37_79B9_7F4A_7C15);
+        spread = (spread ^ (spread >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        spread = (spread ^ (spread >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        spread ^= spread >> 31;
+        let roll = (spread % 1000) as f32 / 1000.0;
+
+        // Two years in five are lean, two are ordinary, one in five is a
+        // mast year and the wood is knee deep in it.
+        if roll < Self::HOW_OFTEN_A_WOOD_BEARS_NOTHING {
+            Self::WHAT_A_LEAN_YEAR_DROPS
+        } else if roll < 1.0 - Self::HOW_OFTEN_A_WOOD_FLOODS {
+            1.0
+        } else {
+            Self::WHAT_A_MAST_YEAR_DROPS
+        }
+    }
+
+    /// How often a wood drops next to nothing.
+    const HOW_OFTEN_A_WOOD_BEARS_NOTHING: f32 = 0.4;
+    /// And how often it floods.
+    const HOW_OFTEN_A_WOOD_FLOODS: f32 = 0.2;
+    /// What a lean year is worth against an ordinary one: a bad autumn, and
+    /// not an empty one - there is always something under a tree.
+    const WHAT_A_LEAN_YEAR_DROPS: f32 = 0.25;
+    /// And a mast year, which is why anybody remembers them.
+    const WHAT_A_MAST_YEAR_DROPS: f32 = 2.5;
+
+    /// Whether a thing's yield swings from one year to the next.
+    ///
+    /// Only the mast does. A hedge bears what it bears.
+    pub fn does_it_have_mast_years(&self) -> bool {
+        matches!(self, ResourceType::Nuts)
+    }
+
     /// Whether there is anything on it to take, on this day of the year.
     pub fn is_it_bearing(&self, day_of_year: u32) -> bool {
         self.bearing_window().covers(day_of_year)
@@ -327,8 +416,9 @@ impl ResourceType {
     /// day of the year anything is bearing, for one. The exhaustive match in
     /// `every_resource_is_listed` below fails to compile if a variant is added
     /// and not put here, so this cannot quietly fall behind the enum.
-    pub fn all() -> [ResourceType; 43] {
+    pub fn all() -> [ResourceType; 44] {
         [
+        ResourceType::Nuts,
         ResourceType::Wood,
         ResourceType::Stone,
         ResourceType::Iron,
@@ -430,6 +520,21 @@ impl ResourceType {
             // And a root is a season's work, so slower than a berry.
             ResourceType::Roots => 0.02,
 
+            // The mast. Quick, because the whole of it is on the ground
+            // inside one six-week window and `regenerate_in_ground` only
+            // runs inside that window - a slow rate here would mean a wood
+            // that never filled before the leaves came off it. How much it
+            // fills to is `how_heavy_the_mast_is`, not this.
+            //
+            // Nuts fell through to `_ => 0.0` when they were added, which
+            // made every nut node non-renewable: it spawned empty out of
+            // season, `remove_depleted_resources` deleted all twenty-five of
+            // them on the first tick, and no autumn ever came. That is the
+            // third time this exact match has swallowed a new food - see the
+            // Greens and Roots note above - and the guard that note promised
+            // had never been written. It is `every_food_grows_back` now.
+            ResourceType::Nuts => 0.03,
+
             ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
             ResourceType::Grain => 0.015,     // Wild grain is thin stuff
             ResourceType::Herbs => 0.04,      // Herbs grow quickly
@@ -471,6 +576,7 @@ impl ResourceType {
                 | ResourceType::Grain
                 | ResourceType::Greens
                 | ResourceType::Roots
+                | ResourceType::Nuts
                 | ResourceType::Fish
                 | ResourceType::Meat
         )
@@ -485,6 +591,7 @@ impl ResourceType {
                 | ResourceType::Grain
                 | ResourceType::Greens
                 | ResourceType::Roots
+                | ResourceType::Nuts
                 | ResourceType::Herbs
                 | ResourceType::Flax
                 | ResourceType::Cotton
@@ -509,6 +616,7 @@ impl ResourceType {
             // Something nobody has tried
             ResourceType::StrangePlant => '?',
             ResourceType::Greens => 'v',
+            ResourceType::Nuts => '*',
             ResourceType::Roots => 'r',
             ResourceType::Salt => '*',
 
@@ -572,6 +680,7 @@ impl ResourceType {
         match self {
             ResourceType::StrangePlant => "\x1b[35m",  // Magenta: unknown
             ResourceType::Greens => "\x1b[92m",        // Bright green: new leaf
+            ResourceType::Nuts => "\x1b[38;5;130m",     // Husk brown
             ResourceType::Roots => "\x1b[33m",         // Yellow/brown
             ResourceType::Salt => "\x1b[97m",          // Bright white
 
@@ -677,6 +786,7 @@ impl ResourceType {
             ResourceType::StrangePlant => "Unidentified",
             ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food | ResourceType::Water => "Basic Resource",
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton => "Agricultural",
+            ResourceType::Nuts => "Agricultural",
             ResourceType::Greens | ResourceType::Roots => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",
@@ -1432,6 +1542,7 @@ mod all_resources_tests {
             ResourceType::Water => {}
             ResourceType::StrangePlant => {}
             ResourceType::Greens => {}
+            ResourceType::Nuts => {}
             ResourceType::Roots => {}
             ResourceType::Grain => {}
             ResourceType::Flax => {}
@@ -1480,5 +1591,60 @@ mod all_resources_tests {
         seen.sort_by_key(|what| format!("{what:?}"));
         seen.dedup();
         assert_eq!(seen.len(), all.len(), "a resource is listed twice in all()");
+    }
+
+    /// The guard `how_fast_it_comes_back` has promised since the Greens and
+    /// Roots hole and never had.
+    ///
+    /// Three foods have now fallen through that match to `_ => 0.0`. A food
+    /// with no regrowth rate is not renewable, and a resource that is not
+    /// renewable is **deleted the moment it is empty** - so a hedgerow that
+    /// is bare out of its season is deleted on the first tick of the world
+    /// and never comes back. Nuts spawned twenty-five stands to a map and had
+    /// none by tick one.
+    ///
+    /// Nothing in the world says "this is food" in one place, so the only way
+    /// to hold the two lists together is to walk `all()` and ask both.
+    #[test]
+    fn every_food_grows_back() {
+        for what in ResourceType::all() {
+            // A carcass is the one food that is genuinely used up. It is a
+            // kill somebody left, not a stand of anything, and deleting it
+            // once it is eaten is the right thing - see
+            // `remove_depleted_resources`.
+            if !what.is_it_food() || what == ResourceType::Meat {
+                continue;
+            }
+            assert!(
+                what.how_fast_it_comes_back() > 0.0,
+                "{what:?} is food and does not grow back, so the world deletes \
+                 every one of them the first time it is out of season"
+            );
+        }
+    }
+
+    /// And the other half of it: a thing that comes up out of the ground is
+    /// grown, so what a patch of it carries follows the soil under it.
+    ///
+    /// Meat and fish are food and are not grown - they walk and swim - so
+    /// this asks only of the ones the ground puts up.
+    #[test]
+    fn every_food_that_comes_out_of_the_ground_is_grown() {
+        for what in ResourceType::all() {
+            if !what.is_it_food() || matches!(what, ResourceType::Meat | ResourceType::Fish) {
+                continue;
+            }
+            assert!(
+                what.is_it_grown(),
+                "{what:?} is picked off the ground and does not read the soil, \
+                 so a stand on worked-out ground carries as much as one on a \
+                 river meadow"
+            );
+            assert!(
+                (0..crate::environment::seasons::DAYS_PER_YEAR).any(|day| what.is_it_bearing(day)),
+                "{what:?} is food and bears on no day of the year, so it is \
+                 food nobody can ever pick"
+            );
+        }
     }
 }

@@ -118,6 +118,11 @@ impl TerrainResourceMapper {
             ],
             ResourceType::Honey => vec![TerrainType::Forest, TerrainType::Meadow],
 
+            // The mast falls under the trees that drop it, and nowhere else.
+            // A wood in October is a different place from a meadow in
+            // October, and this is most of why.
+            ResourceType::Nuts => vec![TerrainType::Forest, TerrainType::Hills],
+
             // Processed/finished goods don't spawn naturally
             _ => vec![],
         }
@@ -155,6 +160,12 @@ impl TerrainResourceMapper {
             // Gatherable
             ResourceType::Fish => (40, 100),
             ResourceType::Honey => (4, 12),
+
+            // A wood in mast drops a great deal at once. It is the largest
+            // single thing a forager meets in a year, and it is on the
+            // ground for a few weeks - see `bearing_window` and
+            // `how_heavy_the_mast_is`.
+            ResourceType::Nuts => (30, 80),
 
             // Wild leaf, shoot and the first roots. Thin stuff: a person
             // living on greens has to pick a great many of them, which is
@@ -221,6 +232,18 @@ pub fn what_this_ground_carries(
     at_its_best: u32,
     today: u32,
 ) -> ResourceNode {
+    what_this_ground_carries_in(grid, resource_type, pos, at_its_best, today, 0)
+}
+
+/// The same, in a named year - which only the mast cares about.
+pub fn what_this_ground_carries_in(
+    grid: &Grid,
+    resource_type: ResourceType,
+    pos: Position,
+    at_its_best: u32,
+    today: u32,
+    year: u32,
+) -> ResourceNode {
     let mut node = ResourceNode::new(resource_type, pos, at_its_best);
 
     // Out of its season it carries nothing, whatever it is. This is asked
@@ -242,6 +265,13 @@ pub fn what_this_ground_carries(
         .unwrap_or(0.5);
 
     node.amount = node.standing_capacity(fertility).max(1);
+
+    // And how good a year it is, which for the mast is most of the answer.
+    if resource_type.does_it_have_mast_years() {
+        let mast = ResourceType::how_heavy_the_mast_is(year);
+        node.amount = ((node.amount as f32 * mast).round() as u32).max(1);
+    }
+
     node
 }
 

@@ -494,6 +494,7 @@ impl Simulation {
             ResourceType::Grain => "grain",
             ResourceType::Greens => "greens",
             ResourceType::Roots => "roots",
+            ResourceType::Nuts => "nuts",
             ResourceType::Herbs => "herbs",
             ResourceType::Fish => "fish",
             ResourceType::Meat => "meat",
@@ -973,6 +974,8 @@ impl Simulation {
             // What there is to eat before anything has ripened
             "greens" => Some(ResourceType::Greens),
             "roots" => Some(ResourceType::Roots),
+            // The mast, which is the best of it and only there in October
+            "nuts" => Some(ResourceType::Nuts),
             "water" => Some(ResourceType::Water),
             // Clothing materials. Flax and cotton grow in patches an agent can
             // walk to; hides and wool come off animals, so they are here for

@@ -89,10 +89,28 @@ fn being_ill_costs_and_then_passes() {
     let mut worst = started_at;
     while simulation.current_tick < runs_until + 2 {
         simulation.tick();
-        let agent = &simulation.population.agents[0];
-        if !agent.state.is_alive {
-            break;
-        }
+
+        // Feed and water this person, so that what comes off their health
+        // over the days is the illness and nothing else.
+        //
+        // `one_person` hands them an empty pack in an emptied world and an
+        // ailment lasts days, so without this the test is a race between the
+        // illness running its course and thirst killing them first. Thirst
+        // was winning: their health fell a quarter of a point a tick with
+        // `what_last_took_health` reading "thirst" from the first tick to the
+        // last, and they died of dehydration on tick 90. The claim below -
+        // that being ill takes something off - was being carried entirely by
+        // that, and would have passed with the illness doing nothing at all.
+        // It only showed when the mast changed how much the world spawns and
+        // the death moved a few ticks earlier, past the end of the loop.
+        let now = simulation.current_tick;
+        let agent = &mut simulation.population.agents[0];
+        agent.state.last_ate_tick = now;
+        agent.state.ticks_without_food = 0;
+        agent.state.last_drank_tick = now;
+        agent.state.ticks_without_water = 0;
+        agent.state.physiology.hydration = 1.0;
+
         worst = worst.min(agent.state.health);
     }
 

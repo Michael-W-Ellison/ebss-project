@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `67d6e67` and the work since.
+**Last verified:** September 2026, against commit `fb2ac04` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -10699,3 +10699,137 @@ What is left to look at: whether `ResourceType::Herbs` is anywhere near where
 people actually are, and whether `Rest` can win a tick against hunger often
 enough for an ill agent to do anything at all about it. The disease model
 proper - three states, rest arithmetic, resistance - is #210 and is not this.
+
+---
+
+### 164. The best food in a temperate wood existed only in a comment, and seven lists swallowed it whole
+
+`physiology.rs` describes the nutrition database as running "from six (spring
+greens) to eighty (fat and nuts)". Nothing in the world yielded a nut. There
+was no `ResourceType` for one, no `ItemType`, no template in the food
+database, and no plant that dropped one — an oak was standing timber. The top
+of this model's own energy scale was named in a comment and nowhere else, and
+the wood in October, which is the one place and time a temperate forager has
+a great deal of dense food on the ground at once, was empty ground.
+
+**The mast is also the first thing in this model that makes one year worth
+more than another.** The seasons turn, the weather blows, and every autumn was
+otherwise identical: a settlement that got through last winter knew exactly
+what this one held. A wood does not work like that. It drops next to nothing
+for two or three years and then, all the trees of a district agreeing somehow,
+floods the ground — and the pigs, the deer and the people live or do not live
+on that. `how_heavy_the_mast_is(year)` gives two years in five a quarter crop,
+one in five two and a half times the crop, and the rest an ordinary one, worked
+out from the year rather than rolled so that every wood in a country agrees.
+A district where half the woods bore would be no gamble at all, and a gamble
+is the point: it is what a store is *for*.
+
+#### The multiplicative hash never once flooded
+
+The first version used the obvious thing — Knuth's constant and the top bits of
+the product, `(year as u64).wrapping_mul(2_654_435_761) >> 16`. Over the first
+twenty years that produces
+
+```
+0.000  0.503  0.006  0.510  0.013  0.517  0.020  0.524  0.027  0.531 ...
+```
+
+because a single multiply leaves the high bits of a small input linear in it.
+Lean, ordinary, lean, ordinary, forever; no wood ever flooded and the whole
+point of the thing was gone. A splitmix64 finaliser — three shift-xor-multiply
+rounds — breaks it up, and over two hundred years lands 76 lean, 90 ordinary
+and 34 mast against the 80/80/40 asked for.
+
+#### And then it fell through seven hand-written lists
+
+This is the defect this project keeps finding, at its widest yet. A new food
+was added and **seven separate matches, none of which knows about the others,
+each had to be told about it by hand**:
+
+| the list | what it decides | what its silence did |
+|---|---|---|
+| `ResourceType::how_fast_it_comes_back` | regrowth rate | `_ => 0.0`, so not renewable |
+| `ResourceType::is_it_food` | can a person eat it | invisible to the forager |
+| `ResourceType::is_it_grown` | does the soil decide the crop | ignored the ground |
+| `ItemType::is_it_food` | is this in a pack food | not eaten once carried |
+| `Simulation::resource_name` / the reverse | asking for it by name | unaskable |
+| `getting.rs`'s basket list | a basket or an armful a trip | one nut a trip |
+| `food.rs::edible_resources` | what the drive layer forages | never gathered |
+
+The first one is the worst, and it is silent. A resource with no regrowth rate
+is not renewable, and `remove_depleted_resources` **deletes a non-renewable
+node the moment it is empty**. Out of its bearing window a nut stand is empty
+by design, so all twenty-five stands on every map were deleted on the first
+tick of the world and no autumn ever came. Measured: 25 nut nodes at tick 0,
+0 at mid-autumn, 0 in anybody's pack, across twelve worlds.
+
+`how_fast_it_comes_back` has swallowed a food this way three times now, and the
+comment above it has promised a guard called `every_food_grows_back` since the
+second time. **That guard had never been written.** It is written now, and so
+is `every_food_that_comes_out_of_the_ground_is_grown`; both walk `all()` rather
+than naming anything, which is the only shape that catches the next one.
+
+#### What it is worth
+
+After the seven lists were fixed, across twelve worlds at mid-autumn:
+
+| | before | after |
+|---|---|---|
+| nut stands on the map | 0 | 300 (25 a world) |
+| nuts standing in the wood | 0 | 9,691 |
+| nuts in somebody's pack | 0 | 569 |
+| worlds where anybody has any | 0/12 | 7/12 |
+
+And against the first winter, paired on seeds 1000–1063:
+
+| | before | after |
+|---|---|---|
+| reached winter with somebody | 62/64 | 62/64 |
+| came out the other side | 11/62 | 16/62 |
+| people out of winter | 13 | 18 |
+| alive a year and four days on | 11/64 | 16/64 |
+
+Half again as many settlements survive their first winter. Sixty-four draws
+with counts of 11 and 16 is not a large enough sample to call that precisely,
+and it is offered as a direction rather than a coefficient. Note also that
+**year 0 is an ordinary mast year** — `how_heavy_the_mast_is(0)` is 1.00 — so
+this is the mast at its average and none of the swing. Nothing in the harness
+reaches a lean year (year 2) or a flood (year 4); what a settlement does when
+the wood fails is not yet measured.
+
+#### Two tests moved, and both were resting on something else
+
+Adding twenty-five stands of food to a map changes where people go, so two
+live-settlement tests moved. Neither was tuned green.
+
+**`being_ill_costs_and_then_passes`** panicked indexing an empty population.
+Following it down: the person's health was falling a quarter of a point a
+tick with `what_last_took_health` reading `"thirst"` from the first tick to
+the last, and they died of dehydration on tick 90. The test's claim — that
+being ill takes something off — **was being carried entirely by thirst, and
+would have passed with the illness doing nothing at all**. It only showed
+because the death moved a few ticks earlier, past the end of the loop. The
+person is fed and watered each tick now, so what comes off is the ailment.
+
+**`news_reaches_everybody_within_earshot`** fell to 2 of 4. It was a block of
+four worlds allowing one to miss, which is not a rate. Measured wider it is
+19 of 24 and 10 of 12 — the claim holds in about four settlements in five —
+so it is twelve worlds and two thirds of them now, set from the measurement
+rather than to the failure.
+
+And one went the other way: **`lies_are_told_and_found_out_in_a_settlement`,
+left failing as the evidence for #160, now passes**, with nothing whatever
+changed in the trust machinery. More food on the map means more people alive
+at four thousand ticks and more chances to be told something. #160's finding
+stands — taking somebody's word is vanishingly rare — but part of what made it
+look like *never* was that nobody lived long enough.
+
+#### What is not here
+
+A mast does not regrow within its own autumn; what is on the ground is what
+fell. The bearing window gates growth to six weeks and the mast multiplier
+caps how full a stand gets, so a picked-over wood does refill inside those
+weeks, which a real one does not. Squirrels and pigs do not compete for it.
+And the mast year is worked out from the calendar year alone, so it is the
+same everywhere and does not run in the streaks a real wood does — a flood
+year exhausts the trees and is followed by lean ones.
