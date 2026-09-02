@@ -832,7 +832,19 @@ pub struct Ailment {
     /// And when it will have run its course.
     pub until: u32,
     /// How badly, from nought to one.
+    ///
+    /// This is the live figure and a remedy moves it - see
+    /// `Agent::take_a_remedy`. What it started at is `at_its_worst`.
     pub severity: f32,
+
+    /// What it was at its worst, before anybody treated it.
+    ///
+    /// Kept so that easing can be capped against the illness itself rather
+    /// than against whatever it has already been eased to, which is the
+    /// difference between a remedy that helps and a remedy that, taken often
+    /// enough, cures. Nothing in this model cures anything.
+    #[serde(default)]
+    pub at_its_worst: f32,
 }
 
 impl Ailment {
@@ -848,6 +860,43 @@ impl Ailment {
     /// not simply a slower way of dying.
     pub const THE_SHORTEST_IT_LASTS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
     pub const THE_LONGEST_IT_LASTS: u32 = 10 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// How bad it was before anybody did anything about it.
+    ///
+    /// A saved game from before remedies existed has nought here, and nought
+    /// means "as bad as it is now" rather than "no illness at all".
+    pub fn at_its_worst(&self) -> f32 {
+        if self.at_its_worst > 0.0 {
+            self.at_its_worst
+        } else {
+            self.severity
+        }
+    }
+
+    /// What sort of trouble this is, so a remedy can be right or wrong for it.
+    ///
+    /// **Every illness in this model is a bad gut** - raw flesh, food on the
+    /// turn, foul ground - which is not a shortcut so much as a fact about
+    /// what laid people up before anybody boiled water. The match is written
+    /// out rather than defaulted so that the day something else makes
+    /// somebody ill, this is a place that has to be looked at.
+    pub fn what_sort_it_is(&self) -> crate::environment::remedies::WhatARemedyEases {
+        use crate::environment::remedies::WhatARemedyEases as Eases;
+
+        match self.from.as_str() {
+            // What people were actually ill with before anybody boiled
+            // water: it went in at one end.
+            Agent::OFF_RAW_FLESH | Agent::OFF_FOOD_ON_THE_TURN | Agent::OFF_FOUL_GROUND => {
+                Eases::TheGut
+            }
+            // A soaking in the cold that turned into something.
+            Agent::OFF_A_SOAKING => Eases::TheChest,
+            // And the pre-antibiotic killer: a wound that did not close.
+            Agent::OFF_A_WOUND_THAT_TURNED => Eases::TheSkin,
+            // Anything new: the gut, because most of it is.
+            _ => Eases::TheGut,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -918,6 +967,14 @@ pub struct AgentState {
     /// that costs, it is the days after it.
     #[serde(default)]
     pub salt_in_me: f32,
+
+    /// A wound that has not closed, nought to one.
+    ///
+    /// Opened by `take_damage` and closing on its own clock. While it is
+    /// open it can turn - see `Agent::OFF_A_WOUND_THAT_TURNED` - which is
+    /// what actually killed people who survived the animal.
+    #[serde(default)]
+    pub an_open_wound: f32,
 }
 
 impl AgentState {
@@ -952,6 +1009,7 @@ impl AgentState {
             ailing: None,
             what_last_took_health: None,
             salt_in_me: 0.0,
+            an_open_wound: 0.0,
         }
     }
 
@@ -1033,6 +1091,13 @@ impl AgentState {
 
     /// Take damage
     pub fn take_damage(&mut self, amount: f32) {
+        // A blow leaves something open, and how open depends on how hard it
+        // was. This is the one place a wound is opened, because
+        // `take_damage` is the one place a blow lands - hunger and cold go
+        // through `lose_health` and leave nothing to fester.
+        let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
+        self.an_open_wound = self.an_open_wound.max(opened);
+
         self.lose_health(amount, "a blow");
     }
 
@@ -1043,6 +1108,20 @@ impl AgentState {
     /// gave **"unknown cause" for 70% of every death in this model** - by the
     /// time anybody asks, the hunger has been eaten away and the cold has
     /// worn off, and the honest answer to every question is no.
+    /// How hard a blow has to be before it leaves anything worth calling a
+    /// wound.
+    ///
+    /// A blow of this size leaves one that is as open as they come. A scratch
+    /// leaves a scratch.
+    pub const WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND: f32 = 25.0;
+
+    /// How much of an open wound closes in a tick.
+    ///
+    /// A fortnight to close the worst of them, on twelve ticks to the day,
+    /// which is about right for something nobody stitched.
+    pub const HOW_FAST_A_WOUND_CLOSES: f32 =
+        1.0 / (14.0 * crate::environment::seasons::TICKS_PER_DAY as f32);
+
     pub fn lose_health(&mut self, amount: f32, to: &str) {
         if amount <= 0.0 {
             return;
@@ -1971,6 +2050,7 @@ impl Agent {
             since: now,
             until: now + how_long,
             severity,
+            at_its_worst: severity,
         });
 
         // And it is a thing that happened for a reason. This is the whole of
@@ -1995,6 +2075,61 @@ impl Agent {
         self.state.ailing.as_ref()
     }
 
+    /// How often an open wound turns, in a tick, at its worst.
+    ///
+    /// About one in three hundred, which over the fortnight a bad wound takes
+    /// to close comes to rather better than an even chance of getting away
+    /// with it. That is the shape of the thing: most people were all right,
+    /// and the ones who were not died of it.
+    const HOW_OFTEN_A_WOUND_TURNS: f64 = 0.0035;
+
+    /// And how often a soaking in the cold turns into a chill.
+    ///
+    /// Read against how much the weather is actually taking out of somebody,
+    /// so a mild damp day is nothing and a January night in the open is not.
+    const HOW_OFTEN_A_SOAKING_TELLS: f64 = 0.02;
+
+    /// A wound closes, or it turns.
+    fn tick_the_wound(&mut self, now: u32) {
+        use rand::Rng;
+
+        if self.state.an_open_wound <= 0.0 {
+            return;
+        }
+
+        // Only an open wound can turn, and only somebody not already ill can
+        // come down with it - nothing in this model stacks.
+        if self.state.ailing.is_none() {
+            let odds = Self::HOW_OFTEN_A_WOUND_TURNS * self.state.an_open_wound as f64;
+            if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
+                let how_bad = 0.4 + 0.5 * self.state.an_open_wound;
+                self.taken_ill_with(Self::OFF_A_WOUND_THAT_TURNED, how_bad, now);
+            }
+        }
+
+        self.state.an_open_wound =
+            (self.state.an_open_wound - AgentState::HOW_FAST_A_WOUND_CLOSES).max(0.0);
+    }
+
+    /// Cold and wet, for long enough, comes to something.
+    ///
+    /// Called with what the weather is costing this tick, which is already
+    /// the answer to "how cold, how wet, how sheltered" - see
+    /// `update_exposure`. Nothing here needs to ask those three again.
+    pub fn a_soaking_may_tell(&mut self, what_the_weather_costs: f32, now: u32) {
+        use rand::Rng;
+
+        if what_the_weather_costs <= 0.0 || self.state.ailing.is_some() {
+            return;
+        }
+
+        let odds = Self::HOW_OFTEN_A_SOAKING_TELLS * what_the_weather_costs.min(1.0) as f64;
+        if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
+            let how_bad = (0.2 + what_the_weather_costs).clamp(0.2, 0.8);
+            self.taken_ill_with(Self::OFF_A_SOAKING, how_bad, now);
+        }
+    }
+
     /// A tick of being ill: it costs, and then it is over.
     fn tick_ailment(&mut self, now: u32) {
         let Some(ailing) = self.state.ailing.as_ref() else {
@@ -2013,6 +2148,144 @@ impl Agent {
             (self.state.health - severity * Self::WHAT_A_TICK_OF_ILLNESS_COSTS).max(0.0);
         self.state.energy =
             (self.state.energy - severity * Self::WHAT_ILLNESS_TAKES_OUT_OF_YOU).max(0.0);
+    }
+
+    /// Take something for it.
+    ///
+    /// **This is the whole of the treatment in this model, and it is
+    /// deliberately not very much.** A remedy takes something off how badly
+    /// somebody is laid up; it never shortens the illness by a single tick,
+    /// and no amount of it can take off more than
+    /// `THE_MOST_A_HERBAL_CAN_DO`. That cap is the line between easing and
+    /// curing, and every caveat in the specification is on the easing side of
+    /// it: aloe is "not a replacement for burn or wound care", echinacea's
+    /// "clinical benefits remain uncertain", garlic is not "an antibiotic
+    /// substitute". A settlement can have the whole hedgerow and still bury
+    /// people.
+    ///
+    /// The wrong remedy is still worth something - somebody has been looked
+    /// after - but only a quarter, which is what makes knowing one herb from
+    /// another worth having.
+    ///
+    /// Returns how much came off, or `None` if there was nothing to treat or
+    /// the thing was not a remedy at all.
+    pub fn take_a_remedy(&mut self, item_id: &str, now: u32) -> Option<f32> {
+        use crate::environment::remedies;
+
+        let remedy = remedies::what_this_is_good_for(item_id)?;
+        let ailing = self.state.ailing.as_ref()?;
+
+        if ailing.is_over(now) {
+            return None;
+        }
+
+        let worst = ailing.at_its_worst();
+        let sort = ailing.what_sort_it_is();
+
+        // A practised hand gets more out of the same handful: knowing when to
+        // pick it, how much to use, and what to do with it. The untaught get
+        // rather less and never nothing.
+        let hand = self
+            .skills
+            .get_skill_if_exists(super::SkillType::Herbalism)
+            .map(|skill| skill.level)
+            .unwrap_or(0)
+            .clamp(0, 10) as f32
+            / 10.0;
+        let by_hand = Self::WHAT_AN_UNTAUGHT_HAND_GETS
+            + (1.0 - Self::WHAT_AN_UNTAUGHT_HAND_GETS) * hand;
+
+        let for_the_right_thing = if remedy.eases == sort {
+            1.0
+        } else {
+            remedies::WHAT_THE_WRONG_REMEDY_IS_STILL_WORTH
+        };
+
+        // Against the illness at its worst, never against what it has already
+        // been eased to: this is what stops a second dose taking a second
+        // third off, and a sixth dose curing.
+        let already_off = (worst - ailing.severity).max(0.0);
+        let room = (worst * remedies::THE_MOST_A_HERBAL_CAN_DO - already_off).max(0.0);
+        let eased = (worst * remedy.takes_off * by_hand * for_the_right_thing).min(room);
+
+        if eased <= 0.0 {
+            return Some(0.0);
+        }
+
+        if let Some(ailing) = self.state.ailing.as_mut() {
+            ailing.severity = (ailing.severity - eased).max(0.0);
+        }
+
+        Some(eased)
+    }
+
+    /// What somebody who has never been taught gets out of a remedy.
+    ///
+    /// Half. The plants do what the plants do; what a herbalist adds is
+    /// knowing which one, when it was picked and how much of it - real, and
+    /// not the difference between life and death.
+    const WHAT_AN_UNTAUGHT_HAND_GETS: f32 = 0.5;
+
+    /// Whether this one would be glad of something for it.
+    pub fn wants_something_for_it(&self) -> bool {
+        self.state.ailing.is_some()
+    }
+
+    /// The first thing in the pack that is any use as a remedy, best first.
+    ///
+    /// Best for what actually ails them, so a herbalist reaches past the aloe
+    /// for the mint. Somebody with no Herbalism at all reaches for whatever
+    /// is nearest, which is what `WHAT_AN_UNTAUGHT_HAND_GETS` is about at the
+    /// other end.
+    pub fn what_i_have_for_it(&self) -> Option<String> {
+        use crate::environment::remedies;
+
+        let sort = self.state.ailing.as_ref()?.what_sort_it_is();
+        let taught = self
+            .skills
+            .get_skill_if_exists(super::SkillType::Herbalism)
+            .map(|skill| skill.level > 0)
+            .unwrap_or(false);
+
+        let mut best: Option<(f32, String)> = None;
+        for (id, item) in self.inventory.get_all_items().iter() {
+            if item.quantity == 0 {
+                continue;
+            }
+            let Some(remedy) = remedies::what_this_is_good_for(id) else {
+                continue;
+            };
+
+            // Somebody who has been taught knows which is which. Somebody who
+            // has not takes the first thing that is called medicine.
+            let worth = if taught && remedy.eases != sort {
+                remedy.takes_off * remedies::WHAT_THE_WRONG_REMEDY_IS_STILL_WORTH
+            } else {
+                remedy.takes_off
+            };
+
+            if best.as_ref().map(|(so_far, _)| worth > *so_far).unwrap_or(true) {
+                best = Some((worth, id.clone()));
+            }
+        }
+
+        best.map(|(_, id)| id)
+    }
+
+    /// Whether there is anything in the pack worth carrying to somebody
+    /// else who is ill.
+    ///
+    /// Anything at all that is a remedy: what is right for them depends on
+    /// what ails *them*, which this cannot see. It is the cheap check that
+    /// stops a healthy agent walking across the camp with an empty hand.
+    pub fn what_i_have_for_it_for_somebody_else(&self) -> Option<String> {
+        use crate::environment::remedies;
+
+        self.inventory
+            .get_all_items()
+            .iter()
+            .find(|(id, item)| item.quantity > 0 && remedies::is_a_remedy(id))
+            .map(|(id, _)| id.clone())
     }
 
     /// Whether this one has learned, the hard way, to leave a thing alone.
@@ -2080,6 +2353,23 @@ impl Agent {
 
     /// And off living on fouled ground.
     pub const OFF_FOUL_GROUND: &'static str = "foul ground";
+
+    /// A chill: cold and wet, for long enough, with no roof.
+    ///
+    /// The winter had nothing to do with illness in this model until the
+    /// thermometer started reading below freezing - see ISSUES_FOUND.md #161.
+    /// A person soaked through in a January wind gets ill, and that is most
+    /// of what a shelter and a coat are *for* beyond the exposure damage
+    /// itself.
+    pub const OFF_A_SOAKING: &'static str = "a soaking";
+
+    /// A wound that did not close.
+    ///
+    /// The thing that killed people who survived the bear. Nothing in this
+    /// model has ever cared what happened to a wound after the blow landed:
+    /// health came back at a flat rate and that was the end of it. A wound
+    /// that turns is why a man with aloe is better off than a man without.
+    pub const OFF_A_WOUND_THAT_TURNED: &'static str = "a wound that turned";
 
     /// Food went off in this agent's own hands.
     ///
@@ -3990,6 +4280,7 @@ impl Agent {
         // And whatever this one has come down with, which costs a little
         // every tick and then is over
         self.tick_ailment(current_tick);
+        self.tick_the_wound(current_tick);
 
         // And the salt, if this one has been drinking out of the sea
         self.tick_salt();
@@ -4101,7 +4392,7 @@ impl Agent {
         }
 
         // Remove completely spoiled food (freshness <= 0)
-        let spoiled_items: Vec<String> = self.inventory.items.iter()
+        let spoiled_items: Vec<String> = self.inventory.get_all_items().iter()
             .filter(|(_, item)| {
                 item.food_data.as_ref()
                     .map(|f| f.freshness <= 0.0)
@@ -4165,6 +4456,7 @@ impl Agent {
         has_shelter: bool,
         has_water_access: bool,
         time_of_day: f32,
+        now: u32,
     ) -> f32 {
         let damage = self.exposure_status.update(
             &self.body_temperature,
@@ -4178,6 +4470,9 @@ impl Agent {
         // Apply exposure damage to health
         if damage > 0.0 {
             self.state.lose_health(damage * 10.0, "the weather");
+            // And a soaking in the cold is a thing people came down with,
+            // rather than only a thing that wore them down.
+            self.a_soaking_may_tell(damage, now);
         }
 
         damage
@@ -5431,6 +5726,7 @@ impl Agent {
             Action::TakeCutting => "takecutting".to_string(),
             Action::PlantCutting => "plantcutting".to_string(),
             Action::SpreadMuck => "spreadmuck".to_string(),
+            Action::Treat { .. } => "treat".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
             Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
@@ -5480,6 +5776,11 @@ impl Agent {
             // Freezing is not an attempt at anything and teaches nothing: an
             // agent that lived through it did not do so by freezing well
             Action::Freeze => return,
+            // Doctoring is its own lesson. A man who has dosed four people
+            // and watched them all get better anyway must not learn that he
+            // is a hunter, and folding it into `Foraging` would teach him
+            // about picking herbs rather than about giving them.
+            Action::Treat { .. } => Undertaking::Healing,
             Action::Fish => Undertaking::Fishing,
             Action::SetSnare | Action::CheckSnares => Undertaking::Trapping,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,

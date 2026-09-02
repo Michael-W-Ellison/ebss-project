@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `9fd2299` and the work since.
+**Last verified:** September 2026, against commit `67d6e67` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -10623,3 +10623,79 @@ takes the ordinary temperate country. Every world this project has measured
 has been that country, so nothing is wrong today - but set a world to Taiga
 and its thermometer would know while its plants did not. Carrying the country
 into those two places is the rest of this job.
+
+### 163. A herbal that eases and does not cure, and three more ways to be ill
+
+The third of the four sections of the sustenance specification. Before this,
+`ResourceType::Herbs` spawned, was gathered, became `ItemType::Herbs`, taught
+Herbalism - and then **nothing**. There was no treatment of any kind in this
+model, which is the standing half of #202: illness is the only thing that
+kills anybody and nothing touches it. The chamomile, mint, sage, aloe,
+lavender and ginseng in the flora table were scenery.
+
+**The specification is unusually careful about its ten medicinal plants, and
+that care is the model.** Aloe is "topical gel for minor skin irritation;
+**not a replacement for burn or wound care**". Echinacea is "widely used in
+herbal products, **clinical benefits remain uncertain**". Garlic has
+"historical medicinal use; **avoid treating it as an antibiotic substitute**".
+Turmeric's "bioavailability and clinical effects vary". Only ginger gets a
+plain claim, and it is for nausea.
+
+So a remedy **eases and does not cure**: it takes something off how badly
+somebody is laid up, it never shortens the illness by a tick, and
+`THE_MOST_A_HERBAL_CAN_DO` is a third however much of it anybody swallows.
+The cap is measured against the illness at its worst rather than against what
+it has already been eased to, which is what stops a sixth dose curing. The
+wrong remedy is still worth a quarter - somebody has been looked after - which
+makes knowing one herb from another worth having without making it the
+difference between living and dying. A settlement can have the whole
+hedgerow and still bury people, which is what happened.
+
+The table is keyed on what a plant actually drops, so a medicine nobody can
+pick cannot get into it by accident:
+`every_remedy_is_something_you_could_actually_pick` proves it. Ginger,
+calendula, lemon balm, echinacea, garlic and turmeric are not in it because
+no plant in this world yields them yet; they belong with the rest of the crop
+list.
+
+**Three more ways to be ill.** Every ailment in this model was a bad gut -
+raw flesh, food on the turn, foul ground - which is not a shortcut so much as
+a fact about what laid people up before anybody boiled water. But it left the
+topical and chest remedies with nothing to be right about. Two more causes,
+both with machinery that already existed:
+
+- **A wound that turned.** `AgentState::take_damage` is the one place a blow
+  lands, so it is the one place a wound opens; hunger and cold go through
+  `lose_health` and leave nothing to fester. An open wound closes over a
+  fortnight and can turn while it is open. This is the pre-antibiotic killer
+  and it is what makes a topical the right answer to something.
+- **A soaking.** Read off what the weather is already costing, so a mild damp
+  day is nothing and a January night in the open is not. The winter had no
+  connection to illness at all until the thermometer started reading below
+  freezing - #161.
+
+Measured over twelve worlds of twelve founders, a year each, sampled as it
+went because the dead leave the roll:
+
+| came down with | times |
+|---|---|
+| raw flesh | 233 |
+| foul ground | 50 |
+| a wound that turned | 13 |
+| a soaking | 1 |
+| food on the turn | 1 |
+
+**And it does not yet fire in play.** `remedies given: 0` across all twelve
+worlds. The machinery is wired end to end and unit-tested - `Action::Treat`,
+the drive arms, the executor, the easing - and no agent in a live settlement
+ever took a remedy, because no agent was carrying one. Sending an ill agent
+to gather herbs when its pack is empty moved the survivors from **0 to 6** of
+144 and still produced no dose, which means the herbs are not being found
+either. This is the same class as #191 - a path that exists, compiles, is
+tested in a fixture, and has never once run in a settlement - and it is named
+here rather than claimed as working.
+
+What is left to look at: whether `ResourceType::Herbs` is anywhere near where
+people actually are, and whether `Rest` can win a tick against hunger often
+enough for an ill agent to do anything at all about it. The disease model
+proper - three states, rest arithmetic, resistance - is #210 and is not this.

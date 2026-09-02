@@ -210,6 +210,7 @@ impl Simulation {
     pub(in crate::analytics) fn update_agent_exposure(&mut self) {
         let weather = self.world.climate.weather.clone();
         let time_of_day = self.world.climate.calendar.time_of_day;
+        let now = self.current_tick;
 
         // Collect position data first to avoid borrow issues with climate.get_climate
         let agent_data: Vec<_> = self.population.agents.iter()
@@ -327,6 +328,7 @@ impl Simulation {
                 has_shelter,
                 has_water_access,
                 time_of_day,
+                now,
             );
 
             // Log critical exposure events

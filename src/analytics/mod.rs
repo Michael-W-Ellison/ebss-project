@@ -391,6 +391,12 @@ impl Simulation {
             Action::TakeCutting => Some(ActionType::Farming),
             Action::PlantCutting => Some(ActionType::Farming),
             Action::SpreadMuck => Some(ActionType::Farming),
+            // Herbalism is what a remedy is read against, and Herbalism is
+            // what gathering teaches.
+            // Watching somebody dose a sick man is watching a problem being
+            // worked at, which is the nearest thing the observation tiers
+            // have to doctoring.
+            Action::Treat { .. } => Some(ActionType::ProblemSolving),
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
             Action::SetSnare | Action::CheckSnares => Some(ActionType::Mining),
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking

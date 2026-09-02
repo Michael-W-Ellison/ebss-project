@@ -422,3 +422,243 @@ fn a_starving_person_eats_it_anyway() {
         "a man three days without food eats what is in front of him"
     );
 }
+
+// --- and something to do about it -----------------------------------------
+
+/// A remedy eases an illness. It does not cure one, and no amount of it will.
+///
+/// This is the whole of the treatment in this model and it is deliberately
+/// not very much. The specification is unusually careful about its ten
+/// medicinal plants - aloe is "not a replacement for burn or wound care",
+/// echinacea's "clinical benefits remain uncertain", garlic is not "an
+/// antibiotic substitute" - and that care is the model: a settlement can have
+/// the whole hedgerow and still bury people.
+#[test]
+fn a_remedy_eases_and_does_not_cure() {
+    use crate::environment::remedies;
+
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.taken_ill_with(Agent::OFF_RAW_FLESH, 0.8, 100);
+
+    let at_its_worst = agent.what_ails_me().expect("ill").severity;
+    let until = agent.what_ails_me().expect("ill").until;
+
+    // Mint is for the gut, and a bad gut is what everybody in this model has.
+    let eased = agent.take_a_remedy("mint_leaves", 100).expect("a remedy");
+    assert!(eased > 0.0, "mint should be worth something for a bad gut");
+
+    let after = agent.what_ails_me().expect("still ill");
+    assert!(
+        after.severity < at_its_worst,
+        "it should be easier to bear: {} against {at_its_worst}",
+        after.severity
+    );
+    assert_eq!(
+        after.until, until,
+        "and not one tick shorter: a remedy is not a cure"
+    );
+
+    // Take it over and over and it stops helping. The cap is against the
+    // illness at its worst, not against what it has already been eased to,
+    // which is what stops a sixth dose curing.
+    for _ in 0..20 {
+        agent.take_a_remedy("mint_leaves", 100);
+    }
+    let dosed = agent.what_ails_me().expect("still ill");
+    assert!(
+        dosed.severity >= at_its_worst * (1.0 - remedies::THE_MOST_A_HERBAL_CAN_DO) - 0.001,
+        "no amount of herbs takes off more than a third: {} against {at_its_worst}",
+        dosed.severity
+    );
+    assert!(agent.is_ailing(), "and they are still ill at the end of it");
+}
+
+/// The right remedy for the trouble is worth four times the wrong one.
+///
+/// Aloe is for the skin and a bad gut is not the skin. It is still worth
+/// something - somebody has been looked after - and that is
+/// `WHAT_THE_WRONG_REMEDY_IS_STILL_WORTH`, which is what makes knowing one
+/// herb from another worth having without making it the difference between
+/// living and dying.
+#[test]
+fn the_right_herb_for_the_trouble_is_worth_the_most() {
+    use crate::environment::remedies::{self, WhatARemedyEases};
+
+    let eased_by = |remedy: &str, cause: &str| {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.taken_ill_with(cause, 0.8, 100);
+        agent.take_a_remedy(remedy, 100).unwrap_or(0.0)
+    };
+
+    // A bad gut, treated with a gut herb and with a skin one.
+    let right = eased_by("mint_leaves", Agent::OFF_RAW_FLESH);
+    let wrong = eased_by("aloe_gel", Agent::OFF_RAW_FLESH);
+    assert!(right > wrong, "mint beats aloe for a bad gut: {right} against {wrong}");
+    assert!(wrong > 0.0, "and being looked after is worth something");
+
+    // And the other way about: a wound that turned wants the topical.
+    let on_a_wound = eased_by("aloe_gel", Agent::OFF_A_WOUND_THAT_TURNED);
+    assert!(
+        on_a_wound > eased_by("mint_leaves", Agent::OFF_A_WOUND_THAT_TURNED),
+        "aloe beats mint for a wound"
+    );
+
+    // The unproven ones are worth almost nothing, whatever they are given
+    // for, which is what the specification says about them.
+    let ginseng = remedies::what_this_is_good_for("ginseng_root").expect("in the table");
+    assert_eq!(ginseng.eases, WhatARemedyEases::NothingAnybodyCanShow);
+    assert!(
+        ginseng.takes_off
+            < remedies::what_this_is_good_for("mint_leaves").unwrap().takes_off,
+        "prized, rare, expensive, and never shown to do this"
+    );
+
+    // Nothing in this model is ill in the nerves, so lavender is always the
+    // wrong remedy - which is the honest place for it.
+    let lavender = remedies::what_this_is_good_for("lavender").expect("in the table");
+    assert_eq!(lavender.eases, WhatARemedyEases::TheNerves);
+}
+
+/// Every remedy in the table is something a plant in this world actually
+/// drops, or comes off a patch of herbs.
+///
+/// A table of medicines nobody can get hold of is the same defect as a biome
+/// no map can produce.
+#[test]
+fn every_remedy_is_something_you_could_actually_pick() {
+    use crate::environment::flora::FloraRegistry;
+    use crate::environment::remedies;
+
+    let flora = FloraRegistry::new();
+    let mut droppable: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for plant in flora.all_species() {
+        for drop in &plant.drops {
+            droppable.insert(drop.material_id.clone());
+        }
+    }
+    // And what a patch of herbs gathers as.
+    droppable.insert("herbs".to_string());
+
+    for remedy in remedies::EVERY_REMEDY {
+        assert!(
+            droppable.contains(remedy.id),
+            "{} is in the remedy table and nothing in this world yields it",
+            remedy.id
+        );
+    }
+}
+
+/// A wound that does not close can turn, and that is what killed people who
+/// survived the animal.
+#[test]
+fn a_wound_can_turn() {
+    crate::core::dice::seed(5_100);
+
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.take_damage(30.0);
+    assert!(
+        agent.state.an_open_wound > 0.9,
+        "a heavy blow leaves an open wound: {}",
+        agent.state.an_open_wound
+    );
+
+    // Hunger and cold do not leave wounds - only blows do.
+    let mut worn_down = Agent::new(AgentConfig::default());
+    worn_down.state.lose_health(30.0, "hunger");
+    assert_eq!(
+        worn_down.state.an_open_wound, 0.0,
+        "being starved does not leave anything to fester"
+    );
+
+    // Over a fortnight of an open wound, somebody comes down with something.
+    let mut came_down = 0;
+    for seed in 0..24u64 {
+        crate::core::dice::seed(5_200 + seed);
+        let mut one = Agent::new(AgentConfig::default());
+        one.state.take_damage(30.0);
+        for tick in 0..(14 * crate::environment::seasons::TICKS_PER_DAY) {
+            one.tick_with_time(tick);
+            if one.is_ailing() {
+                break;
+            }
+        }
+        if one.what_ails_me().map(|a| a.from == Agent::OFF_A_WOUND_THAT_TURNED).unwrap_or(false) {
+            came_down += 1;
+        }
+    }
+    assert!(
+        came_down > 0 && came_down < 24,
+        "most people were all right and some were not: {came_down} of 24"
+    );
+}
+
+/// A soaking in the cold is a thing you come down with, not only a thing that
+/// wears you down.
+#[test]
+fn a_soaking_in_the_cold_tells() {
+    let mut came_down = 0;
+    for seed in 0..24u64 {
+        crate::core::dice::seed(6_100 + seed);
+        let mut agent = Agent::new(AgentConfig::default());
+        // A hard day of it: what `update_exposure` would be handing over on a
+        // January night in the open.
+        for tick in 0..crate::environment::seasons::TICKS_PER_DAY {
+            agent.a_soaking_may_tell(0.8, tick);
+        }
+        if agent.what_ails_me().map(|a| a.from == Agent::OFF_A_SOAKING).unwrap_or(false) {
+            came_down += 1;
+        }
+    }
+    assert!(
+        came_down > 0,
+        "somebody out in it all day should come down with something"
+    );
+
+    // And it is a chest complaint, which is not what a gut herb is for.
+    let mut chilled = Agent::new(AgentConfig::default());
+    chilled.taken_ill_with(Agent::OFF_A_SOAKING, 0.6, 10);
+    assert_eq!(
+        chilled.what_ails_me().unwrap().what_sort_it_is(),
+        crate::environment::remedies::WhatARemedyEases::TheChest
+    );
+    let sage = chilled.take_a_remedy("sage_leaves", 10).unwrap_or(0.0);
+    let mint = {
+        let mut other = Agent::new(AgentConfig::default());
+        other.taken_ill_with(Agent::OFF_A_SOAKING, 0.6, 10);
+        other.take_a_remedy("mint_leaves", 10).unwrap_or(0.0)
+    };
+    assert!(sage > mint, "a gargle beats a stomach herb for a chill: {sage} against {mint}");
+}
+
+/// An ill agent with something in the pack takes it, rather than only lying
+/// down.
+#[test]
+fn somebody_ill_reaches_for_what_they_have() {
+    let mut agent = Agent::new(AgentConfig::default());
+    assert!(agent.what_i_have_for_it().is_none(), "nothing wrong, nothing wanted");
+
+    agent.taken_ill_with(Agent::OFF_RAW_FLESH, 0.6, 50);
+    assert!(
+        agent.what_i_have_for_it().is_none(),
+        "ill with an empty pack is still nothing to take"
+    );
+
+    agent
+        .inventory
+        .add_item(InventoryItem::new("mint_leaves".to_string(), 3));
+    assert_eq!(agent.what_i_have_for_it().as_deref(), Some("mint_leaves"));
+
+    // A taught hand reaches past the aloe for the mint; an untaught one takes
+    // whatever is called medicine.
+    agent
+        .inventory
+        .add_item(InventoryItem::new("aloe_gel".to_string(), 3));
+    agent
+        .skills
+        .practise(crate::agents::SkillType::Herbalism, 400, 50);
+    assert_eq!(
+        agent.what_i_have_for_it().as_deref(),
+        Some("mint_leaves"),
+        "a herbalist knows which is which"
+    );
+}

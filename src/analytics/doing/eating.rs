@@ -797,4 +797,161 @@ impl Simulation {
 
         result
     }
+
+    /// `Action::Treat`.
+    ///
+    /// Somebody takes something for what ails them, or gives it to somebody
+    /// who is ill. **It eases and it does not cure** - see
+    /// `crate::environment::remedies` - and the whole of what it buys is some
+    /// of the week back.
+    ///
+    /// Before this there was no treatment of any kind in the model. `Herbs`
+    /// spawned, were gathered, became `ItemType::Herbs`, taught Herbalism and
+    /// then sat in the pack for ever: ISSUES_FOUND.md #202.
+    pub(in crate::analytics) fn treating(
+        &mut self,
+        agent_index: usize,
+        who: Option<uuid::Uuid>,
+        tick_now: u32,
+    ) -> ActionResult {
+        // Who is being treated. Nobody is treated at a distance: a remedy has
+        // to be handed over, which is why this checks the reach.
+        let patient = match who {
+            None => agent_index,
+            Some(id) => {
+                let here = self.population.agents[agent_index].state.position;
+                let found = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == id && other.state.is_alive);
+                let Some(found) = found else {
+                    return ActionResult::failure("Nobody of that name here".to_string());
+                };
+                let there = self.population.agents[found].state.position;
+                let apart = (here.0 - there.0).abs().max((here.1 - there.1).abs());
+                if apart > Self::HOW_CLOSE_YOU_HAVE_TO_BE_TO_DOSE_SOMEBODY {
+                    return ActionResult::failure("Too far off to hand it over".to_string());
+                }
+                found
+            }
+        };
+
+        if !self.population.agents[patient].wants_something_for_it() {
+            return ActionResult::failure("There is nothing the matter".to_string());
+        }
+
+        // The remedy comes out of the pack of whoever is doing the treating,
+        // and it is chosen for what is actually wrong with the patient.
+        let sort = self.population.agents[patient]
+            .what_ails_me()
+            .map(|ailing| ailing.what_sort_it_is());
+        let Some(sort) = sort else {
+            return ActionResult::failure("There is nothing the matter".to_string());
+        };
+
+        let Some(remedy) = self.what_in_this_pack_would_answer(agent_index, sort) else {
+            return ActionResult::failure("Nothing in the pack for it".to_string());
+        };
+
+        // It is used up. A handful of mint is a handful of mint.
+        if self.population.agents[agent_index]
+            .inventory
+            .remove_item(&remedy, 1)
+            .is_none()
+        {
+            return ActionResult::failure("Nothing in the pack for it".to_string());
+        }
+
+        let eased = self.population.agents[patient]
+            .take_a_remedy(&remedy, tick_now)
+            .unwrap_or(0.0);
+
+        self.population.agents[agent_index].skills.practise(
+            crate::agents::SkillType::Herbalism,
+            Self::WHAT_DOSING_SOMEBODY_TEACHES,
+            tick_now,
+        );
+
+        // Being looked after is worth something in itself, whether or not the
+        // herb was. This is the placebo and the company, and it is the reason
+        // the wrong remedy is not worth nothing.
+        if patient != agent_index {
+            let name = self.population.agents[agent_index].id;
+            self.population.agents[patient].emotions.add_happiness(
+                crate::agents::EmotionSource::Agent(name),
+                Self::WHAT_BEING_LOOKED_AFTER_IS_WORTH,
+            );
+        }
+
+        debug!(
+            "Agent {} treated {} with {remedy}, easing {eased:.3}",
+            self.population.agents[agent_index].id,
+            if patient == agent_index { "himself".to_string() } else { "somebody".to_string() },
+        );
+
+        if eased <= 0.0 {
+            // It was a remedy, it was used up, and it did nothing that could
+            // be measured. That is a real outcome and it is recorded as a
+            // failure so the agent can learn it - see `Undertaking::Healing`.
+            return ActionResult::failure(format!("{remedy} did nothing"))
+                .with_energy_cost(Self::WHAT_DOSING_SOMEBODY_COSTS);
+        }
+
+        ActionResult::success()
+            .with_energy_cost(Self::WHAT_DOSING_SOMEBODY_COSTS)
+            .with_message(format!("Eased it with {remedy}"))
+    }
+
+    /// The best thing in a pack for a trouble of this sort.
+    ///
+    /// A taught hand knows which is which; an untaught one takes whatever is
+    /// called medicine - see `Agent::what_i_have_for_it`, which this is the
+    /// simulation's side of.
+    fn what_in_this_pack_would_answer(
+        &self,
+        agent_index: usize,
+        sort: crate::environment::remedies::WhatARemedyEases,
+    ) -> Option<String> {
+        use crate::environment::remedies;
+
+        let agent = &self.population.agents[agent_index];
+        let taught = agent
+            .skills
+            .get_skill_if_exists(crate::agents::SkillType::Herbalism)
+            .map(|skill| skill.level > 0)
+            .unwrap_or(false);
+
+        let mut best: Option<(f32, String)> = None;
+        for (id, item) in agent.inventory.get_all_items().iter() {
+            if item.quantity == 0 {
+                continue;
+            }
+            let Some(remedy) = remedies::what_this_is_good_for(id) else {
+                continue;
+            };
+            let worth = if taught && remedy.eases != sort {
+                remedy.takes_off * remedies::WHAT_THE_WRONG_REMEDY_IS_STILL_WORTH
+            } else {
+                remedy.takes_off
+            };
+            if best.as_ref().map(|(so_far, _)| worth > *so_far).unwrap_or(true) {
+                best = Some((worth, id.clone()));
+            }
+        }
+
+        best.map(|(_, id)| id)
+    }
+
+    /// How close you have to be to hand somebody a remedy.
+    const HOW_CLOSE_YOU_HAVE_TO_BE_TO_DOSE_SOMEBODY: i32 = 2;
+
+    /// What dosing somebody teaches about herbs.
+    const WHAT_DOSING_SOMEBODY_TEACHES: u32 = 8;
+
+    /// And what it costs: the picking is done, this is the sitting with them.
+    const WHAT_DOSING_SOMEBODY_COSTS: f32 = 1.0;
+
+    /// What being looked after is worth to somebody who is ill.
+    const WHAT_BEING_LOOKED_AFTER_IS_WORTH: f32 = 0.15;
 }

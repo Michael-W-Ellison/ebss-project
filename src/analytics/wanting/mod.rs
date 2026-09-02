@@ -703,7 +703,21 @@ impl Simulation {
             }
 
             DriveType::Rest => {
-                if agent.fatigue.is_sleeping {
+                // Something for it first, and then lie down. A remedy costs a
+                // turn and eases the week; it is the one thing a person can
+                // do about being ill besides waiting, and until now there was
+                // nothing at all - see ISSUES_FOUND.md #202.
+                if agent.wants_something_for_it() && agent.what_i_have_for_it().is_some() {
+                    Some(Action::Treat { who: None })
+                } else if agent.wants_something_for_it() && !agent.fatigue.is_sleeping {
+                    // Ill and nothing in the pack. **Measured: without this,
+                    // the whole of the treatment machinery never fired once
+                    // in twelve worlds** - nobody carries herbs unless
+                    // something sends them for herbs, so a settlement with a
+                    // hedgerow full of mint never touched it. Going for it is
+                    // what somebody ill and on their feet does.
+                    Some(Action::Gather { resource_type: "herbs".to_string() })
+                } else if agent.fatigue.is_sleeping {
                     None
                 } else if let Some(clean) = self.somewhere_that_does_not_stink(agent_position) {
                     // "Waste should smell unpleasant and repulse the agents."

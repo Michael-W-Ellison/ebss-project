@@ -251,6 +251,13 @@ impl Simulation {
     ) -> Option<Action> {
         use crate::agents::LifeStage;
 
+        // Somebody of your own, lying ill within reach, and something in the
+        // pack for it: that is what looking after your own comes to before
+        // it comes to standing between them and a wolf.
+        if let Some(sick) = self.one_of_mine_who_is_ill(agent, agent_position) {
+            return Some(Action::Treat { who: Some(sick) });
+        }
+
         // Only the small ones. An adolescent can look after itself.
         let mine: Vec<(i32, i32, i32)> = self
             .population
@@ -445,4 +452,52 @@ impl Simulation {
             .map(|building| building.is_completed())
             .unwrap_or(false)
     }
+
+    /// One of this agent's own, ill, close enough to hand something to.
+    ///
+    /// Kin rather than anybody, because `Protection` is the drive for one's
+    /// own and a settlement where everybody doses everybody is a settlement
+    /// with no herbs left by Tuesday. Nearest first.
+    fn one_of_mine_who_is_ill(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        // Nothing to give is nothing to offer.
+        agent.what_i_have_for_it_for_somebody_else()?;
+
+        let mut nearest: Option<(i32, uuid::Uuid)> = None;
+        for other in self.population.agents.iter() {
+            if !other.state.is_alive || other.id == agent.id {
+                continue;
+            }
+            if !other.wants_something_for_it() {
+                continue;
+            }
+            let theirs = other.parent_ids.contains(&agent.id)
+                || agent.parent_ids.contains(&other.id)
+                || other.parent_ids.iter().any(|p| agent.parent_ids.contains(p));
+            if !theirs {
+                continue;
+            }
+
+            let apart = (agent_position.0 - other.state.position.0)
+                .abs()
+                .max((agent_position.1 - other.state.position.1).abs());
+            if apart > Self::HOW_FAR_YOU_WILL_GO_TO_DOSE_YOUR_OWN {
+                continue;
+            }
+            if nearest.map(|(so_far, _)| apart < so_far).unwrap_or(true) {
+                nearest = Some((apart, other.id));
+            }
+        }
+
+        nearest.map(|(_, who)| who)
+    }
+
+    /// How far somebody will carry a remedy to one of their own.
+    ///
+    /// Across the camp, and no further. Anything past that is a journey and
+    /// wants an errand rather than a drive.
+    const HOW_FAR_YOU_WILL_GO_TO_DOSE_YOUR_OWN: i32 = 12;
 }

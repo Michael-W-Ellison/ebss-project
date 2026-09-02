@@ -180,6 +180,13 @@ pub enum Undertaking {
     Crafting,
     /// Dealing with other people
     Dealing,
+    /// Giving somebody something for what ails them.
+    ///
+    /// Its own undertaking rather than a corner of `Foraging`, and for the
+    /// reason `Trapping` is kept out of `Hunting`: picking a herb and dosing
+    /// a sick man are two different things to be good at, and a settlement's
+    /// herbalist is usually not its best forager.
+    Healing,
 }
 
 /// What an agent has found out about the things it does.

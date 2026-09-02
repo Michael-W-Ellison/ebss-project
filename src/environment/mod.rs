@@ -35,6 +35,9 @@ pub mod biome;
 pub mod weather;
 pub mod exposure;
 pub mod seasons;
+
+/// What a herbal is good for, and how little that is.
+pub mod remedies;
 mod minecraft_survival;
 
 pub use material::*;
@@ -307,6 +310,12 @@ pub enum Action {
     SetSnare,
     /// Walk the line and take what has gone into it
     CheckSnares,
+    /// Take something for what ails you, or give it to somebody who is ill.
+    ///
+    /// `None` is yourself. Nothing here cures anybody - see
+    /// [`crate::environment::remedies`] - it takes something off how badly
+    /// they are laid up, and that is all a herbal has ever done.
+    Treat { who: Option<uuid::Uuid> },
     /// Wait/idle
     Wait,
 }
@@ -376,6 +385,14 @@ impl Action {
             Action::TakeCutting => Some(DriveType::Sustenance),
             Action::PlantCutting => Some(DriveType::Sustenance),
             Action::SpreadMuck => Some(DriveType::Sustenance),
+            // Taking something for it answers the want to be well enough to
+            // work, which is what `Rest` is; giving it to somebody else is
+            // looking after your own, which is `Protection`.
+            Action::Treat { who } => Some(if who.is_some() {
+                DriveType::Protection
+            } else {
+                DriveType::Rest
+            }),
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),
             Action::Move { .. } => None,
