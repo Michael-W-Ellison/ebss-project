@@ -293,10 +293,15 @@ fn news_reaches_everybody_within_earshot() {
     // twenty-five more stands of food on the map and the settlement spread
     // out differently, and that says nothing about whether news travels.
     // Measured across a wider block it is 19 of 24 and 10 of 12, so the claim
-    // holds in about four settlements in five. Twelve worlds, and two thirds
-    // of them, which is a clear majority and still well under what was
-    // measured.
-    let worlds = 12;
+    // holds in about four settlements in five. Two thirds of them is a clear
+    // majority and still well under that.
+    //
+    // Twelve worlds turned out to be too thin for that threshold all the
+    // same: when ill agents started actually fetching herbs, and so spending
+    // turns away from the camp, the twelve-world block read 7. Twenty-four
+    // holds. A block wide enough to be a rate has to be wide enough to stay
+    // one when the settlement's habits change.
+    let worlds = 24;
     let heard_by_more_than_one = (0..worlds)
         .filter(|world_number| widest_a_teller_reached(4_101 + world_number) > 1)
         .count();

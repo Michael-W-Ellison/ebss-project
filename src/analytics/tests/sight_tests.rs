@@ -65,18 +65,39 @@ fn sight_discovers_the_world_and_blindness_does_not() {
         blind.apply_trait_sensory_modifications();
     }
 
+    // Read both as it goes and stop when either is gone. Two founders alone
+    // in a world do not reliably last two hundred ticks, and the dead are
+    // swept out of the population - so indexing them at the end was a panic
+    // waiting for the day something upstream made this pair a little less
+    // lucky. What this test is about is what each of them saw while it was
+    // alive to see it.
+    let (sighted_id, blind_id) = (
+        simulation.population.agents[0].id,
+        simulation.population.agents[1].id,
+    );
+
+    let mut seeing = 0usize;
+    let mut blind = 0usize;
+
     for _ in 0..200 {
         simulation.tick();
-    }
 
-    let seeing = simulation.population.agents[0]
-        .exploration_knowledge
-        .explored_tiles
-        .len();
-    let blind = simulation.population.agents[1]
-        .exploration_knowledge
-        .explored_tiles
-        .len();
+        let look = |id: uuid::Uuid, sim: &Simulation| {
+            sim.population
+                .agents
+                .iter()
+                .find(|agent| agent.id == id)
+                .map(|agent| agent.exploration_knowledge.explored_tiles.len())
+        };
+
+        match (look(sighted_id, &simulation), look(blind_id, &simulation)) {
+            (Some(a), Some(b)) => {
+                seeing = a;
+                blind = b;
+            }
+            _ => break,
+        }
+    }
 
     assert!(
         seeing > 0,

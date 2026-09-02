@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `bada9e3` and the work since.
+**Last verified:** September 2026, against commit `bd8f374` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -10953,3 +10953,142 @@ happened. One lucky seed had been hiding a coin-flip. The threshold is now a
 third — set under the measurement rather than at it — and what it guards is
 that the chain is reachable at all, which is the most this test was ever able
 to say.
+
+---
+
+### 166. "herbs" was missing from a list, and that one word was the whole of #163
+
+`Simulation::gathered_as` says, in its own docstring, that it is "the same
+vocabulary `Gather` answers to, kept here so that the decision and the
+executor cannot drift apart". It was one of **two** hand-written lists saying
+that, and they drifted apart three times. Two of them are recorded in the
+comments of the other list:
+
+> grain "fell through to unknown resource type and failed… which is how a
+> people that had never handled grain came to have none of it to sow"
+
+> clay "has been spawning on every riverbank and every marsh in every world
+> since the project began and no agent could ever pick any of it up: it was
+> missing from this list"
+
+The third was **`"herbs"`**, and it was the entire cause of #163.
+
+`Action::Gather { resource_type: "herbs" }` is what item 3's Rest arm sends an
+ill agent with an empty pack to do. Measured over twelve worlds and 5,327
+person-samples: Rest presses hardest on somebody ill in **194 of 426** ill
+samples, so the errand was chosen constantly; there were **7,003** bearing
+herb patches across those maps and the nearest was a **median of twelve paces
+away**; and **not one person ever held a remedy.** Every one of those turns
+came back "Unknown resource type: herbs" and the whole treatment machinery -
+`Action::Treat`, the drive arm, the executor, the easing, all of it
+unit-tested - never ran once in a settlement.
+
+There is one list now: `what_a_gather_asks_for` walks `ResourceType::all()`
+and inverts `gathered_as`, with `"generic"` handled separately because it is
+not a thing in the world but what the Industry arm says when it cannot name
+what it wants. A list cannot fail this way if there is only one of it. Three
+guard tests hold it there, including one that names every literal the drive
+ladder hands to `Gather` - the round trip alone cannot catch a name the ladder
+invents that no resource answers to, which is exactly what `"herbs"` was.
+
+**Merging the two lists took thirst away from everybody**, because `"water"`
+was the one name the old list had and `gathered_as` did not. Twelve worlds
+fell from 5,327 person-samples to 286 and every survivor still ill had Thirst
+pressing hardest on them. A settlement that cannot ask for water is dead in a
+fortnight. It is in `gathered_as` now.
+
+#### What it is worth
+
+With the fix, over twelve worlds: **2,015** person-samples holding a remedy
+where there were none, **148** of the ill holding one, **200** with somebody
+within two paces who is. Sixty-four worlds, settlements out of their first
+winter: **25/62 against 27/64** at the previous commit — within noise. The
+machinery runs and costs nothing measurable.
+
+#### And what the model would not take
+
+The obvious next step was the other half of item 6: the six plants the
+specification names that this project has no plant for — ginger, calendula,
+lemon balm, garlic, echinacea, turmeric. They were written: six
+`PlantSpecies`, six `ARemedy` entries, and the two the specification is most
+careful about (echinacea, "clinical benefits remain uncertain"; turmeric,
+"bioavailability and clinical effects vary") filed under
+`NothingAnybodyCanShow`, taking that category to four of seventeen.
+
+**They are not in the tree.** Sixty-four worlds, seeds 1000–1063, settlements
+coming out of their first winter and people alive a year on:
+
+| | out of winter | alive a year on |
+|---|---|---|
+| before any of this | 27/64 | 26/64 |
+| the gather-vocabulary fix alone | 25/62 | 24/64 |
+| the six plants alone | 29/63 | 27/64 |
+| **both together** | **16/62** | **14/64** |
+| both, errand bounded to six paces | 12/62 | 11/64 |
+| both, errand bounded to one pace | 12/62 | 9/64 |
+| both, with self-dosing capped | 16/62 | 14/64 |
+| both, errand removed entirely | 14/62 | 12/64 |
+| both, Rest standing aside for hunger | 9/64 | 8/64 |
+
+Either change alone is fine. Together they cost about 40% of every settlement
+in the model, and **none of the five things tried recovered it.** Bounding the
+walk did not (the walk is not the mechanism — one pace is as bad as
+twenty-five). Capping how often a person doses themselves did not. Removing
+the errand did not. Making Rest stand aside for hunger and thirst made it
+worse.
+
+So the six plants are not shipped. The rule for this item was "added where
+they would behave differently, skipped where they would be a name", and a
+change that costs four settlements in ten is neither: it is a change whose
+mechanism is not understood, and the honest thing is to say so rather than
+ship it or quietly tune around it.
+
+#### What this is really about
+
+It is not about the herbal. Rest presses on somebody ill at a **median of
+115**, where an ordinary drive sits near one. Once that happens Rest wins the
+tick over and over for the whole week an illness lasts, and whatever the Rest
+arm offers is what that person does instead of eating. What it offers at the
+bottom is `Sleep`. **An ill person in this model sleeps through their own
+hunger**, and until the vocabulary was fixed a broken string had been masking
+that, because a failed action left the tick free for something else.
+
+That is #210 (the disease model: three states, rest arithmetic, resistance)
+and #202, and it wants doing properly rather than patched. What to try for the
+herbal afterwards is to let somebody ill **stoop** for mint they are already
+walking past — `something_worth_stooping_for` is exactly that shape and costs
+nothing — rather than setting out for it.
+
+#### Three tests moved
+
+`sight_discovers_the_world_and_blindness_does_not` panicked on an index: two
+founders alone in a world do not reliably last two hundred ticks and the dead
+are swept out of the population, so it had been one unlucky world away from a
+panic since it was written. It reads both agents as it goes now.
+
+`news_reaches_everybody_within_earshot` fell to 7 of 12 — the block set at
+twelve in #165 was still too thin, because ill agents fetching herbs spend
+turns away from the camp. Twenty-four holds. A block wide enough to be a rate
+has to stay one when the settlement's habits change.
+
+`lies_are_told_and_found_out_in_a_settlement` fails again. It is the evidence
+for #160, it failed for most of this project, it went green by accident when
+the mast put more food on the map (#164), and it has gone back. Nothing about
+trust changed in either direction.
+
+#### What was skipped from the crop list, and why
+
+The rest of the specification's crops are names in this model, and adding them
+would have been padding: aromatics (garlic, onion) and most fruit and
+vegetables are already `ResourceType::Food`, `Greens` and `Roots` under other
+words; sesame and sunflower would behave exactly as `Flax` does.
+
+Two would genuinely behave differently and are not small:
+
+- **The grains split.** One `ResourceType::Grain` grows the same everywhere.
+  Rye and barley stand cold that wheat will not, and with fourteen biomes and
+  real temperatures (#161, #162) that would make *where you are* decide *what
+  you can sow*. It is a deep change to a deeply wired variant.
+- **Orchards.** A tree that takes years to come into bearing and then bears
+  for decades is a multi-year investment, and nothing in this model has one.
+  `ResourceType::Food` covers the fruit; it does not cover the waiting.

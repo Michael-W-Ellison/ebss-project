@@ -485,6 +485,15 @@ impl Simulation {
             ResourceType::Stone => "stone",
             ResourceType::Iron => "iron",
             ResourceType::Food => "food",
+
+            // Water belongs here as much as anything does, and it was the one
+            // name the two lists did not share. Merging them without it took
+            // `Action::Gather { "water" }` away from everybody: across twelve
+            // worlds the person-samples fell from 5,327 to 286 and every
+            // person still alive and ill had Thirst pressing hardest on them.
+            // A settlement that cannot ask for water is dead in a fortnight.
+            ResourceType::Water => "water",
+
             ResourceType::Clay => "clay",
             ResourceType::Salt => "salt",
             ResourceType::Sand => "sand",
@@ -961,41 +970,39 @@ impl Simulation {
     fn what_a_gather_asks_for(named: &str) -> Option<crate::world::ResourceType> {
         use crate::world::ResourceType;
 
-        match named {
-            "wood" => Some(ResourceType::Wood),
-            "stone" => Some(ResourceType::Stone),
-            "iron" => Some(ResourceType::Iron),
-            "food" => Some(ResourceType::Food),
-            // Wild grain stands in the world and there was no way to ask for
-            // it by name: a request for grain fell through to "unknown
-            // resource type" and failed. It came back only as an edible
-            // substitute for a request for food, which is how a people that
-            // had never handled grain came to have none of it to sow.
-            "grain" => Some(ResourceType::Grain),
-            // What there is to eat before anything has ripened
-            "greens" => Some(ResourceType::Greens),
-            "roots" => Some(ResourceType::Roots),
-            // The mast, which is the best of it and only there in October
-            "nuts" => Some(ResourceType::Nuts),
-            // The pod crop, and the one that pays the ground back
-            "legumes" => Some(ResourceType::Legumes),
-            "water" => Some(ResourceType::Water),
-            // Clothing materials. Flax and cotton grow in patches an agent can
-            // walk to; hides and wool come off animals, so they are here for
-            // when an agent has somewhere to get them rather than because the
-            // ground offers any.
-            "flax" => Some(ResourceType::Flax),
-            "cotton" => Some(ResourceType::Cotton),
-            // Clay has been spawning on every riverbank and every marsh in
-            // every world since the project began and no agent could ever pick
-            // any of it up: it was missing from this list.
-            "clay" => Some(ResourceType::Clay),
-            "salt" => Some(ResourceType::Salt),
-            "hides" => Some(ResourceType::Hides),
-            "wool" => Some(ResourceType::Wool),
-            "generic" => Some(ResourceType::Wood), // Default to wood for generic
-            _ => None,
+        // "generic" is not a thing in the world. It is what the drive ladder
+        // says when Industry wins and it cannot name what it wants, and it
+        // comes out as a trip for timber.
+        if named == "generic" {
+            return Some(ResourceType::Wood);
         }
+
+        // Everything else is the inverse of `gathered_as`, walked rather than
+        // written out again.
+        //
+        // This was a second hand-written list, and `gathered_as` claims in its
+        // own docstring to be "the same vocabulary `Gather` answers to, kept
+        // here so that the decision and the executor cannot drift apart". They
+        // drifted apart three times. Its own comments record two of them:
+        // grain, which "fell through to unknown resource type and failed" so
+        // that a people who had never handled grain had none to sow; and clay,
+        // which "has been spawning on every riverbank and every marsh in every
+        // world since the project began and no agent could ever pick any of it
+        // up: it was missing from this list."
+        //
+        // The third was **herbs**, and it cost the whole of the treatment
+        // machinery. `Action::Gather { resource_type: "herbs" }` is what an
+        // ill agent with an empty pack is sent to do, Rest wins the tick for
+        // 194 of 426 ill person-samples, and every one of those turns came
+        // back "Unknown resource type: herbs". Measured across twelve worlds
+        // and 5,327 person-samples: **not one person ever held a remedy**,
+        // with seven thousand bearing herb patches on the maps and the nearest
+        // one a median twelve paces away. See ISSUES_FOUND.md #163 and #166.
+        //
+        // A list cannot fail this way if there is only one of it.
+        ResourceType::all()
+            .into_iter()
+            .find(|what| Self::gathered_as(*what) == Some(named))
     }
 
     /// Whether an agent can stand on this tile
