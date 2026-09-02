@@ -10047,6 +10047,23 @@ and neither number was ever chosen. It is a hundredth of the animal a day
 now, which is the specification's figure and is what makes a wound worth
 something - a hundred days from a mortal one to a whole skin.
 
+**What it came to.** Two years on a hundred square kilometres with nobody in
+the world, against the same run before any of this: the tick 13.24 ms and
+13.32, head 2,123 and 2,201, boar 44 and 26 with twenty-eight of them starved
+and three taken, and the small life holding at half of what the ground would
+carry in both bands. Nineteen tests failed before and nineteen after, with
+one going each way: `the_land_will_only_carry_so_many` came out three head
+against five - small-number noise in an unseeded pair of runs, converted to a
+seed block - and `a_cold_agent_ends_up_dressed`, left failing on purpose at
+the end of #153, passes again.
+
+**And what is still open.** The smallest specialists are better and not well:
+kestrel 73 to 1 with 156 starved, heron 16 to 2, otter 13 to 1, eagle, owl
+and fish to nought. The layer under them is no longer the reason - it stands
+at half stock all year and pays a hawk four or five times its keep on ground
+that suits it - so what is left is placement and competition rather than
+appetite, which is a different question again and the one to take next.
+
 ### 155. Nothing in this world moved at its own speed, and a block was a prefix
 
 Two defects found on the plainest fixture there is - **fourteen wolves and

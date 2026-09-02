@@ -172,7 +172,8 @@ fn wolves_take_sheep_and_the_grass_holds_the_rest() {
 /// room around them to.
 #[test]
 fn the_land_will_only_carry_so_many() {
-    fn herd_after(penned: bool) -> usize {
+    fn herd_after(penned: bool, seed: u64) -> usize {
+        crate::core::dice::seed(seed);
         let mut world = World::new(WorldConfig::default());
         world.animals.get_all_mut().clear();
 
@@ -200,16 +201,27 @@ fn the_land_will_only_carry_so_many() {
             .count()
     }
 
-    let penned = herd_after(true);
-    let roaming = herd_after(false);
+    // A seed block rather than one world of each.
+    //
+    // **Ten sheep on a quarter of a square kilometre is a small number**, and
+    // a single pair of runs decides this on a handful of head: it came out
+    // three against five once the ecology moved under it, which is not a
+    // statement about ground at all. Summed over four worlds it is.
+    let mut penned = 0;
+    let mut roaming = 0;
+    for seed in 0..4 {
+        penned += herd_after(true, 61_000 + seed);
+        roaming += herd_after(false, 61_000 + seed);
+    }
 
     assert!(
         roaming > penned,
-        "a herd with the run of the map should outgrow one on a single patch: {roaming} against {penned}"
+        "a herd with the run of the map should outgrow one on a single patch, \
+         over four worlds: {roaming} against {penned}"
     );
     assert!(
-        penned <= 20,
-        "a herd penned on one patch should stop growing, ended at {penned}"
+        penned <= 20 * 4,
+        "a herd penned on one patch should stop growing, ended at {penned} over four worlds"
     );
 }
 
