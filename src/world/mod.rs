@@ -1593,8 +1593,10 @@ impl World {
                 .map(|tile| tile.terrain.terrain_type)
                 .unwrap_or(TerrainType::Plains);
 
-            let temperature = self.climate.get_temperature(resource.position, terrain_type);
-            let inflow = resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+            // What stops a spring is the ground freezing, not the air being
+            // cold for an hour - see `ClimateManager::water_temperature`.
+            let frozen = self.climate.is_the_water_frozen(resource.position, terrain_type);
+            let inflow = resource.water_inflow(terrain_type, precipitation, frozen);
 
             resource.flow = inflow;
         }
@@ -2353,12 +2355,18 @@ impl World {
                 .unwrap_or(TerrainType::Plains);
 
             let temperature = self.climate.get_temperature(resource.position, terrain_type);
+            // And how warm the water is, which is a different question and
+            // the one that decides ice. See `ClimateManager::water_temperature`.
+            let frozen_water = self.climate.is_the_water_frozen(resource.position, terrain_type);
 
             // Water is fed by the ground it sits on and the weather over it,
             // not by growing back the way a berry patch does
             if resource.resource_type == ResourceType::Water {
-                let inflow =
-                    resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+                let inflow = resource.water_inflow(
+                    terrain_type,
+                    precipitation,
+                    frozen_water,
+                );
 
                 // The rate is also the floor. What is standing in a spring is
                 // this pass's flow arriving, not a barrel somebody filled, so
@@ -2374,8 +2382,7 @@ impl World {
             // what last year's fishing left behind, so a reach that was taken
             // down to nothing fills again - see `fish_run`.
             if resource.resource_type.grows_in_water() {
-                let run =
-                    resource.fish_run(terrain_type, current_season, temperature < 0.0);
+                let run = resource.fish_run(terrain_type, current_season, frozen_water);
                 resource.take_inflow(run);
                 continue;
             }

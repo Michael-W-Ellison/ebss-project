@@ -11,25 +11,14 @@ use crate::agents::temperature::{Climate, Temperature};
 use crate::world::{Position, TerrainType};
 use std::collections::BTreeMap;
 
-/// Maps terrain types to biome types
+/// What ground of a given sort is, in an ordinary temperate country.
+///
+/// A convenience for the callers that have no world to hand and want the
+/// default. Where the country is known - which is everywhere inside a
+/// running world - `ClimateManager::biome_of` is the thing to call, because
+/// a wood in a boreal country is taiga and this cannot say so.
 pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
-    match terrain {
-        TerrainType::Plains => BiomeType::Grassland,
-        TerrainType::Forest => BiomeType::TemperateForest,
-        TerrainType::Mountain => BiomeType::Alpine,
-        TerrainType::Water => BiomeType::Coast,
-        TerrainType::Desert => BiomeType::Desert,
-        TerrainType::Wetland => BiomeType::Wetland,
-        TerrainType::Meadow => BiomeType::Grassland,
-        TerrainType::Hills => BiomeType::Grassland,
-        TerrainType::Beach => BiomeType::Coast,
-        TerrainType::Riverbank => BiomeType::Wetland,
-        TerrainType::Sea => BiomeType::Coast,
-        TerrainType::SaltMarsh => BiomeType::Wetland,
-        TerrainType::SaltFlat => BiomeType::Desert,
-        // A field is grassland that somebody has taken in hand
-        TerrainType::Farmland => BiomeType::Grassland,
-    }
+    BiomeType::THE_ORDINARY_SORT_OF_COUNTRY.on_this_ground(terrain)
 }
 
 /// Lightning strike event
@@ -94,6 +83,22 @@ pub struct ClimateManager {
     /// Current tick for lightning tracking
     pub current_tick: u32,
 
+    /// What kind of country this whole map is.
+    ///
+    /// **A hundred square kilometres is ten kilometres by ten, and that is
+    /// one climate.** A map does not run from tundra to rainforest, so the
+    /// biome family is a property of the world and the terrain picks within
+    /// it - see `BiomeType::on_this_ground`. Before this, the biome was read
+    /// off the terrain alone, which meant every wood on every map was a
+    /// temperate deciduous wood: measured, six of the ten biomes and three
+    /// of the four climate zones were unreachable on any map ever generated,
+    /// and the banana, the coffee bush, the mahogany, the mangrove, the
+    /// monkey and the parrot had nowhere at all to be put.
+    ///
+    /// Only a country can be a region. Asked to be a marsh or a mountain, it
+    /// answers with the ordinary sort - see `BiomeType::as_a_country`.
+    region: BiomeType,
+
     /// Whether world is in cold climate overall
     cold_climate: bool,
 
@@ -106,6 +111,32 @@ pub struct ClimateManager {
 
 impl ClimateManager {
     pub fn new(cold_climate: bool, wet_climate: bool) -> Self {
+        Self::in_a_country(
+            BiomeType::THE_ORDINARY_SORT_OF_COUNTRY,
+            cold_climate,
+            wet_climate,
+        )
+    }
+
+    /// The country this map is, and the weather over it.
+    pub fn in_a_country(region: BiomeType, cold_climate: bool, wet_climate: bool) -> Self {
+        let mut made = Self::the_old_way(cold_climate, wet_climate);
+        made.region = region.as_a_country();
+        made
+    }
+
+    /// What kind of country this is.
+    pub fn region(&self) -> BiomeType {
+        self.region
+    }
+
+    /// What ground of a given sort is, in this country. The one place
+    /// terrain becomes a biome.
+    pub fn biome_of(&self, terrain: TerrainType) -> BiomeType {
+        self.region.on_this_ground(terrain)
+    }
+
+    fn the_old_way(cold_climate: bool, wet_climate: bool) -> Self {
         let season = Season::Spring; // Start in spring
         let mut weather_gen = WeatherGenerator::new(
             season,
@@ -124,6 +155,7 @@ impl ClimateManager {
             biome_as_of: None,
             lightning_strikes: Vec::new(),
             current_tick: 0,
+            region: BiomeType::THE_ORDINARY_SORT_OF_COUNTRY,
             cold_climate,
             wet_climate,
             dominant_biome: None,
@@ -151,6 +183,9 @@ impl ClimateManager {
             biome_as_of: None,
             lightning_strikes: Vec::new(),
             current_tick: 0,
+            // The dominant biome is what the weather is drawn against, and
+            // it is also what kind of country this is - one answer, not two.
+            region: biome.as_a_country(),
             cold_climate,
             wet_climate,
             dominant_biome: Some(biome),
@@ -255,7 +290,7 @@ impl ClimateManager {
             self.biome_as_of = Some(now);
         }
 
-        let biome_type = terrain_to_biome(terrain);
+        let biome_type = self.region.on_this_ground(terrain);
 
         if !self.biome_today.contains_key(&biome_type) {
             let mut biome = Biome::new(biome_type);
@@ -290,6 +325,27 @@ impl ClimateManager {
         let weather_temp = self.weather.effective_temperature(biome_temp);
 
         weather_temp
+    }
+
+    /// How warm the water itself is here, as against the air over it.
+    ///
+    /// **What freezes a river is the water, not the air over it.** Both the
+    /// water's flow and the fish run were gated on `get_temperature < 0.0`,
+    /// which stops a reach the first frosty night: a river carries far more
+    /// heat than the air above it and gives it up far more slowly, and a
+    /// running one does not ice over because a night was cold. See
+    /// `BiomeType::water_temperature_at`.
+    pub fn water_temperature(&mut self, pos: Position, terrain: TerrainType) -> Temperature {
+        let biome_type = self.region.on_this_ground(terrain);
+        let season = self.calendar.current_season();
+        let hour = self.calendar.time_of_day;
+        let _ = pos;
+        biome_type.water_temperature_at(self.region, season, hour)
+    }
+
+    /// And whether that water is ice.
+    pub fn is_the_water_frozen(&mut self, pos: Position, terrain: TerrainType) -> bool {
+        self.water_temperature(pos, terrain) <= 0.0
     }
 
     /// Get climate for a position (combines biome climate with weather)
@@ -374,7 +430,11 @@ mod tests {
         assert_eq!(terrain_to_biome(TerrainType::Plains), BiomeType::Grassland);
         assert_eq!(terrain_to_biome(TerrainType::Forest), BiomeType::TemperateForest);
         assert_eq!(terrain_to_biome(TerrainType::Mountain), BiomeType::Alpine);
-        assert_eq!(terrain_to_biome(TerrainType::Water), BiomeType::Coast);
+        // A lake and a river are fresh water, and they used to be told they
+        // were the sea. What is salt is `Sea` and `Beach`.
+        assert_eq!(terrain_to_biome(TerrainType::Water), BiomeType::Freshwater);
+        assert_eq!(terrain_to_biome(TerrainType::Riverbank), BiomeType::Freshwater);
+        assert_eq!(terrain_to_biome(TerrainType::Sea), BiomeType::Coast);
     }
 
     #[test]

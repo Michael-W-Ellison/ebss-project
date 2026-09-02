@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `af2c0f6` and the work since.
+**Last verified:** September 2026, against commit `9fd2299` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -10525,3 +10525,101 @@ and it is #141 and #207's real remainder.
 `a_settlement_works_things_out_that_nobody_wrote_down` also moved back into
 the failing set. It is unseeded, it was failing before the fish change,
 passing after it, and failing now: the #132 family again.
+
+### 162. Where a place is, answered twice, and neither answer could say "tropical"
+
+The second half of the climate specification, and it turns out to be the same
+defect this project keeps finding.
+
+**Two functions, both keyed on terrain alone.** `terrain_to_biome` said what
+kind of place a tile was for the thermometer; `terrain_to_climate_zone` said
+what kind of place it was for the plants and the beasts. A mountain was
+`Alpine` to one and `Arctic` to the other, a sea was `Coast` and `Temperate`,
+a marsh was `Wetland` and `Temperate`. They agreed on every terrain, but by
+luck rather than by construction: nothing made them agree and nothing would
+have noticed if they stopped.
+
+**And keying on terrain alone means every map is one map.** A wood was a
+temperate deciduous wood wherever it stood, because `Forest` is `Forest`. Walk
+all fourteen terrains through both functions and what comes out is:
+
+- **six of the ten biomes** - Grassland, TemperateForest, Alpine, Coast,
+  Desert, Wetland. Tundra, Taiga, Tropical and Savanna were unreachable on
+  any map ever generated.
+- **three of the four climate zones**. Nothing was ever Tropical.
+- and therefore the banana tree, the coffee bush, the mahogany, the mangrove,
+  the monkey and the parrot **had nowhere at all to be put**, in any world,
+  ever.
+
+**A hundred square kilometres is ten kilometres by ten, and that is one
+climate.** A map does not run from tundra to rainforest, so the missing
+biomes are not a terrain that was left out - they are a *country* that could
+never be chosen. `ClimateManager` now carries a region, and the ground picks
+within it: `BiomeType::on_this_ground` is the one place terrain becomes a
+biome, and `climate_zone()` is derived from that biome rather than from a
+second table. `a_zone_is_what_its_biome_says` holds the old table as data and
+proves the derivation reproduces it exactly, so the join changed nothing it
+was not meant to.
+
+| country | its wood | its open ground | zone |
+|---|---|---|---|
+| Tundra | Taiga | Tundra | Arctic |
+| Taiga | Taiga | Taiga | Arctic |
+| TemperateForest | TemperateForest | Grassland | Temperate |
+| TemperateConifer | TemperateConifer | Grassland | Temperate |
+| Grassland | TemperateForest | Grassland | Temperate |
+| Mediterranean | Mediterranean | Mediterranean | Temperate |
+| Savanna | TropicalDryForest | Savanna | Tropical |
+| Tropical | Tropical | Savanna | Tropical |
+| TropicalDryForest | TropicalDryForest | Savanna | Tropical |
+| Desert | Mediterranean | Desert | Desert |
+
+Over the ten countries: **fourteen biomes and four climate zones**, and no
+species in either registry without somewhere to live.
+
+**The specification's fourteen categories out of one table.** Four of the
+fourteen - alpine, wetland, freshwater and marine - are not countries at all;
+they are what the ground does to whatever country it is in, and the
+specification says so: "Wetlands in tundra, tropics, or deserts should inherit
+those broader biome patterns", "Freshwater ... air temperature depends on
+surrounding biome". So they read the country's bands and bend them: standing
+water pulls a year in towards its own average (a marsh a quarter, a lake a
+third, the sea two thirds), and height subtracts a lapse rate. That is also
+how the three marine readings fall out without being written down three
+times: salt water freezes near minus two and never runs above thirty, so a
+polar coast reads -2 to about 9 while the tundra behind it is at forty below.
+
+**A mistake worth recording.** The first cut mapped open ground to the
+country itself, so a plain in a deciduous country came out a deciduous
+forest and `test_terrain_to_biome` caught it. A country's kind names its
+climate, not what is standing on any particular field: open ground in a
+temperate country is grassland, in a polar country tundra, in the tropics
+savanna.
+
+**And the water is not the air over it.** Both a spring's flow and a fish run
+were gated on `get_temperature < 0.0` - the **air** - so a reach stopped the
+first frosty night. Water carries far more heat and gives it up far more
+slowly: `BiomeType::water_temperature_at` lags the day almost entirely and
+clamps to the specification's own nought-to-twenty-five for fresh water,
+because water below freezing is ice and ice is the state the callers actually
+want. A temperate river no longer ices over because one night was cold; a
+boreal one does.
+
+Measured, sixty-four worlds of twelve founders on the same seeds:
+
+| | before | after |
+|---|---|---|
+| reached winter with somebody | 63/64 | 61/64 |
+| came out the other side | 9/63 | 10/61 |
+| people into winter, and out | 515 -> 11 | 494 -> 10 |
+| alive a year on | 9/64 | 8/64 |
+
+Flat. Thirty-two worlds first read 6 against 3 and that was noise, which is
+what sixty-four are for.
+
+**Still open.** The region is not threaded into the flora and the fauna:
+`survey_the_grounds` and the spawn pools call `terrain_to_climate_zone`, which
+takes the ordinary temperate country. Every world this project has measured
+has been that country, so nothing is wrong today - but set a world to Taiga
+and its thermometer would know while its plants did not. Carrying the country
+into those two places is the rest of this job.

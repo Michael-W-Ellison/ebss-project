@@ -601,3 +601,224 @@ const EVERY_BIOME: [crate::environment::biome::BiomeType; 10] = {
         B::Tropical, B::Savanna, B::Alpine, B::Wetland, B::Coast,
     ]
 };
+
+// --- one vocabulary for where a place is ----------------------------------
+
+/// A climate zone is what its biome says, and it says exactly what the old
+/// table said.
+///
+/// There were two functions keyed on terrain alone - `terrain_to_biome` and
+/// `terrain_to_climate_zone` - which is one question answered twice, and the
+/// two answers only happened to agree: a mountain was `Alpine` to the
+/// thermometer and `Arctic` to the fauna, a sea was `Coast` and `Temperate`,
+/// a marsh was `Wetland` and `Temperate`. The zone is derived from the biome
+/// now, and this is the proof that the derivation changed nothing: it holds
+/// the old table as data and checks every terrain against it.
+#[test]
+fn a_zone_is_what_its_biome_says() {
+    use crate::environment::fauna::terrain_to_climate_zone;
+    use crate::environment::flora::ClimateZone;
+    use crate::world::{terrain_to_biome, TerrainType};
+
+    // The table that used to be hand-written in `terrain_to_climate_zone`.
+    let as_it_was = |terrain: TerrainType| match terrain {
+        TerrainType::Desert | TerrainType::SaltFlat => ClimateZone::Desert,
+        TerrainType::Mountain => ClimateZone::Arctic,
+        _ => ClimateZone::Temperate,
+    };
+
+    for terrain in EVERY_TERRAIN {
+        assert_eq!(
+            terrain_to_climate_zone(terrain),
+            as_it_was(terrain),
+            "{terrain:?} used to be {:?}",
+            as_it_was(terrain)
+        );
+        assert_eq!(
+            terrain_to_biome(terrain).climate_zone(),
+            terrain_to_climate_zone(terrain),
+            "{terrain:?}: the zone must be the biome's own answer"
+        );
+    }
+}
+
+/// What kind of country a map is decides what its ground is.
+///
+/// Before this the biome came off the terrain alone, so every wood on every
+/// map was a temperate deciduous wood: **six of ten biomes and three of four
+/// climate zones were unreachable on any map**, and the banana, the coffee
+/// bush, the mahogany, the mangrove, the monkey and the parrot could never be
+/// placed anywhere at all. A hundred square kilometres is ten kilometres by
+/// ten and that is one climate, so the country is a property of the world and
+/// the ground picks within it.
+#[test]
+fn the_country_decides_what_its_woods_are() {
+    use crate::environment::BiomeType;
+    use crate::world::TerrainType;
+
+    // The same wood, in four countries.
+    assert_eq!(
+        BiomeType::TemperateForest.on_this_ground(TerrainType::Forest),
+        BiomeType::TemperateForest
+    );
+    assert_eq!(
+        BiomeType::Taiga.on_this_ground(TerrainType::Forest),
+        BiomeType::Taiga
+    );
+    assert_eq!(
+        BiomeType::Tropical.on_this_ground(TerrainType::Forest),
+        BiomeType::Tropical
+    );
+    assert_eq!(
+        BiomeType::Tundra.on_this_ground(TerrainType::Plains),
+        BiomeType::Tundra
+    );
+
+    // And a tropical country puts something in the tropical zone, which no
+    // map could do before.
+    assert_eq!(
+        BiomeType::Tropical.on_this_ground(TerrainType::Forest).climate_zone(),
+        crate::environment::flora::ClimateZone::Tropical
+    );
+
+    // A mountain is a height and a marsh is wet ground: neither is a
+    // country, and both are the same kind of thing wherever they stand.
+    for country in [BiomeType::Tundra, BiomeType::Tropical, BiomeType::Desert] {
+        assert_eq!(country.on_this_ground(TerrainType::Mountain), BiomeType::Alpine);
+        assert_eq!(country.on_this_ground(TerrainType::Wetland), BiomeType::Wetland);
+        assert_eq!(country.on_this_ground(TerrainType::Water), BiomeType::Freshwater);
+        assert_eq!(country.on_this_ground(TerrainType::Sea), BiomeType::Coast);
+    }
+}
+
+/// But what those places are *like* is the country's business.
+///
+/// "Wetlands in tundra, tropics, or deserts should inherit those broader
+/// biome patterns", and a lake and a mountain the same. Four kinds of ground
+/// reading their year off ten kinds of country is how the specification's
+/// fourteen categories come out of one table instead of fourteen.
+#[test]
+fn a_marsh_in_a_cold_country_is_a_cold_marsh() {
+    use crate::environment::BiomeType;
+
+    let midwinter = |ground: BiomeType, country: BiomeType| {
+        ground.what_the_year_does_here_in(country).winter.0
+    };
+
+    for ground in [BiomeType::Wetland, BiomeType::Freshwater, BiomeType::Alpine] {
+        assert!(
+            midwinter(ground, BiomeType::Taiga) < midwinter(ground, BiomeType::TemperateForest),
+            "{ground:?} in a boreal country is colder than in a temperate one"
+        );
+        assert!(
+            midwinter(ground, BiomeType::Tropical) > midwinter(ground, BiomeType::TemperateForest),
+            "{ground:?} in the tropics is warmer"
+        );
+    }
+
+    // Standing water shortens a year: a marsh swings less than the country
+    // around it, a lake less again, and the sea least of all.
+    let swing = |ground: BiomeType| {
+        let year = ground.what_the_year_does_here_in(BiomeType::TemperateForest);
+        year.summer.1 - year.winter.0
+    };
+    let open_country = {
+        let year = BiomeType::TemperateForest.what_the_year_does_here();
+        year.summer.1 - year.winter.0
+    };
+    assert!(swing(BiomeType::Wetland) < open_country);
+    assert!(swing(BiomeType::Freshwater) < swing(BiomeType::Wetland));
+    assert!(swing(BiomeType::Coast) < swing(BiomeType::Freshwater));
+
+    // High ground is the country moved bodily down, so an alpine winter is
+    // colder than the valley's in every country.
+    assert!(midwinter(BiomeType::Alpine, BiomeType::Tropical) < 15.0);
+}
+
+/// The sea reads the specification's three marine bands, off the three kinds
+/// of country, because salt water cannot go below about minus two.
+#[test]
+fn the_sea_has_three_readings_and_they_fall_out_of_the_country() {
+    use crate::environment::BiomeType;
+
+    let sea = |country: BiomeType| BiomeType::Coast.what_the_year_does_here_in(country);
+
+    // "Polar marine -2C to 5C" - against a tundra whose own winter is -40.
+    let polar = sea(BiomeType::Tundra);
+    assert!(
+        polar.winter.0 >= -2.5 && polar.summer.1 < 12.0,
+        "a polar sea is held near freezing, not at the land's forty below: {polar:?}"
+    );
+
+    // "Temperate marine 5C to 20C"
+    let temperate = sea(BiomeType::TemperateForest);
+    assert!(
+        temperate.winter.0 > polar.winter.0 && temperate.summer.1 < 25.0,
+        "a temperate sea sits between: {temperate:?}"
+    );
+
+    // "Tropical marine 20C to 30C"
+    let tropical = sea(BiomeType::Tropical);
+    assert!(
+        tropical.winter.0 > 18.0 && tropical.summer.1 <= 30.0,
+        "and a tropical sea is warm all year and never above thirty: {tropical:?}"
+    );
+}
+
+/// The water is not the air over it, and it is the water that freezes.
+///
+/// Both a spring's flow and a fish run were gated on the **air** dropping
+/// below zero, so a reach stopped the first frosty night. Water carries far
+/// more heat and gives it up far more slowly: it barely notices the day at
+/// all, and a temperate river does not ice over because a night was cold.
+#[test]
+fn a_river_is_not_the_air_over_it() {
+    use crate::environment::BiomeType;
+
+    let river = BiomeType::Freshwater;
+    let country = BiomeType::TemperateForest;
+
+    // Round the clock in midwinter the air moves several degrees and the
+    // water hardly moves at all.
+    let air_at_dawn = river.temperature_at(Season::Winter, 5.0);
+    let air_at_noon = river.temperature_at(Season::Winter, 12.0);
+    let water_at_dawn = river.water_temperature_at(country, Season::Winter, 5.0);
+    let water_at_noon = river.water_temperature_at(country, Season::Winter, 12.0);
+
+    assert!(
+        (water_at_noon - water_at_dawn).abs() < (air_at_noon - air_at_dawn).abs() / 2.0,
+        "a river hardly feels the day: water {water_at_dawn}..{water_at_noon} against air \
+         {air_at_dawn}..{air_at_noon}"
+    );
+
+    // Fresh water never reads below freezing or above twenty-five, which is
+    // the specification's own band: it becomes ice instead, which is the
+    // state the callers want.
+    for season in Season::ALL {
+        for hour in [0.0, 6.0, 12.0, 18.0] {
+            for country in [BiomeType::Tundra, BiomeType::TemperateForest, BiomeType::Tropical] {
+                let t = river.water_temperature_at(country, season, hour);
+                assert!(
+                    (0.0..=25.0).contains(&t),
+                    "fresh water in a {country:?} country in {season:?} at {hour}h reads {t}"
+                );
+            }
+        }
+    }
+
+    // And a summer river is warmer than a winter one.
+    assert!(
+        river.water_temperature_at(country, Season::Summer, 12.0)
+            > river.water_temperature_at(country, Season::Winter, 12.0)
+    );
+}
+
+/// The fourteen terrains this test file walks.
+const EVERY_TERRAIN: [crate::world::TerrainType; 14] = {
+    use crate::world::TerrainType as T;
+    [
+        T::Plains, T::Forest, T::Mountain, T::Water, T::Desert, T::Wetland,
+        T::Meadow, T::Hills, T::Beach, T::Riverbank, T::Sea, T::SaltMarsh,
+        T::SaltFlat, T::Farmland,
+    ]
+};

@@ -13,25 +13,53 @@ use crate::environment::seasons::Season;
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 pub enum BiomeType {
-    /// Cold, snowy regions
+    // --- the ten a country can be -----------------------------------------
+    //
+    // A hundred square kilometres is ten kilometres by ten, and that is one
+    // climate. A map does not run from tundra to rainforest; it is one of
+    // these, and the four below are what its own ground does to it. Which
+    // one a country is is `ClimateManager::region`.
+    /// Cold, snowy regions: tundra and the polar and subpolar country.
     Tundra,
-    /// Pine forests in cold climates
+    /// Boreal forest. Pine, long cold winters, short warm summers.
     Taiga,
-    /// Temperate forests with four seasons
+    /// Temperate deciduous forest, with four distinct seasons.
     TemperateForest,
-    /// Grasslands with moderate rainfall
+    /// Temperate conifer forest: cool to cold winters, mild to warm summers,
+    /// and a narrower year than the deciduous wood beside it.
+    TemperateConifer,
+    /// Temperate grassland, prairie and steppe. The hardest year on any map:
+    /// cold winters and hot summers both.
     Grassland,
-    /// Hot, dry regions with minimal vegetation
-    Desert,
-    /// Hot, wet regions with dense vegetation
-    Tropical,
-    /// Dry grasslands with scattered trees
+    /// Mediterranean shrubland and chaparral: mild wet winters, hot dry
+    /// summers.
+    Mediterranean,
+    /// Dry grasslands with scattered trees. Warm the year round, and it is
+    /// the moisture that has a season rather than the temperature.
     Savanna,
-    /// High altitude mountains
+    /// Tropical rainforest. Consistently warm, and next to no year at all.
+    Tropical,
+    /// Tropical seasonal and dry forest: warm year round, with a stronger
+    /// wet and dry season than the rainforest has.
+    TropicalDryForest,
+    /// Hot, dry regions with minimal vegetation, and the widest day on any
+    /// map.
+    Desert,
+
+    // --- and the four that are what the ground does to a country ----------
+    //
+    // These read their year off the country they are in - see
+    // `what_the_year_does_here_in`. A marsh in a boreal country is not a
+    // marsh in a temperate one, and the specification says so in as many
+    // words: "Wetlands in tundra, tropics, or deserts should inherit those
+    // broader biome patterns."
+    /// High ground, above where the country's own trees stop.
     Alpine,
-    /// Swampy wetlands
+    /// Swampy wetlands, marshes and riparian ground.
     Wetland,
-    /// Coastal regions
+    /// Lakes and rivers: the air over them, moderated by the water under.
+    Freshwater,
+    /// The coast and the sea, whose year is the narrowest there is.
     Coast,
 }
 
@@ -86,6 +114,36 @@ impl BiomeType {
     /// temperature is derived from it, so a biome cannot be cold for one
     /// purpose and mild for another.
     pub fn what_the_year_does_here(&self) -> WhatTheYearDoesHere {
+        self.what_the_year_does_here_in(*self)
+    }
+
+    /// What a year and a day come to on ground of this sort, **in a country
+    /// of this kind**.
+    ///
+    /// The one owner. A wood, a steppe or a desert is a country in its own
+    /// right and reads its own band; a mountain, a marsh, a river and the
+    /// sea are not places on the map so much as things the ground does to
+    /// wherever it is, so they read the country's band and bend it. The
+    /// specification asks for exactly that - "Wetlands in tundra, tropics, or
+    /// deserts should inherit those broader biome patterns", "Freshwater ...
+    /// air temperature depends on surrounding biome" - and it is the only way
+    /// fourteen categories come out of ten regions without fourteen tables to
+    /// keep in step.
+    pub fn what_the_year_does_here_in(&self, region: BiomeType) -> WhatTheYearDoesHere {
+        // A marsh is not a country, so a marsh asked what country it is in
+        // gets the default one rather than itself - which is also what stops
+        // this recursing for ever.
+        let region = region.as_a_country();
+
+        // The four that answer to the country rather than to themselves.
+        match self {
+            BiomeType::Alpine => return region.up_a_mountain(),
+            BiomeType::Wetland => return region.steadied_by(Self::WHAT_A_MARSH_STEADIES),
+            BiomeType::Freshwater => return region.steadied_by(Self::WHAT_A_LAKE_STEADIES),
+            BiomeType::Coast => return region.out_at_sea(),
+            _ => {}
+        }
+
         let (winter, summer) = match self {
             // Long very cold winters, very short cool summers.
             BiomeType::Tundra => ((-40.0, -10.0), (0.0, 10.0)),
@@ -105,18 +163,123 @@ impl BiomeType {
             // Savanna: warm year round, and it is the moisture that has a
             // season rather than the temperature.
             BiomeType::Savanna => ((15.0, 25.0), (25.0, 35.0)),
-            // Alpine and montane: cold winters, short cool summers.
-            BiomeType::Alpine => ((-20.0, 0.0), (5.0, 20.0)),
-            // Wetland, marsh and riparian: it tracks the region it is in and
-            // the water moderates it. Held to the temperate reading here,
-            // which is what this map's wetlands are.
-            BiomeType::Wetland => ((0.0, 8.0), (15.0, 30.0)),
-            // Temperate marine, whose swings are narrower than anything
-            // inland because there is a sea against it.
-            BiomeType::Coast => ((5.0, 10.0), (15.0, 20.0)),
+            // Temperate conifer: cool to cold winters, mild to warm
+            // summers, and a narrower year than the deciduous wood.
+            BiomeType::TemperateConifer => ((-10.0, 5.0), (10.0, 25.0)),
+            // Mediterranean shrubland: mild wetter winters, hot dry summers.
+            BiomeType::Mediterranean => ((5.0, 15.0), (25.0, 35.0)),
+            // Tropical seasonal and dry forest.
+            BiomeType::TropicalDryForest => ((20.0, 28.0), (28.0, 35.0)),
+
+            // Handled above, off the country they are in. Written out rather
+            // than left to a wildcard so that a new region cannot be added
+            // without this arm being looked at.
+            BiomeType::Alpine
+            | BiomeType::Wetland
+            | BiomeType::Freshwater
+            | BiomeType::Coast => unreachable!("the ground kinds read their country"),
         };
 
         WhatTheYearDoesHere { winter, summer }
+    }
+
+    /// What kind of country a map is when nobody has said.
+    ///
+    /// Temperate deciduous, which is what every world this project has ever
+    /// measured has been, and what the terrain tables were written for.
+    pub const THE_ORDINARY_SORT_OF_COUNTRY: BiomeType = BiomeType::TemperateForest;
+
+    /// Whether this is a kind of country, or a kind of ground that takes its
+    /// year from whatever country it is in.
+    pub fn is_a_country(&self) -> bool {
+        !matches!(
+            self,
+            BiomeType::Alpine | BiomeType::Wetland | BiomeType::Freshwater | BiomeType::Coast
+        )
+    }
+
+    /// This, if it is a country; the ordinary sort if it is not.
+    ///
+    /// A mountain is not a climate, it is a height; a marsh is not a
+    /// climate, it is wet ground. Asked which country they are, they answer
+    /// for the country they are ordinarily in.
+    pub fn as_a_country(self) -> BiomeType {
+        if self.is_a_country() {
+            self
+        } else {
+            Self::THE_ORDINARY_SORT_OF_COUNTRY
+        }
+    }
+
+    /// How much of a country's swing standing water takes out of it.
+    const WHAT_A_MARSH_STEADIES: f32 = 0.25;
+
+    /// And a lake or a river, which holds more heat than a marsh does.
+    const WHAT_A_LAKE_STEADIES: f32 = 0.35;
+
+    /// And the sea, which is the steadiest thing there is.
+    const WHAT_THE_SEA_STEADIES: f32 = 0.65;
+
+    /// What a country's year looks like with water standing in it: the same
+    /// year, pulled in towards its own average.
+    ///
+    /// Water takes a long time to warm and a long time to cool, so ground
+    /// with water in it has a shorter year and a shorter day than the
+    /// country around it. One rule, one number per kind of water, rather
+    /// than a table of bands that could drift away from the country's.
+    fn steadied_by(&self, how_much: f32) -> WhatTheYearDoesHere {
+        let country = self.as_a_country();
+        let year = country.what_the_year_does_here_in(country);
+        let settled =
+            (year.winter.0 + year.winter.1 + year.summer.0 + year.summer.1) / 4.0;
+        let pull = |t: f32| t + (settled - t) * how_much;
+
+        WhatTheYearDoesHere {
+            winter: (pull(year.winter.0), pull(year.winter.1)),
+            summer: (pull(year.summer.0), pull(year.summer.1)),
+        }
+    }
+
+    /// The coldest the open sea gets before it is ice, and the warmest it
+    /// gets at all.
+    ///
+    /// Salt water freezes near minus two, and no sea on this earth runs much
+    /// above thirty. They are the reason a polar coast reads warmer than the
+    /// tundra behind it: "Polar marine -2C to 5C" while the land is at minus
+    /// forty. The clamp is what makes the specification's three marine
+    /// readings fall out of the three kinds of country rather than being
+    /// written down three times.
+    const THE_COLDEST_THE_SEA_GETS: f32 = -2.0;
+    const THE_WARMEST_THE_SEA_GETS: f32 = 30.0;
+
+    fn out_at_sea(&self) -> WhatTheYearDoesHere {
+        let year = self.steadied_by(Self::WHAT_THE_SEA_STEADIES);
+        let hold = |t: f32| t.clamp(Self::THE_COLDEST_THE_SEA_GETS, Self::THE_WARMEST_THE_SEA_GETS);
+
+        WhatTheYearDoesHere {
+            winter: (hold(year.winter.0), hold(year.winter.1)),
+            summer: (hold(year.summer.0), hold(year.summer.1)),
+        }
+    }
+
+    /// What height takes off a country's thermometer.
+    ///
+    /// The lapse rate, near enough: six and a half degrees a kilometre, and
+    /// mountain ground on this map stands a couple of kilometres above the
+    /// valley it looks down on. It is the same subtraction in every season,
+    /// which is what makes an alpine year the country's year moved bodily
+    /// down rather than a different year.
+    const WHAT_HEIGHT_TAKES_OFF: f32 = 13.0;
+
+    fn up_a_mountain(&self) -> WhatTheYearDoesHere {
+        let country = self.as_a_country();
+        let year = country.what_the_year_does_here_in(country);
+        let up = |t: f32| t - Self::WHAT_HEIGHT_TAKES_OFF;
+
+        WhatTheYearDoesHere {
+            winter: (up(year.winter.0), up(year.winter.1)),
+            summer: (up(year.summer.0), up(year.summer.1)),
+        }
     }
 
     /// The coldest and the warmest this place ever is.
@@ -167,6 +330,159 @@ impl BiomeType {
         by_night + (by_day - by_night) * how_far_through_the_days_warmth(hour)
     }
 
+    /// What ground of this sort is, in a country of this kind.
+    ///
+    /// **The one place terrain becomes a biome.** There used to be two
+    /// functions keyed on terrain alone - `terrain_to_biome` and
+    /// `terrain_to_climate_zone` - which is one question answered twice and
+    /// is the defect this project keeps finding. Worse, keying on terrain
+    /// alone meant a wood was a temperate wood wherever it stood: measured,
+    /// **six of ten biomes and three of four climate zones were reachable on
+    /// any map at all**, and the banana, the coffee bush, the mahogany, the
+    /// mangrove, the monkey and the parrot could never be placed anywhere.
+    ///
+    /// A country is a kind and the ground picks within it. Woodland and open
+    /// ground are the country itself; the rest is what the ground does to
+    /// it.
+    pub fn on_this_ground(&self, terrain: crate::world::TerrainType) -> BiomeType {
+        use crate::world::TerrainType as T;
+
+        let country = self.as_a_country();
+        match terrain {
+            // Above the tree line, wherever the tree line is.
+            T::Mountain => BiomeType::Alpine,
+            // Fresh water: a lake, a river, and the bank you stand on to
+            // fish it.
+            T::Water | T::Riverbank => BiomeType::Freshwater,
+            // Salt water and the strand beside it.
+            T::Sea | T::Beach => BiomeType::Coast,
+            // Wet ground that is not open water.
+            T::Wetland | T::SaltMarsh => BiomeType::Wetland,
+            // Ground too dry for the country it is in - a rain shadow, or
+            // where a shallow sea dried up.
+            T::Desert | T::SaltFlat => BiomeType::Desert,
+            // And the country itself, standing timber or open.
+            T::Forest => country.where_its_trees_are(),
+            T::Plains | T::Meadow | T::Hills | T::Farmland => country.where_its_open_ground_is(),
+        }
+    }
+
+    /// What woodland is, in a country of this kind.
+    ///
+    /// A wood is a wood everywhere, but a wood at the edge of the tundra is
+    /// taiga and a wood in the tropics is rainforest, and they are not the
+    /// same year at all. The country names its own timber.
+    pub fn where_its_trees_are(&self) -> BiomeType {
+        match self.as_a_country() {
+            // The treeline's edge: what trees there are are boreal.
+            BiomeType::Tundra | BiomeType::Taiga => BiomeType::Taiga,
+            // A wood in a steppe is a temperate wood.
+            BiomeType::TemperateForest | BiomeType::Grassland => BiomeType::TemperateForest,
+            BiomeType::TemperateConifer => BiomeType::TemperateConifer,
+            // Dry woodland, whether it is chaparral or an oasis.
+            BiomeType::Mediterranean | BiomeType::Desert => BiomeType::Mediterranean,
+            BiomeType::Tropical => BiomeType::Tropical,
+            BiomeType::Savanna | BiomeType::TropicalDryForest => BiomeType::TropicalDryForest,
+            other => other,
+        }
+    }
+
+    /// And what open ground is.
+    ///
+    /// **The mistake worth writing down: the first cut mapped open ground to
+    /// the country itself, so a plain in a deciduous country came out a
+    /// deciduous forest.** A country's kind names its climate, not what is
+    /// standing on any particular field. Open ground in a temperate country
+    /// is grassland, in a polar country it is tundra, and in the tropics it
+    /// is savanna.
+    pub fn where_its_open_ground_is(&self) -> BiomeType {
+        match self.as_a_country() {
+            BiomeType::Tundra => BiomeType::Tundra,
+            // A boreal clearing is still boreal; there is no band for it of
+            // its own and inventing one would be a number to keep in step.
+            BiomeType::Taiga => BiomeType::Taiga,
+            BiomeType::TemperateForest
+            | BiomeType::TemperateConifer
+            | BiomeType::Grassland => BiomeType::Grassland,
+            BiomeType::Mediterranean => BiomeType::Mediterranean,
+            BiomeType::Savanna | BiomeType::Tropical | BiomeType::TropicalDryForest => {
+                BiomeType::Savanna
+            }
+            BiomeType::Desert => BiomeType::Desert,
+            other => other,
+        }
+    }
+
+    /// Which of the four coarse zones this is, for the plants and the beasts
+    /// that are written down against zones rather than biomes.
+    ///
+    /// **Derived, not a second table.** `terrain_to_climate_zone` used to be
+    /// its own match on terrain, and the two answers were only accidentally
+    /// consistent: a mountain was `Alpine` to the thermometer and `Arctic` to
+    /// the fauna, a sea was `Coast` and `Temperate`, a marsh was `Wetland`
+    /// and `Temperate`. They agreed on every terrain by luck rather than by
+    /// construction, and `a_zone_is_what_its_biome_says` proves that this
+    /// derivation reproduces the old table exactly.
+    pub fn climate_zone(&self) -> crate::environment::flora::ClimateZone {
+        use crate::environment::flora::ClimateZone as Z;
+
+        match self {
+            BiomeType::Tundra | BiomeType::Taiga | BiomeType::Alpine => Z::Arctic,
+            BiomeType::Desert => Z::Desert,
+            BiomeType::Tropical | BiomeType::TropicalDryForest | BiomeType::Savanna => Z::Tropical,
+            BiomeType::TemperateForest
+            | BiomeType::TemperateConifer
+            | BiomeType::Grassland
+            // A Mediterranean country is hot and dry in summer, but what the
+            // model's Desert zone stands for is ground that grows almost
+            // nothing, and chaparral is not that.
+            | BiomeType::Mediterranean
+            | BiomeType::Wetland
+            | BiomeType::Freshwater
+            | BiomeType::Coast => Z::Temperate,
+        }
+    }
+
+    /// How warm the water itself is here, as against the air over it.
+    ///
+    /// The specification asks for this and the model had no such thing: a
+    /// river's ice and a fish run were both decided by **air** temperature,
+    /// so a reach stopped running the first frosty night. Water carries far
+    /// more heat than air and gives it up far more slowly, so it lags the
+    /// day almost entirely and the year only partly, and it cannot go below
+    /// freezing - it becomes ice instead, which is the state the callers
+    /// actually want to know about.
+    ///
+    /// "Water temperature 0C to 25C depending on depth, flow, and latitude,
+    /// buffered relative to adjacent land": the buffering is the lag, and the
+    /// nought and the twenty-five are the clamp.
+    pub fn water_temperature_at(&self, region: BiomeType, season: Season, hour: f32) -> Temperature {
+        /// The coldest fresh water gets before it is ice.
+        const THE_COLDEST_FRESH_WATER_GETS: f32 = 0.0;
+        /// And the warmest a lake or a river gets anywhere.
+        const THE_WARMEST_FRESH_WATER_GETS: f32 = 25.0;
+        /// How much of the day's swing reaches the water at all. Almost
+        /// none: a lake is the same temperature at dawn as at dusk.
+        const WHAT_OF_THE_DAY_REACHES_THE_WATER: f32 = 0.1;
+
+        let year = self.what_the_year_does_here_in(region);
+        let into_the_summer = season.how_far_into_the_year_it_is();
+        let by_night = year.winter.0 + (year.summer.0 - year.winter.0) * into_the_summer;
+        let by_day = year.winter.1 + (year.summer.1 - year.winter.1) * into_the_summer;
+
+        let over_the_day = how_far_through_the_days_warmth(hour) - 0.5;
+        let settled = (by_night + by_day) / 2.0;
+        let in_the_water =
+            settled + (by_day - by_night) * over_the_day * WHAT_OF_THE_DAY_REACHES_THE_WATER;
+
+        if matches!(self, BiomeType::Coast) {
+            // Salt water freezes lower and holds warmer.
+            in_the_water.clamp(Self::THE_COLDEST_THE_SEA_GETS, Self::THE_WARMEST_THE_SEA_GETS)
+        } else {
+            in_the_water.clamp(THE_COLDEST_FRESH_WATER_GETS, THE_WARMEST_FRESH_WATER_GETS)
+        }
+    }
+
     /// Get average humidity (0.0 to 1.0)
     pub fn average_humidity(&self) -> f32 {
         match self {
@@ -180,6 +496,10 @@ impl BiomeType {
             BiomeType::Alpine => 0.4,
             BiomeType::Wetland => 0.9,
             BiomeType::Coast => 0.7,
+            BiomeType::TemperateConifer => 0.6,
+            BiomeType::Mediterranean => 0.4,
+            BiomeType::TropicalDryForest => 0.6,
+            BiomeType::Freshwater => 0.9,
         }
     }
 
@@ -196,6 +516,10 @@ impl BiomeType {
             BiomeType::Alpine => 8.0,
             BiomeType::Wetland => 2.0,
             BiomeType::Coast => 5.0,
+            BiomeType::TemperateConifer => 2.0,
+            BiomeType::Mediterranean => 3.0,
+            BiomeType::TropicalDryForest => 2.0,
+            BiomeType::Freshwater => 3.0,
         }
     }
 
@@ -228,6 +552,10 @@ impl BiomeType {
             BiomeType::Alpine => 0.9,      // Extreme cold and altitude
             BiomeType::Wetland => 0.6,     // Disease and exposure
             BiomeType::Coast => 0.4,
+            BiomeType::TemperateConifer => 0.4,   // colder than the deciduous wood
+            BiomeType::Mediterranean => 0.4,      // hot dry summers
+            BiomeType::TropicalDryForest => 0.5,
+            BiomeType::Freshwater => 0.5,         // cold water and nowhere to get out of it
         }
     }
 
@@ -244,6 +572,10 @@ impl BiomeType {
             BiomeType::Alpine => 0.3,
             BiomeType::Wetland => 0.4,
             BiomeType::Coast => 0.5,
+            BiomeType::TemperateConifer => 0.8,   // standing timber
+            BiomeType::Mediterranean => 0.5,      // scrub, and not much of it
+            BiomeType::TropicalDryForest => 0.6,
+            BiomeType::Freshwater => 0.3,
         }
     }
 
@@ -260,6 +592,10 @@ impl BiomeType {
             BiomeType::Alpine => 0.3,
             BiomeType::Wetland => 0.7,
             BiomeType::Coast => 0.7,
+            BiomeType::TemperateConifer => 0.6,
+            BiomeType::Mediterranean => 0.5,
+            BiomeType::TropicalDryForest => 0.7,
+            BiomeType::Freshwater => 0.8,         // fish, reeds, and a drink
         }
     }
 }
