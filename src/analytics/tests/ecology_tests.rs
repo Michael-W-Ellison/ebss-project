@@ -839,9 +839,9 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
 
     // Left alone at full stock, it stays there
     let mut untouched = SmallLife::default();
-    untouched.settle(ground, would_carry);
+    untouched.settle(ground, would_carry, 0.0);
     for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
-        untouched.tick_a_ground(ground, would_carry, 1.0);
+        untouched.tick_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let held = untouched.here(ground).grazers;
     assert!(
@@ -851,7 +851,7 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
 
     // Trapped down to nothing at all, it comes back inside a year or two
     let mut worked = SmallLife::default();
-    worked.settle(ground, would_carry);
+    worked.settle(ground, would_carry, 0.0);
     let taken = worked.take(ground, would_carry * 2.0);
     assert!(
         (taken - would_carry).abs() < 1.0,
@@ -860,7 +860,7 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
     assert_eq!(worked.here(ground).grazers, 0.0, "and it is empty now");
 
     for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
-        worked.tick_a_ground(ground, would_carry, 1.0);
+        worked.tick_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let back = worked.here(ground).grazers;
     assert!(
@@ -887,9 +887,9 @@ fn the_small_hunters_follow_the_game_they_live_on() {
     let would_carry = 500.0;
 
     let mut country = SmallLife::default();
-    country.settle(ground, would_carry);
+    country.settle(ground, would_carry, 0.0);
     for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
-        country.tick_a_ground(ground, would_carry, 1.0);
+        country.tick_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let with_game = country.here(ground).hunters;
     assert!(with_game > 0.0, "a full ground keeps hunters: {with_game:.1}");
@@ -905,7 +905,7 @@ fn the_small_hunters_follow_the_game_they_live_on() {
     // whole of what is under them going, which is a hard winter or a bad
     // vole year rather than anything a person does with string.
     for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
-        country.tick_a_ground(ground, would_carry, 1.0);
+        country.tick_a_ground(ground, would_carry, 0.0, 1.0);
         let there = country.here(ground);
         country.take(ground, there.grazers * 0.95);
         country.take_rodents(ground, there.rodents * 0.95);
@@ -967,14 +967,14 @@ fn a_snare_fills_at_the_rate_the_ground_carries() {
     // grazers cannot quietly leave the fixture describing a country that
     // could not exist.
     let mut country = SmallLife::default();
-    country.settle((0, 0), 500.0);
+    country.settle((0, 0), 500.0, 0.0);
     let full = country.here((0, 0));
 
-    country.settle((1, 0), 500.0);
+    country.settle((1, 0), 500.0, 0.0);
     country.take((1, 0), 450.0);
     let worked_out = country.here((1, 0));
 
-    country.settle((2, 0), 0.0);
+    country.settle((2, 0), 0.0, 0.0);
     let barren = country.here((2, 0));
 
     let one_snare = 1;
@@ -1017,13 +1017,13 @@ fn a_thin_country_robs_a_snare_sooner_than_a_full_one() {
     use crate::environment::{SmallLife, TheSmallLifeHere};
 
     let mut country = SmallLife::default();
-    country.settle((0, 0), 500.0);
+    country.settle((0, 0), 500.0, 0.0);
     let settled = country.here((0, 0));
 
     // The same foxes, after the game has been trapped out from under them -
     // both bands, because a country whose rabbits are gone and whose voles
     // are not is not a hungry country for a fox.
-    country.settle((1, 0), 500.0);
+    country.settle((1, 0), 500.0, 0.0);
     country.take((1, 0), 450.0);
     country.take_rodents((1, 0), settled.rodents * 0.9);
     let trapped_out = country.here((1, 0));
@@ -1194,10 +1194,10 @@ fn the_small_life_spreads_into_emptier_ground_without_inventing_any() {
     let untouched = (1, 0);
     let would_carry = 500.0;
 
-    country.settle(worked, would_carry);
-    country.settle(untouched, would_carry);
-    country.tick_a_ground(worked, would_carry, 1.0);
-    country.tick_a_ground(untouched, would_carry, 1.0);
+    country.settle(worked, would_carry, 0.0);
+    country.settle(untouched, would_carry, 0.0);
+    country.tick_a_ground(worked, would_carry, 0.0, 1.0);
+    country.tick_a_ground(untouched, would_carry, 0.0, 1.0);
 
     // Trap one of them out and leave it.
     let there = country.here(worked).grazers;
@@ -1227,7 +1227,7 @@ fn the_small_life_spreads_into_emptier_ground_without_inventing_any() {
     // Nothing crosses onto ground that will carry nothing. A wood beside a
     // salt flat does not empty into it.
     let salt_flat = (0, 1);
-    country.tick_a_ground(salt_flat, 0.0, 1.0);
+    country.tick_a_ground(salt_flat, 0.0, 0.0, 1.0);
     let flat_before = country.here(salt_flat).grazers;
     country.let_them_spread(1.0);
     assert!(
@@ -1618,7 +1618,7 @@ fn the_rodents_are_a_band_of_their_own_under_the_grazers() {
 
     // One ground, one climate, one season, two densities.
     let mut country = SmallLife::default();
-    country.settle((0, 0), 500.0);
+    country.settle((0, 0), 500.0, 0.0);
     let here = country.here((0, 0));
     assert!(
         (here.would_carry_rodents
@@ -1977,5 +1977,192 @@ fn a_country_can_be_let_up_a_tier_at_a_time() {
     assert!(
         world.animals.how_many_are_alive() > 0,
         "and the country should have something on it at the end of it"
+    );
+}
+
+// --- the water is a band of its own ----------------------------------------
+
+/// The fish are a stock in the water, not a boom-and-bust of records.
+///
+/// The last of the lower tiers still held one for one, and it behaved exactly
+/// the way the rabbits did before #151: **103** at generation, **984** by
+/// midsummer, **one** at the year's end. A hundred square kilometres of lakes
+/// and rivers is not a country with one fish in it, and it is not a country
+/// with nine hundred either.
+///
+/// What carries fish is how much water a ground has, which is the water's
+/// answer to cover and is got the same way - by walking the ground once and
+/// counting, in `survey_the_grounds`.
+#[test]
+fn the_fish_are_a_band_of_their_own_in_the_water() {
+    use crate::environment::flora::ClimateZone;
+    use crate::environment::{AnimalManager, Season, SmallLife};
+
+    let across = AnimalManager::HOW_BIG_A_HUNTING_GROUND_IS;
+
+    // A ground that is a fifth water carries a fishery; a ground with no
+    // water in it carries no fish at all, however good its cover.
+    let watery = SmallLife::what_this_ground_will_carry_of_fish(
+        0.2,
+        ClimateZone::Temperate,
+        Season::Summer,
+        across,
+    );
+    let dry = SmallLife::what_this_ground_will_carry_of_fish(
+        0.0,
+        ClimateZone::Temperate,
+        Season::Summer,
+        across,
+    );
+    assert!(
+        watery > 500.0,
+        "sixty-four hectares a fifth under water is a fishery: {watery}"
+    );
+    assert_eq!(dry, 0.0, "and dry ground has no fish on it: {dry}");
+
+    // The season tells on the water as it tells on the land, off the one
+    // curve rather than two that could come to disagree about which month is
+    // hard.
+    let winter = SmallLife::what_this_ground_will_carry_of_fish(
+        0.2,
+        ClimateZone::Temperate,
+        Season::Winter,
+        across,
+    );
+    assert!(
+        winter < watery * 0.6,
+        "a hard year thins the water too: {winter} against {watery}"
+    );
+
+    // And the band is drawn down on its own: a heron working a reach thins
+    // the fish and leaves the field alone.
+    let mut country = SmallLife::default();
+    country.settle((0, 0), 500.0, watery);
+    let before = country.here((0, 0));
+    country.take_fish((0, 0), before.fish * 0.5);
+    let after = country.here((0, 0));
+    assert!(
+        after.how_thick_the_fish_are() < 0.6
+            && after.how_thick_it_is() > 0.99
+            && after.how_thick_the_rodents_are() > 0.99,
+        "the fish should be halved and the land untouched: {}, {}, {}",
+        after.how_thick_the_fish_are(),
+        after.how_thick_it_is(),
+        after.how_thick_the_rodents_are()
+    );
+
+    // A ground of bare rock with a river through it keeps its river. The
+    // land bands die back on ground that will carry nothing, and running the
+    // water through that same early return would have emptied every reach in
+    // the mountains.
+    let mut cold = SmallLife::default();
+    cold.settle((0, 0), 0.0, watery);
+    for _ in 0..120 {
+        cold.tick_a_ground((0, 0), 0.0, watery, 1.0);
+    }
+    let up_there = cold.here((0, 0));
+    assert!(
+        up_there.how_thick_the_fish_are() > 0.9 && up_there.grazers < 1.0,
+        "the river holds where the ground does not: {} fish thick, {} grazers",
+        up_there.how_thick_the_fish_are(),
+        up_there.grazers
+    );
+}
+
+/// A heron standing in a lake eats fish, and a stoat standing in a wood eats
+/// voles, and neither is taking the other's dinner.
+///
+/// Until the water was a band of its own, the yield a water hunter drew came
+/// out of the water's own rate and was **subtracted from the ground's mice**.
+/// A heron thinned a field it never touched, and the reach it emptied filled
+/// again by arithmetic that knew nothing about it.
+#[test]
+fn a_water_hunter_takes_its_living_out_of_the_water() {
+    use crate::environment::fauna::{what_this_ground_offers, AnimalManager};
+    use crate::environment::FaunaRegistry;
+    use crate::world::TerrainType;
+
+    let registry = FaunaRegistry::new();
+    let heron = registry.get("heron").expect("herons exist");
+    let stoat = registry.get("stoat").expect("stoats exist");
+
+    assert!(
+        heron.feeds_in_the_water(),
+        "a heron eats nothing that is not out of the water"
+    );
+    assert!(!stoat.feeds_in_the_water(), "and a stoat eats none of it");
+
+    let lake = what_this_ground_offers(TerrainType::Water);
+    let wood = what_this_ground_offers(TerrainType::Forest);
+
+    let (grazers, rodents, fish) =
+        AnimalManager::what_the_small_life_turns_up(heron, lake, 1.0);
+    assert!(
+        fish > 0.0 && grazers == 0.0 && rodents == 0.0,
+        "a heron in a lake turns up fish and nothing else: {grazers}, {rodents}, {fish}"
+    );
+
+    // On land it is back on the land's bands, because the yield comes off
+    // the ground it is standing on and a heron in a field is in a field.
+    let (_, on_land, no_fish) =
+        AnimalManager::what_the_small_life_turns_up(heron, wood, 1.0);
+    assert!(
+        on_land > 0.0 && no_fish == 0.0,
+        "and out of the water it is on the land's larder: {on_land}, {no_fish}"
+    );
+
+    // A stoat standing in the water is not a swimmer, so the lake is a hole
+    // in its range rather than its larder.
+    let (_, _, stoats_fish) =
+        AnimalManager::what_the_small_life_turns_up(stoat, lake, 1.0);
+    assert_eq!(stoats_fish, 0.0, "a stoat does not fish: {stoats_fish}");
+
+    // And a fish is worth what a grazer is worth, because they are the same
+    // two kilogrammes - one conversion between head and keep, not two.
+    assert!(
+        (AnimalManager::what_a_fish_is_worth_to(heron)
+            - AnimalManager::what_a_grazer_is_worth_to(heron))
+        .abs()
+            < 1e-6,
+        "a fish and a rabbit are the same weight and the same keep"
+    );
+}
+
+/// And the country stops holding fish as records at all.
+///
+/// The same claim `is_stood_for_by_the_small_life` makes about the rabbits:
+/// the species stays in the registry with its mass, its diet and its place in
+/// the web, and world-generation and the migration that refills a depleted
+/// country stop dealing it out, because there is a population of them
+/// already.
+#[test]
+fn a_country_is_stocked_with_water_but_not_with_fish_records() {
+    use crate::environment::FaunaRegistry;
+    use crate::world::{World, WorldConfig};
+
+    let registry = FaunaRegistry::new();
+    let fish = registry.get("fish").expect("fish are still in the registry");
+    assert!(
+        fish.is_stood_for_by_the_small_life(),
+        "the fish are the water band now"
+    );
+
+    crate::core::dice::seed(7000);
+    let world = World::new(WorldConfig::default().with_size(500, 500));
+
+    assert!(
+        world
+            .animals
+            .get_all()
+            .iter()
+            .all(|a| a.species_id != "fish"),
+        "no fish should be dealt out as a record"
+    );
+
+    // And there is water in the country for the things that live off it.
+    assert!(
+        world.animals.small_life.how_many_fish() > 1000.0,
+        "twenty-five square kilometres of lakes and rivers is a fishery: {}",
+        world.animals.small_life.how_many_fish()
     );
 }

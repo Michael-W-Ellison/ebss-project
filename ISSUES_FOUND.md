@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `fe227db` and the work since.
+**Last verified:** September 2026, against commit `6e2eb70` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -10292,3 +10292,121 @@ took the birds out of its way; it did not make the fishery behave. Whether
 the fish want abstracting as the rabbits were, or only a check on their
 breeding, is the next question and a different one from this.
 
+
+### 159. The last records that should have been a number, and the bird that took their place
+
+#158 closed by naming what was left: the fish. **103 at generation, 984 by
+midsummer, one at the year's end**, and at the height of that year the demand
+on their own hunting grounds stood at thirty-four. That is the shape #151
+abstracted the rabbits for, in a species with an extra sting: a fish is a
+small predator by `where_it_sits`, so every one of those nine hundred was
+counted as a hunter demanding a share of the water it *was*. The heron, the
+otter, the kingfisher and the eagle were being starved off a larder made of
+their own dinner.
+
+**The fish are a band now.** `TheSmallLifeHere` carries a third stock beside
+the grazers and the rodents, and what a ground carries of it comes from how
+much of that ground is water - the water's answer to `cover`, got the same
+way, by walking the country once. `survey_the_grounds` records both in one
+pass, so nothing can come to two views about which grounds have a river in
+them. The climate and the season are read through the same curve the land is
+read through, deliberately: two curves would be two opinions about which
+month is hard.
+
+The water branch of `what_the_small_life_turns_up` draws on it. That branch
+existed before and it was incoherent: a heron standing in a lake took its
+living at the water's own rate and **the head came off the ground's voles**.
+It thinned a field it never touched, and the reach it emptied filled again by
+arithmetic that knew nothing about it.
+
+Measured over two years on a hundred square kilometres with nobody in the
+world, against the same seed:
+
+| | before | after |
+|---|---|---|
+| head | 2,367 | 2,175 |
+| ms/tick | 13.07 | 12.75 |
+| starved | 4,311 | 681 |
+| fish | 103 -> 1 | a stock at 53% of what the water carries |
+| heron | 22 -> 13 | 14 -> 8 |
+| otter | 18 -> 1 | 18 -> 3 |
+| hawk | 12 -> 5 | 19 -> 9 |
+| owl | 2 -> 1 | 9 -> 3 |
+
+Six sevenths of the country's starvation was fish starving.
+
+**Two things it turned over on the way, and both are worth having written
+down.**
+
+*The water has to turn up two bands, because the land does.* Left as one, a
+heron standing in a lake got half of what the same heron got standing in a
+field, while `WHAT_OPEN_WATER_IS_WORTH_TO_A_SWIMMER` says open water is worth
+a wood to something that swims. The herons went to **nought** on water that
+had just been emptied of its competition. Fry and grown fish come off the one
+stock rather than two, and that is where the water and the land differ for a
+reason: what separates the rabbits from the voles is that a snare catches one
+and not the other, and there is no such thing in the water.
+
+*The kingfisher had never once been placed on a map, and the moment the fish
+let go of the water it went off like the crow did.* The fish held every
+watering ground in the country, so for the life of this model the kingfisher
+was passed over at generation. Freed, a hundred square kilometres went from
+85 at generation to **745, with two thousand four hundred starved behind
+them**; the heron fell to two, the otter, the owl, the eagle and the seal to
+nothing, and the tick went from 13.07 ms to **57.65**. It is fifty grammes,
+it breeds like it, and `where_it_sits` calls it a small predator - the same
+three things that make a rabbit a bad record, and the same three the crow was
+abstracted for in #152. It is a band now too.
+
+**And the reason it went off is a defect of its own, still open.** What a
+head of the assumed layers is worth rises steeply as the hunter shrinks -
+`days_a_grazer_keeps` - while what a ground turns up is the same head for
+everything working it. So the smallest hunter on a ground gets the largest
+surplus. Measured on good ground at generation, against its own burn:
+
+| kingfisher | owl | kestrel | hawk | heron | eagle |
+|---|---|---|---|---|---|
+| 4.06x | 2.75x | 1.40x | 1.23x | 1.24x | 1.05x |
+
+A clean inverse ladder in size, and at fifty grammes the bottom of it has no
+brake on it at all. Abstracting the bird is not a fix for that ladder; it is
+the same decision taken about the same three properties, and the ladder is
+what to look at next. The kestrel is the evidence that it has not gone away:
+181 founded, 448 starved, 21 alive.
+
+**Also still open, and named rather than bundled: there are two fisheries.**
+`SmallLife.fish` is what a heron eats; `ResourceType::Fish` nodes are what an
+agent spears, fed by `fish_run` - a run from outside the country rather than
+a stock, which is a deliberate and correct thing to say about salmon and is
+why it was left alone here. But they are two answers to "how many fish are in
+this water", and that is the defect this project keeps finding. Joining them
+means the reach becoming a way in to the band, as a snare is to the grazers,
+and it wants its own piece of work.
+
+### 160. Nobody in a fresh settlement ever takes anybody's word for where anything is
+
+Found by seeding a test that had never been seeded.
+
+`lies_are_told_and_found_out_in_a_settlement` builds a settlement of
+twenty-five with five liars in it, runs it four thousand ticks, and asks that
+somebody somewhere has been told where something is. It passed. It passed
+**only inside the suite**: run on its own it fails, at this commit and at
+`6e2eb70` before it, because what it was really reading was the draws the rest
+of the suite had left in the global dice. That is the #132 family, and a
+change to the fish was enough to move them.
+
+Asked as a block of seeded worlds and summed - which is this project's answer
+to #132 - the claim does not hold at all. Across three fresh settlements over
+four thousand ticks, `exploration_knowledge.who_told_me` is **empty in every
+agent in every world**. Not "few lies were caught": nobody was told anything
+by anybody, so there was nothing to catch.
+
+The machinery is not dead - `news_reaches_everybody_within_earshot` passes, so
+a teller with something to say reaches the people around him in a fixture.
+What is missing is between that and a running settlement: either nobody ever
+reaches the point of telling, or what is told never lands in
+`take_their_word_for_it`. Which of the two it is has not been measured yet.
+
+The test is left failing and seeded rather than tuned back to green, because a
+green test that is reading the suite's dice is worse than a red one that is
+reading the model.

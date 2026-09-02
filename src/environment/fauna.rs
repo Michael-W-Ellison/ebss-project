@@ -297,6 +297,49 @@ impl AnimalSpecies {
             // went to **58,682 crows** inside a year, out of 61,558 head,
             // with the tick at 249 ms. See ISSUES_FOUND.md #152.
             | "crow"
+            // And the fish, for the same three reasons and one more.
+            //
+            // It breeds in thousands, it is eaten by everything and it is
+            // supposed to be numerous - which is the rabbit's case exactly,
+            // and it behaved the same way: 103 at generation, **984** by
+            // midsummer and **one** at the year's end. The one more is that
+            // a fish is a small predator by `where_it_sits`, so every one of
+            // those nine hundred was counted as a hunter demanding a share
+            // of its own ground's water - putting the demand on the fishing
+            // grounds at thirty-four and starving the heron, the otter, the
+            // kingfisher and the eagle off the larder the fish themselves
+            // were. See `TheSmallLifeHere::fish`.
+            | "fish"
+            // And the kingfisher, on the crow's precedent and for the crow's
+            // reasons.
+            //
+            // It is fifty grammes, it breeds like it, and `where_it_sits`
+            // calls it a small predator - the same three things that make a
+            // rabbit a bad record. It had never once been placed on a map:
+            // the fish held every watering ground in the country, so the
+            // kingfisher was passed over at generation for the life of this
+            // model. The moment the fish became a band and let go of them,
+            // a hundred square kilometres went from **85 at generation to
+            // 745, with two thousand four hundred starved behind them**, the
+            // heron fell from thirteen to two, the otter, the owl, the eagle
+            // and the seal went to nothing, and the tick went from 13.07 ms
+            // to 57.65. That is a boom-and-bust in records, which is the one
+            // thing this abstraction exists to stop.
+            //
+            // **Why it, and not the hawk or the eagle beside it.** What a
+            // head of the assumed layers is worth rises steeply as the
+            // hunter shrinks - `days_a_grazer_keeps` - while what a ground
+            // turns up is the same head for everything working it. So the
+            // smallest hunter on a ground gets the largest surplus: measured
+            // on good ground, the kingfisher took four times its keep, the
+            // owl two and three quarters, the kestrel one and two fifths and
+            // the eagle one and a twentieth - a clean inverse ladder in
+            // size. At fifty grammes the bottom of that ladder has no brake
+            // on it at all. That ladder is a defect of its own and it is
+            // named as one in ISSUES_FOUND.md #159; abstracting the bird is
+            // not a fix for it, it is the same decision taken about the same
+            // three properties.
+            | "kingfisher"
             // And what lives on them, and on what a snare catches
             | "fox" | "arctic_fox" | "stoat" | "snake" | "adder"
         )
@@ -687,6 +730,23 @@ pub fn what_this_ground_offers(terrain: TerrainType) -> WhatTheGroundOffers {
     WhatTheGroundOffers { cover, can_be_dug, somewhere_to_climb, is_water }
 }
 
+/// What one hunting ground grows, from one walk of the country.
+///
+/// Sixty-four hectares priced by walking them rather than by the terrain of
+/// whichever cell happens to be in the middle - see `survey_the_grounds`.
+/// The three questions are asked together because they are answered off the
+/// same tiles, and asking them apart is how a ground came to be a wood for
+/// one purpose and bare rock for another.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WhatThisGroundGrows {
+    /// How much this ground grows, averaged over it.
+    pub cover: f32,
+    /// And how much of it is water, which is what its fish live in.
+    pub share_that_is_water: f32,
+    /// The climate most of it is in, which decides how hard its year is.
+    pub climate: ClimateZone,
+}
+
 /// What the hunting of a country came to, for measuring.
 ///
 /// Four numbers because there are four places a hunt can die, and inferring
@@ -719,6 +779,9 @@ pub struct WhatPassiveHuntingCameTo {
     pub caught_grazers: u64,
     /// And of the rodent layer.
     pub caught_rodents: u64,
+    /// And out of the water.
+    #[serde(default)]
+    pub caught_fish: u64,
 }
 
 /// What carried the animals off, since the world opened.
@@ -2998,10 +3061,10 @@ pub struct AnimalManager {
     #[serde(default)]
     pub passive: WhatPassiveHuntingCameTo,
 
-    /// What each hunting ground grows and what climate most of it is in,
-    /// surveyed once - see `survey_the_grounds`.
+    /// What each hunting ground grows, how much of it is water, and what
+    /// climate most of it is in, surveyed once - see `survey_the_grounds`.
     #[serde(default)]
-    how_rich_each_ground_is: BTreeMap<(i32, i32), (f32, ClimateZone)>,
+    how_rich_each_ground_is: BTreeMap<(i32, i32), WhatThisGroundGrows>,
 
     /// The lower tiers of the food web, as a population rather than as
     /// records - see [`crate::environment::SmallLife`].
@@ -3947,6 +4010,7 @@ impl AnimalManager {
         for gy in 0..grounds_y {
             for gx in 0..grounds_x {
                 let mut cover = 0.0f32;
+                let mut water = 0u32;
                 let mut looked = 0u32;
                 let mut climates: BTreeMap<ClimateZone, u32> = BTreeMap::new();
 
@@ -3958,7 +4022,16 @@ impl AnimalManager {
                             grid.get_tile(&crate::world::Position::new(x, y))
                         {
                             let terrain = tile.terrain.terrain_type;
-                            cover += what_this_ground_offers(terrain).cover;
+                            let offers = what_this_ground_offers(terrain);
+                            cover += offers.cover;
+                            // How much of the ground is water at all, which
+                            // is the water's answer to cover and is got the
+                            // same way. One walk of the country records
+                            // both, so nothing can come to two views about
+                            // which grounds have a river in them.
+                            if offers.is_water {
+                                water += 1;
+                            }
                             *climates.entry(terrain_to_climate_zone(terrain)).or_insert(0) += 1;
                             looked += 1;
                         }
@@ -3981,8 +4054,14 @@ impl AnimalManager {
                     .map(|(climate, _)| climate)
                     .unwrap_or(ClimateZone::Temperate);
 
-                self.how_rich_each_ground_is
-                    .insert((gx, gy), (cover / looked as f32, climate));
+                self.how_rich_each_ground_is.insert(
+                    (gx, gy),
+                    WhatThisGroundGrows {
+                        cover: cover / looked as f32,
+                        share_that_is_water: water as f32 / looked as f32,
+                        climate,
+                    },
+                );
             }
         }
     }
@@ -4017,15 +4096,26 @@ impl AnimalManager {
 
         for gy in 0..grounds_y {
             for gx in 0..grounds_x {
-                let Some(&(cover, climate)) = self.how_rich_each_ground_is.get(&(gx, gy)) else {
+                let Some(&grows) = self.how_rich_each_ground_is.get(&(gx, gy)) else {
                     continue;
                 };
 
                 let would_carry = crate::environment::SmallLife::what_this_ground_will_carry(
-                    cover, climate, season, across,
+                    grows.cover,
+                    grows.climate,
+                    season,
+                    across,
                 );
+                let would_carry_fish =
+                    crate::environment::SmallLife::what_this_ground_will_carry_of_fish(
+                        grows.share_that_is_water,
+                        grows.climate,
+                        season,
+                        across,
+                    );
 
-                self.small_life.tick_a_ground((gx, gy), would_carry, 1.0);
+                self.small_life
+                    .tick_a_ground((gx, gy), would_carry, would_carry_fish, 1.0);
             }
         }
 
@@ -4258,11 +4348,12 @@ impl AnimalManager {
                 // worse than a wood that has not, and until there was a
                 // number behind it there was no such thing as a trapped-out
                 // wood.
-                let (at_full_grazers, at_full_rodents) =
+                let (at_full_grazers, at_full_rodents, at_full_fish) =
                     Self::what_the_small_life_turns_up(hunter, ground, sharing_it);
                 let standing = self.small_life.here(this_ground);
                 let wants_grazers = at_full_grazers * standing.how_thick_it_is();
                 let wants_rodents = at_full_rodents * standing.how_thick_the_rodents_are();
+                let wants_fish = at_full_fish * standing.how_thick_the_fish_are();
 
                 // **Passive hunting: it catches animals, one at a time.**
                 //
@@ -4290,6 +4381,7 @@ impl AnimalManager {
                 // stops hunting until it has burnt what it ate.
                 let a_grazer = Self::what_a_grazer_is_worth_to(hunter);
                 let a_rodent = Self::what_a_rodent_is_worth_to(hunter);
+                let a_fish = Self::what_a_fish_is_worth_to(hunter);
 
                 // What the ground pays on an average day, which is what
                 // decides whether it is worth standing on. Not what this
@@ -4298,12 +4390,14 @@ impl AnimalManager {
                 // spend its life walking, and turning the stipend into
                 // catches would have made every hunter in the country do
                 // exactly that.
-                the_ground_pays = wants_grazers * a_grazer + wants_rodents * a_rodent;
+                the_ground_pays =
+                    wants_grazers * a_grazer + wants_rodents * a_rodent + wants_fish * a_fish;
 
                 let caught_grazers = Self::what_a_period_of_hunting_takes(wants_grazers, &mut rng);
                 let caught_rodents = Self::what_a_period_of_hunting_takes(wants_rodents, &mut rng);
+                let caught_fish = Self::what_a_period_of_hunting_takes(wants_fish, &mut rng);
 
-                if caught_grazers > 0.0 || caught_rodents > 0.0 {
+                if caught_grazers > 0.0 || caught_rodents > 0.0 || caught_fish > 0.0 {
                     // And it comes off the ground, band by band, in head -
                     // which is what the ground is counted in. One conversion
                     // between head and energy, in one place
@@ -4311,12 +4405,14 @@ impl AnimalManager {
                     // the thing that was wrong before.
                     let grazers = self.small_life.take(this_ground, caught_grazers);
                     let rodents = self.small_life.take_rodents(this_ground, caught_rodents);
+                    let fish = self.small_life.take_fish(this_ground, caught_fish);
 
-                    let got = grazers * a_grazer + rodents * a_rodent;
+                    let got = grazers * a_grazer + rodents * a_rodent + fish * a_fish;
 
                     if got > 0.0 {
                         self.passive.caught_grazers += grazers as u64;
                         self.passive.caught_rodents += rodents as u64;
+                        self.passive.caught_fish += fish as u64;
                         foraged.push((pred_idx, got));
                     }
                 }
@@ -4546,18 +4642,27 @@ impl AnimalManager {
                 // the small life it can is worth that much to something that
                 // lives entirely off it, and proportionately less to a wolf.
                 let leans = Self::how_much_it_leans_on_the_small_life(hunter);
+                // And which larder it reads is the larder it eats out of. A
+                // heron comparing grounds by their voles walks towards a
+                // wood; what it wants is water, and the two are not the same
+                // grounds.
+                let by_the_water = hunter.feeds_in_the_water();
                 let mut living_on = |ground: (i32, i32), counting_itself: usize| -> f32 {
+                    let here = self.small_life.here(ground);
+                    let under_it = if by_the_water {
+                        here.how_thick_the_water_is_against_the_best_there_could_be(
+                            Self::HOW_BIG_A_HUNTING_GROUND_IS,
+                        )
+                    } else {
+                        here.how_thick_against_the_best_ground_there_could_be(
+                            Self::HOW_BIG_A_HUNTING_GROUND_IS,
+                        )
+                    };
+
                     Self::how_good_a_living(
                         game_in.get(&ground).copied().unwrap_or(0),
                         hunters_in.get(&ground).copied().unwrap_or(0) + counting_itself,
-                    ) + leans
-                        * Self::WHAT_A_HUNTER_WANTS_UNDER_IT
-                        * self
-                            .small_life
-                            .here(ground)
-                            .how_thick_against_the_best_ground_there_could_be(
-                                Self::HOW_BIG_A_HUNTING_GROUND_IS,
-                            )
+                    ) + leans * Self::WHAT_A_HUNTER_WANTS_UNDER_IT * under_it
                 };
 
                 let here = living_on(this_ground, 0);
@@ -5288,7 +5393,7 @@ impl AnimalManager {
     /// squares said a hunting ground held two stoats where it should hold
     /// three over a hundred times the area. Four square kilometres came out
     /// with seven hundred and twenty-one of them.
-    const HOW_BIG_A_HUNTING_GROUND_IS: i32 = 80;
+    pub(crate) const HOW_BIG_A_HUNTING_GROUND_IS: i32 = 80;
 
     /// What share of its ordinary burn a beast is paying, where it is standing,
     /// in the season it is standing there.
@@ -5640,9 +5745,11 @@ impl AnimalManager {
         ground: WhatTheGroundOffers,
         sharing_it: f32,
     ) -> f32 {
-        let (grazers, rodents) = Self::what_the_small_life_turns_up(hunter, ground, sharing_it);
+        let (grazers, rodents, fish) =
+            Self::what_the_small_life_turns_up(hunter, ground, sharing_it);
         grazers * Self::what_a_grazer_is_worth_to(hunter)
             + rodents * Self::what_a_rodent_is_worth_to(hunter)
+            + fish * Self::what_a_fish_is_worth_to(hunter)
     }
 
     /// And the same in head, a band at a time: what a day of working this
@@ -5658,7 +5765,7 @@ impl AnimalManager {
         hunter: &AnimalSpecies,
         ground: WhatTheGroundOffers,
         sharing_it: f32,
-    ) -> (f32, f32) {
+    ) -> (f32, f32, f32) {
         /// And what open water is worth to something that lives in it.
         ///
         /// On a par with a wood, which is what a lake is to a fish: the
@@ -5713,10 +5820,89 @@ impl AnimalManager {
         let a_tick = Self::GRAZERS_A_DAY_ON_THE_BEST_GROUND * how_rich / sharing_it.max(1.0)
             / crate::environment::seasons::TICKS_PER_DAY as f32;
 
+        // **Which larder it is taking out of, not only how much.** A heron
+        // standing in a lake is not turning over voles, and until the fish
+        // were a band it was doing exactly that: the yield came out of the
+        // water's own rate and was subtracted from the ground's mice. So
+        // water hunters thinned a field they never touched, and the water
+        // they emptied refilled by arithmetic that knew nothing about them.
+        //
+        // The same question the yield already asks - is the tile it is
+        // standing on water, and does this animal feed in water - decides
+        // it, in the one place.
+        if ground.is_water && hunter.feeds_in_the_water() {
+            // Grown fish, as much of them as it can take, **and the fry**.
+            //
+            // The land turns up two bands and the water has to turn up two
+            // as well, or open water is worth half a wood to the thing that
+            // swims in it while `WHAT_OPEN_WATER_IS_WORTH_TO_A_SWIMMER` says
+            // it is worth the same. Measured with the fry left off: the
+            // heron went from thirteen to **nought** on water that had just
+            // been emptied of its competition, because a heron standing in a
+            // lake was getting half of what the same heron got standing in a
+            // field.
+            //
+            // They come off the one stock rather than a second one, which is
+            // where the water and the land differ and why: what separates
+            // the rabbits from the voles is that a snare catches one and not
+            // the other, and there is no such thing in the water. Fry and
+            // grown fish live in the same reach and answer to the same
+            // capacity, so one band in head of grown fish holds both, with
+            // the fry counted at what they are worth.
+            const FRY_TURNED_UP_FOR_A_GROWN_FISH: f32 =
+                SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER;
+            const HOW_MANY_FRY_MAKE_A_FISH: f32 = SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER;
+
+            return (
+                0.0,
+                0.0,
+                a_tick
+                    * (Self::how_much_of_the_fish_it_can_take(hunter.mass_kg)
+                        + FRY_TURNED_UP_FOR_A_GROWN_FISH / HOW_MANY_FRY_MAKE_A_FISH),
+            );
+        }
+
         (
             a_tick * Self::how_much_of_the_grazers_it_can_take(hunter.mass_kg),
             a_tick * SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER,
+            0.0,
         )
+    }
+
+    /// How much of what is in the water this one can actually take, nought
+    /// to one.
+    ///
+    /// The same rule the grazer band is under, said of the band the water
+    /// holds: a fifty-gramme bird cannot take a two-kilogramme fish, and
+    /// without this the water was a larder every fish-eater drew on at the
+    /// same rate however big it was.
+    ///
+    /// What it costs is that a bird which lives on minnows gets a poor
+    /// living out of this model's water, because the water is held as one
+    /// band and that band is grown fish. The land answers the same question
+    /// with two bands - see `TheSmallLifeHere::rodents` - and the water has
+    /// no equivalent. That is a real limit, and it is written down rather
+    /// than tuned around: **it is not what stopped the kingfisher**, and
+    /// putting it in by itself made the kingfisher worse, because what it
+    /// did was move a bird that was living off the water onto the land's
+    /// voles instead. See `is_stood_for_by_the_small_life`.
+    pub fn how_much_of_the_fish_it_can_take(mass_kg: f32) -> f32 {
+        (mass_kg * Self::HOW_MUCH_BIGGER_THAN_ITSELF_IT_WILL_TAKE / SmallLife::WHAT_A_FISH_WEIGHS)
+            .clamp(0.0, 1.0)
+    }
+
+    /// What one fish out of the water is worth to something that eats it.
+    ///
+    /// The same as a grazer, because a fish and a grazer are the same two
+    /// kilogrammes - see `SmallLife::WHAT_A_FISH_WEIGHS`. Written as its own
+    /// function rather than as a call to the grazer's at every site, so that
+    /// the day the two weights part company there is one line to change and
+    /// not a search to do.
+    pub fn what_a_fish_is_worth_to(hunter: &AnimalSpecies) -> f32 {
+        Self::days_a_grazer_keeps(hunter.mass_kg)
+            * (SmallLife::WHAT_A_FISH_WEIGHS / SmallLife::WHAT_A_GRAZER_WEIGHS)
+            * crate::environment::seasons::TICKS_PER_DAY as f32
+            * hunter.hunger_rate
     }
 
     /// How much of its living a hunter of this sort would take out of the

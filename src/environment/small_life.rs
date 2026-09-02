@@ -70,6 +70,29 @@ pub struct TheSmallLifeHere {
     /// And what the ground would carry of them, this season.
     #[serde(default)]
     pub would_carry_rodents: f32,
+
+    /// What is in the water of this ground.
+    ///
+    /// The third band, and the one that was still records. A fish is the
+    /// same bad record a rabbit is - it breeds in thousands, it is eaten by
+    /// everything, and there are supposed to be a great many of it - and it
+    /// behaved exactly the way the rabbits did before #151: a hundred at
+    /// generation, **nine hundred and eighty-four** by midsummer, and one
+    /// left at the year's end. Worse than useless as a population, it was
+    /// also the thing crowding the animals that live on it, because every
+    /// one of those nine hundred counted as a hunter demanding a share of
+    /// its own ground's water.
+    ///
+    /// Held apart from the grazers and the rodents rather than folded in
+    /// with them, because a lake is not a share of a field: what carries
+    /// fish is how much water a ground has, not how much cover, and a heron
+    /// standing in it was drawing its living out of the ground's *voles*
+    /// until this existed.
+    #[serde(default)]
+    pub fish: f32,
+    /// And what the water of this ground would carry, this season.
+    #[serde(default)]
+    pub would_carry_fish: f32,
 }
 
 impl TheSmallLifeHere {
@@ -94,6 +117,15 @@ impl TheSmallLifeHere {
         (self.rodents / self.would_carry_rodents).clamp(0.0, 1.0)
     }
 
+    /// And the same for the water, which is what a heron, an otter or a
+    /// kingfisher is reading when it looks at a reach.
+    pub fn how_thick_the_fish_are(&self) -> f32 {
+        if self.would_carry_fish <= 0.0 {
+            return 0.0;
+        }
+        (self.fish / self.would_carry_fish).clamp(0.0, 1.0)
+    }
+
     /// Everything standing on this ground, counted in head of grazer.
     ///
     /// One owner for "how much small life is here", so that the two bands
@@ -102,6 +134,13 @@ impl TheSmallLifeHere {
     /// existed - what keeps the foxes up, how fast a snared rabbit is stolen
     /// - reads this instead, which is why adding a band under them did not
     /// silently treble the foxes or empty the traplines.
+    ///
+    /// The fish are deliberately not in it. A fox does not live on fish and
+    /// a snare does not catch one, and the two things this number decides -
+    /// how many small hunters a ground keeps, and how fast a catch is robbed
+    /// out of a snare - are both about the land. Adding a lake to the larder
+    /// that feeds the stoats would put foxes on a ground because it had
+    /// water on it.
     pub fn in_head_of_grazer(&self) -> f32 {
         self.grazers + self.rodents / SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER
     }
@@ -145,6 +184,24 @@ impl TheSmallLifeHere {
             return 0.0;
         }
         (self.in_head_of_grazer() / best).clamp(0.0, 1.0)
+    }
+
+    /// And the same question asked of the water, for the animals whose
+    /// larder the water is.
+    ///
+    /// A heron choosing which way to walk wants to know which ground has
+    /// more fish in it, not which ground has more voles. Reading the land
+    /// figure for a bird that eats nothing off the land is the same mistake
+    /// as pricing a lake by its cover, one step further along.
+    pub fn how_thick_the_water_is_against_the_best_there_could_be(
+        &self,
+        cells_across: i32,
+    ) -> f32 {
+        let best = SmallLife::what_a_ground_of_water_would_carry_at_its_very_best(cells_across);
+        if best <= 0.0 {
+            return 0.0;
+        }
+        (self.fish / best).clamp(0.0, 1.0)
     }
 }
 
@@ -256,6 +313,43 @@ impl SmallLife {
     /// eats once.
     pub const HOW_FAST_THE_RODENTS_COME_BACK: f32 = 0.006;
 
+    /// Head of fish a hectare of water carries.
+    ///
+    /// The standing crop of a productive fresh water runs a hundred-odd
+    /// kilogrammes to the hectare, and at the two kilogrammes the fish
+    /// record carried that is some sixty head - which is what this is. It
+    /// is well above the eight head of grazers a hectare of the best land
+    /// carries and well below the hundred and twenty rodents, which is the
+    /// right place for it: water is the richest ground there is for the
+    /// thing that can work it and there is not much of it on a map.
+    ///
+    /// Measured against what it replaces rather than asserted: a hundred
+    /// square kilometres held about a hundred fish records at generation and
+    /// nine hundred at the height of the year, both of which are absurd for
+    /// a country with lakes and rivers in it. This puts a ground that is a
+    /// fifth water at some seven or eight hundred, which is a fishery.
+    pub const FISH_A_GOOD_HECTARE_OF_WATER_CARRIES: f32 = 60.0;
+
+    /// How fast the fish come back, a tick at a time.
+    ///
+    /// Between the grazers and the rodents, and faster than a closed
+    /// population of anything that size would be - because it is not a
+    /// closed population. Fish are spawned upstream and fed at sea and come
+    /// back up the rivers under their own power whatever last year's fishing
+    /// left behind; `ResourceNode::fish_run` says the same thing about a
+    /// reach an agent stands in. A water fished or hunted down comes back
+    /// inside a season rather than inside a year.
+    pub const HOW_FAST_THE_FISH_COME_BACK: f32 = 0.004;
+
+    /// What one head of the fish band weighs.
+    ///
+    /// The same two kilogrammes the fish record carried, which is also what
+    /// a grazer weighs - so what a fish is worth to something eating it is
+    /// what a grazer is worth to it, and there is one conversion between
+    /// head and keep rather than two that could drift apart. If these ever
+    /// part company, this is the line that says so.
+    pub const WHAT_A_FISH_WEIGHS: f32 = Self::WHAT_A_GRAZER_WEIGHS;
+
     /// What share of the grazers the ground will keep hunters for.
     ///
     /// Foxes proper run about one to the square kilometre, which is well
@@ -333,6 +427,37 @@ impl SmallLife {
         grazers
             + grazers * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND
                 / Self::HOW_MANY_RODENTS_MAKE_A_GRAZER
+    }
+
+    /// And what a hunting ground of nothing but water would carry, in head
+    /// of fish.
+    ///
+    /// The yardstick the water bands are compared against, for the same
+    /// reason the land has one: a heron deciding which way to walk wants to
+    /// know which reach has more fish in it, not which reach is fuller of
+    /// what its own little would hold.
+    pub fn what_a_ground_of_water_would_carry_at_its_very_best(cells_across: i32) -> f32 {
+        Self::FISH_A_GOOD_HECTARE_OF_WATER_CARRIES
+            * Self::hectares_in_a_hunting_ground(cells_across)
+    }
+
+    /// What the water of a hunting ground will carry, in head of fish.
+    ///
+    /// `share_that_is_water` is how much of the ground is water at all -
+    /// the water's answer to `cover`, and got the same way, by walking the
+    /// ground once and counting. The climate and the season are read
+    /// through the same curve the land is read through, deliberately: a
+    /// river in an arctic winter is thin for the same reason a field is,
+    /// and two curves would be two opinions about which month is hard.
+    pub fn what_this_ground_will_carry_of_fish(
+        share_that_is_water: f32,
+        climate: ClimateZone,
+        season: Season,
+        cells_across: i32,
+    ) -> f32 {
+        Self::what_a_ground_of_water_would_carry_at_its_very_best(cells_across)
+            * share_that_is_water.clamp(0.0, 1.0)
+            * Self::what_a_hectare_of_this_is_worth(1.0, climate, season)
     }
 
     /// What a hunting ground will carry, in head of small grazers.
@@ -417,7 +542,7 @@ impl SmallLife {
     /// time anything asks about a piece of ground it is found already carrying
     /// what it will carry, and after that it grows or is drawn down like
     /// anything else.
-    pub fn settle(&mut self, ground: (i32, i32), would_carry: f32) {
+    pub fn settle(&mut self, ground: (i32, i32), would_carry: f32, would_carry_fish: f32) {
         let rodents = would_carry * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND;
         self.grounds.entry(ground).or_insert(TheSmallLifeHere {
             grazers: would_carry,
@@ -426,6 +551,8 @@ impl SmallLife {
             would_carry,
             rodents,
             would_carry_rodents: rodents,
+            fish: would_carry_fish,
+            would_carry_fish,
         });
     }
 
@@ -442,6 +569,22 @@ impl SmallLife {
 
         let got = wanted.max(0.0).min(here.rodents.max(0.0));
         here.rodents = (here.rodents - got).max(0.0);
+        got
+    }
+
+    /// Take up to `wanted` head of fish out of this ground's water.
+    ///
+    /// Its own band for its own reason: a heron working a reach all summer
+    /// thins the fish and leaves the field alone, and what it took has to
+    /// come off the thing it actually took it from. Until this existed a
+    /// heron standing in a lake drew its living out of that ground's voles.
+    pub fn take_fish(&mut self, ground: (i32, i32), wanted: f32) -> f32 {
+        let Some(here) = self.grounds.get_mut(&ground) else {
+            return 0.0;
+        };
+
+        let got = wanted.max(0.0).min(here.fish.max(0.0));
+        here.fish = (here.fish - got).max(0.0);
         got
     }
 
@@ -471,14 +614,41 @@ impl SmallLife {
     /// empties a ground of foxes every few years by arithmetic rather than by
     /// anything that happened, and the point of taking the small life out of
     /// records was to stop exactly that.
-    pub fn tick_a_ground(&mut self, ground: (i32, i32), would_carry: f32, ticks: f32) {
-        self.settle(ground, would_carry);
+    pub fn tick_a_ground(
+        &mut self,
+        ground: (i32, i32),
+        would_carry: f32,
+        would_carry_fish: f32,
+        ticks: f32,
+    ) {
+        self.settle(ground, would_carry, would_carry_fish);
         let Some(here) = self.grounds.get_mut(&ground) else {
             return;
         };
 
         here.would_carry = would_carry;
         here.would_carry_rodents = would_carry * Self::RODENTS_TO_A_GRAZER_ON_THE_GROUND;
+
+        // The water is a separate ground with its own capacity, so it is
+        // brought on separately and before the land's own early return: a
+        // hunting ground can be bare rock with a river through it, and
+        // returning on the land's account would have emptied that river.
+        here.would_carry_fish = would_carry_fish;
+        if would_carry_fish <= 0.0 {
+            here.fish = (here.fish - here.fish * 0.01 * ticks).max(0.0);
+        } else {
+            // The same floor the land bands have, and for the same reason:
+            // a reach fished or hunted to nothing has to be able to fill
+            // again, and what fills it is the run - which is water that was
+            // never this country's to use up. See `HOW_FAST_THE_FISH_COME
+            // _BACK` and `ResourceNode::fish_run`.
+            const ALWAYS_A_FEW_IN_THE_WATER: f32 = 1.0;
+            here.fish = here.fish.max(ALWAYS_A_FEW_IN_THE_WATER.min(would_carry_fish));
+
+            let room = 1.0 - (here.fish / would_carry_fish).clamp(0.0, 1.0);
+            here.fish = (here.fish + here.fish * Self::HOW_FAST_THE_FISH_COME_BACK * room * ticks)
+                .clamp(0.0, would_carry_fish);
+        }
 
         // Ground that will carry nothing loses what is on it rather than
         // holding it for ever - a salt flat in February is not a larder.
@@ -563,29 +733,25 @@ impl SmallLife {
     /// every tick.
     pub fn let_them_spread(&mut self, ticks: f32) {
         let grounds: Vec<(i32, i32)> = self.grounds.keys().copied().collect();
-        let mut moves: Vec<((i32, i32), (i32, i32), f32, f32)> = Vec::new();
+        let mut moves: Vec<((i32, i32), (i32, i32), f32, f32, f32)> = Vec::new();
 
         for &(gx, gy) in &grounds {
             let here = self.here((gx, gy));
-            if here.would_carry <= 0.0 {
-                continue;
-            }
-
-            // East and south only, which is how each unordered pair is
-            // reached exactly once.
+            // Ground that will carry no land life may still have a river
+            // through it, so the gate is on each band rather than on the
+            // land's account of the ground.
             for (dx, dy) in [(1, 0), (0, 1)] {
                 let over_there = (gx + dx, gy + dy);
                 let Some(there) = self.grounds.get(&over_there).copied() else {
                     continue;
                 };
-                if there.would_carry <= 0.0 {
-                    continue;
-                }
 
-                let across = Self::HOW_FAST_THEY_SPREAD
+                let on_land = here.would_carry > 0.0 && there.would_carry > 0.0;
+
+                let across = if !on_land { 0.0 } else { Self::HOW_FAST_THEY_SPREAD
                     * (here.how_thick_it_is() - there.how_thick_it_is())
                     * here.would_carry.min(there.would_carry)
-                    * ticks;
+                    * ticks };
 
                 // The rodents work outwards on the same rule and their own
                 // crowding. A field thick with voles beside one that has
@@ -593,18 +759,36 @@ impl SmallLife {
                 // rabbits beside a trapped one, and the two bands are not
                 // in step: an owl can hunt the voles out of ground whose
                 // rabbits nobody has touched.
-                let below = Self::HOW_FAST_THEY_SPREAD
+                let below = if !on_land { 0.0 } else { Self::HOW_FAST_THEY_SPREAD
                     * (here.how_thick_the_rodents_are() - there.how_thick_the_rodents_are())
                     * here.would_carry_rodents.min(there.would_carry_rodents)
-                    * ticks;
+                    * ticks };
 
-                if across.abs() > f32::EPSILON || below.abs() > f32::EPSILON {
-                    moves.push(((gx, gy), over_there, across, below));
+                // And the water works along itself on the same rule. Two
+                // grounds that both have water in them are joined by it,
+                // and a reach that has been worked draws on the next one
+                // up - which is the same statement about a river that the
+                // other two bands make about a wood.
+                let in_the_water = if here.would_carry_fish <= 0.0 || there.would_carry_fish <= 0.0
+                {
+                    0.0
+                } else {
+                    Self::HOW_FAST_THEY_SPREAD
+                        * (here.how_thick_the_fish_are() - there.how_thick_the_fish_are())
+                        * here.would_carry_fish.min(there.would_carry_fish)
+                        * ticks
+                };
+
+                if across.abs() > f32::EPSILON
+                    || below.abs() > f32::EPSILON
+                    || in_the_water.abs() > f32::EPSILON
+                {
+                    moves.push(((gx, gy), over_there, across, below, in_the_water));
                 }
             }
         }
 
-        for (from, to, across, below) in moves {
+        for (from, to, across, below, in_the_water) in moves {
             // Never move more than is actually standing there, whichever way
             // it is going.
             let grazers = if across > 0.0 {
@@ -617,14 +801,21 @@ impl SmallLife {
             } else {
                 -((-below).min(self.here(to).rodents))
             };
+            let fish = if in_the_water > 0.0 {
+                in_the_water.min(self.here(from).fish)
+            } else {
+                -((-in_the_water).min(self.here(to).fish))
+            };
 
             if let Some(here) = self.grounds.get_mut(&from) {
                 here.grazers = (here.grazers - grazers).max(0.0);
                 here.rodents = (here.rodents - rodents).max(0.0);
+                here.fish = (here.fish - fish).max(0.0);
             }
             if let Some(there) = self.grounds.get_mut(&to) {
                 there.grazers = (there.grazers + grazers).max(0.0);
                 there.rodents = (there.rodents + rodents).max(0.0);
+                there.fish = (there.fish + fish).max(0.0);
             }
         }
     }
@@ -648,6 +839,11 @@ impl SmallLife {
     /// the sky is standing on.
     pub fn how_many_rodents(&self) -> f32 {
         self.grounds.values().map(|here| here.rodents).sum()
+    }
+
+    /// And of fish, which is what the water of the country holds.
+    pub fn how_many_fish(&self) -> f32 {
+        self.grounds.values().map(|here| here.fish).sum()
     }
 }
 

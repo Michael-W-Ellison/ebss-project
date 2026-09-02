@@ -310,40 +310,63 @@ fn nobody_passes_on_hearsay_as_though_they_had_seen_it() {
 }
 
 /// Lies get told and found out in a running settlement.
+///
+/// **Failing, and it is the test that was wrong before it was the model.**
+///
+/// It was one unseeded world, and it passed inside the suite and nowhere
+/// else: run on its own - at this commit and at the one before it - it fails
+/// exactly as it fails here. What it was answering was what draws the rest of
+/// the suite had left in the global dice, which is ISSUES_FOUND.md #132's
+/// family, and a change to the fish was enough to move them.
+///
+/// Asked properly - a block of seeded worlds, summed, so that no one world's
+/// luck decides it - the claim does not hold at all: across three fresh
+/// settlements of twenty-five over four thousand ticks, **not one person ever
+/// takes another's word for where anything is**. `who_told_me` is empty in
+/// every agent in every world. That is a real defect and it is left failing
+/// and written down rather than tuned until it goes green - see
+/// ISSUES_FOUND.md #160.
 #[test]
 fn lies_are_told_and_found_out_in_a_settlement() {
-    let world = World::new(WorldConfig::default());
-    let mut population = Population::new();
-    for _ in 0..25 {
-        population.spawn_agent(AgentConfig::default());
-    }
-
-    // Somebody in this settlement is a liar, which a random draw of traits
-    // does not guarantee
-    for index in 0..5 {
-        population.agents[index].traits.add_trait(Trait::Dishonest);
-    }
-
-    let mut simulation = crate::analytics::Simulation::new(world, population);
-    for _ in 0..4000 {
-        simulation.tick();
-    }
+    const HOW_MANY_WORLDS: u64 = 3;
 
     let mut hearsay = 0usize;
     let mut caught = 0usize;
-    for agent in simulation
-        .population
-        .agents
-        .iter()
-        .filter(|a| a.state.is_alive)
-    {
-        hearsay += agent.exploration_knowledge.who_told_me.len();
-        caught += agent
-            .knowledge
-            .trust_ratings
-            .values()
-            .filter(|record| record.wrong_count > 0)
-            .count();
+
+    for which in 0..HOW_MANY_WORLDS {
+        crate::core::dice::seed(9_000 + which);
+
+        let world = World::new(WorldConfig::default());
+        let mut population = Population::new();
+        for _ in 0..25 {
+            population.spawn_agent(AgentConfig::default());
+        }
+
+        // Somebody in this settlement is a liar, which a random draw of traits
+        // does not guarantee
+        for index in 0..5 {
+            population.agents[index].traits.add_trait(Trait::Dishonest);
+        }
+
+        let mut simulation = crate::analytics::Simulation::new(world, population);
+        for _ in 0..4000 {
+            simulation.tick();
+        }
+
+        // Everybody who was in it, not only who came out of it. Twenty-five
+        // founders on one map is a hard start and a good few of these worlds
+        // end empty; a man who was told where the berries were and found
+        // none there told us what we asked, whether or not he saw the year
+        // out.
+        for agent in simulation.population.agents.iter() {
+            hearsay += agent.exploration_knowledge.who_told_me.len();
+            caught += agent
+                .knowledge
+                .trust_ratings
+                .values()
+                .filter(|record| record.wrong_count > 0)
+                .count();
+        }
     }
 
     assert!(
@@ -354,7 +377,7 @@ fn lies_are_told_and_found_out_in_a_settlement() {
         caught > 0,
         "and somebody should have gone to a place he was told about and found \
          nothing: {hearsay} places taken on somebody's word, {caught} people \
-         found out"
+         found out across {HOW_MANY_WORLDS} worlds"
     );
 }
 
